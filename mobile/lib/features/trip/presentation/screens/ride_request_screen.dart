@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_colors.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 import '../widgets/request_timer_ring.dart';
 import '../widgets/request_stat_card.dart';
 import '../widgets/request_route_details.dart';

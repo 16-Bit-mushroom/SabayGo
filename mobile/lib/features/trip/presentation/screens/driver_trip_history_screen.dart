@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_colors.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 import '../widgets/driver_trip_summary_row.dart';
 import '../widgets/driver_trip_filter_bar.dart';
 import '../widgets/driver_trip_card.dart';

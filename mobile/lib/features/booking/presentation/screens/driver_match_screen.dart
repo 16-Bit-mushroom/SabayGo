@@ -4,6 +4,15 @@ import 'package:mobile/core/widgets/quick_action_buttons.dart';
 import '../widgets/driver_profile_header.dart';
 
 class DriverMatchScreen extends StatelessWidget {
+
+  final String driverName;
+  final String vehicleModel;
+  final String plateNumber;
+  final String vehicleColor;
+  final String rating;
+  final String currentPaymentId; // NEW
+  final Function(String) onChangePayment; // NEW
+
   // ViewModel Callbacks
   final VoidCallback onBackPressed;
   final VoidCallback onMessageDriver;
@@ -13,6 +22,13 @@ class DriverMatchScreen extends StatelessWidget {
 
   const DriverMatchScreen({
     Key? key,
+    required this.driverName,
+    required this.vehicleModel,
+    required this.plateNumber,
+    required this.vehicleColor,
+    required this.rating,
+    required this.currentPaymentId, // <-- ADD THIS
+    required this.onChangePayment,
     required this.onBackPressed,
     required this.onMessageDriver,
     required this.onCallDriver,
@@ -106,13 +122,44 @@ class DriverMatchScreen extends StatelessWidget {
                   const SizedBox(height: 24),
                   
                   // Clean Driver Profile (Redundant cards removed)
-                  const DriverProfileHeader(
-                    driverName: "Marcus Williams",
-                    rating: "4.9",
-                    tripsCount: "1,247",
-                    vehicleModel: "Tesla Model 3",
-                    vehicleColor: "Pearl White",
-                    plateNumber: "GHI-4892",
+                  // Clean Driver Profile
+                  DriverProfileHeader(
+                    driverName: driverName,
+                    rating: rating,
+                    tripsCount: "1,247", // We can leave tripsCount hardcoded for the prototype
+                    vehicleModel: vehicleModel,
+                    vehicleColor: vehicleColor,
+                    plateNumber: plateNumber,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // NEW: Change Payment Row
+                  InkWell(
+                    onTap: () => _showPaymentBottomSheet(context),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.payment, color: AppColors.textSecondary, size: 20),
+                              const SizedBox(width: 12),
+                              Text(
+                                "Payment: ${currentPaymentId.toUpperCase()}", 
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const Text("Change", style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -163,6 +210,54 @@ class DriverMatchScreen extends StatelessWidget {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),
+    );
+  }
+
+  void _showPaymentBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Change Payment Method", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.money, color: Colors.green),
+                  title: const Text("Cash"),
+                  onTap: () {
+                    onChangePayment('cash');
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Text("G", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 20)),
+                  title: const Text("GCash"),
+                  onTap: () {
+                    onChangePayment('gcash');
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Text("M", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 20)),
+                  title: const Text("Maya"),
+                  onTap: () {
+                    onChangePayment('maya');
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
