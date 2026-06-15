@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'theme/app_colors.dart';
-import 'ui/screens/driver_trip_history_screen.dart';
+import 'package:mobile/core/theme/app_colors.dart';
+import 'features/trip/presentation/screens/screens/driver_trip_history_screen.dart';
 
 void main() {
   runApp(const SabayGoApp());

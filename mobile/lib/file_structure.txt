@@ -1,0 +1,57 @@
+.
+├── core
+│   ├── theme
+│   │   └── app_colors.dart
+│   └── widgets
+│       └── quick_action_buttons.dart
+├── features
+│   ├── booking
+│   │   └── presentation
+│   │       ├── screens
+│   │       │   ├── driver_match_screen.dart
+│   │       │   ├── payment_screen.dart
+│   │       │   └── ride_selection_screen.dart
+│   │       └── widgets
+│   │           ├── driver_profile_header.dart
+│   │           ├── payment_method_tile.dart
+│   │           ├── promo_card.dart
+│   │           └── ride_option_card.dart
+│   ├── identity
+│   │   └── presentation
+│   │       ├── screens
+│   │       │   ├── go_premium_screen.dart
+│   │       │   └── profile_screen.dart
+│   │       └── widgets
+│   │           ├── premium_comparison_table.dart
+│   │           ├── premium_feature_card.dart
+│   │           ├── profile_kpi_card.dart
+│   │           └── settings_tile.dart
+│   └── trip
+│       └── presentation
+│           ├── screens
+│           │   ├── driver_navigation_screen.dart
+│           │   ├── driver_trip_history_screen.dart
+│           │   ├── in_ride_screen.dart
+│           │   ├── ride_request_screen.dart
+│           │   └── trip_history_screen.dart
+│           └── widgets
+│               ├── co_passenger_card.dart
+│               ├── driver_passenger_card.dart
+│               ├── driver_trip_card.dart
+│               ├── driver_trip_filter_bar.dart
+│               ├── driver_trip_summary_row.dart
+│               ├── fare_breakdown_card.dart
+│               ├── navigation_header.dart
+│               ├── request_route_details.dart
+│               ├── request_stat_card.dart
+│               ├── request_timer_ring.dart
+│               ├── trip_filter_bar.dart
+│               ├── trip_history_card.dart
+│               ├── trip_stepper.dart
+│               └── trip_summary_row.dart
+├── file_structure.txt
+├── main.dart
+├── services
+└── viewmodels
+
+19 directories, 36 files
