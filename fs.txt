@@ -1,0 +1,38 @@
+.
+├── fs.txt
+├── mobile
+├── sabayGo
+│   ├── bookings
+│   │   ├── application
+│   │   ├── domain
+│   │   │   └── entity
+│   │   │       └── booking.py
+│   │   ├── infrastructure
+│   │   └── interfaces
+│   ├── core
+│   │   └── domain
+│   │       └── entity.py
+│   ├── file_structure.txt
+│   ├── identity
+│   │   ├── application
+│   │   ├── domain
+│   │   │   └── entity
+│   │   │       ├── user.py
+│   │   │       └── verification_profile.py
+│   │   ├── infrastructure
+│   │   ├── interfaces
+│   │   └── test
+│   │       └── test_domain
+│   │           └── test_user.py
+│   └── trip
+│       ├── application
+│       ├── domain
+│       │   ├── entity
+│       │   │   └── trip.py
+│       │   └── value_objects
+│       │       └── node.py
+│       ├── infrastructure
+│       └── interfaces
+└── web
+
+27 directories, 9 files

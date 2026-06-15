@@ -1,0 +1,29 @@
+.
+├── bookings
+│   ├── application
+│   ├── domain
+│   ├── infrastructure
+│   └── interfaces
+├── core
+│   └── domain
+│       └── entity.py
+├── fs.txt
+├── identity
+│   ├── application
+│   ├── domain
+│   │   └── entity
+│   │       ├── user.py
+│   │       └── verification_profile.py
+│   ├── infrastructure
+│   └── interfaces
+└── trip
+    ├── application
+    ├── domain
+    │   ├── entity
+    │   │   └── trip.py
+    │   └── value_objects
+    │       └── node.py
+    ├── infrastructure
+    └── interfaces
+
+21 directories, 6 files
