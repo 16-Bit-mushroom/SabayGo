@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_colors.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 import '../widgets/profile_kpi_card.dart';
 import '../widgets/settings_tile.dart';
 

@@ -5,12 +5,15 @@ import '../widgets/ride_option_card.dart';
 class RideSelectionScreen extends StatelessWidget {
   // In a real MVVM setup, these values and callbacks are passed in from the ViewModel.
   // We mock them here so the UI compiles and is testable today.
+  
+  final VoidCallback onConfirmRide;
   final VoidCallback onBackPressed;
   final Function(String) onRideSelected;
   final String selectedRideId;
 
   const RideSelectionScreen({
     Key? key,
+    required this.onConfirmRide,
     required this.onBackPressed,
     required this.onRideSelected,
     this.selectedRideId = 'eco_1', // Default selection state
@@ -116,7 +119,7 @@ class RideSelectionScreen extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       children: [
                         RideOptionCard(
-                          title: "SabayGo Solo",
+                          title: "Solo",
                           subtitle: "Private ride, zero detours",
                           price: "PHP 180.00",
                           timeEst: "14 min",
@@ -125,7 +128,7 @@ class RideSelectionScreen extends StatelessWidget {
                           onTap: () => onRideSelected('solo_1'),
                         ),
                         RideOptionCard(
-                          title: "SabayGo Shared",
+                          title: "Shared",
                           subtitle: "Cost-share with 1 commuter",
                           price: "PHP 90.00",
                           timeEst: "16 min",
@@ -142,10 +145,7 @@ class RideSelectionScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () {
-                         // Action passes to ViewModel here
-                         print("Calling ViewModel to reserve seat via NAHGM API...");
-                      },
+                      onPressed: onConfirmRide,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryAction,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

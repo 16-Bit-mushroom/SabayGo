@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_colors.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 import '../widgets/premium_feature_card.dart';
 import '../widgets/premium_comparison_table.dart';
 
