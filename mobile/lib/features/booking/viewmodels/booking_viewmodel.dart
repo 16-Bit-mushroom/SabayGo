@@ -3,16 +3,22 @@ import '../interfaces/i_booking_repository.dart';
 import '../infrastructure/booking_dto.dart';
 
 // The 4 absolute states of your booking flow
-enum BookingStep { selectingRide, selectingPayment, matching, matched, inRide }
+enum BookingStep {
+  selectingRide,
+  selectingPayment,
+  matching,
+  matched,
+  inRide,
+  completed,
+}
 
 class BookingViewModel extends ChangeNotifier {
   final IBookingRepository _repository;
 
-// -- NEW: State variables to track user interactions --
+  // -- NEW: State variables to track user interactions --
   String selectedRideId = 'eco_1'; // Defaults to Shared
   String selectedPaymentId = ''; // Defaults to GCash
   bool isPromoApplied = true; // Defaults to Promo ON
-
 
   BookingStep currentStep = BookingStep.selectingRide;
   DriverMatchDTO? currentMatch;
@@ -67,20 +73,33 @@ class BookingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Triggers the Gamified Summary Screen
+  void completeRide() {
+    currentStep = BookingStep.completed;
+    notifyListeners();
+  }
+
+  // Closes the receipt and starts a fresh new booking loop
+  void resetToHome() {
+    currentStep = BookingStep.selectingRide;
+    currentMatch = null;
+    notifyListeners();
+  }
+
   // Transition 2 & 3: Start the algorithm, then show the match
   Future<void> requestRide(String pickup, String dropoff) async {
     currentStep = BookingStep.matching;
     errorMessage = null;
-    notifyListeners(); 
+    notifyListeners();
 
     try {
       currentMatch = await _repository.findRide(pickup, dropoff);
-      currentStep = BookingStep.matched; 
+      currentStep = BookingStep.matched;
     } catch (e) {
       errorMessage = "Failed to find a driver on this route.";
-      currentStep = BookingStep.selectingPayment; 
+      currentStep = BookingStep.selectingPayment;
     } finally {
-      notifyListeners(); 
+      notifyListeners();
     }
   }
 }

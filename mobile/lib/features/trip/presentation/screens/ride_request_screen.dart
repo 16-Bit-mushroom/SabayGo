@@ -133,19 +133,7 @@ class RideRequestScreen extends StatelessWidget {
         ],
       ),
       
-      // FIXED: Injected the global driver navigation bar
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 0, // 'Home' Map view is active
-        selectedItemColor: AppColors.success, // Swapped to green to match the Driver's primary action color
-        unselectedItemColor: AppColors.textSecondary,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: "Trips"),
-          BottomNavigationBarItem(icon: Icon(Icons.message), label: "Messages"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
-        ],
-      ),
+      
     );
   }
 }
