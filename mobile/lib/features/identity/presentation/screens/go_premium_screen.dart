@@ -158,19 +158,7 @@ class GoPremiumScreen extends StatelessWidget {
         ],
       ),
       
-      // FIX: Restored the Bottom Navigation Bar
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 3, // 'Profile' tab is active since we navigated from there
-        selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: AppColors.textSecondary,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: "Trips"),
-          BottomNavigationBarItem(icon: Icon(Icons.message), label: "Messages"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
-        ],
-      ),
+     
     );
   }
 }

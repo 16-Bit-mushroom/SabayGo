@@ -185,18 +185,7 @@ class DriverNavigationScreen extends StatelessWidget {
       ),
       
       // FIXED: Restored the Bottom Navigation Bar
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 0, // 'Home' Map view is active
-        selectedItemColor: AppColors.success, // Driver theme color
-        unselectedItemColor: AppColors.textSecondary,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: "Trips"),
-          BottomNavigationBarItem(icon: Icon(Icons.message), label: "Messages"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
-        ],
-      ),
+     
     );
   }
 }
