@@ -4,7 +4,6 @@ import 'package:mobile/core/theme/app_colors.dart';
 class DriverPassengerCard extends StatelessWidget {
   final String name;
   final String rating;
-  final String rides;
   final String pickupNode;
   final String dropoffNode;
 
@@ -12,7 +11,6 @@ class DriverPassengerCard extends StatelessWidget {
     Key? key,
     required this.name,
     required this.rating,
-    required this.rides,
     required this.pickupNode,
     required this.dropoffNode,
   }) : super(key: key);
@@ -39,23 +37,22 @@ class DriverPassengerCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 4),
+                const Text("Requested by", style: TextStyle(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
                 Row(
                   children: [
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(width: 8),
                     const Icon(Icons.star, color: Colors.amber, size: 12),
                     const SizedBox(width: 4),
                     Text(rating, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    Text(" · $rides rides", style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Upgraded Routing Display
                 Row(
                   children: [
                     const Icon(Icons.circle, size: 8, color: Colors.orange),
                     const SizedBox(width: 8),
-                    Text(pickupNode, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    Text("Origin: $pickupNode", style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -63,13 +60,12 @@ class DriverPassengerCard extends StatelessWidget {
                   children: [
                     const Icon(Icons.circle, size: 8, color: AppColors.success),
                     const SizedBox(width: 8),
-                    Text(dropoffNode, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    Text("Destination: $dropoffNode", style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                   ],
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: Colors.grey),
         ],
       ),
     );
