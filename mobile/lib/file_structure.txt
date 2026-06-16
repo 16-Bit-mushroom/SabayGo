@@ -6,16 +6,27 @@
 │       └── quick_action_buttons.dart
 ├── features
 │   ├── booking
+│   │   ├── infrastructure
+│   │   │   ├── booking_dto.dart
+│   │   │   └── mock_booking_repository.dart
+│   │   ├── interfaces
+│   │   │   └── i_booking_repository.dart
+│   │   ├── presentation
+│   │   │   ├── screens
+│   │   │   │   ├── driver_match_screen.dart
+│   │   │   │   ├── payment_screen.dart
+│   │   │   │   └── ride_selection_screen.dart
+│   │   │   └── widgets
+│   │   │       ├── driver_profile_header.dart
+│   │   │       ├── payment_method_tile.dart
+│   │   │       ├── promo_card.dart
+│   │   │       └── ride_option_card.dart
+│   │   └── viewmodels
+│   │       └── booking_viewmodel.dart
+│   ├── dashboard
 │   │   └── presentation
-│   │       ├── screens
-│   │       │   ├── driver_match_screen.dart
-│   │       │   ├── payment_screen.dart
-│   │       │   └── ride_selection_screen.dart
-│   │       └── widgets
-│   │           ├── driver_profile_header.dart
-│   │           ├── payment_method_tile.dart
-│   │           ├── promo_card.dart
-│   │           └── ride_option_card.dart
+│   │       └── screens
+│   │           └── commuter_dashboard.dart
 │   ├── identity
 │   │   └── presentation
 │   │       ├── screens
@@ -33,6 +44,7 @@
 │           │   ├── driver_trip_history_screen.dart
 │           │   ├── in_ride_screen.dart
 │           │   ├── ride_request_screen.dart
+│           │   ├── trip_completed_screen.dart
 │           │   └── trip_history_screen.dart
 │           └── widgets
 │               ├── co_passenger_card.dart
@@ -54,4 +66,4 @@
 ├── services
 └── viewmodels
 
-19 directories, 36 files
+25 directories, 42 files
