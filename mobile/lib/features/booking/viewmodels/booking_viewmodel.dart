@@ -86,6 +86,19 @@ class BookingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Add this inside BookingViewModel
+  void reset() {
+    // Replace these with whatever your actual initial variables are named!
+    currentStep = BookingStep.selectingRide; // or whatever your default state enum is
+    selectedPaymentId = '';
+    selectedRideId = '';
+    isPromoApplied = false;
+    currentMatch = null;
+
+    
+    notifyListeners();
+  }
+
   // Transition 2 & 3: Start the algorithm, then show the match
   Future<void> requestRide(String pickup, String dropoff) async {
     currentStep = BookingStep.matching;

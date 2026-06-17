@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:mobile/core/theme/app_colors.dart';
+import '../../viewmodels/profile_viewmodel.dart';
 import '../widgets/profile_kpi_card.dart';
 import '../widgets/settings_tile.dart';
 
 class ProfileScreen extends StatelessWidget {
-  // ViewModel Callbacks
   final VoidCallback onEditProfile;
   final Function(String) onSettingsTap;
   final VoidCallback onSignOut;
@@ -15,6 +16,39 @@ class ProfileScreen extends StatelessWidget {
     required this.onSettingsTap,
     required this.onSignOut,
   }) : super(key: key);
+
+  // INJECTED: The Confirmation Dialogue
+  void _showSignOutConfirmation(BuildContext context, ProfileViewModel viewModel) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Sign Out", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text("Are you sure you want to sign out of your passenger account?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text("Cancel", style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext); // Close the dialogue
+                viewModel.signOut();          // Clear backend state
+                onSignOut();                  // Trigger navigation back to login
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade50,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Yes, Sign Out", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   Widget _buildSectionHeader(String title) {
     return Padding(
@@ -39,18 +73,28 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final viewModel = context.watch<ProfileViewModel>();
+    final user = viewModel.currentUser;
+
+    if (viewModel.isLoading || user == null) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Header Gradient Section
+            // Header Gradient Section
             Container(
               padding: const EdgeInsets.only(bottom: 32),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF2E3192), Color(0xFF1BFFFF)], // Deep blue to bright cyan gradient matching your screenshot
+                  colors: [Color(0xFF2E3192), Color(0xFF1BFFFF)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -60,14 +104,13 @@ class ProfileScreen extends StatelessWidget {
                 bottom: false,
                 child: Column(
                   children: [
-                    // Top Bar with Edit Button
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const SizedBox(width: 48), // Spacer for centering
-                          const Text("PASSENGER · PROFILE", style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                          const SizedBox(width: 48),
+                          Text("${user.accountType.toUpperCase()} · PROFILE", style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.white, size: 20),
                             onPressed: onEditProfile,
@@ -76,22 +119,20 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    
-                    // Avatar & Info
                     Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
                       child: const CircleAvatar(radius: 40, backgroundColor: Colors.white, child: Icon(Icons.person, size: 40, color: Colors.blue)),
                     ),
                     const SizedBox(height: 12),
-                    const Text("Alex Johnson", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text(user.fullName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.circle, color: AppColors.success, size: 8),
-                        SizedBox(width: 6),
-                        Text("Passenger · Free Plan", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      children: [
+                        const Icon(Icons.circle, color: AppColors.success, size: 8),
+                        const SizedBox(width: 6),
+                        Text("${user.accountType} · ${user.subscriptionTier}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -101,12 +142,12 @@ class ProfileScreen extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-                          child: Row(children: const [Icon(Icons.star, color: Colors.amber, size: 14), SizedBox(width: 4), Text("4.9", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))]),
+                          child: Row(children: [const Icon(Icons.star, color: Colors.amber, size: 14), const SizedBox(width: 4), Text(user.rating.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))]),
                         ),
                         const SizedBox(width: 12),
                         const Text("|", style: TextStyle(color: Colors.white54)),
                         const SizedBox(width: 12),
-                        const Text("Member since Jan 2024", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        Text("Member since ${user.joinDate}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
                       ],
                     )
                   ],
@@ -114,23 +155,23 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
 
-            // 2. KPI Cards (Shifted up to overlap the gradient slightly)
+            // KPI Cards
             Transform.translate(
               offset: const Offset(0, -20),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12.0),
                 child: Row(
-                  children: const [
-                    ProfileKpiCard(icon: Icons.directions_car, iconColor: Colors.red, value: "47", label: "Total Trips"),
-                    ProfileKpiCard(icon: Icons.eco, iconColor: AppColors.success, value: "18 kg", label: "CO₂ Saved"),
-                    ProfileKpiCard(icon: Icons.star, iconColor: Colors.amber, value: "4.9★", label: "Avg Rating"),
-                    ProfileKpiCard(icon: Icons.confirmation_num, iconColor: Colors.deepOrange, value: "3", label: "Vouchers"),
+                  children: [
+                    ProfileKpiCard(icon: Icons.directions_car, iconColor: Colors.red, value: user.totalTrips.toString(), label: "Total Trips"),
+                    ProfileKpiCard(icon: Icons.eco, iconColor: AppColors.success, value: user.co2Saved, label: "CO₂ Saved"),
+                    ProfileKpiCard(icon: Icons.star, iconColor: Colors.amber, value: "${user.rating}★", label: "Avg Rating"),
+                    ProfileKpiCard(icon: Icons.confirmation_num, iconColor: Colors.deepOrange, value: user.availableVouchers.toString(), label: "Vouchers"),
                   ],
                 ),
               ),
             ),
 
-            // 3. Settings Sections
+            // Settings Sections
             _buildSectionHeader("ACCOUNT"),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -169,17 +210,20 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   SettingsTile(icon: Icons.help_outline, iconColor: Colors.grey, title: "Help & Support", onTap: () => onSettingsTap("support")),
                   const Divider(height: 1, indent: 48),
-                  SettingsTile(icon: Icons.logout, iconColor: Colors.red, title: "Sign Out", onTap: onSignOut),
+                  SettingsTile(
+                    icon: Icons.logout, 
+                    iconColor: Colors.red, 
+                    title: "Sign Out", 
+                    onTap: () => _showSignOutConfirmation(context, viewModel) // Connect the dialogue here
+                  ),
                 ],
               ),
             ),
             
-            const SizedBox(height: 32), // Bottom padding
+            const SizedBox(height: 32),
           ],
         ),
       ),
-      
-     
     );
   }
 }
