@@ -11,6 +11,9 @@ import 'features/booking/viewmodels/driver_viewmodel.dart';
 import 'features/dashboard/presentation/screens/commuter_dashboard.dart';
 import 'features/dashboard/presentation/screens/driver_dashboard.dart';
 
+// Identity
+import 'features/identity/presentation/screens/login_screen.dart';
+
 void main() {
   // 1. Initialize our decoupled Mock Repository
   final mockRepo = MockBookingRepository();
@@ -42,7 +45,7 @@ class SabayGoApp extends StatelessWidget {
       ),
       // We route directly to the global dashboard now
       // home: const CommuterDashboard(),
-      home: const DriverDashboard(),
+      home: const LoginScreen(),
     );
   }
 }
