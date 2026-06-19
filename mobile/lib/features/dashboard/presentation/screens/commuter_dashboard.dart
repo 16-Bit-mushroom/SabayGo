@@ -4,8 +4,11 @@ import 'package:mobile/features/booking/presentation/screens/driver_match_screen
 import 'package:mobile/features/booking/presentation/screens/payment_screen.dart';
 import 'package:mobile/features/booking/presentation/screens/ride_selection_screen.dart';
 import 'package:mobile/features/booking/viewmodels/booking_viewmodel.dart';
+import 'package:mobile/features/communications/presentations/screens/messages_screen.dart';
+import 'package:mobile/features/identity/presentation/screens/edit_profile_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/login_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/profile_screen.dart';
+import 'package:mobile/features/identity/viewmodels/profile_viewmodel.dart';
 import 'package:mobile/features/trip/presentation/screens/in_ride_screen.dart';
 import 'package:mobile/features/trip/presentation/screens/trip_completed_screen.dart';
 import 'package:mobile/features/trip/presentation/screens/trip_history_screen.dart';
@@ -55,20 +58,41 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
     // Handle tab switching
     if (_currentIndex == 1) return const TripHistoryScreen();
 
-    if (_currentIndex == 2) return const Center(child: Text("Messages UI"));
+    if (_currentIndex == 2) return const MessagesScreen();
     if (_currentIndex == 2)
       return const Center(child: Text("Saved Routes/Promo"));
 
     if (_currentIndex == 3) {
       return ProfileScreen(
-        onEditProfile: () => debugPrint("Edit Profile Tapped"),
+        // UPDATE THIS LINE:
+        onEditProfile: () {
+          final currentUser = context.read<ProfileViewModel>().currentUser;
+          
+          // Split the existing full name into First and Last to fit the new UI
+          final nameParts = (currentUser?.fullName ?? "").split(" ");
+          final firstName = nameParts.isNotEmpty ? nameParts.first : "";
+          final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(" ") : "";
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditProfileScreen(
+                currentUserData: {
+                  'firstName': firstName,
+                  'lastName': lastName,
+                  // Mocking the required backend formats so the form doesn't instantly throw errors
+                  'email': 'juan@example.edu.ph', 
+                  'phoneNumber': '+639171234567',
+                  'emergencyContactName': 'Maria Dela Cruz',
+                  'emergencyContactPhone': '+639189876543',
+                },
+              ),
+            ),
+          );
+        },
         onSettingsTap: (setting) => debugPrint("$setting Tapped"),
         onSignOut: () {
-          // 1. WIPE THE STATE CLEAN! 
-          // (Requires importing 'package:provider/provider.dart' at the top if not already there)
           context.read<BookingViewModel>().reset();
-          
-          // 2. Log out and return to the Unified Login Bridge
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -140,10 +164,13 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
       case BookingStep.matched:
         return DriverMatchScreen(
           driverName: viewModel.currentMatch!.driverName,
-          vehicleModel: viewModel.currentMatch!.vehicleModel,
-          plateNumber: viewModel.currentMatch!.plateNumber,
-          vehicleColor: viewModel.currentMatch!.vehicleColor,
-          rating: viewModel.currentMatch!.rating,
+          // Split "Toyota Vios - Silver" into Model and Color for the UI
+          vehicleModel: viewModel.currentMatch!.vehicleModel.split(' - ').first,
+          plateNumber: viewModel.currentMatch!.vehiclePlate,
+          vehicleColor: viewModel.currentMatch!.vehicleModel.split(' - ').length > 1 
+              ? viewModel.currentMatch!.vehicleModel.split(' - ').last 
+              : "Standard",
+          rating: viewModel.currentMatch!.driverRating.toStringAsFixed(1), 
           currentPaymentId: viewModel.selectedPaymentId,
           onChangePayment: (String newMethod) =>
               viewModel.selectPaymentMethod(newMethod),
@@ -155,7 +182,7 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
               context: context,
               builder: (BuildContext dialogContext) {
                 return AlertDialog(
-                  backgroundColor: AppColors.surface,
+                  backgroundColor: const Color(0xFFFAFAFA), // Replaced AppColors.surface fallback
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -171,7 +198,7 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
                       onPressed: () => Navigator.pop(dialogContext),
                       child: const Text(
                         "Keep Ride",
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: Colors.grey),
                       ),
                     ),
                     ElevatedButton(
@@ -204,20 +231,24 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
           onSosPressed: () => debugPrint("SOS Emergency Triggered!"),
           onBackPressed: () => debugPrint("Removed back button"),
           onSimulateDropoff: () async {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text("📍 Arriving at destination..."),
-                backgroundColor: AppColors.primaryAction,
-                duration: const Duration(seconds: 3),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            // 1. Get the real user ID from the ProfileViewModel
+            final currentUserId = context.read<ProfileViewModel>().currentUser?.id ?? "user_001";
+            
+            // 2. Trigger the SQLite Save in the BookingViewModel
+            await context.read<BookingViewModel>().completeRide(currentUserId);
+            
+            // 3. Show a success message
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text("Ride completed and saved to history! ✓"),
+                  backgroundColor: const Color(0xFF00A859),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
-            );
-            await Future.delayed(const Duration(seconds: 3));
-            viewModel.completeRide();
-          },
+              );
+            }
+          }
         );
 
       case BookingStep.completed:

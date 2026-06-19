@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../../core/domain/models/trip_model.dart';
 import '../interfaces/i_booking_repository.dart';
 import '../infrastructure/booking_dto.dart';
 
-// The 4 absolute states of your booking flow
+// The absolute states of your booking flow
 enum BookingStep {
   selectingRide,
   selectingPayment,
@@ -15,10 +16,14 @@ enum BookingStep {
 class BookingViewModel extends ChangeNotifier {
   final IBookingRepository _repository;
 
-  // -- NEW: State variables to track user interactions --
+  // State variables to track user interactions
   String selectedRideId = 'eco_1'; // Defaults to Shared
   String selectedPaymentId = ''; // Defaults to GCash
   bool isPromoApplied = true; // Defaults to Promo ON
+
+  // NEW: State variables for the route
+  String? selectedPickup = "University of Mindanao - Matina"; 
+  String? selectedDropoff = "SM City Davao"; 
 
   BookingStep currentStep = BookingStep.selectingRide;
   DriverMatchDTO? currentMatch;
@@ -26,29 +31,26 @@ class BookingViewModel extends ChangeNotifier {
 
   BookingViewModel(this._repository);
 
-  // -- NEW: Methods to update the state --
   void selectRide(String id) {
     selectedRideId = id;
-    notifyListeners(); // Tells the UI to redraw the green highlight
+    notifyListeners();
   }
 
   void selectPaymentMethod(String id) {
     selectedPaymentId = id;
-    notifyListeners(); // Tells the UI to move the checkmark
+    notifyListeners();
   }
 
   void togglePromo() {
     isPromoApplied = !isPromoApplied;
-    notifyListeners(); // Tells the UI to turn the promo off/on
+    notifyListeners();
   }
 
-  // Transition 1: Move from Ride Selection to Payment
   void proceedToPayment() {
     currentStep = BookingStep.selectingPayment;
     notifyListeners();
   }
 
-  // Transition Back: From Payment back to Ride Selection
   void stepBack() {
     if (currentStep == BookingStep.selectingPayment) {
       currentStep = BookingStep.selectingRide;
@@ -60,49 +62,39 @@ class BookingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // New: Completely resets the flow if the user cancels
   void cancelRide() {
     currentMatch = null;
     currentStep = BookingStep.selectingRide;
     notifyListeners();
   }
 
-  // New: Transitions to the In-Ride screen
   void startRide() {
     currentStep = BookingStep.inRide;
     notifyListeners();
   }
 
-  // Triggers the Gamified Summary Screen
-  void completeRide() {
-    currentStep = BookingStep.completed;
-    notifyListeners();
-  }
-
-  // Closes the receipt and starts a fresh new booking loop
   void resetToHome() {
     currentStep = BookingStep.selectingRide;
     currentMatch = null;
     notifyListeners();
   }
 
-  // Add this inside BookingViewModel
   void reset() {
-    // Replace these with whatever your actual initial variables are named!
-    currentStep = BookingStep.selectingRide; // or whatever your default state enum is
+    currentStep = BookingStep.selectingRide; 
     selectedPaymentId = '';
-    selectedRideId = '';
+    selectedRideId = 'eco_1';
     isPromoApplied = false;
     currentMatch = null;
-
-    
     notifyListeners();
   }
 
-  // Transition 2 & 3: Start the algorithm, then show the match
   Future<void> requestRide(String pickup, String dropoff) async {
     currentStep = BookingStep.matching;
     errorMessage = null;
+    
+    // Update the route state
+    selectedPickup = pickup;
+    selectedDropoff = dropoff;
     notifyListeners();
 
     try {
@@ -114,5 +106,32 @@ class BookingViewModel extends ChangeNotifier {
     } finally {
       notifyListeners();
     }
+  }
+
+  // FIXED: Removed duplicates, added the underscore to _repository
+  Future<void> completeRide(String passengerId) async {
+    if (currentMatch == null) return;
+
+    final newTrip = TripModel(
+      id: 'trip_${DateTime.now().millisecondsSinceEpoch}',
+      passengerId: passengerId,
+      driverName: currentMatch!.driverName,
+      origin: selectedPickup ?? "Unknown Origin",
+      destination: selectedDropoff ?? "Unknown Destination",
+      status: "Completed",
+      fare: currentMatch!.fare,
+      date: "${DateTime.now().day} ${_getMonth(DateTime.now().month)} ${DateTime.now().year}", 
+      rideType: selectedRideId == 'eco_1' ? "Shared" : "Solo", 
+    );
+
+    // Write to SQLite
+    await _repository.saveTrip(newTrip);
+
+    reset();
+  }
+
+  String _getMonth(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
   }
 }

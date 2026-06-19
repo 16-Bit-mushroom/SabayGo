@@ -1,15 +1,17 @@
 class DriverMatchDTO {
   final String driverName;
+  final double driverRating;
+  final String vehiclePlate;
   final String vehicleModel;
-  final String plateNumber;
-  final String vehicleColor;
-  final String rating;
+  final int etaMinutes;
+  final double fare;
 
   DriverMatchDTO({
     required this.driverName,
+    required this.driverRating,
+    required this.vehiclePlate,
     required this.vehicleModel,
-    required this.plateNumber,
-    required this.vehicleColor,
-    required this.rating,
+    required this.etaMinutes,
+    required this.fare,
   });
 }

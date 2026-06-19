@@ -1,62 +1,80 @@
 import 'package:flutter/material.dart';
+import '../../../core/domain/models/user_model.dart';
+import '../../../core/data/repositories/user_repository.dart';
 
-// 1. The Domain Entity (Matches your backend JSON structure)
-class UserProfile {
-  final String fullName;
-  final String accountType;
-  final String subscriptionTier;
-  final double rating;
-  final String joinDate;
-  final int totalTrips;
-  final String co2Saved;
-  final int availableVouchers;
-
-  UserProfile({
-    required this.fullName,
-    required this.accountType,
-    required this.subscriptionTier,
-    required this.rating,
-    required this.joinDate,
-    required this.totalTrips,
-    required this.co2Saved,
-    required this.availableVouchers,
-  });
-}
-
-// 2. The ViewModel
 class ProfileViewModel extends ChangeNotifier {
-  bool isLoading = false;
-  UserProfile? currentUser;
+  // 1. The Interface Contract
+  final IUserRepository repository;
+  
+  UserModel? _currentUser;
+  bool _isLoading = false;
 
-  ProfileViewModel() {
-    _loadMockProfile();
+  // 2. The Constructor (Notice the 'required this.repository' to fix main.dart)
+  ProfileViewModel({required this.repository}) {
+    _loadInitialUser();
   }
 
-  // When your Python backend is ready, you swap this out for an HTTP GET request!
-  Future<void> _loadMockProfile() async {
-    isLoading = true;
+  UserModel? get currentUser => _currentUser;
+  bool get isLoading => _isLoading;
+
+  // Read: Fetch the seed data (or newly created user) from SQLite
+  Future<void> _loadInitialUser() async {
+    _isLoading = true;
     notifyListeners();
 
-    // Simulating network delay
-    await Future.delayed(const Duration(milliseconds: 800));
+    // Pulling the mock user we seeded in database_helper.dart
+    _currentUser = await repository.getUser('user_001'); 
+    
+    _isLoading = false;
+    notifyListeners();
+  }
 
-    currentUser = UserProfile(
-      fullName: "Alex Johnson",
-      accountType: "Passenger",
-      subscriptionTier: "Free Plan",
-      rating: 4.9,
-      joinDate: "Jan 2024",
-      totalTrips: 47,
-      co2Saved: "18 kg",
-      availableVouchers: 3,
+  // Create: For the Sign Up Screen
+  Future<void> registerUser(UserModel newUser) async {
+    _isLoading = true;
+    notifyListeners();
+
+    await repository.createUser(newUser);
+    _currentUser = newUser;
+    
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // Update: For the Edit Profile Screen
+  Future<void> saveProfileUpdates(Map<String, dynamic> updatedData) async {
+    if (_currentUser == null) return;
+    
+    _isLoading = true;
+    notifyListeners();
+
+    final updatedUser = UserModel(
+      id: _currentUser!.id,
+      firstName: updatedData['firstName'],
+      lastName: updatedData['lastName'],
+      middleName: _currentUser!.middleName,
+      email: updatedData['email'],
+      phoneNumber: updatedData['phoneNumber'],
+      emergencyContactName: updatedData['emergencyContactName'],
+      emergencyContactPhone: updatedData['emergencyContactPhone'],
+      accountType: _currentUser!.accountType,
+      subscriptionTier: _currentUser!.subscriptionTier,
+      rating: _currentUser!.rating,
+      joinDate: _currentUser!.joinDate,
+      totalTrips: _currentUser!.totalTrips,
+      co2Saved: _currentUser!.co2Saved,
+      availableVouchers: _currentUser!.availableVouchers,
     );
 
-    isLoading = false;
+    await repository.updateUser(updatedUser);
+    _currentUser = updatedUser;
+    
+    _isLoading = false;
     notifyListeners();
   }
 
   void signOut() {
-    // Handle token clearing and state reset here
-    debugPrint("Signing out...");
+    _currentUser = null;
+    notifyListeners();
   }
 }
