@@ -1,5 +1,7 @@
 .
 ├── core
+│   ├── database
+│   │   └── database_helper.dart
 │   ├── theme
 │   │   └── app_colors.dart
 │   └── widgets
@@ -22,48 +24,63 @@
 │   │   │       ├── promo_card.dart
 │   │   │       └── ride_option_card.dart
 │   │   └── viewmodels
-│   │       └── booking_viewmodel.dart
+│   │       ├── booking_viewmodel.dart
+│   │       └── driver_viewmodel.dart
+│   ├── communications
+│   │   └── presentations
+│   │       ├── screens
+│   │       │   ├── chat_detail_screen.dart
+│   │       │   └── messages_screen.dart
+│   │       └── widgets
 │   ├── dashboard
 │   │   └── presentation
 │   │       └── screens
-│   │           └── commuter_dashboard.dart
+│   │           ├── commuter_dashboard.dart
+│   │           └── driver_dashboard.dart
 │   ├── identity
-│   │   └── presentation
-│   │       ├── screens
-│   │       │   ├── go_premium_screen.dart
-│   │       │   └── profile_screen.dart
-│   │       └── widgets
-│   │           ├── premium_comparison_table.dart
-│   │           ├── premium_feature_card.dart
-│   │           ├── profile_kpi_card.dart
-│   │           └── settings_tile.dart
+│   │   ├── presentation
+│   │   │   ├── screens
+│   │   │   │   ├── edit_profile_screen.dart
+│   │   │   │   ├── go_premium_screen.dart
+│   │   │   │   ├── login_screen.dart
+│   │   │   │   └── profile_screen.dart
+│   │   │   └── widgets
+│   │   │       ├── premium_comparison_table.dart
+│   │   │       ├── premium_feature_card.dart
+│   │   │       ├── profile_kpi_card.dart
+│   │   │       └── settings_tile.dart
+│   │   └── viewmodels
+│   │       └── profile_viewmodel.dart
 │   └── trip
-│       └── presentation
-│           ├── screens
-│           │   ├── driver_navigation_screen.dart
-│           │   ├── driver_trip_history_screen.dart
-│           │   ├── in_ride_screen.dart
-│           │   ├── ride_request_screen.dart
-│           │   ├── trip_completed_screen.dart
-│           │   └── trip_history_screen.dart
-│           └── widgets
-│               ├── co_passenger_card.dart
-│               ├── driver_passenger_card.dart
-│               ├── driver_trip_card.dart
-│               ├── driver_trip_filter_bar.dart
-│               ├── driver_trip_summary_row.dart
-│               ├── fare_breakdown_card.dart
-│               ├── navigation_header.dart
-│               ├── request_route_details.dart
-│               ├── request_stat_card.dart
-│               ├── request_timer_ring.dart
-│               ├── trip_filter_bar.dart
-│               ├── trip_history_card.dart
-│               ├── trip_stepper.dart
-│               └── trip_summary_row.dart
+│       ├── presentation
+│       │   ├── screens
+│       │   │   ├── driver_navigation_screen.dart
+│       │   │   ├── driver_trip_history_screen.dart
+│       │   │   ├── driver_trip_summary_screen.dart
+│       │   │   ├── in_ride_screen.dart
+│       │   │   ├── ride_request_screen.dart
+│       │   │   ├── trip_completed_screen.dart
+│       │   │   └── trip_history_screen.dart
+│       │   └── widgets
+│       │       ├── co_passenger_card.dart
+│       │       ├── driver_passenger_card.dart
+│       │       ├── driver_trip_card.dart
+│       │       ├── driver_trip_filter_bar.dart
+│       │       ├── driver_trip_summary_row.dart
+│       │       ├── fare_breakdown_card.dart
+│       │       ├── navigation_header.dart
+│       │       ├── request_route_details.dart
+│       │       ├── request_stat_card.dart
+│       │       ├── request_timer_ring.dart
+│       │       ├── trip_filter_bar.dart
+│       │       ├── trip_history_card.dart
+│       │       ├── trip_stepper.dart
+│       │       └── trip_summary_row.dart
+│       └── viewmodels
+│           └── trip_history_viewmodel.dart
 ├── file_structure.txt
 ├── main.dart
 ├── services
 └── viewmodels
 
-25 directories, 42 files
+32 directories, 52 files
