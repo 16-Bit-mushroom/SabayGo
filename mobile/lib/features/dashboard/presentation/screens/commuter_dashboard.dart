@@ -13,6 +13,7 @@ import 'package:mobile/features/trip/presentation/screens/in_ride_screen.dart';
 import 'package:mobile/features/trip/presentation/screens/trip_completed_screen.dart';
 import 'package:mobile/features/trip/presentation/screens/trip_history_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:mobile/features/booking/presentation/screens/location_search_screen.dart';
 
 class CommuterDashboard extends StatefulWidget {
   const CommuterDashboard({Key? key}) : super(key: key);
@@ -103,10 +104,22 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
 
     // Index 0 (Home) runs your state machine
     switch (viewModel.currentStep) {
+
+      case BookingStep.idle:
+        return _buildHomeMapState(context);
+
       case BookingStep.selectingRide:
         return RideSelectionScreen(
           selectedRideId: viewModel.selectedRideId,
-          onBackPressed: () => debugPrint("Navigating back to main map..."),
+          onBackPressed: () {
+            // Reset to the idle map state
+            viewModel.reset(); 
+            // Immediately slide up the location search screen again
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const LocationSelectionScreen()),
+            );
+          },
           onRideSelected: (String id) => viewModel.selectRide(id),
           onConfirmRide: () => viewModel.proceedToPayment(),
         );
@@ -226,36 +239,100 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
           onStartRide: () => viewModel.startRide(),
         );
 
-      case BookingStep.inRide:
+     case BookingStep.inRide:
         return InRideScreen(
           onSosPressed: () => debugPrint("SOS Emergency Triggered!"),
-          onBackPressed: () => debugPrint("Removed back button"),
-          onSimulateDropoff: () async {
-            // 1. Get the real user ID from the ProfileViewModel
+          onBackPressed: () {}, // FIXED: Empty callback prevents accidental backing out of a live ride
+          onSimulateDropoff: () {
+            // DO NOT save to database here. 
+            // Just transition the UI to the receipt screen.
+            viewModel.finishRide(); 
+          },
+        );
+
+      case BookingStep.completed:
+        return TripCompletedScreen(
+          // 1. Pass the live data from the ViewModel to the Receipt
+          driverName: viewModel.currentMatch?.driverName ?? "Driver",
+          origin: viewModel.selectedPickup ?? "Origin",
+          destination: viewModel.selectedDropoff ?? "Destination",
+          fare: viewModel.currentMatch?.fare ?? 0.0,
+          paymentMethod: viewModel.selectedPaymentId.isEmpty ? "Cash" : viewModel.selectedPaymentId,
+          
+          // 2. THIS is where we actually save to SQLite and reset
+          onReturnHome: () async {
+            // Grab the user ID
             final currentUserId = context.read<ProfileViewModel>().currentUser?.id ?? "user_001";
             
-            // 2. Trigger the SQLite Save in the BookingViewModel
-            await context.read<BookingViewModel>().completeRide(currentUserId);
+            // Execute the database save (this also calls reset() internally)
+            await viewModel.completeRide(currentUserId);
             
-            // 3. Show a success message
+            // Show the success confirmation
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: const Text("Ride completed and saved to history! ✓"),
-                  backgroundColor: const Color(0xFF00A859),
+                  backgroundColor: const Color(0xFF00A859), // Success Green
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               );
             }
-          }
+          },
         );
-
-      case BookingStep.completed:
-        return TripCompletedScreen(onReturnHome: () => viewModel.resetToHome());
 
       default:
         return const Center(child: CircularProgressIndicator());
-    }
+  }
+  }
+
+
+  Widget _buildHomeMapState(BuildContext context) {
+    return Stack(
+      children: [
+        // 1. Mock Map Background
+        Positioned.fill(
+          child: Container(
+            color: AppColors.highlight.withOpacity(0.2), // Light frosty blue map placeholder
+            child: const Center(
+              child: Text("🗺️ Live Map Active\n(Awaiting Route)", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+            ),
+          ),
+        ),
+        
+        // 2. Floating "Where to?" Search Bar
+        Positioned(
+          top: 60,
+          left: 20,
+          right: 20,
+          child: GestureDetector(
+            onTap: () {
+              // Trigger the Location Selection Screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LocationSelectionScreen()),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))
+                ],
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.search, color: Colors.grey),
+                  SizedBox(width: 12),
+                  Text("Where to?", style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
