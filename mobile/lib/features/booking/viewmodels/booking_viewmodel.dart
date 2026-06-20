@@ -5,6 +5,7 @@ import '../infrastructure/booking_dto.dart';
 
 // The absolute states of your booking flow
 enum BookingStep {
+  idle,
   selectingRide,
   selectingPayment,
   matching,
@@ -17,7 +18,7 @@ class BookingViewModel extends ChangeNotifier {
   final IBookingRepository _repository;
 
   // State variables to track user interactions
-  String selectedRideId = 'eco_1'; // Defaults to Shared
+  String selectedRideId = ''; // Defaults to Shared
   String selectedPaymentId = ''; // Defaults to GCash
   bool isPromoApplied = true; // Defaults to Promo ON
 
@@ -25,11 +26,19 @@ class BookingViewModel extends ChangeNotifier {
   String? selectedPickup = "University of Mindanao - Matina"; 
   String? selectedDropoff = "SM City Davao"; 
 
-  BookingStep currentStep = BookingStep.selectingRide;
+  BookingStep currentStep = BookingStep.idle;
   DriverMatchDTO? currentMatch;
   String? errorMessage;
 
   BookingViewModel(this._repository);
+
+  // 3. Add this new method right below your constructor
+  void setRouteAndSelectRide(String pickup, String dropoff) {
+    selectedPickup = pickup;
+    selectedDropoff = dropoff;
+    currentStep = BookingStep.selectingRide;
+    notifyListeners();
+  }
 
   void selectRide(String id) {
     selectedRideId = id;
@@ -80,9 +89,9 @@ class BookingViewModel extends ChangeNotifier {
   }
 
   void reset() {
-    currentStep = BookingStep.selectingRide; 
+    currentStep = BookingStep.idle; 
     selectedPaymentId = '';
-    selectedRideId = 'eco_1';
+    selectedRideId = '';
     isPromoApplied = false;
     currentMatch = null;
     notifyListeners();
@@ -106,6 +115,12 @@ class BookingViewModel extends ChangeNotifier {
     } finally {
       notifyListeners();
     }
+  }
+
+  // NEW: Transition to the receipt screen
+  void finishRide() {
+    currentStep = BookingStep.completed;
+    notifyListeners();
   }
 
   // FIXED: Removed duplicates, added the underscore to _repository

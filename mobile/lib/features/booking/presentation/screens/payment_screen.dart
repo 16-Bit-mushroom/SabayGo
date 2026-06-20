@@ -16,8 +16,8 @@ class PaymentScreen extends StatelessWidget {
     Key? key,
     required this.onBackPressed,
     this.selectedPaymentId =
-        'gcash', // Defaulting to digital wallet for your P2P setup
-    this.isPromoApplied = true,
+        '', // Defaulting to digital wallet for your P2P setup
+    this.isPromoApplied = false,
     required this.onPaymentMethodSelected,
     required this.onTogglePromo,
     required this.onProceedToBook,
