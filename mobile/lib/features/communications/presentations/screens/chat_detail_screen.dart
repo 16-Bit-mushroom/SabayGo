@@ -1,5 +1,16 @@
 import 'package:flutter/material.dart';
 
+// 1. The Data Model to support statuses and IDs
+class ChatMessage {
+  final String id;
+  String text;
+  final bool isMe;
+  final String time;
+  String status; // 'sending', 'sent', 'read', 'failed'
+
+  ChatMessage({required this.id, required this.text, required this.isMe, required this.time, this.status = 'sent'});
+}
+
 class ChatDetailScreen extends StatefulWidget {
   final String driverName;
   const ChatDetailScreen({Key? key, required this.driverName}) : super(key: key);
@@ -11,11 +22,158 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _isComposing = false;
+  String? _editingMessageId;
+
+  // 2. The Stateful Message List
+  final List<ChatMessage> _messages = [
+    ChatMessage(id: '1', text: "Hello! I'm your driver. I'm on my way.", isMe: false, time: "9:05 AM"),
+    ChatMessage(id: '2', text: "Great! I'm downstairs waiting.", isMe: true, time: "9:06 AM", status: 'read'),
+  ];
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  void _handleSend() {
+    if (_controller.text.trim().isEmpty) return;
+
+    setState(() {
+      if (_editingMessageId != null) {
+        // Edit existing message
+        final msgIndex = _messages.indexWhere((m) => m.id == _editingMessageId);
+        if (msgIndex != -1) {
+          _messages[msgIndex].text = _controller.text.trim();
+        }
+        _editingMessageId = null;
+      } else {
+        // Send new message
+        _messages.add(ChatMessage(
+          id: DateTime.now().toString(),
+          text: _controller.text.trim(),
+          isMe: true,
+          time: "Just now",
+          status: 'sent', // You could set this to 'sending' and use a Future.delayed to simulate network latency
+        ));
+      }
+      _controller.clear();
+      _isComposing = false;
+    });
+  }
+
+  // 3. The Long-Press Action Menu
+  // 3. The Long-Press Action Menu with Unsend Confirmation
+  void _showMessageOptions(ChatMessage message) {
+    if (!message.isMe) return; // Only allow editing/unsending your own messages
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message.status == 'failed')
+              ListTile(
+                leading: const Icon(Icons.refresh, color: Colors.blue),
+                title: const Text("Resend Message"),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() => message.status = 'sent');
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.edit, color: Colors.black87),
+              title: const Text("Edit"),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _editingMessageId = message.id;
+                  _controller.text = message.text;
+                  _isComposing = true;
+                });
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text("Unsend", style: TextStyle(color: Colors.red)),
+              onTap: () {
+                // 1. Close the bottom sheet first
+                Navigator.pop(context); 
+                
+                // 2. Show the Confirmation Dialog
+                showDialog(
+                  context: context,
+                  builder: (BuildContext dialogContext) {
+                    return AlertDialog(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      title: const Text("Unsend Message?", style: TextStyle(fontWeight: FontWeight.bold)),
+                      content: const Text("This message will be removed for everyone in the chat. Are you sure?"),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext), // Just close the dialog
+                          child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(dialogContext); // Close the dialog
+                            // 3. Actually execute the delete action
+                            setState(() => _messages.removeWhere((m) => m.id == message.id));
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade50,
+                            elevation: 0,
+                          ),
+                          child: const Text("Unsend", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 4. The VoIP Dialer Simulation
+  void _showCallDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.all(24),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircleAvatar(
+              radius: 40,
+              backgroundColor: Color(0xFFE5F6EE),
+              child: Icon(Icons.person, size: 40, color: Color(0xFF00A859)),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Calling ${widget.driverName.split(' ').first}...",
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text("Secure VoIP connection", style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 32),
+            FloatingActionButton(
+              backgroundColor: Colors.red,
+              elevation: 0,
+              onPressed: () => Navigator.pop(context),
+              child: const Icon(Icons.call_end, color: Colors.white),
+            )
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -28,14 +186,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 16),
-              onPressed: () => Navigator.pop(context),
-            ),
+            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
+            child: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 16), onPressed: () => Navigator.pop(context)),
           ),
         ),
         title: Row(
@@ -45,10 +197,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 const CircleAvatar(radius: 18, backgroundColor: Color(0xFFF3F0FF), child: Icon(Icons.person, color: Color(0xFF2D2059), size: 20)),
                 Positioned(
                   right: 0, bottom: 0,
-                  child: Container(
-                    width: 10, height: 10,
-                    decoration: BoxDecoration(color: const Color(0xFF00A859), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                  ),
+                  child: Container(width: 10, height: 10, decoration: BoxDecoration(color: const Color(0xFF00A859), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2))),
                 ),
               ],
             ),
@@ -66,13 +215,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           Container(
             margin: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
-            child: IconButton(icon: const Icon(Icons.call_outlined, color: Color(0xFF00A859), size: 20), onPressed: () {}),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
-            child: IconButton(icon: const Icon(Icons.more_vert, color: Colors.black, size: 20), onPressed: () {}),
+            child: IconButton(icon: const Icon(Icons.call_outlined, color: Color(0xFF00A859), size: 20), onPressed: _showCallDialog), // WIRED
           ),
           const SizedBox(width: 16),
         ],
@@ -80,23 +223,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       body: Column(
         children: [
           Expanded(
-            child: ListView(
+            child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              children: [
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
-                    child: const Text("Today", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildMessageBubble("Hello! I'm your driver Marcus. I'm on my way.", "9:05 AM", false),
-                _buildMessageBubble("Great! I'm downstairs waiting.", "9:06 AM", true),
-                _buildMessageBubble("Perfect, I can see you on the map. ETA 5 mins.", "9:07 AM", false),
-                _buildMessageBubble("Okay, I'll stay at the main entrance 👍", "9:08 AM", true),
-                _buildMessageBubble("I'm 2 minutes away, please be ready!", "9:12 AM", false),
-              ],
+              itemCount: _messages.length,
+              itemBuilder: (context, index) => _buildMessageBubble(_messages[index]),
             ),
           ),
           _buildInputArea(),
@@ -105,40 +235,56 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  Widget _buildMessageBubble(String text, String time, bool isMe) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            const CircleAvatar(radius: 12, backgroundColor: Color(0xFFF3F0FF), child: Icon(Icons.person, color: Color(0xFF2D2059), size: 14)),
-            const SizedBox(width: 8),
-          ],
-          Column(
-            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            children: [
-              Container(
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isMe ? const Color(0xFF5A4499) : Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(16),
-                    topRight: const Radius.circular(16),
-                    bottomLeft: Radius.circular(isMe ? 16 : 4),
-                    bottomRight: Radius.circular(isMe ? 4 : 16),
-                  ),
-                  border: isMe ? null : Border.all(color: Colors.grey.shade200),
-                ),
-                child: Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.black87, fontSize: 14)),
-              ),
-              const SizedBox(height: 4),
-              Text(time, style: TextStyle(color: Colors.grey.shade400, fontSize: 10)),
+  Widget _buildMessageBubble(ChatMessage msg) {
+    return GestureDetector(
+      onLongPress: () => _showMessageOptions(msg), // WIRED LONG PRESS
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16.0),
+        child: Row(
+          mainAxisAlignment: msg.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!msg.isMe) ...[
+              const CircleAvatar(radius: 12, backgroundColor: Color(0xFFF3F0FF), child: Icon(Icons.person, color: Color(0xFF2D2059), size: 14)),
+              const SizedBox(width: 8),
             ],
-          ),
-        ],
+            Column(
+              crossAxisAlignment: msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: msg.isMe ? const Color(0xFF5A4499) : Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(msg.isMe ? 16 : 4),
+                      bottomRight: Radius.circular(msg.isMe ? 4 : 16),
+                    ),
+                    border: msg.isMe ? null : Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Text(msg.text, style: TextStyle(color: msg.isMe ? Colors.white : Colors.black87, fontSize: 14)),
+                ),
+                const SizedBox(height: 4),
+                // 5. The Status Indicators
+                Row(
+                  children: [
+                    Text(msg.time, style: TextStyle(color: Colors.grey.shade400, fontSize: 10)),
+                    if (msg.isMe) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        msg.status == 'read' ? Icons.done_all : (msg.status == 'failed' ? Icons.error_outline : Icons.check),
+                        size: 12,
+                        color: msg.status == 'read' ? Colors.blue : (msg.status == 'failed' ? Colors.red : Colors.grey.shade400),
+                      ),
+                    ]
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -148,23 +294,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       bottom: true,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey.shade200)),
-        ),
+        decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
         child: Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _controller,
-                onChanged: (text) {
-                  setState(() {
-                    _isComposing = text.trim().isNotEmpty;
-                  });
-                },
+                onChanged: (text) => setState(() => _isComposing = text.trim().isNotEmpty),
                 decoration: InputDecoration(
-                  hintText: "Type a message...",
-                  hintStyle: TextStyle(color: Colors.grey.shade400),
+                  hintText: _editingMessageId != null ? "Edit message..." : "Type a message...",
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: Colors.grey.shade300)),
                   enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: Colors.grey.shade300)),
@@ -173,33 +311,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            
-            // INJECTED: GestureDetector instead of IconButton for absolute color control
             GestureDetector(
-              onTap: _isComposing 
-                ? () {
-                    _controller.clear();
-                    setState(() {
-                      _isComposing = false; 
-                    });
-                    // Handle send logic here
-                  }
-                : null,
+              onTap: _isComposing ? _handleSend : null,
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: _isComposing ? const Color(0xFF5A4499) : Colors.white, 
-                  shape: BoxShape.circle, 
-                  border: Border.all(color: _isComposing ? const Color(0xFF5A4499) : Colors.grey.shade300)
+                  color: _isComposing ? const Color(0xFF5A4499) : Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _isComposing ? const Color(0xFF5A4499) : Colors.grey.shade300),
                 ),
-                child: Icon(
-                  Icons.send, 
-                  color: _isComposing ? Colors.white : const Color(0xFFD0C9E8), 
-                  size: 20,
-                ),
+                child: Icon(_editingMessageId != null ? Icons.check : Icons.send, color: _isComposing ? Colors.white : const Color(0xFFD0C9E8), size: 20),
               ),
             ),
-            
           ],
         ),
       ),

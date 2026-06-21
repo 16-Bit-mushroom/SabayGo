@@ -1,26 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/app_colors.dart';
-import 'chat_detail_screen.dart'; // We will build this next
+import 'package:mobile/features/booking/viewmodels/booking_viewmodel.dart';
+import 'package:provider/provider.dart';
+import 'chat_detail_screen.dart'; 
 
 class MessagesScreen extends StatelessWidget {
   const MessagesScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // 1. Watch the booking state to see if we have an active driver
+    final bookingVM = context.watch<BookingViewModel>();
+    final activeMatch = bookingVM.currentMatch;
+    final isRideActive = activeMatch != null && 
+        (bookingVM.currentStep == BookingStep.matched || bookingVM.currentStep == BookingStep.inRide);
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
-        // Simplified Title
         title: const Text("Messages", style: TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
         actions: [
-          // Moved the options menu to standard trailing position
-          IconButton(
-            icon: Icon(Icons.more_horiz, color: Colors.grey.shade400),
-            onPressed: () {},
-          ),
+          IconButton(icon: Icon(Icons.more_horiz, color: Colors.grey.shade400), onPressed: () {}),
           const SizedBox(width: 8),
         ],
       ),
@@ -37,14 +40,8 @@ class MessagesScreen extends StatelessWidget {
                 filled: true,
                 fillColor: Colors.grey.shade50,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
               ),
             ),
           ),
@@ -53,18 +50,27 @@ class MessagesScreen extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                _buildChatTile(
-                  context,
-                  name: "Marcus Williams",
-                  message: "I'm 2 minutes away, please be ready!",
-                  time: "9:12 AM",
-                  unreadCount: 2,
-                  role: "Driver",
-                  roleColor: const Color(0xFFE8E5F6),
-                  roleTextColor: const Color(0xFF2D2059),
-                  isOnline: true,
-                ),
-                const Divider(height: 1, indent: 72),
+                // 2. DYNAMIC PINNED CHAT: Only shows if a ride is active
+                if (isRideActive) ...[
+                  Container(
+                    color: AppColors.primaryAction.withOpacity(0.05), // Light highlight
+                    child: _buildChatTile(
+                      context,
+                      name: activeMatch.driverName,
+                      message: "Tap to message your current driver.",
+                      time: "Now",
+                      unreadCount: 0,
+                      role: "Active Driver",
+                      roleColor: AppColors.primaryAction.withOpacity(0.2),
+                      roleTextColor: AppColors.primaryAction,
+                      isOnline: true,
+                      isPinned: true, // Shows the pin icon
+                    ),
+                  ),
+                  const Divider(height: 1, indent: 72),
+                ],
+
+                // Static Mock Chats Below
                 _buildChatTile(
                   context,
                   name: "Sarah Kim",
@@ -89,18 +95,6 @@ class MessagesScreen extends StatelessWidget {
                   isOnline: true,
                   isSupport: true,
                 ),
-                const Divider(height: 1, indent: 72),
-                _buildChatTile(
-                  context,
-                  name: "Dev Patel",
-                  message: "Good luck on your meeting!",
-                  time: "Sun",
-                  unreadCount: 0,
-                  role: "Co-passenger",
-                  roleColor: Colors.transparent,
-                  roleTextColor: Colors.grey,
-                  isOnline: false,
-                ),
               ],
             ),
           ),
@@ -112,12 +106,11 @@ class MessagesScreen extends StatelessWidget {
   Widget _buildChatTile(BuildContext context, {
     required String name, required String message, required String time,
     required int unreadCount, required String role, required Color roleColor,
-    required Color roleTextColor, required bool isOnline, bool isSupport = false,
+    required Color roleTextColor, required bool isOnline, bool isSupport = false, bool isPinned = false,
   }) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       onTap: () {
-        // Navigate to detail screen, hiding bottom nav bar
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => ChatDetailScreen(driverName: name)),
@@ -128,21 +121,14 @@ class MessagesScreen extends StatelessWidget {
           CircleAvatar(
             radius: 24,
             backgroundColor: isSupport ? const Color(0xFF2D2059) : const Color(0xFFF3F0FF),
-            child: Icon(
-              isSupport ? Icons.security : Icons.person,
-              color: isSupport ? Colors.white : const Color(0xFF2D2059),
-            ),
+            child: Icon(isSupport ? Icons.security : Icons.person, color: isSupport ? Colors.white : const Color(0xFF2D2059)),
           ),
           if (isOnline)
             Positioned(
               right: 0, bottom: 0,
               child: Container(
                 width: 12, height: 12,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00A859),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF00A859), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
               ),
             ),
         ],
@@ -150,7 +136,15 @@ class MessagesScreen extends StatelessWidget {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Row(
+            children: [
+              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              if (isPinned) ...[
+                const SizedBox(width: 4),
+                const Icon(Icons.push_pin, size: 14, color: AppColors.primaryAction),
+              ]
+            ],
+          ),
           Text(time, style: TextStyle(color: unreadCount > 0 ? const Color(0xFF2D2059) : Colors.grey, fontSize: 12, fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
@@ -158,12 +152,7 @@ class MessagesScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 4),
-          Text(
-            message,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: unreadCount > 0 ? Colors.black87 : Colors.grey, fontWeight: unreadCount > 0 ? FontWeight.w600 : FontWeight.normal),
-          ),
+          Text(message, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: unreadCount > 0 ? Colors.black87 : Colors.grey, fontWeight: unreadCount > 0 ? FontWeight.w600 : FontWeight.normal)),
           const SizedBox(height: 6),
           if (roleColor != Colors.transparent)
             Container(
@@ -175,13 +164,6 @@ class MessagesScreen extends StatelessWidget {
             Text(role, style: TextStyle(color: roleTextColor, fontSize: 10)),
         ],
       ),
-      trailing: unreadCount > 0
-          ? Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(color: Color(0xFF2D2059), shape: BoxShape.circle),
-              child: Text(unreadCount.toString(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-            )
-          : null,
     );
   }
 }
