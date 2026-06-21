@@ -4,6 +4,7 @@ import 'package:mobile/features/booking/presentation/screens/driver_match_screen
 import 'package:mobile/features/booking/presentation/screens/payment_screen.dart';
 import 'package:mobile/features/booking/presentation/screens/ride_selection_screen.dart';
 import 'package:mobile/features/booking/viewmodels/booking_viewmodel.dart';
+import 'package:mobile/features/communications/presentations/screens/chat_detail_screen.dart';
 import 'package:mobile/features/communications/presentations/screens/messages_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/edit_profile_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/login_screen.dart';
@@ -177,7 +178,6 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
       case BookingStep.matched:
         return DriverMatchScreen(
           driverName: viewModel.currentMatch!.driverName,
-          // Split "Toyota Vios - Silver" into Model and Color for the UI
           vehicleModel: viewModel.currentMatch!.vehicleModel.split(' - ').first,
           plateNumber: viewModel.currentMatch!.vehiclePlate,
           vehicleColor: viewModel.currentMatch!.vehicleModel.split(' - ').length > 1 
@@ -185,34 +185,70 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
               : "Standard",
           rating: viewModel.currentMatch!.driverRating.toStringAsFixed(1), 
           currentPaymentId: viewModel.selectedPaymentId,
-          onChangePayment: (String newMethod) =>
-              viewModel.selectPaymentMethod(newMethod),
-          onBackPressed: () => viewModel.stepBack(),
-          onMessageDriver: () => debugPrint("Opening chat..."),
-          onCallDriver: () => debugPrint("Initiating VoIP call..."),
+          onChangePayment: (String newMethod) => viewModel.selectPaymentMethod(newMethod),
+          onBackPressed: () {}, // Intentionally empty to prevent accidental back-outs
+          
+          // 1. WIRE UP THE MESSAGE BUTTON
+          onMessageDriver: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatDetailScreen(
+                  driverName: viewModel.currentMatch!.driverName,
+                ),
+              ),
+            );
+          },
+          
+          // 2. WIRE UP THE CALL BUTTON (Simulated VoIP Dialer)
+          onCallDriver: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                contentPadding: const EdgeInsets.all(24),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Color(0xFFE5F6EE),
+                      child: Icon(Icons.person, size: 40, color: Color(0xFF00A859)),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Calling ${viewModel.currentMatch!.driverName.split(' ').first}...",
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text("Secure VoIP connection", style: TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 32),
+                    FloatingActionButton(
+                      backgroundColor: Colors.red,
+                      elevation: 0,
+                      onPressed: () => Navigator.pop(context), // Hangs up the call
+                      child: const Icon(Icons.call_end, color: Colors.white),
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
+          
           onCancelRide: () {
             showDialog(
               context: context,
               builder: (BuildContext dialogContext) {
                 return AlertDialog(
-                  backgroundColor: const Color(0xFFFAFAFA), // Replaced AppColors.surface fallback
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  title: const Text(
-                    "Cancel Ride?",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  content: const Text(
-                    "Are you sure you want to cancel this request? You may be charged a cancellation fee.",
-                  ),
+                  backgroundColor: const Color(0xFFFAFAFA),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: const Text("Cancel Ride?", style: TextStyle(fontWeight: FontWeight.bold)),
+                  content: const Text("Are you sure you want to cancel this request? You may be charged a cancellation fee."),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(dialogContext),
-                      child: const Text(
-                        "Keep Ride",
-                        style: TextStyle(color: Colors.grey),
-                      ),
+                      child: const Text("Keep Ride", style: TextStyle(color: Colors.grey)),
                     ),
                     ElevatedButton(
                       onPressed: () {
@@ -223,13 +259,7 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
                         backgroundColor: Colors.red.shade50,
                         elevation: 0,
                       ),
-                      child: const Text(
-                        "Yes, Cancel",
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: const Text("Yes, Cancel", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 );
