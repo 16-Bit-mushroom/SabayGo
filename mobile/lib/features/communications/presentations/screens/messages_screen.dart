@@ -113,7 +113,12 @@ class MessagesScreen extends StatelessWidget {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => ChatDetailScreen(driverName: name)),
+          MaterialPageRoute(
+            builder: (context) => ChatDetailScreen(
+              receiverName: name, 
+              role: role, // Passes "Active Driver", "Support", etc. dynamically
+            )
+          ),
         );
       },
       leading: Stack(

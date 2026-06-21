@@ -194,7 +194,8 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
               context,
               MaterialPageRoute(
                 builder: (context) => ChatDetailScreen(
-                  driverName: viewModel.currentMatch!.driverName,
+                  receiverName: viewModel.currentMatch!.driverName,
+                  role: "Driver", // Hardcoded role since this is the driver match screen
                 ),
               ),
             );

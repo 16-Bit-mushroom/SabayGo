@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
 
-// 1. The Data Model to support statuses and IDs
+// 1. The Data Model
 class ChatMessage {
   final String id;
   String text;
   final bool isMe;
   final String time;
-  String status; // 'sending', 'sent', 'read', 'failed'
+  String status;
 
   ChatMessage({required this.id, required this.text, required this.isMe, required this.time, this.status = 'sent'});
 }
 
 class ChatDetailScreen extends StatefulWidget {
-  final String driverName;
-  const ChatDetailScreen({Key? key, required this.driverName}) : super(key: key);
+  // CHANGED: Made generic so both Drivers and Passengers can use it
+  final String receiverName;
+  final String role; 
+
+  const ChatDetailScreen({
+    Key? key, 
+    required this.receiverName, 
+    required this.role
+  }) : super(key: key);
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
@@ -24,9 +31,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   bool _isComposing = false;
   String? _editingMessageId;
 
-  // 2. The Stateful Message List
   final List<ChatMessage> _messages = [
-    ChatMessage(id: '1', text: "Hello! I'm your driver. I'm on my way.", isMe: false, time: "9:05 AM"),
+    ChatMessage(id: '1', text: "Hello! I'm on my way.", isMe: false, time: "9:05 AM"),
     ChatMessage(id: '2', text: "Great! I'm downstairs waiting.", isMe: true, time: "9:06 AM", status: 'read'),
   ];
 
@@ -41,20 +47,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     setState(() {
       if (_editingMessageId != null) {
-        // Edit existing message
         final msgIndex = _messages.indexWhere((m) => m.id == _editingMessageId);
-        if (msgIndex != -1) {
-          _messages[msgIndex].text = _controller.text.trim();
-        }
+        if (msgIndex != -1) _messages[msgIndex].text = _controller.text.trim();
         _editingMessageId = null;
       } else {
-        // Send new message
         _messages.add(ChatMessage(
           id: DateTime.now().toString(),
           text: _controller.text.trim(),
           isMe: true,
           time: "Just now",
-          status: 'sent', // You could set this to 'sending' and use a Future.delayed to simulate network latency
+          status: 'sent',
         ));
       }
       _controller.clear();
@@ -62,10 +64,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
   }
 
-  // 3. The Long-Press Action Menu
-  // 3. The Long-Press Action Menu with Unsend Confirmation
   void _showMessageOptions(ChatMessage message) {
-    if (!message.isMe) return; // Only allow editing/unsending your own messages
+    if (!message.isMe) return;
 
     showModalBottomSheet(
       context: context,
@@ -99,10 +99,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text("Unsend", style: TextStyle(color: Colors.red)),
               onTap: () {
-                // 1. Close the bottom sheet first
-                Navigator.pop(context); 
-                
-                // 2. Show the Confirmation Dialog
+                Navigator.pop(context);
                 showDialog(
                   context: context,
                   builder: (BuildContext dialogContext) {
@@ -112,20 +109,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       title: const Text("Unsend Message?", style: TextStyle(fontWeight: FontWeight.bold)),
                       content: const Text("This message will be removed for everyone in the chat. Are you sure?"),
                       actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(dialogContext), // Just close the dialog
-                          child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
-                        ),
+                        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel", style: TextStyle(color: Colors.grey))),
                         ElevatedButton(
                           onPressed: () {
-                            Navigator.pop(dialogContext); // Close the dialog
-                            // 3. Actually execute the delete action
+                            Navigator.pop(dialogContext);
                             setState(() => _messages.removeWhere((m) => m.id == message.id));
                           },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.shade50,
-                            elevation: 0,
-                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, elevation: 0),
                           child: const Text("Unsend", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                         ),
                       ],
@@ -140,7 +130,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  // 4. The VoIP Dialer Simulation
   void _showCallDialog() {
     showDialog(
       context: context,
@@ -158,7 +147,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              "Calling ${widget.driverName.split(' ').first}...",
+              "Calling ${widget.receiverName.split(' ').first}...", // UPDATED TO USE GENERIC NAME
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -205,8 +194,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.driverName, style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
-                const Text("Online · Driver", style: TextStyle(color: Color(0xFF00A859), fontSize: 12)),
+                Text(widget.receiverName, style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)), // UPDATED
+                Text("Online · ${widget.role}", style: const TextStyle(color: Color(0xFF00A859), fontSize: 12)), // UPDATED
               ],
             ),
           ],
@@ -215,7 +204,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           Container(
             margin: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
-            child: IconButton(icon: const Icon(Icons.call_outlined, color: Color(0xFF00A859), size: 20), onPressed: _showCallDialog), // WIRED
+            child: IconButton(icon: const Icon(Icons.call_outlined, color: Color(0xFF00A859), size: 20), onPressed: _showCallDialog),
           ),
           const SizedBox(width: 16),
         ],
@@ -237,7 +226,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   Widget _buildMessageBubble(ChatMessage msg) {
     return GestureDetector(
-      onLongPress: () => _showMessageOptions(msg), // WIRED LONG PRESS
+      onLongPress: () => _showMessageOptions(msg),
       child: Padding(
         padding: const EdgeInsets.only(bottom: 16.0),
         child: Row(
@@ -267,7 +256,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   child: Text(msg.text, style: TextStyle(color: msg.isMe ? Colors.white : Colors.black87, fontSize: 14)),
                 ),
                 const SizedBox(height: 4),
-                // 5. The Status Indicators
                 Row(
                   children: [
                     Text(msg.time, style: TextStyle(color: Colors.grey.shade400, fontSize: 10)),
