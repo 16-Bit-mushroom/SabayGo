@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/features/booking/viewmodels/driver_viewmodel.dart';
 import 'package:mobile/features/communications/presentations/screens/chat_detail_screen.dart';
+import 'package:mobile/features/communications/presentations/screens/messages_screen.dart';
+import 'package:mobile/features/identity/presentation/screens/edit_profile_screen.dart';
+import 'package:mobile/features/identity/presentation/screens/login_screen.dart';
+import 'package:mobile/features/identity/presentation/screens/profile_screen.dart';
+import 'package:mobile/features/identity/viewmodels/profile_viewmodel.dart';
 import 'package:mobile/features/trip/presentation/screens/driver_navigation_screen.dart';
 import 'package:mobile/features/trip/presentation/screens/driver_trip_summary_screen.dart';
 import 'package:mobile/features/trip/presentation/screens/ride_request_screen.dart';
@@ -178,19 +183,55 @@ class _DriverDashboardState extends State<DriverDashboard> {
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: "Map"),
-          // CHANGED: Removed "Earnings", replaced with "Trips"
           BottomNavigationBarItem(icon: Icon(Icons.history), label: "Trips"),
-          BottomNavigationBarItem(icon: Icon(Icons.star), label: "Ratings"),
+          BottomNavigationBarItem(icon: Icon(Icons.message), label: "Messages"), // ADDED BACK
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),
     );
   }
-
-  Widget _buildBody(BuildContext context, DriverViewModel viewModel) {
+Widget _buildBody(BuildContext context, DriverViewModel viewModel) {
     if (_currentIndex == 1) return const Center(child: Text("Trip History & Shared Costs"));
-    if (_currentIndex == 2) return const Center(child: Text("Driver Ratings & Reviews"));
-    if (_currentIndex == 3) return const Center(child: Text("Driver Profile & Settings"));
+    if (_currentIndex == 2) return const MessagesScreen(); // WIRED UP
+    
+    if (_currentIndex == 3) {
+      return ProfileScreen(
+        onEditProfile: () {
+          final currentUser = context.read<ProfileViewModel>().currentUser;
+          
+          // Split the existing full name into First and Last
+          final nameParts = (currentUser?.fullName ?? "").split(" ");
+          final firstName = nameParts.isNotEmpty ? nameParts.first : "";
+          final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(" ") : "";
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditProfileScreen(
+                currentUserData: {
+                  'firstName': firstName,
+                  'lastName': lastName,
+                  'email': 'driver@example.edu.ph', 
+                  'phoneNumber': '+639171234567',
+                  'emergencyContactName': 'Maria Dela Cruz',
+                  'emergencyContactPhone': '+639189876543',
+                },
+              ),
+            ),
+          );
+        },
+        onSettingsTap: (setting) => debugPrint("$setting Tapped"),
+        onSignOut: () {
+          // Reset the driver state before logging out
+          viewModel.resetToOnline(); 
+          
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          );
+        },
+      );
+    }
 
     // Home Tab (Index 0) Controls the Driver Shift Lifecycle
     switch (viewModel.currentStep) {
