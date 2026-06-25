@@ -18,17 +18,52 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _keepSignedIn = true;
 
   void _handleSignIn() {
-    // Route to the appropriate dashboard based on the selected role
+    // MOCK DATA: In a real app, you would check the database here.
+    // For the prototype, we simulate that this specific test user is NOT a driver yet.
+    bool hasCompletedDriverKYC = true; 
+
     if (_isCommuter) {
+      // 1. Standard Passenger Login always works
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const CommuterDashboard()),
       );
     } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const DriverDashboard()),
-      );
+      // 2. Driver Login checks for KYC compliance first
+      if (hasCompletedDriverKYC) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DriverDashboard()),
+        );
+      } else {
+        // Force them back to passenger mode and show an error
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.gpp_maybe, color: Colors.orange),
+                SizedBox(width: 8),
+                Text("Verification Required", style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: const Text(
+              "You have not completed the Driver Registration process. Please sign in as a Passenger and tap 'Become a Carpool Driver' in your profile to submit your documents."
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  setState(() => _isCommuter = true); // Snap the toggle back to passenger
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2D2059)),
+                child: const Text("Sign In as Passenger", style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 

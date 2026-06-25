@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/features/booking/viewmodels/booking_viewmodel.dart';
+import 'package:mobile/features/booking/viewmodels/driver_viewmodel.dart';
 import 'package:provider/provider.dart';
 import 'chat_detail_screen.dart'; 
 
@@ -9,11 +10,17 @@ class MessagesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Watch the booking state to see if we have an active driver
+    // 1. Check Passenger State
     final bookingVM = context.watch<BookingViewModel>();
     final activeMatch = bookingVM.currentMatch;
-    final isRideActive = activeMatch != null && 
+    final isPassengerActive = activeMatch != null && 
         (bookingVM.currentStep == BookingStep.matched || bookingVM.currentStep == BookingStep.inRide);
+
+    // 2. Check Driver State
+    final driverVM = context.watch<DriverViewModel>();
+    final isDriverActive = driverVM.currentStep == DriverStep.headingToPickup || 
+                           driverVM.currentStep == DriverStep.arrivedAtPickup || 
+                           driverVM.currentStep == DriverStep.inRide;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -50,10 +57,10 @@ class MessagesScreen extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                // 2. DYNAMIC PINNED CHAT: Only shows if a ride is active
-                if (isRideActive) ...[
+                // DYNAMIC PINNED CHAT FOR PASSENGERS
+                if (isPassengerActive) ...[
                   Container(
-                    color: AppColors.primaryAction.withOpacity(0.05), // Light highlight
+                    color: AppColors.primaryAction.withOpacity(0.05),
                     child: _buildChatTile(
                       context,
                       name: activeMatch.driverName,
@@ -64,7 +71,27 @@ class MessagesScreen extends StatelessWidget {
                       roleColor: AppColors.primaryAction.withOpacity(0.2),
                       roleTextColor: AppColors.primaryAction,
                       isOnline: true,
-                      isPinned: true, // Shows the pin icon
+                      isPinned: true,
+                    ),
+                  ),
+                  const Divider(height: 1, indent: 72),
+                ],
+
+                // DYNAMIC PINNED CHAT FOR DRIVERS
+                if (isDriverActive) ...[
+                  Container(
+                    color: AppColors.success.withOpacity(0.05),
+                    child: _buildChatTile(
+                      context,
+                      name: "Sarah K.", // Mocked active passenger
+                      message: "Tap to message your current passenger.",
+                      time: "Now",
+                      unreadCount: 0,
+                      role: "Active Passenger",
+                      roleColor: AppColors.success.withOpacity(0.2),
+                      roleTextColor: AppColors.success,
+                      isOnline: true,
+                      isPinned: true,
                     ),
                   ),
                   const Divider(height: 1, indent: 72),
@@ -73,11 +100,11 @@ class MessagesScreen extends StatelessWidget {
                 // Static Mock Chats Below
                 _buildChatTile(
                   context,
-                  name: "Sarah Kim",
-                  message: "Thanks for sharing the ride! 🌿",
+                  name: "Marcus D.",
+                  message: "Thanks for the ride! 🌿",
                   time: "Yesterday",
                   unreadCount: 0,
-                  role: "Co-passenger",
+                  role: "Past Trip",
                   roleColor: Colors.transparent,
                   roleTextColor: Colors.grey,
                   isOnline: false,
@@ -86,7 +113,7 @@ class MessagesScreen extends StatelessWidget {
                 _buildChatTile(
                   context,
                   name: "SabayGo Support",
-                  message: "Your refund of ₱30 has been processed.",
+                  message: "Your profile verification is complete.",
                   time: "Mon",
                   unreadCount: 1,
                   role: "Support",
@@ -115,8 +142,8 @@ class MessagesScreen extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (context) => ChatDetailScreen(
-              receiverName: name, 
-              role: role, // Passes "Active Driver", "Support", etc. dynamically
+              receiverName: name,
+              role: role.contains("Driver") ? "Driver" : (role.contains("Support") ? "Support" : "Passenger"),
             )
           ),
         );
@@ -169,6 +196,13 @@ class MessagesScreen extends StatelessWidget {
             Text(role, style: TextStyle(color: roleTextColor, fontSize: 10)),
         ],
       ),
+      trailing: unreadCount > 0
+          ? Container(
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(color: Color(0xFF2D2059), shape: BoxShape.circle),
+              child: Text(unreadCount.toString(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            )
+          : null,
     );
   }
 }
