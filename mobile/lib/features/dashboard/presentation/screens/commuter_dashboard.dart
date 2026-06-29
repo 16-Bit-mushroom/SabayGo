@@ -8,6 +8,7 @@ import 'package:mobile/features/communications/presentations/screens/chat_detail
 import 'package:mobile/features/communications/presentations/screens/messages_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/edit_profile_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/login_screen.dart';
+import 'package:mobile/features/identity/presentation/screens/passenger_verification_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/profile_screen.dart';
 import 'package:mobile/features/identity/viewmodels/profile_viewmodel.dart';
 import 'package:mobile/features/trip/presentation/screens/in_ride_screen.dart';
@@ -364,6 +365,64 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
           ),
         ),
       ],
+    );
+    
+  }
+
+
+  // THE INTERCEPTOR MODAL
+  void _showVerificationRequiredModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.orange.shade50, shape: BoxShape.circle),
+                child: const Icon(Icons.security_update_warning, color: Colors.orange, size: 48),
+              ),
+              const SizedBox(height: 16),
+              const Text("Action Required", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              const Text(
+                "To maintain community safety, all commuters must submit a valid Government ID before requesting a seat on the SabayGo network.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 14, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2D2059),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context); // Close the modal
+                    // Push the user directly to the verification screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PassengerVerificationScreen()),
+                    );
+                  },
+                  child: const Text("Verify Identity Now", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("I'll do it later", style: TextStyle(color: Colors.grey)),
+              )
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
