@@ -14,19 +14,13 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
   
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController(); // Only for UI simulation
   bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -36,23 +30,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
       // 1. Generate a unique ID (Mocking a UUID for the prototype)
       final newUserId = 'user_${DateTime.now().millisecondsSinceEpoch}';
 
-      // 2. Create the new UserModel
-      // We pass empty strings for emergency contacts to be filled later via Edit Profile
+      // 2. Create the new UserModel with placeholders for progressive profiling
       final newUser = UserModel(
         id: newUserId,
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
+        firstName: 'Commuter', // Placeholder until they update their profile
+        lastName: '',          
         email: _emailController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
+        phoneNumber: 'Pending Setup', // Placeholder
         emergencyContactName: 'Pending Setup',
         emergencyContactPhone: 'Pending Setup',
         accountType: 'Passenger',
         subscriptionTier: 'Free',
-        rating: 5.0, // Start with perfect rating
+        rating: 5.0, 
         joinDate: 'Today',
         totalTrips: 0,
         co2Saved: '0 kg',
-        availableVouchers: 1, // Welcome bonus
+        availableVouchers: 1, 
       );
 
       // 3. Save to Database via ViewModel
@@ -89,30 +82,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             children: [
               const Text("Create Account", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF2D2059))),
               const SizedBox(height: 8),
-              const Text("Join SabayGo and start your journey.", style: TextStyle(color: Colors.grey, fontSize: 14)),
-              const SizedBox(height: 32),
+              const Text("Use your institutional email to join the SabayGo network.", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              const SizedBox(height: 40),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _firstNameController,
-                      validator: (value) => value == null || value.trim().isEmpty ? "Required" : null,
-                      decoration: _inputDecoration(Icons.person_outline, "First Name"),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _lastNameController,
-                      validator: (value) => value == null || value.trim().isEmpty ? "Required" : null,
-                      decoration: _inputDecoration(null, "Last Name"),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
+              // 1. Institutional Email
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
@@ -121,26 +94,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   if (!value.endsWith(".edu.ph")) return "Must be a valid .edu.ph address";
                   return null;
                 },
-                decoration: _inputDecoration(Icons.school_outlined, "University Email"),
+                decoration: _inputDecoration(Icons.school_outlined, "University Email (.edu.ph)"),
               ),
               const SizedBox(height: 20),
 
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                validator: (value) {
-                   if (value == null || value.isEmpty) return "Required";
-                   final clean = value.replaceAll(' ', '');
-                   if (!(clean.startsWith('09') && clean.length == 11) && 
-                       !(clean.startsWith('+639') && clean.length == 13)) {
-                     return "Valid PH format required";
-                   }
-                   return null;
-                },
-                decoration: _inputDecoration(Icons.phone_outlined, "Phone Number"),
-              ),
-              const SizedBox(height: 20),
-
+              // 2. Password
               TextFormField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
@@ -163,6 +121,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               const SizedBox(height: 40),
 
+              // 3. Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 56,
