@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import '../widgets/trip_stepper.dart';
 import '../widgets/co_passenger_card.dart';
-import '../widgets/fare_breakdown_card.dart';
 
 class InRideScreen extends StatefulWidget {
   final VoidCallback onSosPressed;
@@ -121,8 +120,8 @@ class _InRideScreenState extends State<InRideScreen> {
             bottom: 0,
             left: 0,
             right: 0,
-            // Fixed height: 480px when open, 90px (just the header) when closed
-            height: _isExpanded ? 480.0 : 90.0,
+            // UPDATED: Lowered the open height from 480.0 to 340.0
+            height: _isExpanded ? 280.0 : 135.0,
             child: Container(
               decoration: const BoxDecoration(
                 color: AppColors.surface,
@@ -169,11 +168,10 @@ class _InRideScreenState extends State<InRideScreen> {
                     ),
                   ),
 
-                  // THE CONTENT (Wrapped to prevent overflow)
+                  // THE CONTENT
                   Expanded(
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      // Dynamic bottom padding to respect the device bezel
                       padding: EdgeInsets.fromLTRB(
                           24, 0, 24, MediaQuery.of(context).padding.bottom + 16),
                       child: Column(
@@ -214,16 +212,7 @@ class _InRideScreenState extends State<InRideScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 32),
-
-                          // Fare Breakdown
-                          const FareBreakdownCard(
-                            baseFare: "₱ 50.00",
-                            distanceFare: "₱ 45.00",
-                            discount: "-₱ 41.80",
-                            serviceFee: "₱ 10.00",
-                            total: "₱ 53.20",
-                          ),
+                          // REMOVED: P2P Cost-Share Status box
                         ],
                       ),
                     ),

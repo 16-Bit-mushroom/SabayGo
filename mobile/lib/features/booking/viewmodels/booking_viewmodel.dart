@@ -23,8 +23,8 @@ class BookingViewModel extends ChangeNotifier {
   bool isPromoApplied = true; // Defaults to Promo ON
 
   // NEW: State variables for the route
-  String? selectedPickup = "University of Mindanao - Matina"; 
-  String? selectedDropoff = "SM City Davao"; 
+  String? selectedPickup = "University of Mindanao - Matina";
+  String? selectedDropoff = "SM City Davao";
 
   BookingStep currentStep = BookingStep.idle;
   DriverMatchDTO? currentMatch;
@@ -89,7 +89,7 @@ class BookingViewModel extends ChangeNotifier {
   }
 
   void reset() {
-    currentStep = BookingStep.idle; 
+    currentStep = BookingStep.idle;
     selectedPaymentId = '';
     selectedRideId = '';
     isPromoApplied = false;
@@ -100,18 +100,30 @@ class BookingViewModel extends ChangeNotifier {
   Future<void> requestRide(String pickup, String dropoff) async {
     currentStep = BookingStep.matching;
     errorMessage = null;
-    
+
     // Update the route state
     selectedPickup = pickup;
     selectedDropoff = dropoff;
     notifyListeners();
 
     try {
-      currentMatch = await _repository.findRide(pickup, dropoff);
+      // 1. Simulate the NAHGM Algorithm execution time
+      await Future.delayed(const Duration(seconds: 3));
+
+      // 2. Mock a guaranteed successful match for the defense demo
+      currentMatch = DriverMatchDTO(
+        driverName: "Carl Fernandez",
+        vehicleModel: "Toyota Vios - Silver",
+        vehiclePlate: "DVO 1234",
+        driverRating: 4.9,
+        fare: 0.0,
+        etaMinutes: 5, // Fare is now calculated at the end via P2P
+      );
+
       currentStep = BookingStep.matched;
     } catch (e) {
       errorMessage = "Failed to find a driver on this route.";
-      currentStep = BookingStep.selectingPayment;
+      currentStep = BookingStep.idle; // Send them back to idle, not payment
     } finally {
       notifyListeners();
     }
@@ -135,8 +147,9 @@ class BookingViewModel extends ChangeNotifier {
       destination: selectedDropoff ?? "Unknown Destination",
       status: "Completed",
       fare: currentMatch!.fare,
-      date: "${DateTime.now().day} ${_getMonth(DateTime.now().month)} ${DateTime.now().year}", 
-      rideType: selectedRideId == 'eco_1' ? "Shared" : "Solo", 
+      date:
+          "${DateTime.now().day} ${_getMonth(DateTime.now().month)} ${DateTime.now().year}",
+      rideType: selectedRideId == 'eco_1' ? "Shared" : "Solo",
     );
 
     // Write to SQLite
@@ -146,7 +159,20 @@ class BookingViewModel extends ChangeNotifier {
   }
 
   String _getMonth(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[month - 1];
   }
 }

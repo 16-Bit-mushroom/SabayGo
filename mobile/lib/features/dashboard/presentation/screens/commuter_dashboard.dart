@@ -6,6 +6,8 @@ import 'package:mobile/features/booking/presentation/screens/ride_selection_scre
 import 'package:mobile/features/booking/viewmodels/booking_viewmodel.dart';
 import 'package:mobile/features/communications/presentations/screens/chat_detail_screen.dart';
 import 'package:mobile/features/communications/presentations/screens/messages_screen.dart';
+import 'package:mobile/features/dashboard/presentation/screens/subscription_paywall_modal.dart';
+import 'package:mobile/features/dashboard/presentation/widgets/node_selection_hud.dart';
 import 'package:mobile/features/identity/presentation/screens/edit_profile_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/login_screen.dart';
 import 'package:mobile/features/identity/presentation/screens/passenger_verification_screen.dart';
@@ -185,8 +187,6 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
               ? viewModel.currentMatch!.vehicleModel.split(' - ').last 
               : "Standard",
           rating: viewModel.currentMatch!.driverRating.toStringAsFixed(1), 
-          currentPaymentId: viewModel.selectedPaymentId,
-          onChangePayment: (String newMethod) => viewModel.selectPaymentMethod(newMethod),
           onBackPressed: () {}, // Intentionally empty to prevent accidental back-outs
           
           // 1. WIRE UP THE MESSAGE BUTTON
@@ -284,26 +284,24 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
 
       case BookingStep.completed:
         return TripCompletedScreen(
-          // 1. Pass the live data from the ViewModel to the Receipt
           driverName: viewModel.currentMatch?.driverName ?? "Driver",
-          origin: viewModel.selectedPickup ?? "Origin",
-          destination: viewModel.selectedDropoff ?? "Destination",
-          fare: viewModel.currentMatch?.fare ?? 0.0,
-          paymentMethod: viewModel.selectedPaymentId.isEmpty ? "Cash" : viewModel.selectedPaymentId,
-          
-          // 2. THIS is where we actually save to SQLite and reset
-          onReturnHome: () async {
-            // Grab the user ID
-            final currentUserId = context.read<ProfileViewModel>().currentUser?.id ?? "user_001";
+          origin: _pickupNode?.name ?? "Origin",
+          destination: _dropoffNode?.name ?? "Destination",
+          onReturnHome: () {
+            // 1. Reset the ViewModel State Machine
+            viewModel.reset();
             
-            // Execute the database save (this also calls reset() internally)
-            await viewModel.completeRide(currentUserId);
+            // 2. Clear the local Node Selection HUD
+            setState(() {
+              _pickupNode = null;
+              _dropoffNode = null;
+            });
             
-            // Show the success confirmation
+            // 3. Show Success Message
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text("Ride completed and saved to history! ✓"),
+                  content: const Text("P2P settlement complete. Ready for your next ride!"),
                   backgroundColor: const Color(0xFF00A859), // Success Green
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -325,48 +323,62 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
         // 1. Mock Map Background
         Positioned.fill(
           child: Container(
-            color: AppColors.highlight.withOpacity(0.2), // Light frosty blue map placeholder
+            color: AppColors.highlight.withOpacity(0.2), 
             child: const Center(
-              child: Text("🗺️ Live Map Active\n(Awaiting Route)", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+              child: Text(
+                "🗺️ Live Map Active\n(McArthur Highway Corridor Geofenced)", 
+                textAlign: TextAlign.center, 
+                style: TextStyle(color: Colors.grey)
+              ),
             ),
           ),
         ),
         
-        // 2. Floating "Where to?" Search Bar
+        // 2. THE TOP APP BAR (Floating)
         Positioned(
           top: 60,
-          left: 20,
-          right: 20,
-          child: GestureDetector(
-            onTap: () {
-              // Trigger the Location Selection Screen
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const LocationSelectionScreen()),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))
-                ],
-              ),
-              child: Row(
-                children: const [
-                  Icon(Icons.search, color: Colors.grey),
-                  SizedBox(width: 12),
-                  Text("Where to?", style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold)),
-                ],
-              ),
+          left: 16,
+          right: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.menu, color: Color(0xFF2D2059)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    _hasActiveSaaS ? "SabayGo · Subscribed" : "SabayGo · Free Tier", 
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2D2059))
+                  ),
+                ),
+                const CircleAvatar(radius: 16, backgroundColor: Colors.blue, child: Icon(Icons.person, size: 16, color: Colors.white)),
+              ],
+            ),
+          ),
+        ),
+
+        // 3. THE STRICT NODE SELECTION HUD (Replaces the old 'Where to?' bar)
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            child: NodeSelectionHud(
+              selectedPickup: _pickupNode,
+              selectedDropoff: _dropoffNode,
+              onSelectPickup: (node) => setState(() => _pickupNode = node),
+              onSelectDropoff: (node) => setState(() => _dropoffNode = node),
+              onRequestRide: _handleRequestRide, // This triggers your eKYC and SaaS gates!
             ),
           ),
         ),
       ],
     );
-    
   }
 
 
@@ -424,5 +436,49 @@ class _CommuterDashboardState extends State<CommuterDashboard> {
         ),
       ),
     );
+  }
+
+  // Inside _CommuterDashboardState
+
+CarpoolNode? _pickupNode;
+CarpoolNode? _dropoffNode;
+
+// MOCK FLAGS FOR CAPSTONE DEFENSE:
+bool _isVerified = true;       // Intercepts eKYC if false
+bool _hasActiveSaaS = false;    // Intercepts Paywall if false
+
+void _handleRequestRide() {
+    // Gate 1: Check eKYC Identity Verification
+    if (!_isVerified) {
+      _showVerificationRequiredModal(context);
+      return;
+    }
+
+    // Gate 2: Check SaaS Zero-Commission Subscription
+    if (!_hasActiveSaaS) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => SubscriptionPaywallModal(
+          onSubscribeSuccess: () {
+            setState(() => _hasActiveSaaS = true);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("SaaS Subscription Activated! Searching for matched drivers..."), backgroundColor: Color(0xFF00A859)),
+            );
+          },
+        ),
+      );
+      return;
+    }
+
+    // 3. All gates cleared! Trigger the NAHGM matching state
+    if (_pickupNode != null && _dropoffNode != null) {
+      // Read the view model and trigger the matching process
+      context.read<BookingViewModel>().requestRide(
+        _pickupNode!.name, 
+        _dropoffNode!.name
+      );
+    }
   }
 }

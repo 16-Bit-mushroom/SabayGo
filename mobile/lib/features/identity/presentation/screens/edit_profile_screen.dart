@@ -17,6 +17,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   
   late TextEditingController _firstNameController;
   late TextEditingController _lastNameController;
+  late TextEditingController _middleNameController;
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _emergencyNameController;
@@ -27,6 +28,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     _firstNameController = TextEditingController(text: widget.currentUserData['firstName'] ?? '');
     _lastNameController = TextEditingController(text: widget.currentUserData['lastName'] ?? '');
+    _middleNameController = TextEditingController(text: widget.currentUserData['middleName'] ?? '');
     _emailController = TextEditingController(text: widget.currentUserData['email'] ?? '');
     _phoneController = TextEditingController(text: widget.currentUserData['phoneNumber'] ?? '');
     _emergencyNameController = TextEditingController(text: widget.currentUserData['emergencyContactName'] ?? '');
@@ -37,6 +39,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
+    _middleNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _emergencyNameController.dispose();
@@ -46,8 +49,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   void _saveProfile() {
     if (_formKey.currentState!.validate()) {
-      // TODO: Connect to SqliteUserRepository to execute UPDATE
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text("Profile validated and ready to save! ✓"),
@@ -71,11 +72,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text("Edit Profile", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text("Edit Profile", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        // TIGHTENED: Reduced outer padding from 24 to 16
+        padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
@@ -97,7 +99,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12), // TIGHTENED
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,27 +108,35 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         TextFormField(
                           controller: _lastNameController,
                           validator: (value) => value == null || value.trim().isEmpty ? "Required" : null,
-                          decoration: _inputDecoration(null), // No icon to save space
+                          decoration: _inputDecoration(null),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12), // TIGHTENED
+              
+              _buildInputLabel("Middle Name (Optional)"),
+              TextFormField(
+                controller: _middleNameController,
+                decoration: _inputDecoration(null),
+              ),
+              const SizedBox(height: 24), // TIGHTENED
 
-              _buildInputLabel("University Email"),
+              _buildSectionHeader("CONTACT INFORMATION"),
+              _buildInputLabel("Email Address"),
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) {
                   if (value == null || value.isEmpty) return "Email is required";
-                  if (!value.endsWith(".edu.ph")) return "Must be a valid .edu.ph address";
+                  if (!value.contains("@") || !value.contains(".")) return "Must be a valid email address";
                   return null;
                 },
-                decoration: _inputDecoration(Icons.school_outlined),
+                decoration: _inputDecoration(Icons.email_outlined),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12), // TIGHTENED
 
               _buildInputLabel("Phone Number"),
               TextFormField(
@@ -134,26 +144,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 keyboardType: TextInputType.phone,
                 validator: (value) {
                    if (value == null || value.isEmpty) return "Required";
-                   // Basic validation matching the Python Value Object logic
                    final clean = value.replaceAll(' ', '');
                    if (!(clean.startsWith('09') && clean.length == 11) && 
                        !(clean.startsWith('+639') && clean.length == 13)) {
-                     return "Valid PH format required (e.g. 09123456789)";
+                     return "Valid PH format required";
                    }
                    return null;
                 },
                 decoration: _inputDecoration(Icons.phone_outlined),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24), // TIGHTENED
 
               _buildSectionHeader("EMERGENCY CONTACT"),
               _buildInputLabel("Contact Name"),
               TextFormField(
                 controller: _emergencyNameController,
-                validator: (value) => value == null || value.trim().isEmpty ? "Required for safety" : null,
+                validator: (value) => value == null || value.trim().isEmpty ? "Required" : null,
                 decoration: _inputDecoration(Icons.health_and_safety_outlined),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12), // TIGHTENED
 
               _buildInputLabel("Contact Phone Number"),
               TextFormField(
@@ -162,20 +171,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 validator: (value) => value == null || value.length < 10 ? "Valid number required" : null,
                 decoration: _inputDecoration(Icons.phone_in_talk_outlined),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 28), // TIGHTENED
 
               // Save Button
               SizedBox(
                 width: double.infinity,
-                height: 56,
+                height: 48, // TIGHTENED: Reduced from 56 to 48
                 child: ElevatedButton(
                   onPressed: _saveProfile,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2D2059),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Slightly tighter radius
                     elevation: 0,
                   ),
-                  child: const Text("Save Changes", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text("Save Changes", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -187,28 +196,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12, letterSpacing: 1.2)),
+      // TIGHTENED: Reduced bottom padding from 16 to 8
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 11, letterSpacing: 1.0)),
     );
   }
 
   Widget _buildInputLabel(String label) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
+      // TIGHTENED: Reduced bottom padding from 8 to 4
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87)),
     );
   }
 
   InputDecoration _inputDecoration(IconData? icon) {
     return InputDecoration(
-      prefixIcon: icon != null ? Icon(icon, color: Colors.grey.shade500) : null,
+      // TIGHTENED: Reduced icon size slightly to match new compact fields
+      prefixIcon: icon != null ? Icon(icon, color: Colors.grey.shade500, size: 20) : null,
       filled: true,
       fillColor: Colors.grey.shade50,
-      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2D2059), width: 2)),
-      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red)),
+      // TIGHTENED: Drastically reduced vertical padding inside the text box
+      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2D2059), width: 1.5)),
+      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.red)),
     );
   }
 }

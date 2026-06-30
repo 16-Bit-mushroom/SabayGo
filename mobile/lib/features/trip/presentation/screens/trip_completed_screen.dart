@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/core/theme/app_colors.dart';
 
-class TripCompletedScreen extends StatefulWidget {
+class TripCompletedScreen extends StatelessWidget {
   final String driverName;
   final String origin;
   final String destination;
-  final double fare;
-  final String paymentMethod;
   final VoidCallback onReturnHome;
 
   const TripCompletedScreen({
@@ -14,179 +11,135 @@ class TripCompletedScreen extends StatefulWidget {
     required this.driverName,
     required this.origin,
     required this.destination,
-    required this.fare,
-    required this.paymentMethod,
     required this.onReturnHome,
   }) : super(key: key);
 
   @override
-  State<TripCompletedScreen> createState() => _TripCompletedScreenState();
-}
-
-class _TripCompletedScreenState extends State<TripCompletedScreen> {
-  int _rating = 0;
-
-  @override
   Widget build(BuildContext context) {
+    // Mocking the variables for the SabayGo formula: S = (D * (F+M)) / (P+1)
+    const double distanceKm = 8.5; 
+    const double fuelRatePerKm = 6.00;
+    const double maintRatePerKm = 2.00;
+    const int passengers = 3; // 3 commuters + 1 driver = 4 people sharing
+
+    // The actual math
+    const double totalRunningCost = distanceKm * (fuelRatePerKm + maintRatePerKm);
+    const double sharedContribution = totalRunningCost / (passengers + 1);
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text("Trip Completed", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 20),
-                    // 1. Success Header
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.check_circle, color: AppColors.success, size: 64),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text("You've Arrived!", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                    const SizedBox(height: 8),
-                    Text("Hope you enjoyed your ride with ${widget.driverName.split(' ').first}.", style: const TextStyle(color: AppColors.textSecondary, fontSize: 16)),
-                    const SizedBox(height: 32),
-
-                    // 2. Rating System
-                    const Text("Rate your driver", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(5, (index) {
-                        return IconButton(
-                          iconSize: 40,
-                          icon: Icon(
-                            index < _rating ? Icons.star : Icons.star_border,
-                            color: index < _rating ? Colors.amber : Colors.grey.shade300,
-                          ),
-                          onPressed: () => setState(() => _rating = index + 1),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // 3. Comprehensive Trip Summary Card
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // A. Proof of Service (Route)
-                          const Text("Trip Route", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Column(
-                                children: [
-                                  const Icon(Icons.circle, color: Colors.blue, size: 12),
-                                  Container(height: 20, width: 2, color: Colors.grey.shade300),
-                                  const Icon(Icons.location_on, color: Colors.red, size: 12),
-                                ],
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(widget.origin, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    const SizedBox(height: 14),
-                                    Text(widget.destination, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  ],
-                                ),
-                              )
-                            ],
-                          ),
-                          const Divider(height: 32),
-
-                          // B. Financial Breakdown
-                          const Text("Fare Breakdown", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          const SizedBox(height: 16),
-                          _buildReceiptRow("Base Fare", "PHP 50.00"),
-                          const SizedBox(height: 8),
-                          // Dynamically calculating distance fare for realism
-                          _buildReceiptRow("Distance Fare", "PHP ${(widget.fare - 50.0 + 10.0).toStringAsFixed(2)}"),
-                          const SizedBox(height: 8),
-                          _buildReceiptRow("Promo Applied", "-PHP 10.00", isGreen: true),
-                          const Padding(padding: EdgeInsets.symmetric(vertical: 12.0), child: Divider(height: 1)),
-                          _buildReceiptRow("Total Paid via ${widget.paymentMethod.toUpperCase()}", "PHP ${widget.fare.toStringAsFixed(2)}", isBold: true),
-                          const Divider(height: 32),
-                          
-                          // C. Gamification (Eco-Impact)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.eco, color: Colors.green, size: 24),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: const [
-                                      Text("Eco-Impact", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                                      Text("You saved 1.2kg of CO2 on this shared ride!", style: TextStyle(fontSize: 12, color: Colors.green)),
-                                    ],
-                                  ),
-                                )
-                              ],
-                            ),
-                          )
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: const Color(0xFFE5F6EE), shape: BoxShape.circle),
+              child: const Icon(Icons.check_circle, color: Color(0xFF00A859), size: 44),
             ),
-            
-            // 4. Submit Action
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: widget.onReturnHome,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryAction,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            const SizedBox(height: 12),
+            const Text("You've arrived at your destination!", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text("Driver: $driverName", style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 20),
+
+            // THE P2P COST-SHARE CALCULATOR (Objective 2.2.4)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.calculate_outlined, color: Color(0xFF2D2059)),
+                      const SizedBox(width: 8),
+                      const Text("Cost-Share Breakdown", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2D2059))),
+                    ],
                   ),
-                  child: const Text("Submit & Finish", style: TextStyle(color: AppColors.surface, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text("Calculated strictly for non-profit cost recovery.", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  const Divider(height: 22),
+                  
+                  _buildMathRow("Distance Traveled (D)", "${distanceKm.toStringAsFixed(1)} km"),
+                  const SizedBox(height: 8),
+                  _buildMathRow("Fuel & Maint. Rate (F+M)", "₱${(fuelRatePerKm + maintRatePerKm).toStringAsFixed(2)} / km"),
+                  const SizedBox(height: 8),
+                  _buildMathRow("Total Running Cost", "₱${totalRunningCost.toStringAsFixed(2)}"),
+                  const SizedBox(height: 8),
+                  _buildMathRow("Total Occupants (P+1)", "${passengers + 1} persons"),
+                  
+                  const Divider(height: 32),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Your Contribution", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text("₱${sharedContribution.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Color(0xFF00A859))),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+
+            // DECENTRALIZED P2P SETTLEMENT
+            const Text("Settle Directly with Driver", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Simulating GCash App launch for direct P2P transfer..."))
+                  );
+                },
+                icon: const Icon(Icons.account_balance_wallet, color: Colors.white),
+                label: const Text("Send via GCash (0% Platform Fee)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: OutlinedButton(
+                onPressed: onReturnHome,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF2D2059)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Text("I paid in exact cash", style: TextStyle(color: Color(0xFF2D2059), fontWeight: FontWeight.bold)),
+              ),
+            )
           ],
         ),
       ),
     );
   }
 
-  Widget _buildReceiptRow(String label, String value, {bool isBold = false, bool isGreen = false}) {
+  Widget _buildMathRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.textSecondary)),
-        Text(
-          value, 
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            fontSize: isBold ? 16 : 14,
-            color: isGreen ? AppColors.success : AppColors.textPrimary,
-          )
-        ),
+        Text(label, style: TextStyle(color: Colors.grey.shade700)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
       ],
     );
   }
