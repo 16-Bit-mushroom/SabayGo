@@ -9,8 +9,7 @@ class DriverMatchScreen extends StatefulWidget {
   final String plateNumber;
   final String vehicleColor;
   final String rating;
-  final String currentPaymentId;
-  final Function(String) onChangePayment;
+  // REMOVED: currentPaymentId and onChangePayment
   final VoidCallback onBackPressed;
   final VoidCallback onMessageDriver;
   final VoidCallback onCallDriver;
@@ -24,8 +23,6 @@ class DriverMatchScreen extends StatefulWidget {
     required this.plateNumber,
     required this.vehicleColor,
     required this.rating,
-    required this.currentPaymentId,
-    required this.onChangePayment,
     required this.onBackPressed,
     required this.onMessageDriver,
     required this.onCallDriver,
@@ -42,8 +39,6 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -63,40 +58,21 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
                           onPressed: widget.onBackPressed,
                           backgroundColor: AppColors.surface,
                           elevation: 2,
-                          child: const Icon(
-                            Icons.arrow_back_ios_new,
-                            color: AppColors.textPrimary,
-                            size: 16,
-                          ),
+                          child: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 16),
                         ),
                         const SizedBox(width: 16),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
                             color: AppColors.surface,
                             borderRadius: BorderRadius.circular(20),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black12, blurRadius: 4),
-                            ],
+                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
                           ),
                           child: Row(
                             children: const [
-                              Icon(
-                                Icons.circle,
-                                color: AppColors.success,
-                                size: 10,
-                              ),
+                              Icon(Icons.circle, color: AppColors.success, size: 10),
                               SizedBox(width: 8),
-                              Text(
-                                "Live tracking",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
+                              Text("Live tracking", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                             ],
                           ),
                         ),
@@ -115,22 +91,12 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
             bottom: 0,
             left: 0,
             right: 0,
-            // ~60% height when open, ~100px when closed (just the status banner)
-            height: _isExpanded ? 440.0 : 100.0,
+            height: _isExpanded ? 360.0 : 90.0,
             child: Container(
               decoration: const BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                    offset: Offset(0, -2),
-                  ),
-                ],
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,31 +119,12 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(
-                                    Icons.near_me,
-                                    color: Colors.deepPurple,
-                                    size: 20,
-                                  ),
+                                  const Icon(Icons.near_me, color: Colors.deepPurple, size: 20),
                                   const SizedBox(width: 12),
                                   Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
-                                        "Driver is 2 mins away",
-                                        style: TextStyle(
-                                          color: Colors.deepPurple,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      Text(
-                                        "${widget.driverName.split(' ').first} is arriving soon",
-                                        style: const TextStyle(
-                                          color: Colors.deepPurple,
-                                          fontSize: 12,
-                                        ),
-                                      ),
+                                      const Text("Driver is 2 mins away", style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 14)),
                                     ],
                                   ),
                                 ],
@@ -185,28 +132,17 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          Icon(
-                            _isExpanded
-                                ? Icons.keyboard_arrow_down
-                                : Icons.keyboard_arrow_up,
-                            color: Colors.grey,
-                            size: 28,
-                          ),
+                          Icon(_isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, color: Colors.grey, size: 28),
                         ],
                       ),
                     ),
                   ),
 
-                  // THE CONTENT (Wrapped to prevent overflow)
+                  // THE CONTENT
                   Expanded(
                     child: SingleChildScrollView(
                       physics: const NeverScrollableScrollPhysics(),
-                      padding: EdgeInsets.fromLTRB(
-                        24,
-                        8,
-                        24,
-                        MediaQuery.of(context).padding.bottom + 12,
-                      ),
+                      padding: EdgeInsets.fromLTRB(24, 8, 24, MediaQuery.of(context).padding.bottom + 12),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -220,50 +156,9 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          InkWell(
-                            onTap: () => _showPaymentBottomSheet(context),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 12,
-                                horizontal: 16,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.payment,
-                                        color: AppColors.textSecondary,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        "Payment: ${widget.currentPaymentId.toUpperCase()}",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const Text(
-                                    "Change",
-                                    style: TextStyle(
-                                      color: Colors.deepPurple,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
+                          // NEW: Replaced Payment method with Cost-Share Info
+                          
+                          // const SizedBox(height: 24),
 
                           QuickActionButtons(
                             onMessage: widget.onMessageDriver,
@@ -278,28 +173,15 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
                             child: ElevatedButton(
                               onPressed: widget.onStartRide,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                                backgroundColor: const Color(0xFF2D2059),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: const [
-                                  Text(
-                                    "Start Ride",
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.surface,
-                                    ),
-                                  ),
+                                  Text("Start Ride", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.surface)),
                                   SizedBox(width: 8),
-                                  Icon(
-                                    Icons.arrow_forward,
-                                    color: AppColors.surface,
-                                    size: 20,
-                                  ),
+                                  Icon(Icons.arrow_forward, color: AppColors.surface, size: 20),
                                 ],
                               ),
                             ),
@@ -314,56 +196,6 @@ class _DriverMatchScreenState extends State<DriverMatchScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showPaymentBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Change Payment Method",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  leading: const Icon(Icons.money, color: Colors.green),
-                  title: const Text("Cash"),
-                  onTap: () {
-                    widget.onChangePayment('cash');
-                    Navigator.pop(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Text(
-                    "G",
-                    style: TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
-                  ),
-                  title: const Text("GCash"),
-                  onTap: () {
-                    widget.onChangePayment('gcash');
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
