@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_v2_uv_express/views/home_search/widgets/modern_route_card.dart';
-import 'package:mobile_v2_uv_express/views/home_search/widgets/trip_details_sheet.dart';
-import 'package:mobile_v2_uv_express/views/ticket/ticket_screen.dart';
 import '../../viewmodels/home_search_viewmodel.dart';
-import 'widgets/node_selector_field.dart';
+import 'widgets/where_to_card.dart';
 import 'widgets/time_block_filter.dart';
 import 'widgets/trip_card.dart';
+import 'widgets/trip_details_sheet.dart';
+import '../ticket/ticket_screen.dart';
 
-/// Responsive breakpoint: below this, filters stack above the list.
-/// At/above it, filters sit in a fixed side panel (tablet/web/desktop).
 const double kWideLayoutBreakpoint = 700;
 
 class HomeScreen extends StatefulWidget {
@@ -24,8 +21,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Plain ChangeNotifier wiring — no external state package required.
-    // Swap for Provider/Riverpod later if the app grows past one view.
     _viewModel = HomeSearchViewModel()..addListener(_onViewModelChanged);
   }
 
@@ -38,27 +33,16 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // Update this function in home_screen.dart
   void _handleBook(String tripId) {
     final success = _viewModel.bookTrip(tripId);
     if (success) {
-      // Find the trip data
-      final bookedTrip = _viewModel.filteredTrips.firstWhere(
-        (t) => t.id == tripId,
-      );
-
-      // Navigate to the Ticket Screen
+      final bookedTrip = _viewModel.filteredTrips.firstWhere((t) => t.id == tripId);
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => TicketScreen(bookedTrip: bookedTrip),
-        ),
+        MaterialPageRoute(builder: (context) => TicketScreen(bookedTrip: bookedTrip)),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sorry, that trip is already full.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+        const SnackBar(content: Text('Sorry, that trip is already full.'), behavior: SnackBarBehavior.floating),
       );
     }
   }
@@ -68,32 +52,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final width = MediaQuery.of(context).size.width;
     final isWide = width >= kWideLayoutBreakpoint;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('UV Express'),
-        actions: [
-          IconButton(
-            tooltip: 'Notification destinations',
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _viewModel.refreshTrips,
-          child: isWide ? _buildWideLayout() : _buildNarrowLayout(),
-        ),
+    // REMOVED Scaffold AppBar here. The Parent handles it.
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _viewModel.refreshTrips,
+        child: isWide ? _buildWideLayout() : _buildNarrowLayout(),
       ),
     );
   }
 
   Widget _buildSearchPanel() {
-    return ModernRouteCard(
-      origin: _viewModel.selectedOrigin,
+    return WhereToCard(
       destination: _viewModel.selectedDestination,
-      onOriginChanged:
-          _viewModel.setOrigin, // Assuming these exist in viewmodel
+      nodes: _viewModel.nodes,
       onDestinationChanged: _viewModel.setDestination,
     );
   }
@@ -115,16 +86,9 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.event_busy,
-                    size: 48,
-                    color: Theme.of(context).hintColor,
-                  ),
+                  Icon(Icons.event_busy, size: 48, color: Theme.of(context).hintColor),
                   const SizedBox(height: 8),
-                  Text(
-                    'No trips match your filters',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                  Text('No trips found for this destination.', style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
             ),
@@ -134,13 +98,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 24),
       itemCount: trips.length,
       itemBuilder: (context, index) {
         final trip = trips[index];
         return InkWell(
           onTap: () {
-            // Slide up the new details sheet!
             showModalBottomSheet(
               context: context,
               isScrollControlled: true,
@@ -151,10 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             );
           },
-          child: TripCard(
-            trip: trip,
-            onBook: () => {},
-          ), // Keep your existing TripCard UI, just remove the book logic from the card itself
+          child: TripCard(trip: trip), 
         );
       },
     );

@@ -17,10 +17,13 @@ Notifications:
 	- notification for new trip schedule tailored for you
 	- view the notifications
 	- trip was canceled
-	- trip already left
+	- van already left
 	- trip details changes
 	- trip policy updates
 	- terminal policy
+	- 
+	
+Profile:
 	- 
 
 For Dispatchers app:
