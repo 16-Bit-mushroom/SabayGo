@@ -1,0 +1,28 @@
+navigation.
+facebook app style?
+
+For passengers app:
+-----------------------------------------------------
+
+[Home]  [My Reservations]  [Notifications]  [Profile]
+
+-----------------------------------------------------
+
+My Reservations:
+	- current reservations
+	- past trips
+	- canceled reservations
+
+Notifications:
+	- notification for new trip schedule tailored for you
+	- view the notifications
+	- trip was canceled
+	- trip already left
+	- trip details changes
+	- trip policy updates
+	- terminal policy
+	- 
+
+For Dispatchers app:
+
+
