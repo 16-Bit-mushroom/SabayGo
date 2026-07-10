@@ -150,15 +150,12 @@ class HomeSearchViewModel extends ChangeNotifier {
   // --- Mock data (swap for a repository/API call later) ---
   void _loadNodes() {
     _nodes = const [
-      TransitNodeModel(
-          id: 'n1', name: 'UM Matina Gate', area: 'Matina, Davao City'),
-      TransitNodeModel(
-          id: 'n2', name: 'Bangkal Center', area: 'Bangkal, Davao City'),
-      TransitNodeModel(id: 'n3', name: 'Ulas Hub', area: 'Ulas, Davao City'),
-      TransitNodeModel(
-          id: 'n4', name: 'Cotabato City Terminal', area: 'Cotabato City'),
-      TransitNodeModel(
-          id: 'n5', name: 'Toril Junction', area: 'Toril, Davao City'),
+      TransitNodeModel(id: 'n1', name: 'Ecoland Terminal', area: 'Davao City'),
+      TransitNodeModel(id: 'n2', name: 'Cotabato City Terminal', area: 'Cotabato City'),
+      TransitNodeModel(id: 'n3', name: 'Bulaong Terminal', area: 'General Santos City'),
+      TransitNodeModel(id: 'n4', name: 'Agora Terminal', area: 'Cagayan de Oro City'),
+      TransitNodeModel(id: 'n5', name: 'Tagum City Terminal', area: 'Tagum City'),
+      TransitNodeModel(id: 'n6', name: 'Digos City Terminal', area: 'Digos City'),
     ];
   }
 
@@ -167,100 +164,78 @@ class HomeSearchViewModel extends ChangeNotifier {
     DateTime at(int h, int m) =>
         DateTime(today.year, today.month, today.day, h, m);
 
-    final davao = _nodes[0]; // UM Matina Gate
-    final cotabato = _nodes[3]; // Cotabato City Terminal
-    
-    // Standard approx fare for this route
-    const double standardFare = 150.0;
-    // Standard travel time for this route
-    const travelDuration = Duration(hours: 2);
+    // Fetch the loaded nodes
+    final davao = _nodes.firstWhere((n) => n.id == 'n1');
+    final cotabato = _nodes.firstWhere((n) => n.id == 'n2');
+    final gensan = _nodes.firstWhere((n) => n.id == 'n3');
+    final tagum = _nodes.firstWhere((n) => n.id == 'n5');
 
     _trips = [
+      // --- DAVAO TO COTABATO ROUTES ---
       UvTripModel(
         id: 't1',
         tripLabel: 'First Trip',
         departureTime: at(5, 30),
-        estimatedArrivalTime: at(5, 30).add(travelDuration), // ADDED
+        estimatedArrivalTime: at(5, 30).add(const Duration(hours: 5)),
         origin: davao,
         destination: cotabato,
         totalSeats: 18,
         availableSeats: 2,
         operatorName: 'RDT Transport',
-        approximateFare: standardFare, // ADDED
+        approximateFare: 500.0,
       ),
       UvTripModel(
         id: 't2',
         tripLabel: 'Second Trip',
         departureTime: at(7, 30),
-        estimatedArrivalTime: at(7, 30).add(travelDuration), // ADDED
-        origin: davao,
-        destination: cotabato,
-        totalSeats: 18,
-        availableSeats: 11,
-        operatorName: 'RDT Transport',
-        approximateFare: standardFare, // ADDED
-      ),
-      UvTripModel(
-        id: 't3',
-        tripLabel: 'Third Trip',
-        departureTime: at(9, 30),
-        estimatedArrivalTime: at(9, 30).add(travelDuration), // ADDED
+        estimatedArrivalTime: at(7, 30).add(const Duration(hours: 5)),
         origin: davao,
         destination: cotabato,
         totalSeats: 18,
         availableSeats: 18,
         operatorName: 'RDT Transport',
-        approximateFare: standardFare, // ADDED
+        approximateFare: 500.0,
       ),
+      
+      // --- DAVAO TO GENSAN ROUTES ---
       UvTripModel(
-        id: 't4',
-        tripLabel: 'Fourth Trip',
-        departureTime: at(11, 30),
-        estimatedArrivalTime: at(11, 30).add(travelDuration), // ADDED
+        id: 't3',
+        tripLabel: 'Morning Express',
+        departureTime: at(8, 00),
+        estimatedArrivalTime: at(8, 00).add(const Duration(hours: 3)),
         origin: davao,
-        destination: cotabato,
-        totalSeats: 18,
-        availableSeats: 4,
-        operatorName: 'RDT Transport',
-        approximateFare: standardFare, // ADDED
-      ),
-      UvTripModel(
-        id: 't5',
-        tripLabel: 'Fifth Trip',
-        departureTime: at(13, 30),
-        estimatedArrivalTime: at(13, 30).add(travelDuration), // ADDED
-        origin: davao,
-        destination: cotabato,
-        totalSeats: 18,
-        availableSeats: 0,
-        operatorName: 'RDT Transport',
-        approximateFare: standardFare, // ADDED
+        destination: gensan,
+        totalSeats: 14,
+        availableSeats: 0, // Mocking a full trip
+        operatorName: 'Southbound Express',
+        approximateFare: 350.0,
         status: TripStatus.full,
       ),
       UvTripModel(
-        id: 't6',
-        tripLabel: 'Sixth Trip',
-        departureTime: at(15, 30),
-        estimatedArrivalTime: at(15, 30).add(travelDuration), // ADDED
+        id: 't4',
+        tripLabel: 'Noon Trip',
+        departureTime: at(12, 00),
+        estimatedArrivalTime: at(12, 00).add(const Duration(hours: 3)),
         origin: davao,
-        destination: cotabato,
-        totalSeats: 18,
-        availableSeats: 9,
-        operatorName: 'RDT Transport',
-        approximateFare: standardFare, // ADDED
+        destination: gensan,
+        totalSeats: 14,
+        availableSeats: 8,
+        operatorName: 'Southbound Express',
+        approximateFare: 350.0,
       ),
+
+      // --- DAVAO TO TAGUM ROUTES (Shorter Trip) ---
       UvTripModel(
-        id: 't7',
-        tripLabel: 'Last Trip',
-        departureTime: at(18, 0),
-        estimatedArrivalTime: at(18, 0).add(travelDuration), // ADDED
+        id: 't5',
+        tripLabel: 'Afternoon Run',
+        departureTime: at(15, 30),
+        estimatedArrivalTime: at(15, 30).add(const Duration(hours: 1, minutes: 30)),
         origin: davao,
-        destination: cotabato,
+        destination: tagum,
         totalSeats: 18,
-        availableSeats: 15,
-        operatorName: 'RDT Transport',
-        approximateFare: standardFare, // ADDED
-        isLastTrip: true,
+        availableSeats: 12,
+        operatorName: 'Metro Davao Vans',
+        approximateFare: 150.0,
       ),
     ];
   }

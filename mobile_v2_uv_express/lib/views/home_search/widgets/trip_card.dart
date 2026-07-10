@@ -5,11 +5,10 @@ class TripCard extends StatelessWidget {
   const TripCard({
     super.key,
     required this.trip,
-    required this.onBook,
+    // Removed the onBook callback since the parent InkWell handles taps now
   });
 
   final UvTripModel trip;
-  final VoidCallback onBook;
 
   Color _seatColor(BuildContext context) {
     if (trip.isFull) return Theme.of(context).colorScheme.error;
@@ -30,21 +29,36 @@ class TripCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // Left: Time & Trip Label
             SizedBox(
-              width: 76,
+              width: 95, 
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _formatTime(trip.departureTime),
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time_rounded, 
+                        size: 16, 
+                        color: Colors.grey.shade700
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatTime(trip.departureTime),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     trip.tripLabel,
                     style: theme.textTheme.bodySmall
@@ -54,6 +68,8 @@ class TripCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            
+            // Middle: Route & Operator
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,18 +80,18 @@ class TripCard extends StatelessWidget {
                         child: Text(
                           trip.origin.name,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium,
+                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 4),
-                        child: Icon(Icons.arrow_forward, size: 14),
+                        child: Icon(Icons.arrow_forward, size: 14, color: Colors.grey),
                       ),
                       Flexible(
                         child: Text(
                           trip.destination.name,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium,
+                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -86,35 +102,40 @@ class TripCard extends StatelessWidget {
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.hintColor),
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _seatColor(context).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      trip.isFull
-                          ? 'Full'
-                          : '${trip.availableSeats}/${trip.totalSeats} seats left',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: _seatColor(context),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton(
-              onPressed: trip.isFull ? null : onBook,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(72, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+            
+            // Right: Scannable Seat Availability Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: _seatColor(context).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(trip.isFull ? 'Full' : 'Book'),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    trip.isFull ? 'FULL' : '${trip.availableSeats}',
+                    style: TextStyle(
+                      fontSize: trip.isFull ? 14 : 22,
+                      fontWeight: FontWeight.bold,
+                      color: _seatColor(context),
+                    ),
+                  ),
+                  if (!trip.isFull)
+                    Text(
+                      'seats',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _seatColor(context),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
