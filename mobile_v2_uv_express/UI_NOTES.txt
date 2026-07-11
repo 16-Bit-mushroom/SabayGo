@@ -14,18 +14,58 @@ My Reservations:
 	- canceled reservations
 
 Notifications:
-	- notification for new trip schedule tailored for you
-	- view the notifications
-	- trip was canceled
-	- van already left
+	- notification for new trip schedule tailored for the passenger (based on passengers saved destinations and trip histories) (add cta button to book)
+	- trip was canceled (add cta button, maybe book another schedule?)
+	- van already left ( add cta button too)
 	- trip details changes
 	- trip policy updates
 	- terminal policy
 	- 
 	
+	- view notification 
+	- trash notifications
+	- search notifications
+	
 Profile:
-	- 
+	- profile card with profile picture, full name, trust rating, edit button to edit profile details
+	
+	
+	- gender
+	- trust rating
+	- phone number
+	- email
+	- address
+	- emergency contact
+	
+	- saved destinations
+	- notification settings (select all turn off notifications, select notif to turn off)
+	- privacy & policy
+	- delete account
+	- sign out
 
 For Dispatchers app:
+
+========================================================================================================================================================NOTEs on Interview:
+
+- naa sila log book of passengers
+- ang ilang individual vans kay naa na pre defined routes registered on LTFRB
+- ang mga van na ga travel kay mag stop sila sa terminal na naa sa ila routes if dili pa full ang seats
+- naga post sila ug regular trip schedules (naa sa ila tarpaulin)
+- usahay naa sila ma change sa ila regular trip schedule
+- terminal to terminal usually ang pick up sa passenger, then pwede unloading of passenger road side
+- seat capacity is 14
+
+[ pain point ]
+- naga book ug trip reservation ang passengers via DM on Facebook only or mag call thru phone
+- Thru FB only ang ila posting of trip schedules
+- walay notification madawat ang passenger if ma cancel ang trip na ila go reserve
+- wala sad notif if naka larga na ang ila trip na masakyan
+- dili nila ma monitor ang van kung mag load ug passenger na wala kabalo ang operator, ma t.y ang plete ma adtu sa dispatchers without the knowledge of operators.
+- mo sobra ug seat capacity if mag load passenger ang dispatchers illegally.
+
+=======================================================================================================================================================
+To PROMPT to Gemini Pro
+
+Let's add search functionality to the log book screen
 
 
