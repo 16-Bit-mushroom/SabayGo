@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_v2_uv_express/views/notifications/notifications_screen.dart';
+import 'package:mobile_v2_uv_express/views/profile/profile_screen.dart';
+import 'package:mobile_v2_uv_express/views/reservations/reservations_screen.dart';
 import 'home_search/home_screen.dart';
 
 class PassengerMainScreen extends StatelessWidget {
@@ -44,10 +47,10 @@ class PassengerMainScreen extends StatelessWidget {
         ),
         body: const TabBarView(
           children: [
-            HomeScreen(), // The newly simplified Home Screen
-            Center(child: Text('My Reservations', style: TextStyle(fontSize: 18, color: Colors.grey))),
-            Center(child: Text('Notifications', style: TextStyle(fontSize: 18, color: Colors.grey))),
-            Center(child: Text('Profile Settings', style: TextStyle(fontSize: 18, color: Colors.grey))),
+            HomeScreen(), 
+            ReservationsScreen(),// The newly simplified Home Screen
+            NotificationsScreen(),
+            ProfileScreen()
           ],
         ),
       ),
