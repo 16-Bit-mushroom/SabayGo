@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_v2_uv_express/views/dispatcher/fleet_and_crew_screen.dart';
 import 'dispatcher_dashboard_screen.dart';
 import 'trip_schedule_screen.dart';
 import 'manage_fleet_screen.dart';
@@ -17,7 +18,7 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
   final List<Widget> _screens = [
     const DispatcherDashboardScreen(),
     const TripScheduleScreen(),
-    const ManageFleetScreen(),
+    const FleetAndCrewScreen(),
     const LogBookScreen(),
   ];
 
@@ -102,7 +103,7 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
           NavigationDestination(
             icon: Icon(Icons.directions_car_outlined),
             selectedIcon: Icon(Icons.directions_car, color: Color(0xFF00A859)),
-            label: 'Vans',
+            label: 'Vans & Crew',
           ),
           NavigationDestination(
             icon: Icon(Icons.menu_book_outlined),

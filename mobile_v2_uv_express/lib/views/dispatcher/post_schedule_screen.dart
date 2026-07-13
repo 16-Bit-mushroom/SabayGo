@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/transit_node_model.dart';
 import '../../models/van_model.dart';
+import '../../models/uv_trip_model.dart'; // Add this import
 
 class PostScheduleScreen extends StatefulWidget {
-  const PostScheduleScreen({super.key});
+  final UvTripModel? existingTrip; // NEW: Pass the trip if editing
+
+  const PostScheduleScreen({super.key, this.existingTrip});
 
   @override
   State<PostScheduleScreen> createState() => _PostScheduleScreenState();
@@ -18,10 +21,11 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
   TransitNodeModel? _selectedDestination;
   VanModel? _selectedVan;
   String? _selectedDriverId;
+  String? _selectedConductorId; 
   DateTime? _departureTime;
-  final TextEditingController _fareCtrl = TextEditingController();
+  late TextEditingController _fareCtrl;
 
-  // --- Mock Data (Usually comes from ViewModel) ---
+  // --- Mock Data ---
   final List<TransitNodeModel> _terminals = const [
     TransitNodeModel(id: 'n1', name: 'Ecoland Terminal', area: 'Davao City'),
     TransitNodeModel(id: 'n2', name: 'Cotabato City Terminal', area: 'Cotabato City'),
@@ -29,14 +33,60 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
   ];
 
   final List<VanModel> _allVans = [
-    VanModel(id: 'v1', plateNumber: 'ABC-1234', registeredRouteNodeIds: ['n1', 'n2'], status: VanStatus.active),
-    VanModel(id: 'v2', plateNumber: 'XYZ-9876', registeredRouteNodeIds: ['n1', 'n5'], status: VanStatus.active),
+    VanModel(
+      id: 'v1', 
+      plateNumber: 'ABC-1234', 
+      cpcNumber: '14523-DVO', 
+      cpcCaseNumber: '23-01450', 
+      brand: 'Toyota', 
+      model: 'Hiace', 
+      color: 'White', 
+      registeredRouteNodeIds: ['n1', 'n2'], 
+      status: VanStatus.active
+    ),
+    VanModel(
+      id: 'v2', 
+      plateNumber: 'XYZ-9876', 
+      cpcNumber: '88321-DVO', 
+      cpcCaseNumber: '21-08832', 
+      brand: 'Nissan', 
+      model: 'Urvan', 
+      color: 'Silver', 
+      registeredRouteNodeIds: ['n1', 'n5'], 
+      status: VanStatus.active
+    ),
   ];
 
   final List<Map<String, String>> _drivers = [
     {'id': 'd1', 'name': 'Ricardo Dalisay'},
     {'id': 'd2', 'name': 'Juan Luna'},
   ];
+
+  final List<Map<String, String>> _conductors = [
+    {'id': 'c1', 'name': 'Andres Bonifacio'},
+    {'id': 'c2', 'name': 'Gabriela Silang'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final trip = widget.existingTrip;
+    
+    // Default fare placeholder, or load from existing trip if available
+    _fareCtrl = TextEditingController(text: trip != null ? '350' : '');
+
+    if (trip != null) {
+      // Try to pre-fill the dropdowns based on the existing trip's data
+      try {
+        _selectedOrigin = _terminals.firstWhere((t) => t.id == trip.origin.id);
+        _selectedDestination = _terminals.firstWhere((t) => t.id == trip.destination.id);
+        // Note: In a real app, you'd match the exact Van and Driver IDs from the trip object here
+      } catch (e) {
+        // Fallback if mock IDs don't perfectly align
+      }
+      _departureTime = trip.departureTime;
+    }
+  }
 
   @override
   void dispose() {
@@ -57,7 +107,7 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
   Future<void> _pickDateTime() async {
     final date = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _departureTime ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 30)),
       builder: (context, child) {
@@ -74,7 +124,7 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
     if (!mounted) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.now(),
+      initialTime: _departureTime != null ? TimeOfDay.fromDateTime(_departureTime!) : TimeOfDay.now(),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -93,11 +143,8 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
 
   void _submitForm() {
     if (_formKey.currentState!.validate() && _departureTime != null) {
-      // TODO: Save schedule to backend with audited Dispatcher ID
-      // final newTrip = UvTripModel( ... );
-      
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Schedule successfully posted!')),
+        SnackBar(content: Text(widget.existingTrip == null ? 'Schedule successfully posted!' : 'Schedule changes saved!')),
       );
       Navigator.pop(context);
     } else if (_departureTime == null) {
@@ -110,11 +157,12 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     final availableVans = _compliantVans;
+    final isEditing = widget.existingTrip != null;
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Post New Schedule', style: TextStyle(fontSize: 18, color: Colors.black87)),
+        title: Text(isEditing ? 'Edit Schedule' : 'Post New Schedule', style: const TextStyle(fontSize: 18, color: Colors.black87)),
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black87),
@@ -141,7 +189,7 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
                         onChanged: (val) {
                           setState(() {
                             _selectedOrigin = val;
-                            _selectedVan = null; // Reset van if route changes
+                            _selectedVan = null; 
                           });
                         },
                         validator: (val) => val == null ? 'Required' : null,
@@ -155,7 +203,7 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
                         onChanged: (val) {
                           setState(() {
                             _selectedDestination = val;
-                            _selectedVan = null; // Reset van if route changes
+                            _selectedVan = null; 
                           });
                         },
                         validator: (val) {
@@ -176,7 +224,6 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
                       DropdownButtonFormField<VanModel>(
                         value: _selectedVan,
                         decoration: _inputDeco('Assign Van', Icons.directions_car_outlined),
-                        // Disable if origin/dest aren't selected, or if no compliant vans exist
                         items: availableVans.isEmpty ? null : availableVans.map((v) => DropdownMenuItem(value: v, child: Text('${v.plateNumber} (Cap: ${v.capacity})'))).toList(),
                         onChanged: (val) => setState(() => _selectedVan = val),
                         validator: (val) => val == null ? 'Please assign a compliant van' : null,
@@ -187,7 +234,12 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
                           style: TextStyle(color: availableVans.isEmpty && _selectedOrigin != null ? Colors.red : null),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      
+                      const SizedBox(height: 32),
+
+                      // --- 3. Crew Assignment ---
+                      const Text('CREW ASSIGNMENT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      const SizedBox(height: 12),
 
                       DropdownButtonFormField<String>(
                         value: _selectedDriverId,
@@ -196,10 +248,21 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
                         onChanged: (val) => setState(() => _selectedDriverId = val),
                         validator: (val) => val == null ? 'Required' : null,
                       ),
+                      const SizedBox(height: 16),
+                      
+                      DropdownButtonFormField<String?>(
+                        value: _selectedConductorId,
+                        decoration: _inputDeco('Assign Conductor (Optional)', Icons.group_outlined),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('None (Driver Only)')),
+                          ..._conductors.map((c) => DropdownMenuItem(value: c['id'], child: Text(c['name']!))),
+                        ],
+                        onChanged: (val) => setState(() => _selectedConductorId = val),
+                      ),
 
                       const SizedBox(height: 32),
 
-                      // --- 3. Trip Details ---
+                      // --- 4. Trip Details ---
                       const Text('TRIP DETAILS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                       const SizedBox(height: 12),
 
@@ -247,7 +310,7 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Post Schedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  child: Text(isEditing ? 'Save Changes' : 'Post Schedule', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               ),
             ),
@@ -257,7 +320,6 @@ class _PostScheduleScreenState extends State<PostScheduleScreen> {
     );
   }
 
-  // --- Helper for consistent styling ---
   InputDecoration _inputDeco(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
