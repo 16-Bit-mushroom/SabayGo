@@ -47,7 +47,7 @@ For Dispatchers app:
 
 ========================================================================================================================================================NOTEs on Interview:
 
-- naa sila log book of passengers
+- [x] naa sila log book of passengers 
 - ang ilang individual vans kay naa na pre defined routes registered on LTFRB
 - ang mga van na ga travel kay mag stop sila sa terminal na naa sa ila routes if dili pa full ang seats
 - naga post sila ug regular trip schedules (naa sa ila tarpaulin)
@@ -66,6 +66,14 @@ For Dispatchers app:
 =======================================================================================================================================================
 To PROMPT to Gemini Pro
 
-Let's add search functionality to the log book screen
+- 
 
+=======================================================================================================================================================
+[ Identified business logics ]
+- cannot assign a van to a trip if van is under maintenance
 
+- 
+=======================================================================================================================================================
+[ UI UX Notes ]
+
+- Use dropdowns if option are already known 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_v2_uv_express/views/dispatcher/post_schedule_screen.dart';
 import 'package:mobile_v2_uv_express/views/dispatcher/trip_manifest_screen.dart';
 import '../../models/uv_trip_model.dart';
 import '../../viewmodels/dispatcher/dispatcher_dashboard_viewmodel.dart';
@@ -173,6 +174,9 @@ class _DispatcherTripCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final int occupiedSeats = trip.totalSeats - trip.availableSeats;
     final bool isFull = trip.availableSeats == 0;
+    
+    // Determine if the trip is still editable (usually only before departure)
+    final bool isEditable = trip.status == TripStatus.scheduled || trip.status == TripStatus.boarding;
 
     return Container(
       decoration: BoxDecoration(
@@ -309,26 +313,61 @@ class _DispatcherTripCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    FilledButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => TripManifestScreen(trip: trip),
+                    
+                    // --- NEW: Action Buttons Row ---
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isEditable) ...[
+                          OutlinedButton(
+                            onPressed: () {
+                              // Link to the Post Schedule screen and pass the current trip
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PostScheduleScreen(existingTrip: trip),
+                                ),
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              side: BorderSide(color: Colors.grey.shade300),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined, size: 16, color: Colors.grey.shade700),
+                                const SizedBox(width: 4),
+                                Text('Edit', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
                           ),
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF2D2059),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          const SizedBox(width: 8),
+                        ],
+                        FilledButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => TripManifestScreen(trip: trip),
+                              ),
+                            );
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2D2059),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                          ),
+                          child: const Text(
+                            'Manage',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                      ),
-                      child: const Text(
-                        'Manage',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      ],
                     ),
                   ],
                 ),
