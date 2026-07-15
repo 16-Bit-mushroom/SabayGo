@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../viewmodels/profile_viewmodel.dart';
 import 'edit_profile_screen.dart';
 import 'manage_destinations_screen.dart';
+import '../auth/login_screen.dart'; // IMPORT THE LOGIN SCREEN
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -26,6 +27,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _viewModel.removeListener(_onStateChanged);
     _viewModel.dispose();
     super.dispose();
+  }
+
+  // --- NEW: Sign Out Confirmation Dialog ---
+  void _showSignOutConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text('Are you sure you want to sign out of your SabayGo account?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), // Close Dialog
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            ),
+            FilledButton(
+              onPressed: () {
+                // 1. Close the dialog
+                Navigator.pop(context);
+                
+                // 2. Execute ViewModel sign out logic (clears tokens, etc.)
+                _viewModel.signOut();
+                
+                // 3. Navigate to Login and clear the entire navigation history
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false, // This destroys the back stack
+                );
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFD9534F), // Red for destructive action
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -126,12 +168,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 32),
 
-            // --- 4. Danger Zone Buttons (FIXED: Added Icons) ---
+            // --- 4. Danger Zone Buttons ---
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton.icon(
-                onPressed: () => _viewModel.signOut(),
+                onPressed: () => _showSignOutConfirmation(context), // WIRED THE DIALOG HERE
                 icon: const Icon(Icons.logout, size: 20, color: Colors.black87),
                 label: const Text('Sign Out', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
                 style: OutlinedButton.styleFrom(
@@ -189,7 +231,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // FIXED: Standardized icon sizes to 20
   Widget _buildSettingsTile(IconData icon, String title, {String? subtitle, Color? iconColor, VoidCallback? onTap}) {
     return ListTile(
       onTap: onTap,
@@ -205,7 +246,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // FIXED: Added SafeArea, minimized text sizes and paddings
   void _showNotificationSettingsSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,

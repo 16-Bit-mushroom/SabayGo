@@ -77,3 +77,17 @@ To PROMPT to Gemini Pro
 [ UI UX Notes ]
 
 - Use dropdowns if option are already known 
+- Create the Sign Up, Sign In screen to easily switch app
+- add dummy login accounts
+- create Data Dictionary and ERD,
+
+
+=======================================================================================================================================================
+[ To add in ACM Document ]
+- Use Case Diagram
+- ERD [ done ] 
+- Data Dictionary [ done ]
+- Sample Prototypes 
+
+
+
