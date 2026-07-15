@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_v2_uv_express/views/dispatcher/dispatcher_profile_screen.dart';
 import 'package:mobile_v2_uv_express/views/dispatcher/fleet_and_crew_screen.dart';
 import 'dispatcher_dashboard_screen.dart';
 import 'trip_schedule_screen.dart';
@@ -61,7 +62,11 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
           IconButton(
             icon: const Icon(Icons.person_outline, color: Colors.white),
             onPressed: () {
-              // TODO: Dispatcher Profile
+              // Wired: Navigate to the Dispatcher Profile Screen
+              Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (_) => const DispatcherProfileScreen()),
+              );
             },
           ),
           const SizedBox(width: 8), // Padding on the right
