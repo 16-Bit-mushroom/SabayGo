@@ -83,11 +83,21 @@ To PROMPT to Gemini Pro
 
 
 =======================================================================================================================================================
-[ To add in ACM Document ]
-- Use Case Diagram
-- ERD [ done ] 
-- Data Dictionary [ done ]
-- Sample Prototypes 
+[ New OBJECTIVES ]
+
+Specific Objectives
+
+To achieve the general objective, this study specifically aims to:
+
+1.3.2.1 Implement proximity-based check-in using the Node-Aligned Haversine Greedy Matching (NAHGM) algorithm and MySQL pessimistic locking that prevents double-booking, validates passengers at boarding nodes, and eliminates unfair no-show penalties.
+
+1.3.2.2 Develop QR ticketing for passengers, integrated with payment gateways using the PayMongo API to securely record automated fare collections without manual entry.
+
+1.3.2.3 Build manifest logging that records walk-in boardings, caches data locally in connectivity dead zones using a Flutter on-device store, and syncs on reconnection using a FastAPI synchronization endpoint.
+
+1.3.2.4 Create a revenue dashboard using Flutter and FastAPI that reconciles seats to fares, flags discrepancies, and alerts operators to revenue leakage.
+
+1.3.2.5 Deliver real-time notifications (delays, cancellations, boarding confirmations) using Firebase Cloud Messaging (FCM) to passengers via push alerts.
 
 
 

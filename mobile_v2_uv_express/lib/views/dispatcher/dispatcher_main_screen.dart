@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_v2_uv_express/views/dispatcher/dispatcher_profile_screen.dart';
 import 'package:mobile_v2_uv_express/views/dispatcher/fleet_and_crew_screen.dart';
+import 'package:mobile_v2_uv_express/views/dispatcher/qr_scanner_screen.dart';
 import 'dispatcher_dashboard_screen.dart';
 import 'trip_schedule_screen.dart';
 import 'manage_fleet_screen.dart';
@@ -23,6 +24,59 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
     const LogBookScreen(),
   ];
 
+  void _showBookingConfirmationDialog(String ticketCode) {
+    showDialog(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Color(0xFF00A859), size: 28),
+              SizedBox(width: 8),
+              Text(
+                'Booking Confirmed',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ticket ID: $ticketCode',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Please collect the fare from the passenger.',
+                style: TextStyle(fontSize: 16, color: Colors.black87),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF00A859),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Done',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -39,7 +93,11 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
                 color: Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.storefront, color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.storefront,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             const Column(
@@ -47,11 +105,16 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
               children: [
                 // Explicitly set text color to white for readability
                 Text(
-                  'RDT Transport', 
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white, letterSpacing: 0.5),
+                  'RDT Transport',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
                 Text(
-                  'Dispatcher Portal', 
+                  'Dispatcher Portal',
                   style: TextStyle(fontSize: 12, color: Colors.white70),
                 ),
               ],
@@ -64,8 +127,10 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
             onPressed: () {
               // Wired: Navigate to the Dispatcher Profile Screen
               Navigator.push(
-                context, 
-                MaterialPageRoute(builder: (_) => const DispatcherProfileScreen()),
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DispatcherProfileScreen(),
+                ),
               );
             },
           ),
@@ -73,22 +138,30 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
         ],
       ),
       body: _screens[_currentIndex],
-      
+
+      // --- Conditionally render the FAB ONLY on the Dashboard (Index 0) ---
       // --- Conditionally render the FAB ONLY on the Dashboard (Index 0) ---
       floatingActionButton: _currentIndex == 0 
           ? FloatingActionButton.extended(
-              onPressed: () {
-                // TODO: Open QR Scanner Camera
+              onPressed: () async {
+                // Navigate to the scanner and wait for a result
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const QRScannerScreen()),
+                );
+
+                // If a code was scanned and returned, show the confirmation dialog
+                if (result != null && context.mounted) {
+                  _showBookingConfirmationDialog(result as String);
+                }
               },
               backgroundColor: const Color(0xFF00A859),
               elevation: 4,
               icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
               label: const Text('Scan QR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             )
-          : null, // Hides the button on all other tabs
-      
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      
+          : null, // Hides the button on all other tabs      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),

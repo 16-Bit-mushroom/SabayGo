@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:mobile_v2_uv_express/views/passenger_main_screen.dart';
 import 'signup_screen.dart';
 import '../dispatcher/dispatcher_main_screen.dart';
-// import '../passenger/passenger_main_screen.dart'; // Uncomment when ready
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,7 +22,6 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusScope.of(context).unfocus(); 
 
     if (_isPassenger) {
-      // TODO: Uncomment the navigation line below once PassengerMainScreen is created
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulating routing to Passenger App...')));
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const PassengerMainScreen()), (route) => false);
     } else {
@@ -35,155 +33,194 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: CircleAvatar(
-            backgroundColor: Colors.white,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.black),
-              onPressed: () => Navigator.pop(context),
+      body: Stack(
+        children: [
+          // --- Brand Gradient Header ---
+          Container(
+            height: 280,
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF2D2059), Color(0xFF4A3592)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
             ),
           ),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              const Center(
-                child: Text(
-                  'Welcome Back!',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.black87),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'Best Way to Manage\nYour UV Express Trips.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
-                ),
-              ),
-              const SizedBox(height: 40),
-
-              // --- Form Fields ---
-              _buildLabel('Email Address'),
-              _buildTextField(hint: 'Enter Your Email', icon: Icons.email_outlined),
-              const SizedBox(height: 20),
-              
-              _buildLabel('Password'),
-              _buildTextField(
-                hint: 'Enter Your Password', 
-                icon: Icons.lock_outline, 
-                isPassword: true,
-              ),
-              const SizedBox(height: 16),
-
-              // Remember Me & Forgot Password
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: Checkbox(
-                          value: _rememberMe,
-                          onChanged: (val) => setState(() => _rememberMe = val!),
-                          activeColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        ),
+          
+          SafeArea(
+            child: Column(
+              children: [
+                // --- Custom App Bar ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: CircleAvatar(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
                       ),
-                      const SizedBox(width: 8),
-                      Text('Remember me', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                  TextButton(
-                    onPressed: () {},
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                    child: const Text('Forget Password?', style: TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-
-              // --- Testing Role Toggle ---
-              Center(
-                child: SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: true, label: Text('Passenger')),
-                    ButtonSegment(value: false, label: Text('Dispatcher')),
-                  ],
-                  selected: {_isPassenger},
-                  onSelectionChanged: (Set<bool> newSelection) {
-                    setState(() => _isPassenger = newSelection.first);
-                  },
-                  style: SegmentedButton.styleFrom(
-                    selectedBackgroundColor: Colors.black,
-                    selectedForegroundColor: Colors.white,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 10),
+                        const Center(
+                          child: Text(
+                            'Welcome Back!',
+                            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Text(
+                            'Best Way to Manage\nYour UV Express Trips.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
 
-              // Login Button
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _handleLogin,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        // --- Form Card ---
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20, offset: Offset(0, 10))],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildLabel('Email Address'),
+                              _buildTextField(hint: 'Enter Your Email', icon: Icons.email_outlined),
+                              const SizedBox(height: 20),
+                              
+                              _buildLabel('Password'),
+                              _buildTextField(
+                                hint: 'Enter Your Password', 
+                                icon: Icons.lock_outline, 
+                                isPassword: true,
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Remember Me & Forgot Password
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: Checkbox(
+                                          value: _rememberMe,
+                                          onChanged: (val) => setState(() => _rememberMe = val!),
+                                          activeColor: const Color(0xFF00A859),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text('Remember me', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                  TextButton(
+                                    onPressed: () {},
+                                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                                    child: const Text('Forget Password?', style: TextStyle(color: Color(0xFF00A859), fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 32),
+
+                              // --- Testing Role Toggle ---
+                              Center(
+                                child: SegmentedButton<bool>(
+                                  segments: const [
+                                    ButtonSegment(value: true, label: Text('Passenger', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    ButtonSegment(value: false, label: Text('Dispatcher', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  ],
+                                  selected: {_isPassenger},
+                                  onSelectionChanged: (Set<bool> newSelection) {
+                                    setState(() => _isPassenger = newSelection.first);
+                                  },
+                                  style: SegmentedButton.styleFrom(
+                                    selectedBackgroundColor: const Color(0xFF2D2059),
+                                    selectedForegroundColor: Colors.white,
+                                    side: BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Login Button
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton(
+                                  onPressed: _handleLogin,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF00A859),
+                                    padding: const EdgeInsets.symmetric(vertical: 20),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    elevation: 2,
+                                  ),
+                                  child: const Text('Log In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+
+                        // --- Social Logins ---
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text('Or Continue With', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                            ),
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(child: _buildSocialButton('Google', Icons.g_mobiledata)),
+                            const SizedBox(width: 16),
+                            Expanded(child: _buildSocialButton('Apple', Icons.apple)),
+                          ],
+                        ),
+                        const SizedBox(height: 40),
+
+                        // Footer
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text("Don't have an account? ", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+                            GestureDetector(
+                              onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SignupScreen())),
+                              child: const Text('Sign up', style: TextStyle(color: Color(0xFF00A859), fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
                   ),
-                  child: const Text('Log In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
-              ),
-              const SizedBox(height: 32),
-
-              // --- Social Logins ---
-              Row(
-                children: [
-                  Expanded(child: Divider(color: Colors.grey.shade300)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('Or Continue With', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                  ),
-                  Expanded(child: Divider(color: Colors.grey.shade300)),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(child: _buildSocialButton('Google', Icons.g_mobiledata)),
-                  const SizedBox(width: 16),
-                  Expanded(child: _buildSocialButton('Apple', Icons.apple)),
-                ],
-              ),
-              const SizedBox(height: 40),
-
-              // Footer
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("Don't have an account? ", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
-                  GestureDetector(
-                    onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SignupScreen())),
-                    child: const Text('Sign up', style: TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -198,6 +235,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildTextField({required String hint, required IconData icon, bool isPassword = false}) {
     return TextFormField(
       obscureText: isPassword ? _obscurePassword : false,
+      style: const TextStyle(fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
@@ -209,10 +247,10 @@ class _LoginScreenState extends State<LoginScreen> {
               )
             : null,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFFF8F9FA),
         contentPadding: const EdgeInsets.symmetric(vertical: 18),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade200)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.black, width: 1.5)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF2D2059), width: 1.5)),
       ),
     );
   }
@@ -225,7 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(vertical: 16),
         side: BorderSide(color: Colors.grey.shade300),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         backgroundColor: Colors.white,
       ),
     );
