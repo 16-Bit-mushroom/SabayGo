@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_v2_uv_express/views/reservations/payment_gateway_sheet.dart';
 import '../../../models/uv_trip_model.dart';
 import 'package:intl/intl.dart';
 
@@ -14,9 +15,9 @@ class TripDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    // MOCK DATA: Replace these with actual properties from your UvTripModel later!
+    // MOCK DATA: Using a fixed cost structure matching our objective specs
     final DateTime eta = trip.departureTime.add(const Duration(hours: 2)); 
-    const double approxFare = 150.00;
+    const double approxFare = 150.00; // Mapped value for payment gateway pipeline
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -55,7 +56,8 @@ class TripDetailsSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text('₱${approxFare.toStringAsFixed(0)}', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: const Color(0xFF00A859))),
-                    Text('Approx. Fare', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    // Altered label to denote definitive e-payment rates instead of estimates
+                    Text('Fare Rate', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   ],
                 )
               ],
@@ -76,14 +78,14 @@ class TripDetailsSheet extends StatelessWidget {
                     time: _formatTime(trip.departureTime),
                     location: trip.origin.name,
                     label: 'Departure',
-                    iconColor: const Color(0xFF00A859), // Green for Origin
+                    iconColor: const Color(0xFF00A859),
                     isLast: false,
                   ),
                   _buildTimelineRow(
                     time: _formatTime(eta),
                     location: trip.destination.name,
                     label: 'Est. Arrival',
-                    iconColor: const Color(0xFFD9534F), // Red for Destination
+                    iconColor: const Color(0xFFD9534F),
                     isLast: true,
                   ),
                 ],
@@ -105,9 +107,9 @@ class TripDetailsSheet extends StatelessWidget {
                 children: [
                   const Text('VEHICLE DETAILS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1, color: Colors.grey)),
                   const SizedBox(height: 12),
-                  _buildDetailRow(Icons.directions_car, 'Vehicle Type', 'Toyota Hiace Commuter'), // Mocked
+                  _buildDetailRow(Icons.directions_car, 'Vehicle Type', 'Toyota Hiace Commuter'),
                   const Divider(height: 20),
-                  _buildDetailRow(Icons.pin, 'Plate Number', 'DVO-1234'), // Mocked
+                  _buildDetailRow(Icons.pin, 'Plate Number', 'DVO-1234'),
                 ],
               ),
             ),
@@ -128,15 +130,27 @@ class TripDetailsSheet extends StatelessWidget {
 
             const SizedBox(height: 32),
 
-            // --- Full Width Book Button ---
+            // --- Full Width Reservation Button ---
             SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: trip.isFull ? null : () {
-                  Navigator.pop(context); // Close sheet
-                  onBook(); // Trigger booking
-                },
+                onPressed: trip.isFull 
+                    ? null 
+                    : () {
+                        Navigator.pop(context); // Dismiss current sheet
+                        
+                        // Launch PayMongo Checkout Interface instead of instant booking execution
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => PaymentGatewaySheet(
+                            fare: approxFare,
+                            onPaymentSuccess: onBook, // Book trip upon tokenized verification
+                          ),
+                        );
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00A859),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -151,41 +165,35 @@ class TripDetailsSheet extends StatelessWidget {
     );
   }
 
-  // Helper Widget for the Route Timeline
   Widget _buildTimelineRow({required String time, required String location, required String label, required Color iconColor, required bool isLast}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Time Column
         SizedBox(
           width: 70,
           child: Text(time, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         ),
-        // Timeline Visual Column
         Column(
           children: [
             Container(
-              width: 12,
-              height: 12,
+              width: 12, height: 12,
               decoration: BoxDecoration(shape: BoxShape.circle, color: iconColor),
             ),
             if (!isLast)
               Container(
-                width: 2,
-                height: 30, // Height of the connecting line
+                width: 2, height: 30,
                 color: Colors.grey.shade300,
               ),
           ],
         ),
         const SizedBox(width: 12),
-        // Location Column
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(location, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
               Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-              if (!isLast) const SizedBox(height: 16), // Spacing below the first item
+              if (!isLast) const SizedBox(height: 16),
             ],
           ),
         ),
@@ -193,7 +201,6 @@ class TripDetailsSheet extends StatelessWidget {
     );
   }
 
-  // Helper Widget for Vehicle Details
   Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
       children: [

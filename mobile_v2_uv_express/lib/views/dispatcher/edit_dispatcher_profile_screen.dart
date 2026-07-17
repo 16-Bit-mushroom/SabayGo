@@ -24,7 +24,7 @@ class _EditDispatcherProfileScreenState extends State<EditDispatcherProfileScree
     super.initState();
     // In a real app, you would initialize these with the current user's data
     // if they are editing an existing profile, or leave blank if it's a fresh sign-up.
-    _nameCtrl = TextEditingController(text: 'Rodrigo M. Duterte');
+    _nameCtrl = TextEditingController(text: 'Adonis T. Zuma');
     _phoneCtrl = TextEditingController(text: '0917-123-4567');
     _coopCtrl = TextEditingController(text: 'Davao UV Express Cooperative');
     _terminalCtrl = TextEditingController(text: 'Ecoland Terminal');

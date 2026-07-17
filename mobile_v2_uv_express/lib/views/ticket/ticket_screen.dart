@@ -14,6 +14,10 @@ class TicketScreen extends StatefulWidget {
 
 class _TicketScreenState extends State<TicketScreen> {
   late final TicketViewModel _viewModel;
+  
+  // Hardcoded for UI visualization. Later, this will be updated by your 
+  // NAHGM background location tracker.
+  bool _isAtTerminal = false; 
 
   @override
   void initState() {
@@ -41,6 +45,7 @@ class _TicketScreenState extends State<TicketScreen> {
         title: const Text('Boarding Pass'),
         backgroundColor: const Color(0xFF2D2059),
         elevation: 0,
+        foregroundColor: Colors.white,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -93,6 +98,38 @@ class _TicketScreenState extends State<TicketScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Column(
                         children: [
+                          // NEW: Geofence / NAHGM Status Badge (Objective 1.3.2.1)
+                          if (!_viewModel.isCancelled)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: _isAtTerminal ? Colors.green.shade50 : Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: _isAtTerminal ? Colors.green.shade200 : Colors.orange.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isAtTerminal ? Icons.check_circle : Icons.location_on, 
+                                    size: 16, 
+                                    color: _isAtTerminal ? Colors.green.shade700 : Colors.orange.shade800
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _isAtTerminal ? 'At Terminal - Ready to Board' : 'Awaiting Terminal Arrival', 
+                                    style: TextStyle(
+                                      fontSize: 12, 
+                                      color: _isAtTerminal ? Colors.green.shade700 : Colors.orange.shade800, 
+                                      fontWeight: FontWeight.bold
+                                    )
+                                  ),
+                                ],
+                              ),
+                            ),
+                          
+                          const SizedBox(height: 16),
+
                           Opacity(
                             opacity: _viewModel.isCancelled ? 0.3 : 1.0,
                             child: const Icon(Icons.qr_code_2, size: 120, color: Color(0xFF2D2059)),
@@ -142,12 +179,33 @@ class _TicketScreenState extends State<TicketScreen> {
                           const SizedBox(height: 12),
                           _buildInfoRow(Icons.flag_outlined, 'Est. Arrival', _formatTime(trip.estimatedArrivalTime)),
                           
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Divider(),
-                          ),
+                          const SizedBox(height: 20),
                           
-                          _buildInfoRow(Icons.payments_outlined, 'Approx. Fare', '₱${trip.approximateFare.toStringAsFixed(0)}'),
+                          // NEW: PayMongo Verified Receipt Box (Objective 1.3.2.2)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.verified_user, color: Colors.blue.shade700, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text('Paid via PayMongo', style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                                Text(
+                                  '₱${trip.approximateFare.toStringAsFixed(2)}', 
+                                  style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 16)
+                                ),
+                              ],
+                            ),
+                          )
                         ],
                       ),
                     ),
