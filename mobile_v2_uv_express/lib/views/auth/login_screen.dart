@@ -11,21 +11,33 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  bool _isPassenger = true; // Role Toggle
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
 
   void _handleLogin() {
-    // --- DEMO MODE: Bypass all validation ---
-    
     // Close the keyboard instantly for a smoother transition
     FocusScope.of(context).unfocus(); 
 
-    if (_isPassenger) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulating routing to Passenger App...')));
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const PassengerMainScreen()), (route) => false);
-    } else {
+    // Read the typed email
+    final email = _emailController.text.trim().toLowerCase();
+
+    // --- DEMO MODE: Automatic Role-Based Routing ---
+    // If the email is a dispatcher/admin email, route to Dispatcher screen.
+    if (email == 'admin@sabaygo.com' || email == 'dispatcher@sabaygo.com') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Operator recognized. Routing to Command Center...')));
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const DispatcherMainScreen()), (route) => false);
+    } 
+    // Otherwise, route them as a normal Passenger.
+    else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passenger recognized. Routing to Home...')));
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const PassengerMainScreen()), (route) => false);
     }
   }
 
@@ -101,7 +113,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _buildLabel('Email Address'),
-                              _buildTextField(hint: 'Enter Your Email', icon: Icons.email_outlined),
+                              _buildTextField(
+                                hint: 'Enter Your Email', 
+                                icon: Icons.email_outlined,
+                                controller: _emailController, // Added controller to read input
+                              ),
                               const SizedBox(height: 20),
                               
                               _buildLabel('Password'),
@@ -141,27 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 32),
 
-                              // --- Testing Role Toggle ---
-                              Center(
-                                child: SegmentedButton<bool>(
-                                  segments: const [
-                                    ButtonSegment(value: true, label: Text('Passenger', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    ButtonSegment(value: false, label: Text('Dispatcher', style: TextStyle(fontWeight: FontWeight.bold))),
-                                  ],
-                                  selected: {_isPassenger},
-                                  onSelectionChanged: (Set<bool> newSelection) {
-                                    setState(() => _isPassenger = newSelection.first);
-                                  },
-                                  style: SegmentedButton.styleFrom(
-                                    selectedBackgroundColor: const Color(0xFF2D2059),
-                                    selectedForegroundColor: Colors.white,
-                                    side: BorderSide(color: Colors.grey.shade300),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-
-                              // Login Button
+                              // Login Button (Segmented Button Removed Here)
                               SizedBox(
                                 width: double.infinity,
                                 child: FilledButton(
@@ -232,8 +228,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField({required String hint, required IconData icon, bool isPassword = false}) {
+  // Updated to accept an optional TextEditingController
+  Widget _buildTextField({required String hint, required IconData icon, bool isPassword = false, TextEditingController? controller}) {
     return TextFormField(
+      controller: controller,
       obscureText: isPassword ? _obscurePassword : false,
       style: const TextStyle(fontWeight: FontWeight.w600),
       decoration: InputDecoration(

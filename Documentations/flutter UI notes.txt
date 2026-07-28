@@ -1,0 +1,12 @@
+flutter UI notes:
+
+Remove arriving floating button, let the ride or driver finish the ride session
+Re-do the ride summary 
+remove the back button in the In-Ride screen
+Remove other mode of payments
+Replace the driver matching with better animation
+
+-------------- DRIVER -------------
+add confirm dialogue on driver declining rides.
+better wordings to match system to real world, align with usability heuristics
+on screen with navigation or maps, the card details should able to slide down and up to clear the screen and focus on map navigation. When slid down, there should be visible arrow or semi transparent that indicates to slide up to view details.

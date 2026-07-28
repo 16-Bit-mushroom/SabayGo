@@ -1,0 +1,52 @@
+YOLOv8
+
+This is the absolute core of your capstone, so having this flow perfectly memorized for your defense panel is critical.
+
+If a panelist asks, *"How exactly does your AI reconciliation work?"*, here is the exact, step-by-step breakdown of what is happening under the hood during your live demonstration:
+
+### Phase 1: The Hardware Simulation (The "Van")
+
+In a real-world scenario, there would be a small IoT camera mounted inside the UV Express van. For the sake of the prototype defense, **your laptop acts as the van.**
+
+* Your laptop's webcam represents the IoT camera.
+* A lightweight Python server (Flask) runs in the background on your laptop, constantly listening for a command.
+
+### Phase 2: The Trigger (The Request)
+
+The process starts from the **Operator Command Center** (your Flutter mobile app).
+
+* The manager views a specific route (e.g., Ecoland to Cotabato) and sees the digital manifest shows 12 passengers have scanned their QR codes and paid. We call this the **Booked Count ($C_{booked}$)**.
+* The manager taps the **"Trigger Live Audit"** button on the app.
+* The app sends an HTTP GET request over your local Wi-Fi to your laptop's IP address.
+
+### Phase 3: The YOLOv8 Inference (The "Brain")
+
+The moment your laptop receives that HTTP request, the Python script executes the following sequence in milliseconds:
+
+1. **The Snap:** `OpenCV` (a computer vision library) wakes up the webcam and captures a single, real-time video frame of the room (acting as the van cabin).
+2. **The Detection:** The frame is passed into the `ultralytics` YOLOv8 model.
+3. **The Filter:** YOLOv8 can detect 80 different types of objects, but we explicitly tell it to only look for **Class `0**` (which is the universal ID for "person").
+4. **The Processing:** The model draws green bounding boxes around every person it detects and tallies the total number. We call this the **Visual Count ($C_{visual}$)**.
+
+### Phase 4: The Delivery
+
+The Python script packages the results to send back to your phone.
+
+* It converts the image (with the green bounding boxes drawn on it) into a **Base64 String** (a very long string of text that represents an image so it can be sent over the internet easily).
+* It creates a JSON response containing two things: `{ "visual_count": 14, "image_data": "base64_string..." }`.
+* It sends this JSON back to the Flutter app.
+
+### Phase 5: The Reconciliation (The Math)
+
+The Flutter app receives the data and performs the core business logic:
+
+* It decodes the Base64 string back into a visible picture and displays it on the screen as visual proof.
+* It compares the physical reality against the digital records: **$C_{visual} - C_{booked} = Variance$**.
+* **Scenario A (Match):** If $C_{visual}$ (12) equals $C_{booked}$ (12), the variance is 0. The system automatically clears the audit with a green badge.
+* **Scenario B (Leakage):** If $C_{visual}$ (14) is greater than $C_{booked}$ (12), the variance is +2. The system throws a red alert, proving to the operator that 2 people are inside the van who did not pay via the system, allowing the manager to flag the driver for unremitted fares.
+
+---
+
+By separating the heavy AI processing (Laptop/Python) from the UI (Phone/Flutter), your mobile app stays incredibly fast and responsive, which is exactly how enterprise software is architected.
+
+Which side of this YOLOv8 pipeline would you like to code first—the Python Flask script that handles the camera and AI, or the Flutter mobile UI that triggers the request?

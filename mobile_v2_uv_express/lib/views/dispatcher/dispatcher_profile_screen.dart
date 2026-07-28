@@ -3,9 +3,16 @@ import 'edit_dispatcher_profile_screen.dart';
 import 'operator_revenue_dashboard.dart'; // Ensure this matches your file path
 import '../auth/login_screen.dart';
 
-class DispatcherProfileScreen extends StatelessWidget {
+class DispatcherProfileScreen extends StatefulWidget {
   const DispatcherProfileScreen({super.key});
 
+  @override
+  State<DispatcherProfileScreen> createState() => _DispatcherProfileScreenState();
+}
+
+class _DispatcherProfileScreenState extends State<DispatcherProfileScreen> {
+  // You now have access to setState if you need to manage local variables here!
+  
   void _showSignOutConfirmation(BuildContext context) {
     showDialog(
       context: context,
@@ -159,7 +166,6 @@ class DispatcherProfileScreen extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        // Moved to the top, renamed, and wired up!
                         _buildSettingsTile(
                           icon: Icons.account_balance_wallet_outlined,
                           title: 'Revenue & Seat Reconciliation',
@@ -213,18 +219,45 @@ class DispatcherProfileScreen extends StatelessWidget {
                       label: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
                   ),
-                  const SizedBox(height: 40), // Extra bottom padding for scroll space
+                  const SizedBox(height: 40), 
                 ],
               ),
             ),
           ],
         ),
       ),
+      
+      // --- ADDED: Bottom Navigation Bar ---
+      bottomNavigationBar: NavigationBar(
+        // We leave selectedIndex blank or default because Profile isn't one of the 4 main tabs
+        selectedIndex: 0, 
+        // FIX: Tapping any icon pops the profile screen off, revealing the main screen below it
+        onDestinationSelected: (index) => Navigator.pop(context),
+        backgroundColor: Colors.white,
+        indicatorColor: Colors.transparent, // Hide indicator to show this screen isn't a main tab
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            label: 'Schedules',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.directions_car_outlined),
+            label: 'Vans & Crew',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            label: 'Log Book',
+          ),
+        ],
+      ),
     );
   }
 
   // --- Helper Widgets ---
-
   Widget _buildQuickStat(String label, String value, Color valueColor) {
     return Column(
       children: [

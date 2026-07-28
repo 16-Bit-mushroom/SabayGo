@@ -445,7 +445,7 @@ CarpoolNode? _dropoffNode;
 
 // MOCK FLAGS FOR CAPSTONE DEFENSE:
 bool _isVerified = true;       // Intercepts eKYC if false
-bool _hasActiveSaaS = false;    // Intercepts Paywall if false
+bool _hasActiveSaaS = true;    // Intercepts Paywall if false
 
 void _handleRequestRide() {
     // Gate 1: Check eKYC Identity Verification

@@ -150,6 +150,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
   Widget build(BuildContext context) {
     final int occupiedSeats = _currentTrip.totalSeats - _currentTrip.availableSeats;
     final bool isDeparted = _currentTrip.status == TripStatus.departed;
+    final bool isFull = _currentTrip.availableSeats <= 0; // Check if seats are maxed out
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
@@ -242,23 +243,26 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
       ),
       
       // --- Add Walk-in Button ---
-      bottomNavigationBar: isDeparted 
-        ? null 
-        : SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: FilledButton.icon(
-                onPressed: _addMockWalkIn, // In a real app, opens the Walk-in Form Modal
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF00A859),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: const Icon(Icons.person_add),
-                label: const Text('Add Walk-in Passenger', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
+      // Removed the 'isDeparted ? null' check so it always shows.
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
+            // Disable button entirely if van is full
+            onPressed: isFull ? null : _addMockWalkIn, 
+            style: FilledButton.styleFrom(
+              backgroundColor: isFull ? Colors.grey.shade400 : const Color(0xFF00A859),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.person_add),
+            label: Text(
+              isFull ? 'Van is at Maximum Capacity' : 'Add Walk-in Passenger', 
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
             ),
           ),
+        ),
+      ),
     );
   }
 

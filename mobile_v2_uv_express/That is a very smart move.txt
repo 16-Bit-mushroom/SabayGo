@@ -1,0 +1,25 @@
+That is a very smart move. Jumping straight into code or UI without locking down the data structure is a recipe for having to rewrite everything later, especially with strict rubric grading.
+
+Here is the most logical Software Development Life Cycle (SDLC) order to tackle these tasks, along with exactly *why* it must be done this way:
+
+**1. Architecture Diagram**
+
+* **Why:** You must define the "Big Picture" first. We need to establish exactly *where* the YOLOv8 model lives (e.g., as a Python FastAPI microservice) and how the in-van camera (Edge) communicates with your central server and the Operator Web App. If the architecture is flawed, nothing else matters.
+
+**2. Entity Relationship Diagram (ERD)**
+
+* **Why:** Once we know the architecture, we map the conceptual relationships. We need to visualize how the new YOLOv8 data connects to your existing system. For instance, how does a physical camera snapshot link to a specific `TripSchedule` and a specific `Driver`?
+
+**3. Data Dictionary**
+
+* **Why:** The ERD gives us the boxes and lines; the Data Dictionary gives us the microscopic details. Here is where we define the exact columns (e.g., `VisualCount`, `Variance`, `SnapshotURL`), data types, and primary/foreign keys. Your rubric heavily grades data integrity, so this needs to be airtight.
+
+**4. Input-Process-Output (IPO) Model**
+
+* **Why:** This is your teammate's task, but it relies on the first three steps. They cannot define the *Inputs* and *Outputs* accurately until we have locked down the Data Dictionary and Architecture. Handing them steps 1-3 gives them everything they need to finish the IPO perfectly.
+
+**5. UI Prototype & Integration**
+
+* **Why:** UI always comes last in this sequence. Criterion 3 of your rubric explicitly demands that all UI input fields and displayed data accurately map to the database tables. If we build the UI first, we risk adding variables that don't exist in the database, forcing us to redo the work. By building the database logic first, the UI essentially designs itself.
+
+Does this sequence make sense to you, and are you ready to map out the exact layers for the Architecture Diagram first?
