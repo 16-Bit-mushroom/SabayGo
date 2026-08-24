@@ -174,6 +174,26 @@ class DriverCredential(Base):
     cttmo_id_photo_url: Mapped[str | None] = mapped_column(String(512))
 
 
+class PassengerSettings(Base):
+    __tablename__ = "passenger_settings"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    push_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    tailored_schedules: Mapped[bool] = mapped_column(Boolean, default=True)
+    trip_updates: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class SavedDestination(Base):
+    __tablename__ = "saved_destinations"
+
+    destination_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    label: Mapped[str] = mapped_column(String(255))
+    terminal_id: Mapped[str | None] = mapped_column(ForeignKey("terminals.terminal_id"))
+    address: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
 # ======================================================================
 # Fleet
 # ======================================================================
