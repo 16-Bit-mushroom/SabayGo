@@ -1,0 +1,156 @@
+=== 10 concurrent ===
+
+Firing 10 simultaneous reservations at stops 1->4 on TRIP-DEMO-00000001
+
+==============================================================
+CONCURRENCY EXPERIMENT RESULTS
+==============================================================
+Concurrent requests      : 10
+Trip seat capacity       : 10
+Successful bookings      : 10
+Rejected                 : 0
+Distinct seats allocated : 10
+DOUBLE-BOOKED SEATS      : 0   <-- must be 0
+
+Response codes:
+  201    10   created
+
+Latency (ms):
+  min       119.2
+  median    172.0
+  p95       220.2
+  max       220.2
+  wall      224.6  (all 10 requests)
+
+PASS: no double-booking, no overbooking.
+      Pessimistic locking held under concurrent load.
+==============================================================
+
+Verify independently in MySQL:
+
+  SELECT seat_number, leg_sequence, COUNT(*) AS allocations
+    FROM seat_inventory
+   WHERE trip_id = 'TRIP-DEMO-00000001' AND status <> 'available'
+   GROUP BY seat_number, leg_sequence
+  HAVING COUNT(*) > 1;      -- must return zero rows
+
+=== 25 concurrent ===
+
+Firing 25 simultaneous reservations at stops 1->4 on TRIP-DEMO-00000001
+
+==============================================================
+CONCURRENCY EXPERIMENT RESULTS
+==============================================================
+Concurrent requests      : 25
+Trip seat capacity       : 10
+Successful bookings      : 10
+Rejected                 : 15
+Distinct seats allocated : 10
+DOUBLE-BOOKED SEATS      : 0   <-- must be 0
+
+Response codes:
+  201    10   created
+  422    15   policy violation
+
+Error codes:
+  policy_violation         15
+
+Latency (ms):
+  min       174.9
+  median    410.6
+  p95       498.4
+  max       499.8
+  wall      510.1  (all 25 requests)
+
+PASS: no double-booking, no overbooking.
+      Pessimistic locking held under concurrent load.
+==============================================================
+
+Verify independently in MySQL:
+
+  SELECT seat_number, leg_sequence, COUNT(*) AS allocations
+    FROM seat_inventory
+   WHERE trip_id = 'TRIP-DEMO-00000001' AND status <> 'available'
+   GROUP BY seat_number, leg_sequence
+  HAVING COUNT(*) > 1;      -- must return zero rows
+
+=== 50 concurrent ===
+
+Firing 50 simultaneous reservations at stops 1->4 on TRIP-DEMO-00000001
+
+==============================================================
+CONCURRENCY EXPERIMENT RESULTS
+==============================================================
+Concurrent requests      : 50
+Trip seat capacity       : 10
+Successful bookings      : 10
+Rejected                 : 40
+Distinct seats allocated : 10
+DOUBLE-BOOKED SEATS      : 0   <-- must be 0
+
+Response codes:
+  201    10   created
+  422    40   policy violation
+
+Error codes:
+  policy_violation         40
+
+Latency (ms):
+  min       230.7
+  median    809.2
+  p95       961.6
+  max       971.2
+  wall      993.3  (all 50 requests)
+
+PASS: no double-booking, no overbooking.
+      Pessimistic locking held under concurrent load.
+==============================================================
+
+Verify independently in MySQL:
+
+  SELECT seat_number, leg_sequence, COUNT(*) AS allocations
+    FROM seat_inventory
+   WHERE trip_id = 'TRIP-DEMO-00000001' AND status <> 'available'
+   GROUP BY seat_number, leg_sequence
+  HAVING COUNT(*) > 1;      -- must return zero rows
+
+=== 100 concurrent ===
+
+Firing 100 simultaneous reservations at stops 1->4 on TRIP-DEMO-00000001
+
+==============================================================
+CONCURRENCY EXPERIMENT RESULTS
+==============================================================
+Concurrent requests      : 100
+Trip seat capacity       : 10
+Successful bookings      : 10
+Rejected                 : 90
+Distinct seats allocated : 10
+DOUBLE-BOOKED SEATS      : 0   <-- must be 0
+
+Response codes:
+  201    10   created
+  422    90   policy violation
+
+Error codes:
+  policy_violation         90
+
+Latency (ms):
+  min       300.5
+  median   1398.8
+  p95      1956.3
+  max      1998.6
+  wall     2043.4  (all 100 requests)
+
+PASS: no double-booking, no overbooking.
+      Pessimistic locking held under concurrent load.
+==============================================================
+
+Verify independently in MySQL:
+
+  SELECT seat_number, leg_sequence, COUNT(*) AS allocations
+    FROM seat_inventory
+   WHERE trip_id = 'TRIP-DEMO-00000001' AND status <> 'available'
+   GROUP BY seat_number, leg_sequence
+  HAVING COUNT(*) > 1;      -- must return zero rows
+

@@ -1,0 +1,28 @@
+.env
+*.log
+__pycache__/
+.venv/
+venv/
+*.pyc
+.idea/
+.vscode/
+db/dumps/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Flutter / Dart
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# ML weights (document the download instead)
+*.pt
+
+# Local DB artifacts
+*.db
