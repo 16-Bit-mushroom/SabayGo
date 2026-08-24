@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.core.timezone import APP_TZ
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.application.booking.reschedule import (
     CancelBookingUseCase,
@@ -180,14 +181,14 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
         .limit(50)
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(APP_TZ)
     active = {"pending", "confirmed", "checked_in"}
     out: list[MyBookingOut] = []
 
     for booking, trip in result.all():
         departure = trip.departure_datetime
         if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=timezone.utc)
+            departure = departure.replace(tzinfo=APP_TZ)
         deadline = departure - timedelta(hours=trip.reschedule_cutoff_hours)
 
         out.append(

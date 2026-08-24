@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from app.core.timezone import APP_TZ
 from app.core.exceptions import ConflictError, PolicyViolationError
 from app.domain.enums import BookingStatus, BookingType
 from app.domain.value_objects import Segment
@@ -55,7 +56,7 @@ class Booking:
     qr_payload: str | None = None
     rescheduled_from_booking_id: str | None = None
     reschedule_count: int = 0
-    booked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    booked_at: datetime = field(default_factory=lambda: datetime.now(APP_TZ))
 
     # -- construction ---------------------------------------------------
     @classmethod
@@ -108,7 +109,7 @@ class Booking:
 
     @staticmethod
     def _generate_ticket_number() -> str:
-        stamp = datetime.now(timezone.utc).strftime("%y%m%d")
+        stamp = datetime.now(APP_TZ).strftime("%y%m%d")
         return f"SBG-{stamp}-{uuid.uuid4().hex[:6].upper()}"
 
     # -- transitions ----------------------------------------------------
@@ -156,9 +157,9 @@ class Booking:
         trip at generation time -- so a later policy change never alters
         the terms a passenger already bought under.
         """
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(APP_TZ)
         if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=timezone.utc)
+            departure = departure.replace(tzinfo=APP_TZ)
 
         if self.status not in _ACTIVE:
             raise ConflictError(f"A {self.status.value} booking cannot be rescheduled.")

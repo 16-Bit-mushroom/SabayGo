@@ -421,3 +421,18 @@ class Notification(Base):
     fcm_message_id: Mapped[str | None] = mapped_column(String(128))
     delivery_status: Mapped[str] = mapped_column(String(16), default="queued")
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class DriverHeadcount(Base):
+    __tablename__ = "driver_headcounts"
+
+    headcount_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    stop_sequence: Mapped[int] = mapped_column(SmallInteger)
+    confirmed_count: Mapped[int] = mapped_column(SmallInteger)
+    manifest_count: Mapped[int] = mapped_column(SmallInteger)
+    variance: Mapped[int] = mapped_column(SmallInteger)
+    confirmed_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    confirmed_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    client_recorded_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    synced_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))

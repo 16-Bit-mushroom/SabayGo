@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timezone import APP_TZ
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.entities.booking import Booking as BookingEntity
 from app.domain.enums import BookingStatus, BookingType, PaymentStatus, TripStatus
@@ -110,8 +111,8 @@ class RescheduleBookingUseCase:
 
         departure = new_trip.departure_datetime
         if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=timezone.utc)
-        if departure <= datetime.now(timezone.utc):
+            departure = departure.replace(tzinfo=APP_TZ)
+        if departure <= datetime.now(APP_TZ):
             raise ConflictError("Target trip has already departed.")
 
         # Claim the new seat BEFORE releasing the old one. If allocation
@@ -123,7 +124,7 @@ class RescheduleBookingUseCase:
             trip_id=new_trip_id, segment=segment, hold_ttl_seconds=hold_ttl
         )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(APP_TZ)
         new_id = str(uuid.uuid4())
         new_ticket = BookingEntity._generate_ticket_number()
         was_paid = row.status in (
@@ -229,7 +230,7 @@ class CancelBookingUseCase:
         )
         entity.cancel()  # raises if already terminal or boarded
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(APP_TZ)
         row.status = BookingStatus.CANCELLED.value
         row.cancelled_at = now
         row.updated_at = now

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.v1 import auth, bookings, payments, trips
+from app.api.v1 import audits, auth, bookings, operations, payments, trips
 from app.config import settings
 from app.core.db import engine
 from app.core.exceptions import DomainError
@@ -72,3 +74,12 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(bookings.router, prefix="/api/v1")
 app.include_router(trips.router, prefix="/api/v1")
 app.include_router(payments.router, prefix="/api/v1")
+app.include_router(operations.router, prefix="/api/v1")
+app.include_router(audits.router, prefix="/api/v1")
+
+# Blurred audit snapshots. Local disk is a prototype choice -- object
+# storage with signed URLs and a retention policy is the production
+# answer, and that belongs in Limitations.
+MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")

@@ -16,6 +16,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timezone import APP_TZ
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.entities.booking import Booking as BookingEntity
 from app.domain.enums import BookingStatus, BookingType, TripStatus
@@ -67,8 +68,8 @@ class ReserveSeatUseCase:
 
         departure = trip.departure_datetime
         if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=timezone.utc)
-        if departure <= datetime.now(timezone.utc):
+            departure = departure.replace(tzinfo=APP_TZ)
+        if departure <= datetime.now(APP_TZ):
             raise ConflictError("This trip has already departed.")
 
         fare = await self._lookup_fare(trip.route_id, segment)
@@ -101,7 +102,7 @@ class ReserveSeatUseCase:
             walkin_wants_receipt=cmd.walkin_wants_receipt,
         )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(APP_TZ)
         self.session.add(
             BookingRow(
                 booking_id=booking.booking_id,
