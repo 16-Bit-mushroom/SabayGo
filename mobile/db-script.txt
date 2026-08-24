@@ -1,0 +1,564 @@
+
+
+2.3.4	Data Dictionary
+The data dictionary serves as the authoritative reference for the system’s MySQL database, defining every field, data type, size, and constraint. This schema is specifically designed to support the geofenced check-in validation, strict segment-capacity enforcement, and the YOLOv8 edge-to-cloud revenue auditing features of SabayGo.
+
+Table 9. Passengers table
+
+Stores the core identity, credentials, and profile metrics for individual passengers using the app.
+
+Field Name
+Data Type
+Constraints
+Description
+PassengerID
+VARCHAR(32)
+PK, NOT NULL
+Unique identifier (UUID) for the passenger.
+FirstName
+VARCHAR(70)
+NOT NULL
+First name of the passenger.
+MiddleName
+VARCHAR(70)
+NULL
+Middle name of the passenger.
+LastName
+VARCHAR(100)
+NOT NULL
+Last name of the passenger.
+Email
+VARCHAR(255)
+UNIQUE, NOT NULL
+Used for authentication and notifications.
+PhoneNumber
+VARCHAR(15)
+UNIQUE, NOT NULL
+Direct mobile contact (e.g., +63 917 123 4567).
+HomeAddress
+VARCHAR(255)
+NULL
+Passenger's saved residence (e.g., Matina Crossing).
+Gender
+ENUM
+NULL
+Strict values: 'Male', 'Female', 'Other', 'Prefer not to say'.
+EmergContactName
+VARCHAR(150)
+NULL
+Full name of the designated emergency contact.
+EmergContactRelation
+VARCHAR(50)
+NULL
+Relationship to passenger (e.g., 'Mother').
+EmergContactNumber
+VARCHAR(15)
+NULL
+Mobile number of the emergency contact.
+TrustRating
+DECIMAL(2, 1)
+DEFAULT 5.0
+Dynamic rating out of 5.0 based on trip history.
+
+ 
+Table 10. PassengersSettings table
+Manages individual user preferences, specifically isolating push notification configurations to maintain a normalized and lightweight primary passenger table.
+Field Name
+Data Type
+Constraints
+Description
+PassengersID
+VARCHAR(32)
+PK, FK, NOT NULL
+Links to the Passengers table.
+PushEnabled
+BOOLEAN
+NOT NULL, DEFAULT TRUE
+Master toggle for "Allow All Notifications".
+TailoredSchedules
+BOOLEAN
+NOT NULL, DEFAULT TRUE
+Master toggle for "Tailored Trip Schedules".
+TripUpdates
+BOOLEAN
+NOT NULL, DEFAULT TRUE
+Master toggle for "Trip Updates & Cancellations".
+
+
+Table 11. SavedDestinations table 
+Stores the passenger's bookmarked drop-off locations (such as Home, Office, or School) to enable rapid booking and tailored schedule alerts.
+Field Name
+Data Type
+Constraints
+Description
+DestinationID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier.
+PassengerID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Passengers table.
+Label
+VARCHAR(255)
+NOT NULL
+User-defined name (e.g., "Cotabato City Terminal").
+Address
+VARCHAR(255)
+NOT NULL
+The secondary string address of the destination.
+Latitude
+DECIMAL(8, 6)
+NOT NULL
+Geolocation mapping coordinate for distance calculation.
+Longitude
+DECIMAL(9, 6)
+NOT NULL
+Geolocation mapping coordinate for distance calculation.
+CreatedAt
+DATETIME(6)
+NOT NULL, DEFAULT CURRENT_TIMESTAMP
+Timestamp of when the bookmark was added.
+
+Table 12. Bookings table
+The primary transaction table records all active and historical seat reservations made by passengers for specific UV Express trips.
+
+
+Field Name
+Data Type
+Constraints
+Description
+BookingID
+VARCHAR(32)
+PK, NOT NULL
+Auto-incrementing primary key.
+TicketNumber
+VARCHAR(32)
+UNIQUE, NOT NULL
+Human-readable string (e.g., TXN-61482938).
+PassengerID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Passengers table.
+TripID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Operator Trips table.
+BookingType
+ENUM
+NOT NULL
+Strict values: 'App' or 'Walk-in'.
+FareAmount
+DECIMAL(10, 2)
+NOT NULL
+The locked-in price of the ticket at booking time.
+Status
+ENUM
+DEFAULT 'Pending'
+Strict values: 'Pending', 'Confirmed', 'Boarded', 'Cancelled'.
+BookedAt
+DATETIME(6)
+NOT NULL
+The exact time the reservation was made.
+
+ 
+Table 13. PassengerTripHistory table
+An immutable audit log of all completed, cancelled, or missed trips, utilized for generating historical receipts and calculating passenger trust ratings.
+
+
+Field Name
+Data Type
+Constraints
+Description
+HistoryID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier.
+PassengerID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Passengers table.
+BookingID
+VARCHAR(32)
+FK, NOT NULL
+Links back to the original Bookings record.
+Origin
+VARCHAR(255)
+NOT NULL
+The starting terminal name (saved as text for historical accuracy).
+Destination
+VARCHAR(255)
+NOT NULL
+The final drop-off location or terminal.
+FarePaid
+DECIMAL(10, 2)
+NOT NULL
+The actual amount paid at the time of the trip.
+Status
+ENUM
+NOT NULL
+Strict values: 'Completed', 'Cancelled', 'No-Show'.
+CompletedAt
+DATETIME(6)
+NOT NULL
+The exact date and time the trip concluded.
+
+
+Table 14. Notifications table 
+Acts as the in-app inbox, storing historical and unread system alerts, trip updates, and promotional messages sent to the passenger.
+
+
+Field Name
+Data Type
+Constraints
+Description
+NotificationID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier.
+PassengerID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Passengers table.
+Title
+VARCHAR(70)
+NOT NULL
+Short heading for the alert (e.g., "Trip Canceled").
+Message
+VARCHAR(255)
+NOT NULL
+The full body text of the notification.
+Type
+ENUM
+NOT NULL
+Strict values driving UI icons: 'Tailored Schedule', 'Trip Update', 'System Alert'.
+IsRead
+BOOLEAN
+NOT NULL, DEFAULT FALSE
+Tracks unread status (controls the blue dot indicator in UI).
+CreatedAt
+DATETIME(6)
+NOT NULL, DEFAULT CURRENT_TIMESTAMP
+Timestamp generating the relative time display (e.g., "15m ago").
+
+ 
+Table 15. Driver table
+Stores driver profiles, contact details, and local compliance credentials such as CTTMO and Professional Licenses based on the Edit Driver Details screen.
+
+
+Field Name
+Data Type
+Constraints
+Description
+DriverID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier.
+FullName
+VARCHAR(255)
+NOT NULL
+Full legal name of the driver.
+ContactNumber
+VARCHAR(15)
+NOT NULL
+Direct mobile contact number.
+CTTMOIDPhotoUrl
+VARCHAR(255)
+NOT NULL
+CDN link to the uploaded CTTMO ID photo.
+CTTMOIDNumber
+VARCHAR(70)
+UNIQUE, NOT NULL
+LGU-issued CTTMO identification string.
+LicenseNumber
+VARCHAR(15)
+UNIQUE, NOT NULL
+Professional Driver's License number.
+LicenseExpiryDate
+DATE
+NOT NULL
+The expiration date selected via the UI date picker.
+EmploymentStatus
+ENUM
+NOT NULL, DEFAULT 'Active'
+Strict UI dropdown values: 'Active', 'Suspended', 'On-Leave', 'Inactive'.
+
+
+Table 16. Vans table
+Contains the physical fleet details, LTFRB registration (CPC details), vehicle specifications, and operational status as seen in the Edit Van Details screen.
+
+
+Field Name
+Data Type
+Constraints
+Description
+VanID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier.
+PhotoFrontUrl
+VARCHAR(255)
+NOT NULL
+CDN link to the front vehicle photo.
+PhotoBackUrl
+VARCHAR(255)
+NOT NULL
+CDN link to the back vehicle photo.
+PhotoLeftUrl
+VARCHAR(255)
+NOT NULL
+CDN link to the left side vehicle photo.
+PhotoRightUrl
+VARCHAR(255)
+NOT NULL
+CDN link to the right side vehicle photo.
+PlateNumber
+VARCHAR(8)
+UNIQUE, NOT NULL
+Official vehicle plate (e.g., ABC-1234).
+CPCCaseNo
+VARCHAR(23)
+UNIQUE, NOT NULL
+Certificate of Public Convenience Case Number.
+CPCNumber
+VARCHAR(23)
+UNIQUE, NOT NULL
+Certificate of Public Convenience ID.
+Brand
+VARCHAR(30)
+NOT NULL
+Manufacturer brand (e.g., Toyota).
+Model
+VARCHAR(30)
+NOT NULL
+Vehicle model (e.g., Hiace Commuter).
+Color
+VARCHAR(20)
+NOT NULL
+Vehicle exterior color.
+SeatCapacity
+INT(2)
+NOT NULL, DEFAULT 14
+Maximum allowable passengers.
+OperationalStatus
+ENUM
+NOT NULL, DEFAULT 'Active'
+Strict UI dropdown values: 'Active (Ready)', 'Maintenance', 'Inactive'.
+RegisteredRoute
+ENUM
+NOT NULL
+Strict franchised routes (e.g., 'Ecoland-Cotabato', 'Ecoland-Tagum').
+
+
+Table 17. TripSchedules table
+Defines specific trips including origin, destination, assigned crew, departure time, and base pricing mapped from the Edit Schedule screen.
+Field Name
+Data Type
+Constraints
+Description
+ScheduleID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier.
+OriginTerminalID
+VARCHAR(32)
+FK, NOT NULL
+Links to Terminals table for the starting point.
+DestTerminalID
+VARCHAR(32)
+FK, NOT NULL
+Links to Terminals table for the destination.
+AssignedVanID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Vans table for fleet assignment.
+AssignedDriverID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Drivers table for crew assignment.
+ConductorID
+VARCHAR(32)
+FK, NULL
+Links to Conductors table (Nullable because UI allows 'Driver Only').
+DepartureDateTime
+DATETIME
+NOT NULL
+The set departure date and time from the UI picker.
+StandardFare
+DECIMAL(10, 2)
+NOT NULL
+The base ticket price in PHP.
+
+ 
+Table 18. LogBookEntries table
+The Conductor's operational ledger tracking individual passengers (app users and walk-ins), contact info, and boarding assignments, based on the Log Book UI.
+
+
+Field Name
+Data Type
+Constraints
+Description
+LogEntryID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier.
+PassengerName
+VARCHAR(100)
+NOT NULL
+Name of passenger, handles walk-in tags (e.g., 'Maria Clara (Walk-in)').
+PhoneNumber
+VARCHAR(15)
+NOT NULL
+Passenger contact number (e.g., +63 917 123 4567).
+Address
+VARCHAR(255)
+NOT NULL
+Pick-up or home address (e.g., Matina Crossing).
+AssignedVanID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Vans table (UI displays the corresponding Plate Number).
+DestinationCity
+VARCHAR(255)
+NOT NULL
+The final drop-off location (e.g., Cotabato City).
+LogTimestamp
+DATETIME(6)
+NOT NULL, DEFAULT CURRENT_TIMESTAMP
+The exact timestamp when the log/booking was recorded.
+
+
+Table 19. Yolov8_audit_logs table
+This table bridges the physical IoT camera data with the digital trip schedule, serving as the immutable ledger for your AI revenue reconciliation.
+
+Field Name
+Data Type
+Constraints
+Description
+AuditID
+VARCHAR(32)
+PK, NOT NULL2
+Unique alphanumeric identifier for the YOLOv8 physical audit event.
+ScheduleID
+VARCHAR(32)
+FK, NOT NULL
+Links to the TripSchedules table.
+DriverID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Drivers table for accountability tracking.
+CapturedAt
+DATETIME
+NOT NULL, DEFAULT CURRENT_TIMESTAMP
+Exact timestamp when the edge camera frame was processed.
+BookedCount
+INT(3)
+NOT NULL
+The digital QR manifest count at the time of capture.
+VisualCount
+INT(3)
+NOT NULL
+The physical headcount detected by the YOLOv8 model.
+Variance
+INT(3)
+NOT NULL
+The calculated discrepancy.
+SnapshotURL
+VARCHAR(255)
+NOT NULL
+Cloud storage URL to the annotated YOLOv8 inference image.
+ResolutionStatus
+ENUM
+NOT NULL, DEFAULT 'Pending'
+Strict states: 'Pending', 'Cash_Logged', or 'Ignored'.
+
+
+Table 20. Conductors table
+Stores the profiles and terminal assignments for the ground staff managing the passenger manifests and walk-ins.
+Field Name
+Data Type
+Constraints
+Description
+ConductorID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier for the conductor.
+FirstName
+VARCHAR(70)
+NOT NULL
+First legal name of the conductor.
+MiddleName
+VARCHAR(70)
+NULL
+Middle name of the conductor.
+LastName
+VARCHAR(100)
+NOT NULL
+Last legal name of the conductor.
+BirthDate
+DATE
+NOT NULL
+Used by the frontend to dynamically calculate the conductor's current age.
+PhoneNumber
+VARCHAR(15)
+UNIQUE, NOT NULL
+Direct mobile contact (e.g., +63 917 123 4567).
+Gender
+ENUM
+NOT NULL
+Strict values: 'Male', 'Female', 'Other', 'Prefer not to say'.
+HomeAddress
+VARCHAR(255)
+NOT NULL
+Full residential address of the conductor.
+ProfilePicUrl
+VARCHAR(255)
+NULL
+CDN link to the uploaded profile picture.
+AssignedTerminalID
+VARCHAR(32)
+FK, NOT NULL
+Links to the Terminals table for their primary workplace.
+EmploymentStatus
+ENUM
+NOT NULL, DEFAULT 'Active'
+Strict UI dropdown values: 'Active', 'Suspended', 'Inactive'.
+
+
+Table 21. Terminals table
+Defines the physical transport hubs used as origin and destination nodes for geofenced proximity matching and fixed-route scheduling.
+Field Name
+Data Type
+Constraints
+Description
+TerminalID
+VARCHAR(32)
+PK, NOT NULL
+Unique alphanumeric identifier for the terminal.
+TerminalName
+VARCHAR(255)
+NOT NULL
+e.g., "Ecoland Terminal", "Cotabato City Terminal".
+City
+VARCHAR(100)
+NOT NULL
+City location for regional grouping.
+Latitude
+DECIMAL(8, 6)
+NOT NULL
+Geolocation node for proximity matching.
+Longitude
+DECIMAL(9, 6)
+NOT NULL
+Geolocation node for proximity matching.
+IsActive
+BOOLEAN
+NOT NULL, DEFAULT TRUE
+Marks if the terminal is currently operational.
+
+2.3.5	Architecture Design
+SabayGo utilizes a structured, multi-tier client–server architecture engineered for secure concurrent transaction handling and event-driven AI auditing. The Client/Frontend Layer is divided into two distinct interfaces: a Flutter cross-platform mobile application (using the MVVM pattern) for Passengers and Drivers, and a Web Application serving as the Operator command center. The mobile client integrates the Google Maps SDK for node-based route visualization and Firebase Authentication for secure access. At the edge layer, an in-van IoT camera captures cabin snapshots triggered by door closures or specific GPS nodes to initiate physical audits.
+
+The Server/Backend Layer is built on Python and FastAPI, utilizing Clean Architecture and Domain-Driven Design (DDD). The backend isolates core business rules from the Infrastructure Layer [21], [22]. To combat revenue leakage, the system integrates an AI Inference Microservice running the YOLOv8 object detection model. This pipeline processes incoming camera frames to count physical passengers, returning a visual headcount (Cvisual) and a privacy-compliant blurred snapshot to the core backend for discrepancy calculation against the digital manifest (Cbooked).
+To support persistent storage and specialized operations, the backend interacts with a MariaDB Database Layer utilizing the InnoDB storage engine. This ensures transactional integrity via row-level pessimistic locking, structurally managing user profiles, YOLOv8 audit logs, transaction records, and trip histories [13]. For offline manifest caching, the Driver client persists the active trip manifest and walk-in entries to a local on-device store in connectivity dead zones; queued mutations are replayed to the FastAPI synchronization endpoint upon reconnection, where server-side pessimistic locking resolves any capacity conflicts. Finally, the infrastructure seamlessly integrates with external services to extend functionality: the PayMongo API for automated digital fare collection, Firebase Cloud Messaging (FCM) for reliable background push notifications, and the Twilio API to dispatch SMS alerts during SOS emergencies.
+
