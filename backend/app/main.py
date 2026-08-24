@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.v1 import auth, bookings
+from app.api.v1 import auth, bookings, payments, trips
 from app.config import settings
 from app.core.db import engine
 from app.core.exceptions import DomainError
@@ -70,3 +70,5 @@ async def health() -> dict[str, str]:
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(bookings.router, prefix="/api/v1")
+app.include_router(trips.router, prefix="/api/v1")
+app.include_router(payments.router, prefix="/api/v1")

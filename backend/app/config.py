@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # --- payments -------------------------------------------------------
     paymongo_secret_key: str | None = None
     paymongo_webhook_secret: str | None = None
+    # Where PayMongo sends the passenger after checkout. Deep link in
+    # production; a plain page is fine for sandbox testing.
+    payment_success_url: str = "http://localhost:8000/payments/success"
+    payment_cancel_url: str = "http://localhost:8000/payments/cancel"
 
     cors_origins: list[str] = ["http://localhost:8080", "http://localhost:3000"]
 

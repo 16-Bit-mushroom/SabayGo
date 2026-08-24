@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
+from app.application.booking.reschedule import (
+    CancelBookingUseCase,
+    RescheduleBookingUseCase,
+)
 from app.application.booking.reserve_seat import (
     ReserveSeatCommand,
     ReserveSeatUseCase,
 )
 from app.domain.enums import BookingType, Role
+from app.infrastructure.models import Booking as BookingRow
+from app.infrastructure.models import Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
 from app.domain.value_objects import Segment
 
@@ -123,4 +131,110 @@ async def availability(
         boarding_stop=boarding_stop,
         alighting_stop=alighting_stop,
         seats_available=count,
+    )
+
+
+class RescheduleRequest(BaseModel):
+    new_trip_id: str
+
+
+class RescheduleResponse(BaseModel):
+    old_booking_id: str
+    new_booking_id: str
+    new_ticket_number: str
+    new_trip_id: str
+    seat_number: int
+    reschedule_count: int
+    qr_payload: str | None
+
+
+class MyBookingOut(BaseModel):
+    booking_id: str
+    ticket_number: str
+    trip_id: str
+    departure_datetime: datetime
+    route_name: str
+    boarding_stop: int
+    alighting_stop: int
+    seat_number: int
+    fare_amount: Decimal
+    status: str
+    qr_payload: str | None
+    can_reschedule: bool
+    reschedule_deadline: datetime | None
+
+
+@router.get("/mine", response_model=list[MyBookingOut])
+async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingOut]:
+    """The passenger's own bookings, newest first.
+
+    `can_reschedule` and `reschedule_deadline` are computed server-side so
+    the app never has to reimplement the policy -- it just enables or
+    disables the button. The server re-checks on the actual request.
+    """
+    result = await session.execute(
+        select(BookingRow, Trip)
+        .join(Trip, Trip.trip_id == BookingRow.trip_id)
+        .where(BookingRow.passenger_user_id == user.user_id)
+        .order_by(BookingRow.booked_at.desc())
+        .limit(50)
+    )
+
+    now = datetime.now(timezone.utc)
+    active = {"pending", "confirmed", "checked_in"}
+    out: list[MyBookingOut] = []
+
+    for booking, trip in result.all():
+        departure = trip.departure_datetime
+        if departure.tzinfo is None:
+            departure = departure.replace(tzinfo=timezone.utc)
+        deadline = departure - timedelta(hours=trip.reschedule_cutoff_hours)
+
+        out.append(
+            MyBookingOut(
+                booking_id=booking.booking_id,
+                ticket_number=booking.ticket_number,
+                trip_id=booking.trip_id,
+                departure_datetime=trip.departure_datetime,
+                route_name=trip.route.route_name if trip.route else "",
+                boarding_stop=booking.boarding_stop_sequence,
+                alighting_stop=booking.alighting_stop_sequence,
+                seat_number=booking.seat_number,
+                fare_amount=booking.fare_amount,
+                status=booking.status,
+                qr_payload=booking.qr_payload,
+                can_reschedule=booking.status in active and now < deadline,
+                reschedule_deadline=deadline,
+            )
+        )
+    return out
+
+
+@router.post("/{booking_id}/reschedule", response_model=RescheduleResponse)
+async def reschedule(
+    booking_id: str,
+    payload: RescheduleRequest,
+    session: SessionDep,
+    user: CurrentUser,
+) -> RescheduleResponse:
+    """Move a booking to another trip on the same route.
+
+    Cooperative policy: no refunds, but a move is allowed inside the
+    cutoff window. The segment stays the same; only the trip changes.
+    """
+    result = await RescheduleBookingUseCase(session).execute(
+        booking_id=booking_id,
+        new_trip_id=payload.new_trip_id,
+        passenger_user_id=user.user_id,
+    )
+    return RescheduleResponse(**result.__dict__)
+
+
+@router.post("/{booking_id}/cancel")
+async def cancel(
+    booking_id: str, session: SessionDep, user: CurrentUser
+) -> dict[str, str]:
+    """Cancel a booking and release its seat. No refund is issued."""
+    return await CancelBookingUseCase(session).execute(
+        booking_id=booking_id, passenger_user_id=user.user_id
     )
