@@ -12,7 +12,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.v1 import audits, auth, bookings, operations, payments, trips
+from app.api.v1 import (
+    audits,
+    auth,
+    bookings,
+    config as config_router,
+    fleet,
+    operations,
+    payments,
+    trips,
+)
 from app.config import settings
 from app.core.db import engine
 from app.core.exceptions import DomainError
@@ -76,6 +85,8 @@ app.include_router(trips.router, prefix="/api/v1")
 app.include_router(payments.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
 app.include_router(audits.router, prefix="/api/v1")
+app.include_router(fleet.router, prefix="/api/v1")
+app.include_router(config_router.router, prefix="/api/v1")
 
 # Blurred audit snapshots. Local disk is a prototype choice -- object
 # storage with signed URLs and a retention policy is the production

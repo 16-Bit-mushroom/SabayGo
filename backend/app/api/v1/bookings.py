@@ -9,7 +9,6 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.core.timezone import APP_TZ
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.application.booking.reschedule import (
     CancelBookingUseCase,
@@ -38,19 +37,33 @@ class WalkInRequest(BaseModel):
     trip_id: str
     boarding_stop: int = Field(ge=1)
     alighting_stop: int = Field(ge=2)
-    # Consultation: optional, captured only if the passenger wants a receipt.
+    # Optional, captured only if the passenger wants a receipt.
     name: str | None = None
     phone: str | None = None
     wants_receipt: bool = False
+    # Flagged down between terminals. Recorded from the section they are
+    # travelling on, which means the LAST terminal the van passed.
+    is_roadside_pickup: bool = False
+    pickup_landmark: str | None = None
+    # Required for a roadside pickup: they have not travelled a fare-table
+    # distance, so the conductor sets the price.
+    fare_override: Decimal | None = Field(default=None, ge=0)
+    fare_note: str | None = None
 
 
 class BookingResponse(BaseModel):
     booking_id: str
     ticket_number: str
-    seat_number: int
+    # No seat number: UV Express does not assign seats. The system tracks
+    # capacity per section internally, but a passenger is never told where
+    # to sit.
+    boarding_stop: int
+    alighting_stop: int
     fare_amount: Decimal
+    fare_is_manual: bool = False
     status: str
     qr_payload: str | None
+    is_roadside_pickup: bool = False
 
 
 class AvailabilityResponse(BaseModel):
@@ -82,10 +95,13 @@ async def reserve(
     return BookingResponse(
         booking_id=result.booking_id,
         ticket_number=result.ticket_number,
-        seat_number=result.seat_number,
+        boarding_stop=result.boarding_stop,
+        alighting_stop=result.alighting_stop,
         fare_amount=result.fare_amount,
+        fare_is_manual=result.fare_is_manual,
         status=result.status.value,
         qr_payload=result.qr_payload,
+        is_roadside_pickup=result.is_roadside_pickup,
     )
 
 
@@ -96,7 +112,15 @@ async def reserve(
     dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER, Role.OPERATOR))],
 )
 async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingResponse:
-    """Log a cash walk-in. Passenger details optional per cooperative policy."""
+    """Record a cash passenger -- at the terminal or flagged down en route.
+
+    Accepted whenever the trip has space, including while the van is
+    loading and after it has departed. Blocking either would make the
+    honest path impossible and leave undocumented boarding as the only
+    option.
+
+    Passenger details are optional; supply them only for a receipt.
+    """
     result = await ReserveSeatUseCase(session).execute(
         ReserveSeatCommand(
             trip_id=payload.trip_id,
@@ -106,15 +130,22 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
             walkin_name=payload.name,
             walkin_phone=payload.phone,
             walkin_wants_receipt=payload.wants_receipt,
+            is_roadside_pickup=payload.is_roadside_pickup,
+            pickup_landmark=payload.pickup_landmark,
+            fare_override=payload.fare_override,
+            fare_note=payload.fare_note,
         )
     )
     return BookingResponse(
         booking_id=result.booking_id,
         ticket_number=result.ticket_number,
-        seat_number=result.seat_number,
+        boarding_stop=result.boarding_stop,
+        alighting_stop=result.alighting_stop,
         fare_amount=result.fare_amount,
+        fare_is_manual=result.fare_is_manual,
         status=result.status.value,
         qr_payload=result.qr_payload,
+        is_roadside_pickup=result.is_roadside_pickup,
     )
 
 
@@ -144,7 +175,6 @@ class RescheduleResponse(BaseModel):
     new_booking_id: str
     new_ticket_number: str
     new_trip_id: str
-    seat_number: int
     reschedule_count: int
     qr_payload: str | None
 
@@ -157,7 +187,6 @@ class MyBookingOut(BaseModel):
     route_name: str
     boarding_stop: int
     alighting_stop: int
-    seat_number: int
     fare_amount: Decimal
     status: str
     qr_payload: str | None
@@ -181,14 +210,14 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
         .limit(50)
     )
 
-    now = datetime.now(APP_TZ)
+    now = datetime.now(timezone.utc)
     active = {"pending", "confirmed", "checked_in"}
     out: list[MyBookingOut] = []
 
     for booking, trip in result.all():
         departure = trip.departure_datetime
         if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=APP_TZ)
+            departure = departure.replace(tzinfo=timezone.utc)
         deadline = departure - timedelta(hours=trip.reschedule_cutoff_hours)
 
         out.append(
@@ -200,7 +229,6 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
                 route_name=trip.route.route_name if trip.route else "",
                 boarding_stop=booking.boarding_stop_sequence,
                 alighting_stop=booking.alighting_stop_sequence,
-                seat_number=booking.seat_number,
                 fare_amount=booking.fare_amount,
                 status=booking.status,
                 qr_payload=booking.qr_payload,
@@ -228,7 +256,9 @@ async def reschedule(
         new_trip_id=payload.new_trip_id,
         passenger_user_id=user.user_id,
     )
-    return RescheduleResponse(**result.__dict__)
+    return RescheduleResponse(
+        **{k: v for k, v in result.__dict__.items() if k != "seat_number"}
+    )
 
 
 @router.post("/{booking_id}/cancel")

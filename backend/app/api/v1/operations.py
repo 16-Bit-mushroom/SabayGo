@@ -91,7 +91,6 @@ class ScanResponse(BaseModel):
     accepted: bool
     booking_id: str | None
     ticket_number: str | None
-    seat_number: int | None
     boarding_stop: int | None
     alighting_stop: int | None
     message: str
@@ -114,19 +113,21 @@ async def scan_ticket(
         client_recorded_at=payload.client_recorded_at,
     )
     return ScanResponse(**{k: v for k, v in result.__dict__.items()
-                           if k != "passenger_name"})
+                           if k not in ("passenger_name", "seat_number")})
 
 
 # ----------------------------------------------------------------- manifest
 class ManifestPassenger(BaseModel):
     booking_id: str
     ticket_number: str
-    seat_number: int
     boarding_stop: int
     alighting_stop: int
     booking_type: str
     status: str
     fare_amount: Decimal
+    fare_is_manual: bool = False
+    is_roadside_pickup: bool = False
+    pickup_landmark: str | None = None
     name: str | None
 
 

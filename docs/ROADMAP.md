@@ -47,7 +47,7 @@ notifications · all CRUD · trip generator · every Flutter screen (mock data)
 
 ## Priority tiers
 
-### Tier 1 — the core loop (must have)
+### Tier 1 — the core loop (must have)x
 
 > register → login → search → book → **pay** → e-ticket → check-in →
 > **scan** → board → manifest → **audit** → revenue
@@ -58,7 +58,7 @@ walkthrough. Every item is load-bearing.
 **Payment is blocking, not optional.** Booking currently ends at
 `status='pending'` / seat `held` with a 10-minute TTL, and nothing confirms
 it. Without payment the hold sweeper releases the seat and the booking
-dangles forever. Same for QR: `qr_payload` is generated but nothing scans it.
+dangles forever. Same for QR: `qr_payload` is generated but nothing scans it.x
 
 ### Tier 2 — needed to configure any cooperative
 

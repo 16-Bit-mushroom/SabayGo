@@ -15,6 +15,7 @@ from app.domain.enums import BookingStatus, TripStatus
 from app.infrastructure.models import BoardingScan
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import Trip
+from app.infrastructure.repositories.seat_repository import SeatRepository
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +141,10 @@ class ScanTicketUseCase:
         booking.status = BookingStatus.BOARDED.value
         booking.updated_at = now
         return await record(
-            "valid", f"Welcome aboard - seat {booking.seat_number}.", True
+            "valid",
+            f"Valid - stops {booking.boarding_stop_sequence} to "
+            f"{booking.alighting_stop_sequence}.",
+            True,
         )
 
 
@@ -166,7 +170,7 @@ class ManifestUseCase:
                     ]
                 ),
             )
-            .order_by(BookingRow.seat_number, BookingRow.boarding_stop_sequence)
+            .order_by(BookingRow.boarding_stop_sequence, BookingRow.booked_at)
         )
         bookings = list(result.scalars().all())
 
@@ -187,12 +191,14 @@ class ManifestUseCase:
                 {
                     "booking_id": b.booking_id,
                     "ticket_number": b.ticket_number,
-                    "seat_number": b.seat_number,
                     "boarding_stop": b.boarding_stop_sequence,
                     "alighting_stop": b.alighting_stop_sequence,
                     "booking_type": b.booking_type,
                     "status": b.status,
                     "fare_amount": b.fare_amount,
+                    "fare_is_manual": b.fare_is_manual,
+                    "is_roadside_pickup": b.is_roadside_pickup,
+                    "pickup_landmark": b.pickup_landmark,
                     # Walk-ins may legitimately be anonymous.
                     "name": b.walkin_name,
                 }
@@ -235,9 +241,18 @@ class DepartTripUseCase:
             )
         )
         no_shows = list(result.scalars().all())
+        seats = SeatRepository(self.session)
+
         for booking in no_shows:
             booking.status = BookingStatus.NO_SHOW.value
             booking.updated_at = now
+            # Release the space so it can be resold further down the route.
+            # The passenger paid and did not travel -- under a no-refund
+            # policy that is their loss -- but the space is physically
+            # empty and someone waiting at the next terminal can use it.
+            # Leaving it reserved would also make the camera check report
+            # fewer bodies than tickets for the rest of the trip.
+            await seats.release(booking_id=booking.booking_id)
 
         trip.status = TripStatus.DEPARTED.value
         trip.departed_at = now
