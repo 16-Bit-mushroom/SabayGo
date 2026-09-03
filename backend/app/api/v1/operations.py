@@ -17,6 +17,7 @@ from app.application.operations.boarding import (
     ScanTicketUseCase,
 )
 from app.application.operations.check_in import CheckInCommand, CheckInUseCase
+from app.application.operations.guards import assert_assigned_to_trip
 from app.core.exceptions import NotFoundError
 from app.core.timezone import APP_TZ
 from app.domain.enums import Role
@@ -105,6 +106,10 @@ async def scan_ticket(
     Always 200, even for an invalid ticket -- the conductor needs a verdict
     on screen, not an error dialog, while a queue waits. Read `accepted`.
     """
+    # A conductor may only scan the trip they are rostered to. Without
+    # this the remittance record is meaningless: the fares a person is
+    # accountable for would not match the runs they actually worked.
+    await assert_assigned_to_trip(session, trip_id=payload.trip_id, user=user)
     result = await ScanTicketUseCase(session).execute(
         qr_payload=payload.qr_payload,
         trip_id=payload.trip_id,
@@ -188,9 +193,7 @@ async def confirm_headcount(
     cross-check on the YOLOv8 count: two independent observations of the
     same reality, and disagreement between them is itself a signal.
     """
-    trip = await session.get(Trip, trip_id)
-    if trip is None:
-        raise NotFoundError("Trip not found.")
+    trip = await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
 
     manifest_count = await ManifestUseCase(session).booked_count_on_leg(
         trip_id, payload.stop_sequence

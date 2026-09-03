@@ -36,6 +36,7 @@ from app.infrastructure.models import (
     TripLeg,
     Van,
 )
+from app.application.scheduling.conflicts import ScheduleConflictChecker
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
@@ -157,6 +158,25 @@ class GenerateDailyTripsUseCase:
                 )
 
             departure = datetime.combine(target, template.departure_time)
+
+            # A van cannot be in two places at once. The trip is still
+            # created -- skipping it would leave passengers unable to
+            # book a scheduled departure -- but the clashing resource is
+            # dropped and the operator is warned, so they see a roster
+            # gap rather than an impossible assignment.
+            clashes = await ScheduleConflictChecker(self.session).find_conflicts(
+                route_id=template.route_id,
+                departure=departure,
+                van_id=assign_van,
+                driver_id=template.default_driver_id,
+                conductor_id=template.default_conductor_id,
+            )
+            drop = {c.resource for c in clashes}
+            for c in clashes:
+                report.warnings.append(f"{target}: {c.message}")
+            if "van" in drop:
+                assign_van = None
+
             trip_id = str(uuid.uuid4())
             now = datetime.now(APP_TZ)
 
@@ -168,8 +188,13 @@ class GenerateDailyTripsUseCase:
                     service_date=target,
                     departure_datetime=departure,
                     van_id=assign_van,
-                    driver_id=template.default_driver_id,
-                    conductor_id=template.default_conductor_id,
+                    driver_id=(
+                        None if "driver" in drop else template.default_driver_id
+                    ),
+                    conductor_id=(
+                        None if "conductor" in drop
+                        else template.default_conductor_id
+                    ),
                     trip_label=template.trip_label,
                     is_special_trip=False,
                     # Policy snapshot: a later change never alters terms a
@@ -291,6 +316,19 @@ class CreateSpecialTripUseCase:
             if van.operational_status != "active":
                 raise ConflictError(f"Van {van.plate_number} is {van.operational_status}.")
             capacity = van.seat_capacity
+
+        # Manual assignment blocks rather than warns: an operator acting
+        # deliberately should be told immediately, not discover the clash
+        # in a report later.
+        clashes = await ScheduleConflictChecker(self.session).find_conflicts(
+            route_id=route_id,
+            departure=departure_datetime.replace(tzinfo=None),
+            van_id=van_id,
+            driver_id=driver_id,
+            conductor_id=conductor_id,
+        )
+        if clashes:
+            raise ConflictError(clashes[0].message)
 
         cap = advance_booking_seat_cap
         if cap is None:

@@ -24,7 +24,8 @@ from app.api.v1 import (
     trips,
 )
 from app.config import settings
-from app.core.db import engine
+from app.application.operations.guards import HoldSweeper
+from app.core.db import SessionFactory, engine
 from app.core.exceptions import DomainError
 
 logging.basicConfig(
@@ -40,7 +41,16 @@ async def lifespan(app: FastAPI):
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
     log.info("Database connection verified.")
+
+    # Abandoned payment holds were only released when another booking
+    # happened to try that exact space. Until then search showed it as
+    # unavailable.
+    sweeper = HoldSweeper(SessionFactory, interval_seconds=60)
+    sweeper.start()
+
     yield
+
+    await sweeper.stop()
     await engine.dispose()
 
 

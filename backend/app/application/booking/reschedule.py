@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -228,6 +228,24 @@ class CancelBookingUseCase:
             reschedule_count=row.reschedule_count,
             booked_at=row.booked_at,
         )
+        # Cooperative policy may close cancellation some hours before
+        # departure. 0 means it stays open until the van leaves, which
+        # was the previous behaviour.
+        cutoff = await PolicyRepository(self.session).get_int(
+            "cancel_cutoff_hours"
+        )
+        if cutoff > 0:
+            trip = await self.session.get(Trip, row.trip_id)
+            if trip is not None:
+                departure = trip.departure_datetime
+                if departure.tzinfo is None:
+                    departure = departure.replace(tzinfo=APP_TZ)
+                if datetime.now(APP_TZ) > departure - timedelta(hours=cutoff):
+                    raise PolicyViolationError(
+                        f"Cancellation closes {cutoff} hour(s) before "
+                        "departure."
+                    )
+
         entity.cancel()  # raises if already terminal or boarded
 
         now = datetime.now(APP_TZ)
