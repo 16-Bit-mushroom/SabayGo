@@ -20,6 +20,7 @@ from app.api.v1 import (
     fleet,
     operations,
     payments,
+    remittances,
     trips,
 )
 from app.config import settings
@@ -87,6 +88,7 @@ app.include_router(operations.router, prefix="/api/v1")
 app.include_router(audits.router, prefix="/api/v1")
 app.include_router(fleet.router, prefix="/api/v1")
 app.include_router(config_router.router, prefix="/api/v1")
+app.include_router(remittances.router, prefix="/api/v1")
 
 # Blurred audit snapshots. Local disk is a prototype choice -- object
 # storage with signed URLs and a retention policy is the production

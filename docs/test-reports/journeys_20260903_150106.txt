@@ -1,0 +1,119 @@
+===================================================================
+  SabayGo - Role Journey Test Report
+===================================================================
+
+  Generated : 2026-09-03 15:01:06 PST
+  Host      : cachyos-x8664
+  Git       : b49b50a on main
+  API       : http://127.0.0.1:8000
+
+  Legend
+    PASS  assertion held
+    FAIL  regression - something that worked is now broken
+    GAP   endpoint not built yet (a checklist item, not a defect)
+
+-------------------------------------------------------------------
+
+PREFLIGHT
+  ok    API responding
+  ok    AI node responding
+
+===================================================================
+  PASSENGER JOURNEY
+===================================================================
+
+── 1. Account ────────────────────────────────
+  PASS  register (201)
+  PASS  duplicate phone rejected (409)
+  PASS  short password rejected (422)
+  PASS  wrong password rejected (401)
+  PASS  login (200)
+  PASS  profile: Journey Tester
+  PASS  unauthenticated request rejected (401)
+
+── 2. Finding a trip ────────────────────────────────
+  PASS  list terminals (4 found)
+  PASS  search trips
+  PASS  view route stops
+  PASS  check availability (14 seats)
+
+── 3. Booking ────────────────────────────────
+  FAIL  reserve gave 409
+  PASS  reversed segment rejected (422)
+  PASS  list my bookings
+  GAP   GET /bookings/{id} -- no single-booking detail endpoint
+
+── 4. Payment ────────────────────────────────
+  FAIL  checkout gave 404
+  GAP   webhook simulator -- set PAYMONGO_WEBHOOK_SECRET
+  FAIL  status is ?
+  PASS  checkout abandoned, seat released
+
+── 5. Changing plans ────────────────────────────────
+  GAP   reschedule -- no second trip seeded
+  FAIL  cancel gave 404
+  FAIL  double cancel gave 404
+
+── 6. Travel day ────────────────────────────────
+  FAIL  check-in gave 404
+  FAIL  far check-in gave 404
+  GAP   undo check-in -- no way to reverse an accidental check-in
+
+── 7. Managing the account ────────────────────────────────
+  GAP   update profile -- name, phone and address cannot be changed
+  GAP   change password -- not implemented
+  GAP   notifications -- table exists, no endpoint reads it
+  GAP   saved destinations -- table and ORM model exist, no endpoints
+  GAP   notification settings -- passenger_settings unreachable
+  GAP   delete/deactivate account -- no way for a passenger to leave
+
+── 8. Passengers cannot act as crew ────────────────────────────────
+  PASS  /scans blocked (403)
+  PASS  /trips/TRIP-DEMO-00000001/manifest blocked (403)
+  PASS  /audits/pending blocked (403)
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /revenue/summary blocked (403)
+
+═══ SUMMARY ═══
+  passed  20
+  failed  7
+  gaps    10
+
+Failures above are real regressions.
+
+===================================================================
+  CONDUCTOR JOURNEY
+===================================================================
+
+── 1. Conductor signs in ────────────────────────────────
+  FAIL  login gave 401
+
+===================================================================
+  DRIVER OPERATOR JOURNEY
+===================================================================
+
+── DRIVER — 1. Sign in ────────────────────────────────
+  FAIL  login gave 401
+
+===================================================================
+  TOTALS
+===================================================================
+    passed    21
+    failed     9
+    gaps      10
+
+  9 regression(s) - review the FAIL lines above.
+
+  Unbuilt endpoints flagged this run:
+    -  change password -- not implemented
+    -  delete/deactivate account -- no way for a passenger to leave
+    -  GET /bookings/{id} -- no single-booking detail endpoint
+    -  notification settings -- passenger_settings unreachable
+    -  notifications -- table exists, no endpoint reads it
+    -  reschedule -- no second trip seeded
+    -  saved destinations -- table and ORM model exist, no endpoints
+    -  undo check-in -- no way to reverse an accidental check-in
+    -  update profile -- name, phone and address cannot be changed
+    -  webhook simulator -- set PAYMONGO_WEBHOOK_SECRET
+

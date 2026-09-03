@@ -112,6 +112,7 @@ class TripRevenueOut(BaseModel):
     app_bookings: int
     walkin_bookings: int
     collected_fare: Decimal
+    cash_in_hand: Decimal = 0
     expected_fare: Decimal
     unreconciled_amount: Decimal
     max_yolo_variance: int | None
@@ -183,6 +184,10 @@ async def revenue_summary(
                 COALESCE(SUM(app_bookings), 0)       AS app_bookings,
                 COALESCE(SUM(walkin_bookings), 0)    AS walkin_bookings,
                 COALESCE(SUM(collected_fare), 0)     AS collected_fare,
+                -- Cash the crew has taken but not yet handed over.
+                -- Deliberately separate from unreconciled: it is money
+                -- in a pocket, not money missing.
+                COALESCE(SUM(cash_in_hand), 0)       AS cash_in_hand,
                 COALESCE(SUM(expected_fare), 0)      AS expected_fare,
                 COALESCE(SUM(unreconciled_amount),0) AS unreconciled_amount,
                 COALESCE(SUM(pending_audits), 0)     AS pending_audits

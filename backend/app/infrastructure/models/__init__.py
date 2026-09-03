@@ -344,6 +344,8 @@ class Payment(Base):
     booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.booking_id"))
     provider: Mapped[str] = mapped_column(String(20))
     method: Mapped[str | None] = mapped_column(String(20))
+    # Set when this fare is included in an end-of-trip cash handover.
+    remittance_id: Mapped[str | None] = mapped_column(String(36))
     provider_ref_id: Mapped[str | None] = mapped_column(String(128))
     provider_event_id: Mapped[str | None] = mapped_column(String(128), unique=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
@@ -440,3 +442,31 @@ class DriverHeadcount(Base):
     confirmed_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     client_recorded_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     synced_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+
+
+class CashRemittance(Base):
+    """End-of-trip cash handover from crew to office.
+
+    `expected_amount` is computed from the crew member's own cash bookings
+    and never typed in -- the figure a person is measured against must not
+    be editable by that person.
+    """
+
+    __tablename__ = "cash_remittances"
+
+    remittance_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    collected_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    expected_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    declared_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    received_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    variance: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    submitted_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    received_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    received_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.user_id")
+    )
+    notes: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))

@@ -13,6 +13,7 @@ section of road is oversold; it is never shown to a passenger.
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -27,6 +28,7 @@ from app.domain.enums import BookingStatus, BookingType, TripStatus
 from app.domain.value_objects import Segment
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import FareMatrix, Trip
+from app.infrastructure.models import Payment as PaymentRow
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
@@ -187,6 +189,21 @@ class ReserveSeatUseCase:
         # while the passenger is already aboard.
         if is_cash:
             await self.seats.confirm(booking_id=booking.booking_id)
+            # Record the fare as collected but NOT settled. Cash in a
+            # conductor's pocket is a different state from money
+            # missing, and the revenue view separates the two. It
+            # settles when the crew remits at the end of the trip.
+            self.session.add(
+                PaymentRow(
+                    payment_id=str(uuid.uuid4()),
+                    booking_id=booking.booking_id,
+                    provider="cash",
+                    method="cash",
+                    amount=fare,
+                    status="pending",
+                    created_at=now,
+                )
+            )
 
         await self.session.commit()
         # ---- lock released -------------------------------------------

@@ -1,0 +1,249 @@
+===================================================================
+  SabayGo - Role Journey Test Report
+===================================================================
+
+  Generated : 2026-09-03 17:35:34 PST
+  Host      : cachyos-x8664
+  Git       : 96b7874 on main
+  API       : http://127.0.0.1:8000
+
+  Legend
+    PASS  assertion held
+    FAIL  regression - something that worked is now broken
+    GAP   endpoint not built yet (a checklist item, not a defect)
+
+-------------------------------------------------------------------
+
+PREFLIGHT
+  ok    API responding
+  ok    AI node responding
+
+===================================================================
+  PASSENGER JOURNEY
+===================================================================
+
+── 1. Account ────────────────────────────────
+  PASS  register (201)
+  PASS  duplicate phone rejected (409)
+  PASS  short password rejected (422)
+  PASS  wrong password rejected (401)
+  PASS  login (200)
+  PASS  profile: Journey Tester
+  PASS  unauthenticated request rejected (401)
+
+── 2. Finding a trip ────────────────────────────────
+  PASS  list terminals (4 found)
+  PASS  search trips
+  PASS  view route stops
+  PASS  check availability (14 seats)
+
+── 3. Booking ────────────────────────────────
+  PASS  reserve seat 
+  PASS  reversed segment rejected (422)
+  PASS  list my bookings
+  GAP   GET /bookings/{id} -- no single-booking detail endpoint
+
+── 4. Payment ────────────────────────────────
+  GAP   checkout -- PAYMONGO_SECRET_KEY not set (expected)
+  PASS  payment confirmed via signed webhook
+  PASS  booking is now confirmed
+  GAP   abandon checkout -- seat stays held for 10 min with no way to release it
+
+── 5. Changing plans ────────────────────────────────
+  FAIL  reschedule gave 422
+  PASS  cancel (no refund, seat released)
+  PASS  double cancel rejected (409)
+
+── 6. Travel day ────────────────────────────────
+  PASS  checked in at the terminal
+  PASS  far check-in rejected (409)
+  GAP   undo check-in -- no way to reverse an accidental check-in
+
+── 7. Managing the account ────────────────────────────────
+  GAP   update profile -- name, phone and address cannot be changed
+  GAP   change password -- not implemented
+  GAP   notifications -- table exists, no endpoint reads it
+  GAP   saved destinations -- table and ORM model exist, no endpoints
+  GAP   notification settings -- passenger_settings unreachable
+  GAP   delete/deactivate account -- no way for a passenger to leave
+
+── 8. Passengers cannot act as crew ────────────────────────────────
+  PASS  /scans blocked (403)
+  PASS  /trips/TRIP-DEMO-00000001/manifest blocked (403)
+  PASS  /audits/pending blocked (403)
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /revenue/summary blocked (403)
+
+═══ SUMMARY ═══
+  passed  26
+  failed  1
+  gaps    10
+
+Failures above are real regressions.
+
+===================================================================
+  CONDUCTOR JOURNEY
+===================================================================
+
+── 1. Conductor signs in ────────────────────────────────
+  PASS  login
+  PASS  role is conductor
+  PASS  profile: Ramon Villanueva
+
+──    (setting up a paid passenger) ────────────────────────────────
+  PASS  passenger booked and paid
+
+── 2. Boarding ────────────────────────────────
+  PASS  boarding opened
+  PASS  valid ticket accepted
+  PASS  duplicate scan flagged (already_boarded)
+  PASS  unknown QR rejected without raising (wrong_trip)
+  PASS  wrong stop handled (already_boarded)
+  FAIL  unpaid scan returned wrong_trip
+
+── 3. Cash walk-ins ────────────────────────────────
+  PASS  anonymous walk-in logged -- status confirmed
+  PASS  walk-in with receipt details -- P330.00
+  PASS  short-segment walk-in (stop 3->4)
+
+── 4. Manifest ────────────────────────────────
+        capacity=14  total=4  boarded=1  awaiting=3  unpaid=0
+        1->4  boarded     app
+        1->4  confirmed   walk-in
+        2->4  confirmed   Maria Santos
+        3->4  confirmed   walk-in
+  PASS  manifest retrieved
+  PASS  seats still sellable end-to-end: 10
+  GAP   passenger lookup -- no way to find a booking by name or ticket number
+
+── 5. Headcount audit ────────────────────────────────
+  PASS  AI node reachable (yolov8n-1.0)
+        visual=0  manifest=2  variance=-2  88ms
+        2 fewer passenger(s) than expected. Check for early alighting or an unrecorded no-show.
+  PASS  audit recorded
+
+── 6. Departure ────────────────────────────────
+  PASS  headcount confirmed -- variance 2
+  PASS  departed -- 3 no-show(s) recorded
+  PASS  bookings closed after departure (409)
+
+── 7. A conductor is not an operator ────────────────────────────────
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /revenue/summary blocked (403)
+  PASS  /audits/pending blocked (403)
+  PASS  cannot add vans (403)
+
+═══ SUMMARY ═══
+  passed  24
+  failed  1
+  gaps    1
+
+
+===================================================================
+  DRIVER OPERATOR JOURNEY
+===================================================================
+
+── DRIVER — 1. Sign in ────────────────────────────────
+  PASS  login
+  PASS  role is driver
+  PASS  can read the manifest for their van
+
+── DRIVER — 2. Headcount before departure ────────────────────────────────
+  PASS  headcount 3 -- variance 3
+  PASS  corrected to 5 -- variance now 5
+  PASS  count above 14 rejected (422)
+
+── DRIVER — 3. Issue a ticket at an unstaffed stop ────────────────────────────────
+  PASS  cash walk-in logged -- P175.00
+  PASS  can check the camera node
+
+── DRIVER — 4. Boundaries ────────────────────────────────
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /revenue/summary blocked (403)
+  PASS  /audits/pending blocked (403)
+
+── OPERATOR — 1. Sign in ────────────────────────────────
+  PASS  login
+
+── OPERATOR — 2. Fleet ────────────────────────────────
+  PASS  list vans (2)
+  PASS  van added with camera
+  PASS  van flagged out of service (monitoring only, not a maintenance module)
+  PASS  van returned to service
+
+── OPERATOR — 3. Crew ────────────────────────────────
+  PASS  list crew (3)
+  PASS  driver provisioned with licence
+  PASS  expired licence rejected (409)
+  PASS  crew member suspended (deactivated, not deleted)
+  PASS  suspended account cannot log in (401)
+
+── OPERATOR — 4. Configuration ────────────────────────────────
+  PASS  read all policies
+  PASS  variance threshold set to 2
+  PASS  unknown policy key rejected (404)
+  PASS  terminal created
+  PASS  route created -- 1 leg(s), 1 fare pair(s) needed
+  PASS  non-contiguous stop sequence rejected (409)
+  PASS  fare matrix set
+  PASS  reversed fare pair rejected (422)
+
+── OPERATOR — 5. Schedules ────────────────────────────────
+  PASS  weekday template created
+  PASS  malformed day mask rejected (422)
+        2026-09-03  created=2  skipped=1
+        2026-09-04  created=3  skipped=0
+        2026-09-05  created=1  skipped=2
+  PASS  trips generated
+  PASS  re-run is idempotent (created=0)
+  PASS  special trip created -- 14 seat-legs
+  PASS  special trip in the past rejected (409)
+
+── OPERATOR — 6. Audit queue and revenue ────────────────────────────────
+  PASS  audit queue: 0 pending
+./tests/integration/test_driver_operator_journey.sh: line 225: AID: unbound variable
+  FAIL  empty note gave 
+        trips=8  bookings=1  app=0  walk-in=1 (100.0%)
+        collected=P0.00  expected=P175.00  unreconciled=P175.00
+  PASS  revenue summary
+  PASS  per-trip reconciliation
+
+── OPERATOR — 7. Gaps ────────────────────────────────
+  GAP   no CSV/report export -- operators will want this
+  GAP   no resolved-audit history -- only the pending queue is readable
+  GAP   no crew roster view -- cannot see who is driving what, when
+
+═══ SUMMARY ═══
+  passed  39
+  failed  1
+  gaps    3
+
+
+===================================================================
+  TOTALS
+===================================================================
+    passed    90
+    failed     3
+    gaps      14
+
+  3 regression(s) - review the FAIL lines above.
+
+  Unbuilt endpoints flagged this run:
+    -  abandon checkout -- seat stays held for 10 min with no way to release it
+    -  change password -- not implemented
+    -  checkout -- PAYMONGO_SECRET_KEY not set (expected)
+    -  delete/deactivate account -- no way for a passenger to leave
+    -  GET /bookings/{id} -- no single-booking detail endpoint
+    -  no crew roster view -- cannot see who is driving what, when
+    -  no CSV/report export -- operators will want this
+    -  no resolved-audit history -- only the pending queue is readable
+    -  notification settings -- passenger_settings unreachable
+    -  notifications -- table exists, no endpoint reads it
+    -  passenger lookup -- no way to find a booking by name or ticket number
+    -  saved destinations -- table and ORM model exist, no endpoints
+    -  undo check-in -- no way to reverse an accidental check-in
+    -  update profile -- name, phone and address cannot be changed
+
