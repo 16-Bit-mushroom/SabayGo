@@ -156,14 +156,14 @@ SELECT
     v.plate_number,
     t.seat_capacity,
     COUNT(DISTINCT b.booking_id)                                    AS total_bookings,
-    SUM(b.booking_type = 'app')                                     AS app_bookings,
-    SUM(b.booking_type IN ('walk_in','driver_issued'))              AS walkin_bookings,
+    COALESCE(SUM(b.booking_type = 'app'), 0)                                     AS app_bookings,
+    COALESCE(SUM(b.booking_type IN ('walk_in','driver_issued')), 0)              AS walkin_bookings,
     COALESCE(SUM(CASE WHEN p.status = 'paid' THEN p.amount END), 0) AS collected_fare,
     COALESCE(SUM(b.fare_amount), 0)                                 AS expected_fare,
     COALESCE(SUM(b.fare_amount), 0)
         - COALESCE(SUM(CASE WHEN p.status = 'paid' THEN p.amount END), 0) AS unreconciled_amount,
-    MAX(y.variance)                                                 AS max_yolo_variance,
-    SUM(y.resolution_status = 'pending')                            AS pending_audits
+    COALESCE(MAX(y.variance), 0)                                                 AS max_yolo_variance,
+    COALESCE(SUM(y.resolution_status = 'pending'), 0)                            AS pending_audits
 FROM trips t
 JOIN routes r            ON r.route_id = t.route_id
 LEFT JOIN vans v         ON v.van_id   = t.van_id
