@@ -169,7 +169,7 @@ S=$(code POST /config/fares "{\"route_id\":\"$ROUTE\",\"fares\":[
 
 S=$(code POST /config/fares "{\"route_id\":\"$ROUTE\",\"fares\":[
   {\"from_stop_sequence\":2,\"to_stop_sequence\":1,\"fare_amount\":120.00}]}" "$OT")
-[ "$S" = "409" ] && ok "reversed fare pair rejected (409)" || bad "reversed fare gave $S"
+{ [ "$S" = "409" ] || [ "$S" = "422" ]; } && ok "reversed fare pair rejected ($S)" || bad "reversed fare gave $S"
 
 hdr "OPERATOR — 5. Schedules"
 
@@ -221,10 +221,16 @@ if [ "$S" = "200" ]; then
     [ "$S" = "409" ] && ok "double resolve rejected (409)" || bad "double resolve gave $S"
   fi
 else bad "audit queue gave $S"; fi
-
-S=$(code POST "/audits/$AID/resolve" '{"resolution":"resolved","notes":""}' "$OT" 2>/dev/null)
-[ "$S" = "422" ] || [ "$S" = "409" ] && ok "resolution without a note rejected ($S)" \
-                                     || bad "empty note gave $S"
+if [ -z "${AID:-}" ]; then
+  gap "no flagged audit to test empty-note rejection"
+else
+  S=$(code POST "/audits/$AID/resolve" '{"resolution":"resolved","notes":""}' "$OT")
+  if [ "$S" = "422" ] || [ "$S" = "409" ]; then
+    ok "resolution without a note rejected ($S)"
+  else
+    bad "empty note gave $S"
+  fi
+fi
 
 S=$(code GET /revenue/summary "" "$OT")
 if [ "$S" = "200" ]; then

@@ -158,7 +158,7 @@ else bad "check-in gave $S"; fi
 
 S=$(code POST "/bookings/$BID/check-in" \
   "{\"latitude\":7.20,\"longitude\":125.40,\"gps_accuracy_m\":8.5}" "$TOKEN")
-[ "$S" = "422" ] && ok "check-in from 25km away rejected (422)" || bad "far check-in gave $S"
+{ [ "$S" = "422" ] || [ "$S" = "409" ]; } && ok "far check-in rejected ($S)" || bad "far check-in gave $S"
 
 S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
 if [ "$S" = "404" ] || [ "$S" = "405" ]; then

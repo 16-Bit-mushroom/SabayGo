@@ -59,7 +59,7 @@ S=$(code POST "/trips/$TRIP/start-boarding" "" "$CT")
 S=$(code POST /scans \
   "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
 R=$(j "['result']" < /tmp/resp.json)
-[ "$R" = "valid" ] && ok "valid ticket accepted -- seat $(j "['seat_number']" < /tmp/resp.json)" \
+[ "$R" = "valid" ] && ok "valid ticket accepted" \
                    || bad "valid scan returned $R"
 
 S=$(code POST /scans \
@@ -95,7 +95,7 @@ hdr "3. Cash walk-ins"
 
 S=$(code POST /bookings/walk-in \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
-[ "$S" = "201" ] && ok "anonymous walk-in logged -- seat $(j "['seat_number']" < /tmp/resp.json), status $(j "['status']" < /tmp/resp.json)" \
+[ "$S" = "201" ] && ok "anonymous walk-in logged -- status $(j "['status']" < /tmp/resp.json)" \
                  || bad "walk-in gave $S"
 
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,
@@ -119,7 +119,7 @@ print(f\"        capacity={m['seat_capacity']}  total={m['total_bookings']}  \"
       f\"boarded={m['boarded']}  awaiting={m['awaiting']}  unpaid={m['unpaid']}\")
 for p in m['passengers']:
     who = p['name'] or ('walk-in' if p['booking_type']!='app' else 'app')
-    print(f\"        seat {p['seat_number']:>2}  {p['boarding_stop']}->{p['alighting_stop']}  \"
+    print(f\"        {p['boarding_stop']}->{p['alighting_stop']}  \"
           f\"{p['status']:<11} {who}\")"
   ok "manifest retrieved"
 else bad "manifest gave $S"; fi
