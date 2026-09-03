@@ -8,11 +8,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
 
-MYSQL="docker compose exec -T mysql mysql -u root -p${MYSQL_ROOT_PASSWORD} --silent"
+MYSQL="docker compose exec -T -e MYSQL_PWD=${MYSQL_ROOT_PASSWORD} mysql mysql -u root --silent"
 
 echo "==> waiting for MySQL to become healthy"
-until docker compose exec -T mysql mysqladmin ping -h 127.0.0.1 \
-      -u root -p"${MYSQL_ROOT_PASSWORD}" --silent >/dev/null 2>&1; do
+until docker compose exec -T -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql \
+      mysqladmin ping -h 127.0.0.1 -u root --silent >/dev/null 2>&1; do
   sleep 2
 done
 
@@ -36,14 +36,14 @@ for f in db/migrations/*.sql; do
     continue
   fi
   echo "==> apply  $version"
-  docker compose exec -T mysql mysql -u root -p"${MYSQL_ROOT_PASSWORD}" \
+  docker compose exec -T -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql mysql -u root \
     "${MYSQL_DATABASE}" < "$f"
 done
 
 if [[ "${1:-}" == "--seed" ]]; then
   for f in db/seed/*.sql; do
     echo "==> seed   $(basename "$f")"
-    docker compose exec -T mysql mysql -u root -p"${MYSQL_ROOT_PASSWORD}" \
+    docker compose exec -T -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql mysql -u root \
       "${MYSQL_DATABASE}" < "$f"
   done
 fi
