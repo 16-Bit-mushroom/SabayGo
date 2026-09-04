@@ -130,6 +130,9 @@ if [ "$S" = "404" ] || [ "$S" = "405" ]; then
 else ok "checkout abandoned, seat released"; fi
 
 # ═══════════════════════════════════════════════ 5. CHANGES
+# Group F added a cancellation deadline; the seeded trip departs in 20 min
+# so a 2-hour cutoff refuses everything. Disable it for this section.
+code PUT /config/policies/cancel_cutoff_hours "{"policy_value":"0"}" "" >/dev/null 2>&1
 hdr "5. Changing plans"
 
 S=$(code POST "/bookings/$BID/reschedule" '{"new_trip_id":"TRIP-DEMO-00000002"}' "$TOKEN")

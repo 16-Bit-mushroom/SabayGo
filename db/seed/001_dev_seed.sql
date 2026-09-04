@@ -51,13 +51,13 @@ VALUES
 SET @pw = '$2b$12$REPLACE_ME_WITH_A_REAL_BCRYPT_HASH_000000000000000000000';
 
 INSERT INTO users (user_id, email, phone_number, password_hash, role) VALUES
-  ('USER-OPERATOR-0001',  'operator@sabaygo.test',  '+639170000001', @pw, 'operator'),
+  ('USER-COOPADMIN-0001',  'coopadmin@sabaygo.test',  '+639170000001', @pw, 'coop_admin'),
   ('USER-CONDUCTOR-0001', 'conductor@sabaygo.test', '+639170000002', @pw, 'conductor'),
   ('USER-DRIVER-0001',    'driver@sabaygo.test',    '+639170000003', @pw, 'driver'),
   ('USER-PASSENGER-0001', 'passenger@sabaygo.test', '+639170000004', @pw, 'passenger');
 
 INSERT INTO staff_profiles (user_id, first_name, last_name, cooperative_name, assigned_terminal_id) VALUES
-  ('USER-OPERATOR-0001',  'Maria',  'Santos',     'A2Z Transport Cooperative', @t_ecoland),
+  ('USER-COOPADMIN-0001',  'Maria',  'Santos',     'A2Z Transport Cooperative', @t_ecoland),
   ('USER-CONDUCTOR-0001', 'Ramon',  'Villanueva', 'A2Z Transport Cooperative', @t_ecoland),
   ('USER-DRIVER-0001',    'Juan',   'Dela Cruz',  'A2Z Transport Cooperative', @t_ecoland);
 
@@ -124,6 +124,39 @@ FROM trip_legs l
 CROSS JOIN seats s
 WHERE l.trip_id = 'TRIP-DEMO-00000001';
 
--- Expect 42 rows.
+-- ------------------------------------------------- a second trip
+-- Needed so reschedule has a target: a booking can only move to another
+-- trip on the same route, and with one seeded trip there is nowhere to
+-- move it to. Uses the 07:30 template and the second van, which also
+-- keeps the van/driver overlap check from firing.
+INSERT INTO trips
+  (trip_id, template_id, route_id, service_date, departure_datetime,
+   van_id, driver_id, conductor_id, trip_label,
+   seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status)
+VALUES
+  ('TRIP-DEMO-00000002', 'TMPL-ECO-COT-0730', @route,
+   CURRENT_DATE, CONCAT(CURRENT_DATE, ' 07:30:00'),
+   'VAN-0002', 'USER-DRIVER-0001', 'USER-CONDUCTOR-0001', 'Second Trip',
+   14, 14, 6, 'scheduled');
+
+INSERT INTO trip_legs (trip_id, leg_sequence, from_stop_sequence, to_stop_sequence, departs_at)
+SELECT 'TRIP-DEMO-00000002', rs.stop_sequence, rs.stop_sequence, rs.stop_sequence + 1,
+       CONCAT(CURRENT_DATE, ' 07:30:00') + INTERVAL rs.offset_minutes MINUTE
+FROM route_stops rs
+WHERE rs.route_id = @route
+  AND rs.stop_sequence < (SELECT MAX(stop_sequence) FROM route_stops WHERE route_id = @route);
+
+INSERT INTO seat_inventory (trip_id, seat_number, leg_sequence)
+WITH RECURSIVE seats AS (
+    SELECT 1 AS seat_number
+    UNION ALL
+    SELECT seat_number + 1 FROM seats WHERE seat_number < 14
+)
+SELECT l.trip_id, s.seat_number, l.leg_sequence
+FROM trip_legs l
+CROSS JOIN seats s
+WHERE l.trip_id = 'TRIP-DEMO-00000002';
+
+-- Expect 84 rows across both trips.
 SELECT CONCAT('seat_inventory rows seeded: ', COUNT(*)) AS result
-FROM seat_inventory WHERE trip_id = 'TRIP-DEMO-00000001';
+FROM seat_inventory;

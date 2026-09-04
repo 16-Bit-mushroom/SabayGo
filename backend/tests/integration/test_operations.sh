@@ -80,5 +80,5 @@ curl -s -X POST "$API/audits/trigger" -H "Authorization: Bearer $CTOKEN" \
 echo
 echo "== revenue summary ====================================="
 OTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"operator@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 curl -s "$API/revenue/summary" -H "Authorization: Bearer $OTOKEN" | python3 -m json.tool

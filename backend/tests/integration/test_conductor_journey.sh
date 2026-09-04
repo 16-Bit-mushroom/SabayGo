@@ -171,7 +171,7 @@ S=$(code POST /bookings/reserve \
 [ "$S" = "409" ] && ok "bookings closed after departure (409)" || bad "post-departure booking gave $S"
 
 # ═══════════════════════════════════════════════ 7. BOUNDARIES
-hdr "7. A conductor is not an operator"
+hdr "7. A conductor is not a cooperative administrator"
 
 for ep in "GET /fleet/vans" "GET /config/policies" "GET /revenue/summary" \
           "GET /audits/pending"; do

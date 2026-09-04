@@ -62,7 +62,7 @@ async def register(payload: RegisterRequest, session: SessionDep) -> TokenRespon
     to a login screen immediately after signing up.
 
     Staff accounts are deliberately NOT creatable here -- conductors,
-    drivers and operators are provisioned by an operator, because
+    drivers and operators are provisioned by a cooperative administrator, because
     employment is a cooperative decision, not self-service.
     """
     result = await RegisterPassengerUseCase(session).execute(

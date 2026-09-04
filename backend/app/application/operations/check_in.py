@@ -128,7 +128,7 @@ class CheckInUseCase:
             )
 
         # The attempt is recorded either way. A rejected check-in is
-        # evidence too -- it tells the operator a passenger tried, and it
+        # evidence too -- it tells the cooperative administrator a passenger tried, and it
         # gives you the distance distribution for accuracy analysis.
         check_in_id = str(uuid.uuid4())
         self.session.add(

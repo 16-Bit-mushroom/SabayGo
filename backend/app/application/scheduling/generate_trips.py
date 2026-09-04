@@ -13,7 +13,7 @@ duplicate departures. That matters because a cron job that cannot safely
 be retried is a cron job that will eventually corrupt a day's schedule.
 
 Special trips are the complement -- rows with template_id NULL and
-is_special_trip TRUE, created by hand through the operator console.
+is_special_trip TRUE, created by hand through the cooperative administrator console.
 """
 
 from __future__ import annotations
@@ -134,7 +134,7 @@ class GenerateDailyTripsUseCase:
                 elif van.operational_status != "active":
                     # Fleet management is monitoring-only, but a van flagged
                     # out of service must not be dispatched. The trip is
-                    # still created -- unassigned -- so the operator sees a
+                    # still created -- unassigned -- so the cooperative administrator sees a
                     # gap to fill rather than a silently missing departure.
                     report.warnings.append(
                         f"Van {van.plate_number} is {van.operational_status}; "
@@ -162,7 +162,7 @@ class GenerateDailyTripsUseCase:
             # A van cannot be in two places at once. The trip is still
             # created -- skipping it would leave passengers unable to
             # book a scheduled departure -- but the clashing resource is
-            # dropped and the operator is warned, so they see a roster
+            # dropped and the cooperative administrator is warned, so they see a roster
             # gap rather than an impossible assignment.
             clashes = await ScheduleConflictChecker(self.session).find_conflicts(
                 route_id=template.route_id,
@@ -317,7 +317,7 @@ class CreateSpecialTripUseCase:
                 raise ConflictError(f"Van {van.plate_number} is {van.operational_status}.")
             capacity = van.seat_capacity
 
-        # Manual assignment blocks rather than warns: an operator acting
+        # Manual assignment blocks rather than warns: a cooperative administrator acting
         # deliberately should be told immediately, not discover the clash
         # in a report later.
         clashes = await ScheduleConflictChecker(self.session).find_conflicts(

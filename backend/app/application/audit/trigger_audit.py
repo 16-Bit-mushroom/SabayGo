@@ -224,7 +224,7 @@ class ResolveAuditUseCase:
 
 
 class AuditQueueUseCase:
-    """Pending variances, newest first -- backs the operator console queue."""
+    """Pending variances, newest first -- backs the cooperative administrator console queue."""
 
     def __init__(self, session: AsyncSession):
         self.session = session

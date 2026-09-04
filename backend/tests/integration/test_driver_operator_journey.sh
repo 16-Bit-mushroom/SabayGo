@@ -79,7 +79,7 @@ done
 # ╚═══════════════════════════════════════════════════════════════╝
 hdr "OPERATOR — 1. Sign in"
 
-S=$(code POST /auth/login '{"email":"operator@sabaygo.dev","password":"sabaygo123"}')
+S=$(code POST /auth/login '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}')
 [ "$S" = "200" ] && ok "login" || { bad "login gave $S"; exit 1; }
 OT=$(j "['access_token']" < /tmp/resp.json)
 

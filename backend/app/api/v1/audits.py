@@ -20,8 +20,8 @@ from app.infrastructure.clients.ai_node_client import AiNodeClient
 
 router = APIRouter(tags=["audit"])
 
-OPERATOR = require_roles(Role.OPERATOR, Role.ADMIN)
-CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.OPERATOR, Role.ADMIN)
+COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
+CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN, Role.ADMIN)
 
 
 class TriggerAuditRequest(BaseModel):
@@ -71,7 +71,7 @@ class ResolveRequest(BaseModel):
     notes: str = Field(min_length=1, max_length=512)
 
 
-@router.post("/audits/{audit_id}/resolve", dependencies=[Depends(OPERATOR)])
+@router.post("/audits/{audit_id}/resolve", dependencies=[Depends(COOP_ADMIN)])
 async def resolve_audit(
     audit_id: str, payload: ResolveRequest, session: SessionDep, user: CurrentUser
 ) -> dict:
@@ -83,9 +83,9 @@ async def resolve_audit(
     )
 
 
-@router.get("/audits/pending", dependencies=[Depends(OPERATOR)])
+@router.get("/audits/pending", dependencies=[Depends(COOP_ADMIN)])
 async def pending_audits(session: SessionDep, limit: int = Query(50, le=200)) -> list:
-    """Unresolved variances -- the operator console's audit queue."""
+    """Unresolved variances -- the cooperative administrator console's audit queue."""
     return await AuditQueueUseCase(session).pending(limit=limit)
 
 
@@ -122,7 +122,7 @@ class TripRevenueOut(BaseModel):
 @router.get(
     "/revenue/trips",
     response_model=list[TripRevenueOut],
-    dependencies=[Depends(OPERATOR)],
+    dependencies=[Depends(COOP_ADMIN)],
     tags=["revenue"],
 )
 async def trip_revenue(
@@ -159,13 +159,13 @@ async def trip_revenue(
     return [TripRevenueOut(**dict(row._mapping)) for row in result]
 
 
-@router.get("/revenue/summary", dependencies=[Depends(OPERATOR)], tags=["revenue"])
+@router.get("/revenue/summary", dependencies=[Depends(COOP_ADMIN)], tags=["revenue"])
 async def revenue_summary(
     session: SessionDep,
     date_from: dt.date | None = None,
     date_to: dt.date | None = None,
 ) -> dict:
-    """Headline figures for the operator dashboard."""
+    """Headline figures for the cooperative administrator dashboard."""
     clauses, params = [], {}
     if date_from:
         clauses.append("service_date >= :date_from")

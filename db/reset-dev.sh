@@ -28,6 +28,11 @@ UPDATE trips
        status = 'scheduled',
        departed_at = NULL,
        completed_at = NULL;
+-- The seeded trip departs 20 min out with --soon, so a 2-hour
+-- cancellation deadline would refuse everything. The fixture starts
+-- permissive; test_group_f.sh sets its own value to exercise the rule.
+UPDATE cooperative_policies SET policy_value = '0'
+ WHERE policy_key IN ('cancel_cutoff_hours', 'reschedule_cutoff_hours');
 UPDATE trip_legs l JOIN trips t ON t.trip_id = l.trip_id
    SET l.departs_at = t.departure_datetime
        + INTERVAL (l.leg_sequence - 1) * 90 MINUTE;

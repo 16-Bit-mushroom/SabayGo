@@ -11,7 +11,7 @@ hours from departure, plus a turnaround allowance.
 The check is advisory for generation (the trip is still created, but
 unassigned and flagged) and blocking for manual assignment. Reasoning: a
 nightly job that silently skips departures leaves passengers unable to
-book, while an operator assigning by hand should be told immediately.
+book, while a cooperative administrator assigning by hand should be told immediately.
 """
 
 from __future__ import annotations

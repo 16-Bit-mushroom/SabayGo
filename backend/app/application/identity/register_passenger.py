@@ -3,7 +3,7 @@
 Creates the three rows a passenger needs in one transaction: credentials
 (`users`), profile (`passenger_profiles`), and notification preferences
 (`passenger_settings`). Staff accounts are NOT created here -- conductors,
-drivers and operators are provisioned by an operator, since employment is
+drivers and operators are provisioned by a cooperative administrator, since employment is
 a cooperative decision rather than a self-service one.
 """
 

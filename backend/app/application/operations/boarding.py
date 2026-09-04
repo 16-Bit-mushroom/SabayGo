@@ -149,7 +149,7 @@ class ScanTicketUseCase:
 
 
 class ManifestUseCase:
-    """Who is aboard, and what the operator should see."""
+    """Who is aboard, and what the cooperative administrator should see."""
 
     def __init__(self, session: AsyncSession):
         self.session = session

@@ -12,7 +12,7 @@ class Role(str, Enum):
     PASSENGER = "passenger"
     CONDUCTOR = "conductor"
     DRIVER = "driver"
-    OPERATOR = "operator"
+    COOP_ADMIN = "coop_admin"
     ADMIN = "admin"
 
 

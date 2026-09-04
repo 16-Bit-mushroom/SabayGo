@@ -1,7 +1,7 @@
 """Cooperative policy repository.
 
 Every value A2Z has not yet decided is a row here rather than a constant
-in code. When the pitch produces answers, the operator console updates
+in code. When the pitch produces answers, the cooperative administrator console updates
 rows -- no migration, no redeploy.
 """
 

@@ -245,7 +245,7 @@ class RemittanceService:
     async def unremitted_trips(self, *, limit: int = 100) -> list[dict]:
         """Finished trips with cash still in a pocket and no handover started.
 
-        This is the list an operator chases -- a conductor who simply never
+        This is the list a cooperative administrator chases -- a conductor who simply never
         submits would otherwise be invisible.
         """
         result = await self.session.execute(

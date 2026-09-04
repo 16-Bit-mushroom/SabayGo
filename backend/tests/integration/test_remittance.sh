@@ -19,7 +19,7 @@ code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
 CT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 OT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"operator@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 
 hdr "conductor logs three cash passengers"
 code POST "/trips/$TRIP/start-boarding" "" "$CT" >/dev/null

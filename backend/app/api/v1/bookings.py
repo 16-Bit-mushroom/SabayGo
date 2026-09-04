@@ -109,7 +109,7 @@ async def reserve(
     "/walk-in",
     response_model=BookingResponse,
     status_code=201,
-    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER, Role.OPERATOR))],
+    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN))],
 )
 async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingResponse:
     """Record a cash passenger -- at the terminal or flagged down en route.

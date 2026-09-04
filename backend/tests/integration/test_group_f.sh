@@ -18,7 +18,7 @@ code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
   curl "${a[@]}"; }
 
 OT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"operator@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 CT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 

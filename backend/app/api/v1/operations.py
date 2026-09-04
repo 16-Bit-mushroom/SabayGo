@@ -25,7 +25,7 @@ from app.infrastructure.models import DriverHeadcount, Trip
 
 router = APIRouter(tags=["operations"])
 
-CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.OPERATOR)
+CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN)
 
 
 # ----------------------------------------------------------------- check-in

@@ -24,14 +24,14 @@ async def assert_assigned_to_trip(
     remittance record meaningless, since the fares a person is accountable
     for would no longer correspond to the runs they actually worked.
 
-    Operators and admins are exempt: someone has to be able to step in when
+    Cooperative administrators and system admins are exempt: someone has to be able to step in when
     a conductor's phone dies mid-route.
     """
     trip = await session.get(Trip, trip_id)
     if trip is None:
         raise NotFoundError("Trip not found.")
 
-    if user.role in (Role.OPERATOR.value, Role.ADMIN.value):
+    if user.role in (Role.COOP_ADMIN.value, Role.ADMIN.value):
         return trip
 
     if user.user_id in (trip.conductor_id, trip.driver_id):

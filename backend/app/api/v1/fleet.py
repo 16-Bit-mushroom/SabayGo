@@ -29,7 +29,7 @@ from app.infrastructure.models import (
 )
 
 router = APIRouter(prefix="/fleet", tags=["fleet"])
-OPERATOR = require_roles(Role.OPERATOR, Role.ADMIN)
+COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
 
 
 # ===================================================================
@@ -66,7 +66,7 @@ class VanStatusIn(BaseModel):
     operational_status: str = Field(pattern="^(active|maintenance|inactive)$")
 
 
-@router.get("/vans", response_model=list[VanOut], dependencies=[Depends(OPERATOR)])
+@router.get("/vans", response_model=list[VanOut], dependencies=[Depends(COOP_ADMIN)])
 async def list_vans(session: SessionDep, status: str | None = None) -> list[VanOut]:
     stmt = select(Van).order_by(Van.plate_number)
     if status:
@@ -77,7 +77,7 @@ async def list_vans(session: SessionDep, status: str | None = None) -> list[VanO
 
 
 @router.post("/vans", response_model=VanOut, status_code=201,
-             dependencies=[Depends(OPERATOR)])
+             dependencies=[Depends(COOP_ADMIN)])
 async def create_van(payload: VanIn, session: SessionDep) -> VanOut:
     plate = payload.plate_number.upper().strip()
     existing = await session.execute(select(Van).where(Van.plate_number == plate))
@@ -106,7 +106,7 @@ async def create_van(payload: VanIn, session: SessionDep) -> VanOut:
     return VanOut(**{c: getattr(van, c) for c in VanOut.model_fields})
 
 
-@router.patch("/vans/{van_id}/status", dependencies=[Depends(OPERATOR)])
+@router.patch("/vans/{van_id}/status", dependencies=[Depends(COOP_ADMIN)])
 async def set_van_status(
     van_id: str, payload: VanStatusIn, session: SessionDep
 ) -> dict:
@@ -114,7 +114,7 @@ async def set_van_status(
 
     A van marked maintenance or inactive is not assigned by the trip
     generator. Existing trips keep their assignment -- reassigning a van
-    mid-schedule is an operator decision, not an automatic one.
+    mid-schedule is a cooperative administrator decision, not an automatic one.
     """
     van = await session.get(Van, van_id)
     if van is None:
@@ -159,7 +159,7 @@ class StaffOut(BaseModel):
     license_number: str | None = None
 
 
-@router.get("/crew", response_model=list[StaffOut], dependencies=[Depends(OPERATOR)])
+@router.get("/crew", response_model=list[StaffOut], dependencies=[Depends(COOP_ADMIN)])
 async def list_crew(session: SessionDep, role: str | None = None) -> list[StaffOut]:
     stmt = (
         select(User, StaffProfile)
@@ -189,12 +189,12 @@ async def list_crew(session: SessionDep, role: str | None = None) -> list[StaffO
 
 
 @router.post("/crew", response_model=StaffOut, status_code=201,
-             dependencies=[Depends(OPERATOR)])
+             dependencies=[Depends(COOP_ADMIN)])
 async def create_staff(payload: StaffIn, session: SessionDep) -> StaffOut:
     """Provision a conductor, driver, or operator account.
 
     Staff are NOT self-registering -- employment is a cooperative decision,
-    so only an operator can create these. /auth/register is passengers only.
+    so only a cooperative administrator can create these. /auth/register is passengers only.
     """
     phone = PhoneNumber(payload.phone_number).normalized()
     email = payload.email.lower()
@@ -268,7 +268,7 @@ async def create_staff(payload: StaffIn, session: SessionDep) -> StaffOut:
     )
 
 
-@router.patch("/crew/{user_id}/status", dependencies=[Depends(OPERATOR)])
+@router.patch("/crew/{user_id}/status", dependencies=[Depends(COOP_ADMIN)])
 async def set_staff_status(
     user_id: str, status: str, session: SessionDep
 ) -> dict:

@@ -6,7 +6,7 @@ STAMP=$(date +%s)
 j() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1)"; }
 
 TOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"operator@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 AUTH="Authorization: Bearer $TOKEN"
 JSON="Content-Type: application/json"
 

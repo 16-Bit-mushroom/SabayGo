@@ -33,7 +33,7 @@ from app.infrastructure.models import (
 )
 
 router = APIRouter(prefix="/config", tags=["configuration"])
-OPERATOR = require_roles(Role.OPERATOR, Role.ADMIN)
+COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
 
 
 # ===================================================================
@@ -52,7 +52,7 @@ class PolicyIn(BaseModel):
 
 
 @router.get("/policies", response_model=list[PolicyOut],
-            dependencies=[Depends(OPERATOR)])
+            dependencies=[Depends(COOP_ADMIN)])
 async def list_policies(session: SessionDep) -> list[PolicyOut]:
     """Every configurable cooperative policy.
 
@@ -68,7 +68,7 @@ async def list_policies(session: SessionDep) -> list[PolicyOut]:
 
 
 @router.put("/policies/{policy_key}", response_model=PolicyOut,
-            dependencies=[Depends(OPERATOR)])
+            dependencies=[Depends(COOP_ADMIN)])
 async def update_policy(
     policy_key: str, payload: PolicyIn, session: SessionDep
 ) -> PolicyOut:
@@ -114,7 +114,7 @@ class TerminalIn(BaseModel):
     is_staffed: bool = True
 
 
-@router.post("/terminals", status_code=201, dependencies=[Depends(OPERATOR)])
+@router.post("/terminals", status_code=201, dependencies=[Depends(COOP_ADMIN)])
 async def create_terminal(payload: TerminalIn, session: SessionDep) -> dict:
     terminal_id = str(uuid.uuid4())
     session.add(
@@ -148,7 +148,7 @@ class RouteIn(BaseModel):
     stops: list[RouteStopIn] = Field(min_length=2)
 
 
-@router.post("/routes", status_code=201, dependencies=[Depends(OPERATOR)])
+@router.post("/routes", status_code=201, dependencies=[Depends(COOP_ADMIN)])
 async def create_route(payload: RouteIn, session: SessionDep) -> dict:
     """Create a route with its ordered stop sequence.
 
@@ -221,7 +221,7 @@ class FareBulkIn(BaseModel):
     fares: list[FareIn] = Field(min_length=1)
 
 
-@router.post("/fares", status_code=201, dependencies=[Depends(OPERATOR)])
+@router.post("/fares", status_code=201, dependencies=[Depends(COOP_ADMIN)])
 async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     """Set the pairwise fare matrix for a route.
 
@@ -271,7 +271,7 @@ async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     return {"route_id": payload.route_id, "fares_created": created}
 
 
-@router.get("/routes/{route_id}/fares", dependencies=[Depends(OPERATOR)])
+@router.get("/routes/{route_id}/fares", dependencies=[Depends(COOP_ADMIN)])
 async def list_fares(route_id: str, session: SessionDep) -> list[dict]:
     result = await session.execute(
         select(FareMatrix)
@@ -310,7 +310,7 @@ class TemplateIn(BaseModel):
     valid_until: dt.date | None = None
 
 
-@router.get("/schedule-templates", dependencies=[Depends(OPERATOR)])
+@router.get("/schedule-templates", dependencies=[Depends(COOP_ADMIN)])
 async def list_templates(session: SessionDep) -> list[dict]:
     result = await session.execute(
         select(ScheduleTemplate).order_by(ScheduleTemplate.departure_time)
@@ -332,7 +332,7 @@ async def list_templates(session: SessionDep) -> list[dict]:
 
 
 @router.post("/schedule-templates", status_code=201,
-             dependencies=[Depends(OPERATOR)])
+             dependencies=[Depends(COOP_ADMIN)])
 async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
     if await session.get(Route, payload.route_id) is None:
         raise NotFoundError("Route not found.")
@@ -359,7 +359,7 @@ async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
 
 
 @router.patch("/schedule-templates/{template_id}/active",
-              dependencies=[Depends(OPERATOR)])
+              dependencies=[Depends(COOP_ADMIN)])
 async def toggle_template(
     template_id: str, is_active: bool, session: SessionDep
 ) -> dict:
@@ -374,7 +374,7 @@ async def toggle_template(
 # ===================================================================
 # Trip generation
 # ===================================================================
-@router.post("/trips/generate", dependencies=[Depends(OPERATOR)])
+@router.post("/trips/generate", dependencies=[Depends(COOP_ADMIN)])
 async def generate_trips(
     session: SessionDep,
     service_date: dt.date | None = None,
@@ -412,7 +412,7 @@ class SpecialTripIn(BaseModel):
     advance_booking_seat_cap: int | None = Field(default=None, ge=0, le=14)
 
 
-@router.post("/trips/special", status_code=201, dependencies=[Depends(OPERATOR)])
+@router.post("/trips/special", status_code=201, dependencies=[Depends(COOP_ADMIN)])
 async def create_special_trip(
     payload: SpecialTripIn, session: SessionDep
 ) -> dict:

@@ -14,8 +14,8 @@ from app.domain.enums import Role
 
 router = APIRouter(prefix="/remittances", tags=["remittance"])
 
-CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.OPERATOR, Role.ADMIN)
-OPERATOR = require_roles(Role.OPERATOR, Role.ADMIN)
+CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN, Role.ADMIN)
+COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
 
 
 class RemittanceOut(BaseModel):
@@ -86,7 +86,7 @@ async def submit(
 @router.post(
     "/{remittance_id}/receive",
     response_model=RemittanceOut,
-    dependencies=[Depends(OPERATOR)],
+    dependencies=[Depends(COOP_ADMIN)],
 )
 async def receive(
     remittance_id: str,
@@ -109,7 +109,7 @@ async def receive(
     return RemittanceOut(**result.__dict__)
 
 
-@router.get("/outstanding", dependencies=[Depends(OPERATOR)])
+@router.get("/outstanding", dependencies=[Depends(COOP_ADMIN)])
 async def outstanding(
     session: SessionDep, limit: int = Query(100, le=500)
 ) -> list[RemittanceOut]:
@@ -118,7 +118,7 @@ async def outstanding(
     return [RemittanceOut(**r.__dict__) for r in results]
 
 
-@router.get("/unremitted-trips", dependencies=[Depends(OPERATOR)])
+@router.get("/unremitted-trips", dependencies=[Depends(COOP_ADMIN)])
 async def unremitted_trips(
     session: SessionDep, limit: int = Query(100, le=500)
 ) -> list[dict]:
