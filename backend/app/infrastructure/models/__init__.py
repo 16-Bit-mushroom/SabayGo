@@ -470,3 +470,31 @@ class CashRemittance(Base):
     notes: Mapped[str | None] = mapped_column(String(512))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class TripLocationPing(Base):
+    """One GPS position report from an in-vehicle tracking unit.
+
+    Append-only and high-volume: a ping every ten seconds is ~360 rows
+    per van-hour. Fine at pilot scale; production would partition by
+    service date and prune.
+    """
+
+    __tablename__ = "trip_location_pings"
+
+    ping_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    van_id: Mapped[str | None] = mapped_column(ForeignKey("vans.van_id"))
+    latitude: Mapped[Decimal] = mapped_column(Numeric(8, 6))
+    longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    accuracy_m: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    speed_kph: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    heading_deg: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # Map-matching result, computed on ingest so the live map does not
+    # recalculate it on every read.
+    nearest_stop_sequence: Mapped[int | None] = mapped_column(SmallInteger)
+    distance_to_stop_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    # Device clock vs server clock: a unit that buffers through a dead
+    # zone must not have its history collapsed to the upload moment.
+    recorded_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    received_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))

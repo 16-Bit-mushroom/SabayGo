@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     ai_node_api_key: str | None = None
     ai_node_timeout_s: float = 20.0
 
+    # Shared key for in-vehicle tracking units. Devices cannot hold a
+    # user session, so they authenticate the same way the YOLOv8 node
+    # does. Unset in development leaves the ping endpoint open.
+    tracker_api_key: str | None = None
+
     # --- payments -------------------------------------------------------
     paymongo_secret_key: str | None = None
     paymongo_webhook_secret: str | None = None
