@@ -49,7 +49,7 @@ class TripDetailsSheet extends StatelessWidget {
                   children: [
                     Text(trip.tripLabel, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(trip.operatorName, style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+                    Text(trip.operatorName ?? trip.plateNumber ?? "—", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
                   ],
                 ),
                 Column(

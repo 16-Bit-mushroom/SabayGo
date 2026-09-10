@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../viewmodels/dispatcher/log_book_viewmodel.dart';
+import '../../viewmodels/log_book_viewmodel.dart';
 
 class LogBookScreen extends StatefulWidget {
   const LogBookScreen({super.key});

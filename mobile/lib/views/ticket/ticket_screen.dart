@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/uv_trip_model.dart';
+import '../../data/repositories/booking_repository.dart';
 import '../../viewmodels/ticket_viewmodel.dart';
 
 class TicketScreen extends StatefulWidget {
   final UvTripModel bookedTrip;
 
-  const TicketScreen({super.key, required this.bookedTrip});
+  /// The booking just created. Carries the ticket number, the fare that
+  /// was actually charged, and the QR payload. Null when the screen is
+  /// opened from a list rather than straight after reserving.
+  final ReservationResult? reservation;
+
+  const TicketScreen({
+    super.key,
+    required this.bookedTrip,
+    this.reservation,
+  });
 
   @override
   State<TicketScreen> createState() => _TicketScreenState();
@@ -73,7 +83,7 @@ class _TicketScreenState extends State<TicketScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              trip.operatorName,
+                              trip.operatorName ?? trip.plateNumber ?? "—",
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: _viewModel.isCancelled ? Colors.red.shade900 : const Color(0xFF00A859),
@@ -255,7 +265,8 @@ class _TicketScreenState extends State<TicketScreen> {
     );
   }
 
-  String _formatTime(DateTime dt) {
+  String _formatTime(DateTime? dt) {
+    if (dt == null) return "—";
     return DateFormat('hh:mm a').format(dt);
   }
 }

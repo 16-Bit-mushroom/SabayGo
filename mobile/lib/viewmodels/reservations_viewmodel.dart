@@ -23,6 +23,8 @@ class ReservationsViewModel extends ChangeNotifier {
     // Mock Active Ticket
     final activeTrip = UvTripModel(
       id: 't1',
+      boardingStop: 1,
+      alightingStop: 4,
       tripLabel: 'Afternoon Run',
       departureTime: today.add(const Duration(hours: 2)),
       estimatedArrivalTime: today.add(const Duration(hours: 3, minutes: 30)),
@@ -46,6 +48,8 @@ class ReservationsViewModel extends ChangeNotifier {
     // Mock History Ticket
     final pastTrip = UvTripModel(
       id: 't2',
+      boardingStop: 1,
+      alightingStop: 4,
       tripLabel: 'Morning Express',
       departureTime: today.subtract(const Duration(days: 2, hours: 5)),
       estimatedArrivalTime: today.subtract(const Duration(days: 2, hours: 0)),
@@ -72,6 +76,8 @@ class ReservationsViewModel extends ChangeNotifier {
     // Mock Cancelled Ticket
     final cancelledTrip = UvTripModel(
       id: 't3',
+      boardingStop: 1,
+      alightingStop: 4,
       tripLabel: 'Noon Trip',
       departureTime: today.subtract(const Duration(days: 5, hours: 2)),
       estimatedArrivalTime: today.subtract(const Duration(days: 5, hours: 0)),

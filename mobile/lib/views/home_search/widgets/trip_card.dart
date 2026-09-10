@@ -98,7 +98,7 @@ class TripCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    trip.operatorName,
+                    trip.operatorName ?? trip.plateNumber ?? "—",
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.hintColor),
                   ),

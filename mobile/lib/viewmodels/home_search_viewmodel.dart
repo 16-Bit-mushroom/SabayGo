@@ -1,59 +1,94 @@
 import 'package:flutter/foundation.dart';
+
+import '../core/network/api_exception.dart';
+import '../data/repositories/trip_repository.dart';
 import '../models/transit_node_model.dart';
 import '../models/uv_trip_model.dart';
 
 enum TimeBlock { all, nextAvailable, morning, afternoon, evening, lastTrip }
 
 extension TimeBlockLabel on TimeBlock {
-  String get label {
-    switch (this) {
-      case TimeBlock.all:
-        return 'All';
-      case TimeBlock.nextAvailable:
-        return 'Next Available';
-      case TimeBlock.morning:
-        return 'Morning';
-      case TimeBlock.afternoon:
-        return 'Afternoon';
-      case TimeBlock.evening:
-        return 'Evening';
-      case TimeBlock.lastTrip:
-        return 'Last Trip';
-    }
-  }
+  String get label => switch (this) {
+        TimeBlock.all => 'All',
+        TimeBlock.nextAvailable => 'Next Available',
+        TimeBlock.morning => 'Morning',
+        TimeBlock.afternoon => 'Afternoon',
+        TimeBlock.evening => 'Evening',
+        TimeBlock.lastTrip => 'Last Trip',
+      };
 }
 
+/// Trip search, backed by the API.
+///
+/// The important change from the prototype: **search is segment-based**.
+/// The old version loaded every trip and filtered client-side, so the
+/// list showed something immediately. The server cannot work that way —
+/// a trip has no single fare or availability until the journey is known,
+/// because both are properties of the sections of road travelled.
+/// Ecoland→Digos and Ecoland→Cotabato are different prices on the same
+/// van, and can have different space.
+///
+/// So nothing lists until both terminals are chosen. That is the segment
+/// model showing through, not a limitation to design around.
 class HomeSearchViewModel extends ChangeNotifier {
-  HomeSearchViewModel() {
-    _loadNodes();
-    _loadTrips();
+  HomeSearchViewModel(this._repo) {
+    loadTerminals();
   }
 
-  // --- State ---
+  final TripRepository _repo;
+
+  // --- state ---
   List<TransitNodeModel> _nodes = [];
   List<UvTripModel> _trips = [];
 
   TransitNodeModel? selectedOrigin;
   TransitNodeModel? selectedDestination;
+  DateTime serviceDate = DateTime.now();
   TimeBlock selectedTimeBlock = TimeBlock.all;
   String searchQuery = '';
-  bool isLoading = false;
+
+  bool isLoadingTerminals = false;
+  bool isLoadingTrips = false;
+  String? error;
+
+  /// True before the first search — the list is empty because nothing
+  /// has been asked for yet, which is a different state from a search
+  /// that found nothing.
+  bool _hasSearched = false;
 
   List<TransitNodeModel> get nodes => _nodes;
+  bool get hasSearched => _hasSearched;
+  bool get canSearch =>
+      selectedOrigin?.stopSequence != null &&
+      selectedDestination?.stopSequence != null &&
+      selectedOrigin!.stopSequence! < selectedDestination!.stopSequence!;
 
-  // --- Derived ---
+  /// Why the search button is disabled, phrased for the person rather
+  /// than as a validation code.
+  String? get searchBlockedReason {
+    if (selectedOrigin == null) return 'Choose where you are boarding.';
+    if (selectedDestination == null) return 'Choose where you are going.';
+    final from = selectedOrigin!.stopSequence;
+    final to = selectedDestination!.stopSequence;
+    if (from == null || to == null) return 'This terminal is not on a route.';
+    if (from == to) return 'Boarding and destination are the same.';
+    if (from > to) {
+      return 'This route runs ${_nodes.first.name} outward. '
+          'Swap your terminals to travel the other way.';
+    }
+    return null;
+  }
+
+  // --- derived ---
   List<UvTripModel> get filteredTrips {
     final now = DateTime.now();
-    var result = _trips.where((trip) {
-      final matchesOrigin =
-          selectedOrigin == null || trip.origin.id == selectedOrigin!.id;
-      final matchesDestination = selectedDestination == null ||
-          trip.destination.id == selectedDestination!.id;
-      final query = searchQuery.toLowerCase();
-      final matchesQuery = query.isEmpty ||
-          trip.origin.name.toLowerCase().contains(query) ||
-          trip.destination.name.toLowerCase().contains(query);
-      return matchesOrigin && matchesDestination && matchesQuery;
+    final query = searchQuery.toLowerCase();
+
+    var result = _trips.where((t) {
+      if (query.isEmpty) return true;
+      return t.origin.name.toLowerCase().contains(query) ||
+          t.destination.name.toLowerCase().contains(query) ||
+          t.tripLabel.toLowerCase().contains(query);
     }).toList();
 
     switch (selectedTimeBlock) {
@@ -66,24 +101,26 @@ class HomeSearchViewModel extends ChangeNotifier {
         break;
       case TimeBlock.morning:
         result = result
-            .where((t) =>
-                t.departureTime.hour >= 5 && t.departureTime.hour < 11)
+            .where((t) => t.departureTime.hour >= 5 && t.departureTime.hour < 11)
             .toList();
         break;
       case TimeBlock.afternoon:
         result = result
-            .where((t) =>
-                t.departureTime.hour >= 11 && t.departureTime.hour < 15)
+            .where((t) => t.departureTime.hour >= 11 && t.departureTime.hour < 15)
             .toList();
         break;
       case TimeBlock.evening:
         result = result
-            .where((t) =>
-                t.departureTime.hour >= 15 && t.departureTime.hour < 20)
+            .where((t) => t.departureTime.hour >= 15 && t.departureTime.hour < 20)
             .toList();
         break;
       case TimeBlock.lastTrip:
-        result = result.where((t) => t.isLastTrip).toList();
+        // The last departure of the day for this journey, rather than a
+        // flag the server sends — it is a property of the result set.
+        if (result.isNotEmpty) {
+          result.sort((a, b) => a.departureTime.compareTo(b.departureTime));
+          result = [result.last];
+        }
         break;
     }
 
@@ -91,22 +128,90 @@ class HomeSearchViewModel extends ChangeNotifier {
     return result;
   }
 
-  // --- Actions ---
+  // --- actions ---
+  Future<void> loadTerminals() async {
+    isLoadingTerminals = true;
+    error = null;
+    notifyListeners();
+    try {
+      final terminals = await _repo.terminals();
+      _nodes = terminals
+          .map((t) => TransitNodeModel(
+                id: t.terminalId,
+                name: t.terminalName,
+                area: t.city,
+                stopSequence: t.stopSequence,
+              ))
+          .toList();
+    } on ApiException catch (e) {
+      error = e.message;
+    } finally {
+      isLoadingTerminals = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> search() async {
+    if (!canSearch) return;
+
+    isLoadingTrips = true;
+    error = null;
+    notifyListeners();
+
+    try {
+      final results = await _repo.search(
+        boardingStop: selectedOrigin!.stopSequence!,
+        alightingStop: selectedDestination!.stopSequence!,
+        serviceDate: serviceDate,
+      );
+      // Names come back scoped to the searched journey, so the terminals
+      // the passenger picked are carried through rather than re-derived.
+      _trips = results
+          .map((t) => UvTripModel(
+                id: t.tripId,
+                tripLabel: t.tripLabel ?? t.routeName,
+                departureTime: t.departure,
+                origin: selectedOrigin!,
+                destination: selectedDestination!,
+                boardingStop: t.boardingStop,
+                alightingStop: t.alightingStop,
+                availableSeats: t.spacesAvailable,
+                approximateFare: t.fare,
+                plateNumber: t.plateNumber,
+                isSpecialTrip: t.isSpecialTrip,
+                status: t.isFull ? TripStatus.full : TripStatus.scheduled,
+              ))
+          .toList();
+      _hasSearched = true;
+    } on ApiException catch (e) {
+      error = e.message;
+      _trips = [];
+    } finally {
+      isLoadingTrips = false;
+      notifyListeners();
+    }
+  }
+
   void setOrigin(TransitNodeModel? node) {
     selectedOrigin = node;
-    notifyListeners();
+    _invalidate();
   }
 
   void setDestination(TransitNodeModel? node) {
     selectedDestination = node;
-    notifyListeners();
+    _invalidate();
   }
 
   void swapNodes() {
     final temp = selectedOrigin;
     selectedOrigin = selectedDestination;
     selectedDestination = temp;
-    notifyListeners();
+    _invalidate();
+  }
+
+  void setServiceDate(DateTime date) {
+    serviceDate = date;
+    _invalidate();
   }
 
   void setTimeBlock(TimeBlock block) {
@@ -119,124 +224,20 @@ class HomeSearchViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refreshTrips() async {
-    isLoading = true;
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 600)); // simulate fetch
-    _loadTrips();
-    isLoading = false;
+  Future<void> refreshTrips() => search();
+
+  void clearError() {
+    if (error == null) return;
+    error = null;
     notifyListeners();
   }
 
-  /// FR-6: one-tap seat reservation. Returns true if the lock succeeded.
-  /// A real backend must guard this with a concurrency-safe transaction
-  /// (e.g. row-level lock / atomic decrement) — this only mutates local
-  /// state for the prototype.
-  bool bookTrip(String tripId) {
-    final index = _trips.indexWhere((t) => t.id == tripId);
-    if (index == -1) return false;
-    final trip = _trips[index];
-    if (trip.isFull) return false;
-
-    final newAvailable = trip.availableSeats - 1;
-    _trips[index] = trip.copyWith(
-      availableSeats: newAvailable,
-      status: newAvailable <= 0 ? TripStatus.full : trip.status,
-    );
+  /// Changing the journey invalidates the results, because fare and
+  /// availability were computed for the previous one. Showing stale
+  /// prices against a new destination would be worse than showing none.
+  void _invalidate() {
+    _trips = [];
+    _hasSearched = false;
     notifyListeners();
-    return true;
-  }
-
-  // --- Mock data (swap for a repository/API call later) ---
-  void _loadNodes() {
-    _nodes = const [
-      TransitNodeModel(id: 'n1', name: 'Ecoland Terminal', area: 'Davao City'),
-      TransitNodeModel(id: 'n2', name: 'Cotabato City Terminal', area: 'Cotabato City'),
-      TransitNodeModel(id: 'n3', name: 'Bulaong Terminal', area: 'General Santos City'),
-      TransitNodeModel(id: 'n4', name: 'Agora Terminal', area: 'Cagayan de Oro City'),
-      TransitNodeModel(id: 'n5', name: 'Tagum City Terminal', area: 'Tagum City'),
-      TransitNodeModel(id: 'n6', name: 'Digos City Terminal', area: 'Digos City'),
-    ];
-  }
-
-  void _loadTrips() {
-    final today = DateTime.now();
-    DateTime at(int h, int m) =>
-        DateTime(today.year, today.month, today.day, h, m);
-
-    // Fetch the loaded nodes
-    final davao = _nodes.firstWhere((n) => n.id == 'n1');
-    final cotabato = _nodes.firstWhere((n) => n.id == 'n2');
-    final gensan = _nodes.firstWhere((n) => n.id == 'n3');
-    final tagum = _nodes.firstWhere((n) => n.id == 'n5');
-
-    _trips = [
-      // --- DAVAO TO COTABATO ROUTES ---
-      UvTripModel(
-        id: 't1',
-        tripLabel: 'First Trip',
-        departureTime: at(5, 30),
-        estimatedArrivalTime: at(5, 30).add(const Duration(hours: 5)),
-        origin: davao,
-        destination: cotabato,
-        totalSeats: 18,
-        availableSeats: 2,
-        operatorName: 'RDT Transport',
-        approximateFare: 500.0,
-      ),
-      UvTripModel(
-        id: 't2',
-        tripLabel: 'Second Trip',
-        departureTime: at(7, 30),
-        estimatedArrivalTime: at(7, 30).add(const Duration(hours: 5)),
-        origin: davao,
-        destination: cotabato,
-        totalSeats: 18,
-        availableSeats: 18,
-        operatorName: 'RDT Transport',
-        approximateFare: 500.0,
-      ),
-      
-      // --- DAVAO TO GENSAN ROUTES ---
-      UvTripModel(
-        id: 't3',
-        tripLabel: 'Morning Express',
-        departureTime: at(8, 00),
-        estimatedArrivalTime: at(8, 00).add(const Duration(hours: 3)),
-        origin: davao,
-        destination: gensan,
-        totalSeats: 14,
-        availableSeats: 0, // Mocking a full trip
-        operatorName: 'Southbound Express',
-        approximateFare: 350.0,
-        status: TripStatus.full,
-      ),
-      UvTripModel(
-        id: 't4',
-        tripLabel: 'Noon Trip',
-        departureTime: at(12, 00),
-        estimatedArrivalTime: at(12, 00).add(const Duration(hours: 3)),
-        origin: davao,
-        destination: gensan,
-        totalSeats: 14,
-        availableSeats: 8,
-        operatorName: 'Southbound Express',
-        approximateFare: 350.0,
-      ),
-
-      // --- DAVAO TO TAGUM ROUTES (Shorter Trip) ---
-      UvTripModel(
-        id: 't5',
-        tripLabel: 'Afternoon Run',
-        departureTime: at(15, 30),
-        estimatedArrivalTime: at(15, 30).add(const Duration(hours: 1, minutes: 30)),
-        origin: davao,
-        destination: tagum,
-        totalSeats: 18,
-        availableSeats: 12,
-        operatorName: 'Metro Davao Vans',
-        approximateFare: 150.0,
-      ),
-    ];
   }
 }
