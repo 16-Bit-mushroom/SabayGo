@@ -33,11 +33,11 @@ class WelcomeScreen extends StatelessWidget {
                   height: 160,
                   width: 160,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF00A859).withOpacity(0.3),
+                        color: const Color(0xFF00A859).withValues(alpha: 0.3),
                         blurRadius: 50,
                         spreadRadius: 10,
                       ),
@@ -78,7 +78,7 @@ class WelcomeScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontWeight: FontWeight.w500,
                     height: 1.5,
                   ),
@@ -113,7 +113,7 @@ class WelcomeScreen extends StatelessWidget {
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withOpacity(0.5), width: 1.5),
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 1.5),
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),

@@ -176,7 +176,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 side: const BorderSide(color: Colors.white, width: 2),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                backgroundColor: Colors.black.withOpacity(0.5),
+                backgroundColor: Colors.black.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -191,9 +191,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.5),
+          color: Colors.black.withValues(alpha: 0.5),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.3)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
         ),
         child: Icon(icon, color: Colors.white, size: 24),
       ),
@@ -206,7 +206,7 @@ class _ScannerOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // Semi-transparent black background
-    final paint = Paint()..color = Colors.black.withOpacity(0.65);
+    final paint = Paint()..color = Colors.black.withValues(alpha: 0.65);
     
     // The size of the clear scanning window
     final scanAreaSize = 260.0;

@@ -1,7 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_v2_uv_express/views/dispatcher/dispatcher_main_screen.dart';
-import 'login_screen.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
+import '../../viewmodels/auth_provider.dart';
+
+/// Passenger self-registration, wired to POST /auth/register.
+///
+/// Two things changed from the previous version.
+///
+/// The "I'm a van terminal" checkbox is gone. It routed to the crew
+/// portal, so anyone registering could tick it and land in the conductor
+/// app. The backend never honoured it -- /auth/register creates
+/// passengers only -- but a control that implies otherwise is worth
+/// removing rather than leaving to be refused server-side. Conductors,
+/// drivers and cooperative administrators are provisioned by the office,
+/// because employment is a cooperative decision, not self-service.
+///
+/// There is also no navigation on success. The root router watches the
+/// auth state and moves the app itself, so a screen that pushed its own
+/// route would fight it.
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -12,67 +29,75 @@ class SignupScreen extends StatefulWidget {
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  bool _obscurePassword = true;
-  bool _agreeTerms = false;
-  bool _isVanTerminal = false; // Checkbox state
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
+  final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _password = TextEditingController();
 
-  // Controllers
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  bool _obscure = true;
+  bool _agreedToTerms = false;
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
+    for (final c in [_firstName, _lastName, _email, _phone, _password]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _handleSignup() {
-    // --- DEMO MODE: Bypass all validation ---
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_agreedToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please accept the terms to continue.')),
+      );
+      return;
+    }
     FocusScope.of(context).unfocus();
 
-    if (!_isVanTerminal) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Routing to Passenger App...')));
-      // TODO: Uncomment when PassengerMainScreen is ready
-      // Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const PassengerMainScreen()), (route) => false);
-    } else {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const DispatcherMainScreen()),
-        (route) => false,
-      );
+    await context.read<AuthProvider>().register(
+          email: _email.text,
+          phoneNumber: _phone.text,
+          password: _password.text,
+          firstName: _firstName.text,
+          lastName: _lastName.text,
+        );
+    // Same as sign-in: the router has already switched, so clear this
+    // screen off the stack instead of pushing anything.
+    if (mounted && context.read<AuthProvider>().status == AuthStatus.signedIn) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: Stack(
         children: [
-          // --- Brand Gradient Header ---
           Container(
             height: 280,
             width: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF2D2059), Color(0xFF4A3592)],
+                colors: [AppColors.primary, Color(0xFF4A3592)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
             ),
           ),
-          
           SafeArea(
             child: Column(
               children: [
-                // --- Custom App Bar ---
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+                  padding: const EdgeInsets.all(8),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: CircleAvatar(
-                      backgroundColor: Colors.white.withOpacity(0.2),
+                      backgroundColor: Colors.white.withValues(alpha: 0.2),
                       child: IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
@@ -80,10 +105,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                   ),
                 ),
-                
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Form(
                       key: _formKey,
                       child: Column(
@@ -104,188 +128,177 @@ class _SignupScreenState extends State<SignupScreen> {
                           const SizedBox(height: 8),
                           Center(
                             child: Text(
-                              'Best Way to Manage\nYour UV Express Trips.',
+                              'Book a seat on your UV Express route.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.85),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
                           const SizedBox(height: 32),
 
-                          // --- Form Card ---
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(24),
-                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20, offset: Offset(0, 10))],
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black12,
+                                  blurRadius: 20,
+                                  offset: Offset(0, 10),
+                                ),
+                              ],
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildLabel('Email Address*'),
-                                _buildTextField(
-                                  controller: _emailCtrl,
-                                  hint: 'Enter Your Email',
-                                  icon: Icons.email_outlined,
-                                ),
-                                const SizedBox(height: 20),
-
-                                _buildLabel('Password*'),
-                                _buildTextField(
-                                  controller: _passwordCtrl,
-                                  hint: 'Enter Your Password',
-                                  icon: Icons.lock_outline,
-                                  isPassword: true,
-                                ),
-                                const SizedBox(height: 20),
-
-                                // --- Van Terminal Checkbox ---
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: _isVanTerminal ? const Color(0xFF2D2059).withOpacity(0.05) : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: _isVanTerminal ? const Color(0xFF2D2059).withOpacity(0.3) : Colors.grey.shade200,
-                                    ),
+                                if (auth.error != null) ...[
+                                  _ErrorBanner(
+                                    message: auth.error!,
+                                    onDismiss: auth.clearError,
                                   ),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: Checkbox(
-                                          value: _isVanTerminal,
-                                          onChanged: (val) => setState(() => _isVanTerminal = val!),
-                                          activeColor: const Color(0xFF2D2059),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      const Text(
-                                        'Sign up as van terminal', 
-                                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
+                                  const SizedBox(height: 18),
+                                ],
 
-                                // Terms & Conditions
                                 Row(
                                   children: [
-                                    SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: Checkbox(
-                                        value: _agreeTerms,
-                                        onChanged: (val) => setState(() => _agreeTerms = val!),
-                                        activeColor: const Color(0xFF00A859),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
+                                    Expanded(
+                                      child: _Field(
+                                        label: 'First name*',
+                                        controller: _firstName,
+                                        hint: 'Juan',
+                                        icon: Icons.person_outline,
+                                        validator: _required('first name'),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'I agree with the ',
-                                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                    ),
-                                    const Text(
-                                      'Terms and Conditions',
-                                      style: TextStyle(
-                                        color: Color(0xFF00A859),
-                                        fontSize: 13,
-                                        decoration: TextDecoration.underline,
-                                        fontWeight: FontWeight.bold,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _Field(
+                                        label: 'Last name*',
+                                        controller: _lastName,
+                                        hint: 'Dela Cruz',
+                                        validator: _required('last name'),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 32),
+                                const SizedBox(height: 18),
 
-                                // Sign Up Button
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton(
-                                    onPressed: _agreeTerms ? _handleSignup : null, 
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFF00A859),
-                                      disabledBackgroundColor: Colors.grey.shade300,
-                                      padding: const EdgeInsets.symmetric(vertical: 20),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                      elevation: 2,
+                                _Field(
+                                  label: 'Email address*',
+                                  controller: _email,
+                                  hint: 'you@example.com',
+                                  icon: Icons.email_outlined,
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (v) {
+                                    final s = v?.trim() ?? '';
+                                    if (s.isEmpty) return 'Enter your email';
+                                    if (!s.contains('@') || !s.contains('.')) {
+                                      return 'Enter a valid email';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 18),
+
+                                _Field(
+                                  label: 'Mobile number*',
+                                  controller: _phone,
+                                  hint: '09171234567',
+                                  icon: Icons.phone_outlined,
+                                  keyboardType: TextInputType.phone,
+                                  // Mirrors the server's PhoneNumber rule so
+                                  // an obvious typo is caught before a round
+                                  // trip. The server still validates.
+                                  validator: (v) {
+                                    final s = (v ?? '').replaceAll(' ', '');
+                                    if (s.isEmpty) return 'Enter your number';
+                                    final local =
+                                        s.startsWith('09') && s.length == 11;
+                                    final intl =
+                                        s.startsWith('+639') && s.length == 13;
+                                    if (!local && !intl) {
+                                      return 'Use 09XXXXXXXXX or +639XXXXXXXXX';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 18),
+
+                                _Field(
+                                  label: 'Password*',
+                                  controller: _password,
+                                  hint: 'At least 8 characters',
+                                  icon: Icons.lock_outline,
+                                  obscure: _obscure,
+                                  suffix: IconButton(
+                                    icon: Icon(
+                                      _obscure
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                      size: 20,
                                     ),
-                                    child: const Text('Sign Up', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                    onPressed: () =>
+                                        setState(() => _obscure = !_obscure),
                                   ),
+                                  validator: (v) {
+                                    if (v == null || v.isEmpty) {
+                                      return 'Choose a password';
+                                    }
+                                    if (v.length < 8) {
+                                      return 'At least 8 characters';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+
+                                CheckboxListTile(
+                                  value: _agreedToTerms,
+                                  onChanged: (v) =>
+                                      setState(() => _agreedToTerms = v ?? false),
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  contentPadding: EdgeInsets.zero,
+                                  dense: true,
+                                  activeColor: AppColors.accent,
+                                  title: const Text(
+                                    'I agree to the terms of use and privacy notice.',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+
+                                FilledButton(
+                                  onPressed: auth.isBusy ? null : _submit,
+                                  child: auth.isBusy
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.4,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text('Create account'),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 18),
 
-                          // --- Social Logins (Hidden if Van Terminal) ---
-                          if (!_isVanTerminal) ...[
-                            Row(
-                              children: [
-                                Expanded(child: Divider(color: Colors.grey.shade300)),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Text(
-                                    'Or Continue With',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(child: Divider(color: Colors.grey.shade300)),
-                              ],
+                          Center(
+                            child: TextButton(
+                              onPressed: auth.isBusy
+                                  ? null
+                                  : () => Navigator.pop(context),
+                              child: const Text('Already have an account? Sign in'),
                             ),
-                            const SizedBox(height: 24),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildSocialButton('Google', Icons.g_mobiledata),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(child: _buildSocialButton('Apple', Icons.apple)),
-                              ],
-                            ),
-                            const SizedBox(height: 40),
-                          ],
-
-                          // Footer
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "Have an account? ",
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () => Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                                ),
-                                child: const Text(
-                                  'Log In',
-                                  style: TextStyle(
-                                    color: Color(0xFF00A859),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
                           ),
-                          const SizedBox(height: 40),
+                          const SizedBox(height: 24),
                         ],
                       ),
                     ),
@@ -299,78 +312,98 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 4),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-          color: Colors.black87,
+  String? Function(String?) _required(String what) =>
+      (v) => (v == null || v.trim().isEmpty) ? 'Enter your $what' : null;
+}
+
+class _Field extends StatelessWidget {
+  const _Field({
+    required this.label,
+    required this.controller,
+    required this.hint,
+    this.icon,
+    this.obscure = false,
+    this.suffix,
+    this.keyboardType,
+    this.validator,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final IconData? icon;
+  final bool obscure;
+  final Widget? suffix;
+  final TextInputType? keyboardType;
+  final String? Function(String?)? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
         ),
-      ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          obscureText: obscure,
+          keyboardType: keyboardType,
+          autocorrect: false,
+          validator: validator,
+          decoration: InputDecoration(
+            hintText: hint,
+            isDense: true,
+            prefixIcon: icon == null ? null : Icon(icon, size: 20),
+            suffixIcon: suffix,
+          ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool isPassword = false,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: isPassword ? _obscurePassword : false,
-      style: const TextStyle(fontWeight: FontWeight.w600),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.normal),
-        prefixIcon: Icon(icon, color: Colors.grey.shade500, size: 20),
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  color: Colors.grey.shade500,
-                  size: 20,
-                ),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
-              )
-            : null,
-        filled: true,
-        fillColor: const Color(0xFFF8F9FA),
-        contentPadding: const EdgeInsets.symmetric(vertical: 18),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade200),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF2D2059), width: 1.5), // Brand Purple Focus
-        ),
-      ),
-    );
-  }
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message, required this.onDismiss});
 
-  Widget _buildSocialButton(String provider, IconData icon) {
-    return OutlinedButton.icon(
-      onPressed: () {},
-      icon: Icon(icon, color: Colors.black, size: 24),
-      label: Text(
-        provider,
-        style: const TextStyle(
-          color: Colors.black,
-          fontWeight: FontWeight.bold,
-        ),
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
       ),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        side: BorderSide(color: Colors.grey.shade300),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.danger, size: 20),
+          const SizedBox(width: 10),
+          // Server messages name the field that clashed -- "That phone
+          // number is already registered" -- so they are shown as written.
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.danger, height: 1.35),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            color: AppColors.danger,
+            onPressed: onDismiss,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
       ),
     );
   }

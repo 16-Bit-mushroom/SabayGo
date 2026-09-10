@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_v2_uv_express/views/passenger_main_screen.dart';
-import 'signup_screen.dart';
-import '../dispatcher/dispatcher_main_screen.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
+import '../../viewmodels/auth_provider.dart';
+import 'signup_screen.dart';
+
+/// Sign-in, wired to POST /auth/login.
+///
+/// Replaces the previous screen, which routed by email prefix — an
+/// "admin@" address opened the crew portal. The server now decides the
+/// role and the app follows it.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -11,259 +18,244 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _rememberMe = false;
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _obscure = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _email.dispose();
+    _password.dispose();
     super.dispose();
   }
 
-  void _handleLogin() {
-    // Close the keyboard instantly for a smoother transition
-    FocusScope.of(context).unfocus(); 
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    FocusScope.of(context).unfocus();
 
-    // Read the typed email
-    final email = _emailController.text.trim().toLowerCase();
+    final ok = await context.read<AuthProvider>().login(
+          email: _email.text,
+          password: _password.text,
+        );
 
-    // --- DEMO MODE: Automatic Role-Based Routing ---
-    // If the email is a dispatcher/admin email, route to Dispatcher screen.
-    if (email == 'admin@sabaygo.com' || email == 'dispatcher@sabaygo.com') {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Operator recognized. Routing to Command Center...')));
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const DispatcherMainScreen()), (route) => false);
-    } 
-    // Otherwise, route them as a normal Passenger.
-    else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passenger recognized. Routing to Home...')));
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const PassengerMainScreen()), (route) => false);
+    // The root router already swapped to the right shell, but this
+    // screen was pushed on top of it and would keep covering it. Clear
+    // the stack back to the router rather than pushing another route,
+    // so there is no back gesture returning to a stale sign-in form.
+    if (ok && mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: Stack(
-        children: [
-          // --- Brand Gradient Header ---
-          Container(
-            height: 280,
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF2D2059), Color(0xFF4A3592)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-          
-          SafeArea(
+      appBar: AppBar(title: const Text('Sign in')),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Form(
+            key: _formKey,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // --- Custom App Bar ---
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: CircleAvatar(
-                      backgroundColor: Colors.white.withOpacity(0.2),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                const Text(
+                  'Welcome back',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Sign in to book a seat or start your shift.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 28),
+
+                if (auth.error != null) ...[
+                  _ErrorBanner(
+                    message: auth.error!,
+                    onDismiss: auth.clearError,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                TextFormField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.mail_outline),
+                  ),
+                  validator: (v) {
+                    final value = v?.trim() ?? '';
+                    if (value.isEmpty) return 'Enter your email';
+                    if (!value.contains('@') || !value.contains('.')) {
+                      return 'Enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                TextFormField(
+                  controller: _password,
+                  obscureText: _obscure,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submit(),
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility,
                       ),
+                      onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? 'Enter your password' : null,
                 ),
-                
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 10),
-                        const Center(
-                          child: Text(
-                            'Welcome Back!',
-                            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Center(
-                          child: Text(
-                            'Best Way to Manage\nYour UV Express Trips.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                        const SizedBox(height: 32),
+                const SizedBox(height: 28),
 
-                        // --- Form Card ---
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
+                FilledButton(
+                  onPressed: auth.isBusy ? null : _submit,
+                  child: auth.isBusy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20, offset: Offset(0, 10))],
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildLabel('Email Address'),
-                              _buildTextField(
-                                hint: 'Enter Your Email', 
-                                icon: Icons.email_outlined,
-                                controller: _emailController, // Added controller to read input
-                              ),
-                              const SizedBox(height: 20),
-                              
-                              _buildLabel('Password'),
-                              _buildTextField(
-                                hint: 'Enter Your Password', 
-                                icon: Icons.lock_outline, 
-                                isPassword: true,
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Remember Me & Forgot Password
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: Checkbox(
-                                          value: _rememberMe,
-                                          onChanged: (val) => setState(() => _rememberMe = val!),
-                                          activeColor: const Color(0xFF00A859),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text('Remember me', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
-                                    ],
-                                  ),
-                                  TextButton(
-                                    onPressed: () {},
-                                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                                    child: const Text('Forget Password?', style: TextStyle(color: Color(0xFF00A859), fontWeight: FontWeight.bold)),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 32),
-
-                              // Login Button (Segmented Button Removed Here)
-                              SizedBox(
-                                width: double.infinity,
-                                child: FilledButton(
-                                  onPressed: _handleLogin,
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFF00A859),
-                                    padding: const EdgeInsets.symmetric(vertical: 20),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                    elevation: 2,
-                                  ),
-                                  child: const Text('Log In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // --- Social Logins ---
-                        Row(
-                          children: [
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: Text('Or Continue With', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                            ),
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Row(
-                          children: [
-                            Expanded(child: _buildSocialButton('Google', Icons.g_mobiledata)),
-                            const SizedBox(width: 16),
-                            Expanded(child: _buildSocialButton('Apple', Icons.apple)),
-                          ],
-                        ),
-                        const SizedBox(height: 40),
-
-                        // Footer
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text("Don't have an account? ", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
-                            GestureDetector(
-                              onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SignupScreen())),
-                              child: const Text('Sign up', style: TextStyle(color: Color(0xFF00A859), fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 40),
-                      ],
-                    ),
-                  ),
+                        )
+                      : const Text('Sign in'),
                 ),
+                const SizedBox(height: 16),
+
+                TextButton(
+                  onPressed: auth.isBusy
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => const SignupScreen(),
+                          ),
+                        ),
+                  child: const Text("Don't have an account? Create one"),
+                ),
+
+                if (AppConfig.isDebug) ...[
+                  const SizedBox(height: 32),
+                  _DebugPanel(
+                    onPick: (email) {
+                      _email.text = email;
+                      _password.text = 'sabaygo123';
+                    },
+                  ),
+                ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message, required this.onDismiss});
+
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.danger, size: 20),
+          const SizedBox(width: 10),
+          // The backend writes messages for people to read, so they are
+          // shown verbatim rather than swapped for a generic string.
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.danger, height: 1.35),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            color: AppColors.danger,
+            onPressed: onDismiss,
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 4),
-      child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87)),
-    );
-  }
+/// Debug-only account shortcuts. Compiled out of release builds by the
+/// AppConfig.isDebug guard, so seeded credentials cannot ship.
+class _DebugPanel extends StatelessWidget {
+  const _DebugPanel({required this.onPick});
 
-  // Updated to accept an optional TextEditingController
-  Widget _buildTextField({required String hint, required IconData icon, bool isPassword = false, TextEditingController? controller}) {
-    return TextFormField(
-      controller: controller,
-      obscureText: isPassword ? _obscurePassword : false,
-      style: const TextStyle(fontWeight: FontWeight.w600),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        prefixIcon: Icon(icon, color: Colors.grey.shade500, size: 20),
-        suffixIcon: isPassword 
-            ? IconButton(
-                icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey.shade500, size: 20),
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-              )
-            : null,
-        filled: true,
-        fillColor: const Color(0xFFF8F9FA),
-        contentPadding: const EdgeInsets.symmetric(vertical: 18),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade200)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF2D2059), width: 1.5)),
-      ),
-    );
-  }
+  final void Function(String email) onPick;
 
-  Widget _buildSocialButton(String provider, IconData icon) {
-    return OutlinedButton.icon(
-      onPressed: () {},
-      icon: Icon(icon, color: Colors.black, size: 24),
-      label: Text(provider, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        side: BorderSide(color: Colors.grey.shade300),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white,
-      ),
+  static const _accounts = <String, String>{
+    'Passenger': 'passenger@sabaygo.dev',
+    'Conductor': 'conductor@sabaygo.dev',
+    'Driver': 'driver@sabaygo.dev',
+    'Coop admin': 'coopadmin@sabaygo.dev',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.bug_report_outlined,
+                size: 16, color: AppColors.textMuted),
+            const SizedBox(width: 6),
+            Text(
+              'Dev accounts — ${AppConfig.apiBaseUrl}',
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in _accounts.entries)
+              ActionChip(
+                label: Text(entry.key, style: const TextStyle(fontSize: 12)),
+                onPressed: () => onPick(entry.value),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

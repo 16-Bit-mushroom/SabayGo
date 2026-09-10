@@ -71,7 +71,7 @@ class _LogBookScreenState extends State<LogBookScreen> {
                     onSelected: (selected) {
                       if (selected) _viewModel.setFilter(filter);
                     },
-                    selectedColor: const Color(0xFF00A859).withOpacity(0.2),
+                    selectedColor: const Color(0xFF00A859).withValues(alpha: 0.2),
                     backgroundColor: Colors.grey.shade100,
                     labelStyle: TextStyle(
                       color: isSelected ? const Color(0xFF00A859) : Colors.grey.shade700,
@@ -102,7 +102,7 @@ class _LogBookScreenState extends State<LogBookScreen> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.grey.shade200),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4))],
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 8, offset: const Offset(0, 4))],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

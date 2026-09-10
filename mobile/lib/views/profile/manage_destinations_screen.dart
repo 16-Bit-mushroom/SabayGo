@@ -59,7 +59,7 @@ class _ManageDestinationsScreenState extends State<ManageDestinationsScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4))],
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 8, offset: const Offset(0, 4))],
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -70,7 +70,7 @@ class _ManageDestinationsScreenState extends State<ManageDestinationsScreen> {
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(color: const Color(0xFFD9534F).withOpacity(0.1), shape: BoxShape.circle),
+                                decoration: BoxDecoration(color: const Color(0xFFD9534F).withValues(alpha: 0.1), shape: BoxShape.circle),
                                 child: const Icon(Icons.location_on, color: Color(0xFFD9534F), size: 20),
                               ),
                               const SizedBox(width: 16),
@@ -106,7 +106,7 @@ class _ManageDestinationsScreenState extends State<ManageDestinationsScreen> {
                                 Navigator.pop(context);
                               },
                               style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF00A859).withOpacity(0.1),
+                                backgroundColor: const Color(0xFF00A859).withValues(alpha: 0.1),
                                 foregroundColor: const Color(0xFF00A859),
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

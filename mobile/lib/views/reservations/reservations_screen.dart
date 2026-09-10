@@ -86,7 +86,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           color: const Color(0xFF00A859),
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(color: const Color(0xFF00A859).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+            BoxShadow(color: const Color(0xFF00A859).withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8)),
           ],
         ),
         child: Column(

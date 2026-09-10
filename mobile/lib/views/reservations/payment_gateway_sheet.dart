@@ -69,7 +69,7 @@ class _PaymentGatewaySheetState extends State<PaymentGatewaySheet> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50.withOpacity(0.5),
+                color: Colors.blue.shade50.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.blue.shade100),
               ),
@@ -151,7 +151,7 @@ class _PaymentGatewaySheetState extends State<PaymentGatewaySheet> {
             color: isSelected ? color : Colors.grey.shade300,
             width: isSelected ? 2 : 1,
           ),
-          color: isSelected ? color.withOpacity(0.05) : Colors.transparent,
+          color: isSelected ? color.withValues(alpha: 0.05) : Colors.transparent,
         ),
         child: Row(
           children: [

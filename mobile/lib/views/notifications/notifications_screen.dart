@@ -142,7 +142,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         _viewModel.markAsRead(notification.id);
       },
       child: Container(
-        color: isUnread ? Colors.blue.shade50.withOpacity(0.3) : Colors.white,
+        color: isUnread ? Colors.blue.shade50.withValues(alpha: 0.3) : Colors.white,
         padding: const EdgeInsets.all(20),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,7 +151,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
+                color: iconColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: iconColor, size: 24),
