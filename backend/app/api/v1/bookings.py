@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -18,9 +18,10 @@ from app.application.booking.reserve_seat import (
     ReserveSeatCommand,
     ReserveSeatUseCase,
 )
+from app.core import timezone as app_tz
 from app.domain.enums import BookingType, Role
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import Trip
+from app.infrastructure.models import RouteStop, Terminal, Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
 from app.domain.value_objects import Segment
 
@@ -187,6 +188,8 @@ class MyBookingOut(BaseModel):
     route_name: str
     boarding_stop: int
     alighting_stop: int
+    boarding_terminal: str
+    alighting_terminal: str
     fare_amount: Decimal
     status: str
     qr_payload: str | None
@@ -209,15 +212,25 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
         .order_by(BookingRow.booked_at.desc())
         .limit(50)
     )
+    rows = result.all()
 
-    now = datetime.now(timezone.utc)
+    # One name lookup for every route on the page, rather than one per booking.
+    route_ids = {trip.route_id for _, trip in rows}
+    stop_names: dict[tuple[str, int], str] = {}
+    if route_ids:
+        stops = await session.execute(
+            select(RouteStop.route_id, RouteStop.stop_sequence, Terminal.terminal_name)
+            .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
+            .where(RouteStop.route_id.in_(route_ids))
+        )
+        stop_names = {(rid, seq): name for rid, seq, name in stops.all()}
+
+    now = app_tz.now()
     active = {"pending", "confirmed", "checked_in"}
     out: list[MyBookingOut] = []
 
-    for booking, trip in result.all():
-        departure = trip.departure_datetime
-        if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=timezone.utc)
+    for booking, trip in rows:
+        departure = app_tz.localize(trip.departure_datetime)
         deadline = departure - timedelta(hours=trip.reschedule_cutoff_hours)
 
         out.append(
@@ -229,6 +242,12 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
                 route_name=trip.route.route_name if trip.route else "",
                 boarding_stop=booking.boarding_stop_sequence,
                 alighting_stop=booking.alighting_stop_sequence,
+                boarding_terminal=stop_names.get(
+                    (trip.route_id, booking.boarding_stop_sequence), ""
+                ),
+                alighting_terminal=stop_names.get(
+                    (trip.route_id, booking.alighting_stop_sequence), ""
+                ),
                 fare_amount=booking.fare_amount,
                 status=booking.status,
                 qr_payload=booking.qr_payload,
