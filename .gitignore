@@ -26,3 +26,6 @@ build/
 
 # Local DB artifacts
 *.db
+
+# Manuscript exports — keep as Markdown in the repo, not binary
+docs/*.pdf
