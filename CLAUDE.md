@@ -178,7 +178,7 @@ Changing any of these is a schema migration, not a config change.
 
 ---
 
-## State as of 10 September 2026
+## State as of 11 September 2026
 
 ### Backend — complete
 
@@ -195,14 +195,19 @@ Concurrency experiment: 50 simultaneous bookings, **0 double-bookings**,
 advance cap respected. A controlled comparison is recorded — with the cap
 checked *outside* the lock, 14 bookings passed a limit of 10.
 
-### Mobile — Phase 1 and part of Phase 2
+### Mobile — Phase 2 passenger loop complete
 
 Done: `ApiClient` with typed exceptions · `flutter_secure_storage` for the
 JWT · Provider · role-based routing from the server · conductor shell ·
-registration · **trip search live against the API**.
+registration · trip search · reserve · PayMongo checkout with status
+polled from the server · real QR from `qr_payload` · geofenced check-in
+via `geolocator` · my bookings · reschedule · cancel.
 
-Not done: ticket screen (pay, QR, check-in) · my-bookings · reschedule and
-cancel · conductor scanning · walk-in and roadside logging · remittance ·
+Verified on a physical device against the backend on 11 September:
+reserve → webhook-confirmed → QR → check-in rejection → cancel →
+reschedule → reschedule limit. No Dart exceptions.
+
+Not done: conductor scanning · walk-in and roadside logging · remittance ·
 live map · chat.
 
 ### Operator console — untouched
@@ -213,26 +218,22 @@ Three Flutter Web modules on mock data.
 
 ## Next
 
-1. **Ticket screen** — `startCheckout()` → open PayMongo URL · real QR
-   from `qr_payload` via `qr_flutter` · check-in via `geolocator`. Status
-   must come from the server, not the local `_isAtTerminal` bool.
-2. **My bookings** — `GET /bookings/mine`, reschedule, cancel. Replaces
-   the mocks in `reservations_viewmodel.dart`.
-3. **Conductor** — scanning, walk-in and roadside, remittance.
-4. **Operator console** — wire the three modules.
-5. **Chat** — messages in MySQL, delivered via FCM. Not Firestore: the
+1. **Conductor** — scanning, walk-in and roadside, remittance.
+2. **Operator console** — wire the three modules.
+3. **Chat** — messages in MySQL, delivered via FCM. Not Firestore: the
    ERD would have a hole where the data model should be.
 
 ---
 
 ## Known issues
 
-- `TimeoutException` in `api_exception.dart` collides with `dart:async`,
-  so `ApiClient`'s catch matches the wrong type and the error reaches the
-  UI unhandled. Rename the local class.
 - Two journey-test failures are fixture self-conflict: `--soon` makes
-  check-in testable and reschedule untestable at the same time.
-- `reservations_viewmodel.dart` still holds mock bookings.
+  check-in testable and reschedule untestable at the same time. The same
+  applies on the device: the reschedule button is correctly hidden on a
+  `--soon` trip because the 6-hour cutoff has already passed.
+- The ticket screen polls `/bookings/mine` every 4 s while a booking is
+  pending, capped at ~2 min, because there is no single-booking GET
+  (REMAINING_WORK G.7). After the cap it offers a manual "check again".
 - Passenger avatar hits `i.pravatar.cc` on every build; fails offline.
 - AGP 8.11.1 and Kotlin 2.2.20 are below what Flutter will soon require.
   Deferred deliberately.
