@@ -31,8 +31,12 @@ class NetworkException extends ApiException {
 }
 
 /// The request was sent but no response arrived in time.
-class TimeoutException extends ApiException {
-  const TimeoutException([
+///
+/// Not named `TimeoutException`: dart:async exports one of those, and a
+/// local class of the same name shadows it, so `on TimeoutException` in
+/// the client silently stopped matching the one `.timeout()` throws.
+class RequestTimeoutException extends ApiException {
+  const RequestTimeoutException([
     super.message = 'The server took too long to respond. Try again.',
   ]);
 }

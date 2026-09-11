@@ -68,5 +68,7 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>SabayGo needs camera access to scan passenger QR ticket codes.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SabayGo needs your location to confirm you're at the terminal when checking in.</string>
 </dict>
 </plist>

@@ -1,105 +1,85 @@
-import 'package:flutter/material.dart';
-import '../models/ticket_model.dart';
-import '../models/uv_trip_model.dart';
-import '../models/transit_node_model.dart';
+import 'package:flutter/foundation.dart';
+
+import '../core/network/api_exception.dart';
+import '../data/repositories/booking_repository.dart';
 
 class ReservationsViewModel extends ChangeNotifier {
-  ReservationsViewModel() {
-    _loadMockData();
+  ReservationsViewModel(this._repo);
+
+  final BookingRepository _repo;
+
+  List<BookingSummary> _all = const [];
+  bool isLoading = false;
+  bool hasLoaded = false;
+  String? error;
+
+  /// Booking ids with a cancel or reschedule in flight, so the row can
+  /// disable its own buttons without freezing the whole list.
+  final Set<String> _busy = {};
+  bool isBusy(String bookingId) => _busy.contains(bookingId);
+
+  /// Soonest departure first: the one the passenger is about to take.
+  List<BookingSummary> get active {
+    final list = _all.where((b) => b.isActive).toList()
+      ..sort((a, b) => a.departure.compareTo(b.departure));
+    return list;
   }
 
-  TicketModel? activeTicket;
-  List<TicketModel> historyTickets = [];
-  List<TicketModel> cancelledTickets = [];
+  BookingSummary? get current => active.isEmpty ? null : active.first;
+  List<BookingSummary> get upcoming =>
+      active.length <= 1 ? const [] : active.sublist(1);
 
-  void _loadMockData() {
-    final today = DateTime.now();
-    
-    // Mock Nodes
-    const davao = TransitNodeModel(id: 'n1', name: 'Ecoland Terminal', area: 'Davao City');
-    const cotabato = TransitNodeModel(id: 'n2', name: 'Cotabato City Terminal', area: 'Cotabato City');
-    const tagum = TransitNodeModel(id: 'n5', name: 'Tagum City Terminal', area: 'Tagum City');
+  List<BookingSummary> get history => _all
+      .where((b) => !b.isActive && !b.isCancelled)
+      .toList();
 
-    // Mock Active Ticket
-    final activeTrip = UvTripModel(
-      id: 't1',
-      boardingStop: 1,
-      alightingStop: 4,
-      tripLabel: 'Afternoon Run',
-      departureTime: today.add(const Duration(hours: 2)),
-      estimatedArrivalTime: today.add(const Duration(hours: 3, minutes: 30)),
-      origin: davao,
-      destination: tagum,
-      totalSeats: 18,
-      availableSeats: 5,
-      operatorName: 'Metro Davao Vans',
-      approximateFare: 150.0,
-    );
+  List<BookingSummary> get cancelled =>
+      _all.where((b) => b.isCancelled).toList();
 
-    activeTicket = TicketModel(
-      ticketId: 'TXN-88492',
-      trip: activeTrip,
-      passengerName: 'Sarah K.',
-      bookingTime: today.subtract(const Duration(minutes: 45)),
-      qrPayload: 'sabaygo://verify/t1/user123',
-      status: TicketStatus.active,
-    );
-
-    // Mock History Ticket
-    final pastTrip = UvTripModel(
-      id: 't2',
-      boardingStop: 1,
-      alightingStop: 4,
-      tripLabel: 'Morning Express',
-      departureTime: today.subtract(const Duration(days: 2, hours: 5)),
-      estimatedArrivalTime: today.subtract(const Duration(days: 2, hours: 0)),
-      origin: davao,
-      destination: cotabato,
-      totalSeats: 18,
-      availableSeats: 0,
-      operatorName: 'RDT Transport',
-      approximateFare: 500.0,
-      status: TripStatus.departed,
-    );
-
-    historyTickets.add(
-      TicketModel(
-        ticketId: 'TXN-11204',
-        trip: pastTrip,
-        passengerName: 'Sarah K.',
-        bookingTime: today.subtract(const Duration(days: 3)),
-        qrPayload: 'sabaygo://verify/t2/user123',
-        status: TicketStatus.used,
-      ),
-    );
-
-    // Mock Cancelled Ticket
-    final cancelledTrip = UvTripModel(
-      id: 't3',
-      boardingStop: 1,
-      alightingStop: 4,
-      tripLabel: 'Noon Trip',
-      departureTime: today.subtract(const Duration(days: 5, hours: 2)),
-      estimatedArrivalTime: today.subtract(const Duration(days: 5, hours: 0)),
-      origin: tagum,
-      destination: davao,
-      totalSeats: 14,
-      availableSeats: 14,
-      operatorName: 'Metro Davao Vans',
-      approximateFare: 150.0,
-    );
-
-    cancelledTickets.add(
-      TicketModel(
-        ticketId: 'TXN-99381',
-        trip: cancelledTrip,
-        passengerName: 'Sarah K.',
-        bookingTime: today.subtract(const Duration(days: 6)),
-        qrPayload: 'sabaygo://verify/t3/user123',
-        status: TicketStatus.cancelled,
-      ),
-    );
-
+  Future<void> load() async {
+    isLoading = true;
+    error = null;
     notifyListeners();
+    try {
+      _all = await _repo.mine();
+    } on ApiException catch (e) {
+      error = e.message;
+    } finally {
+      isLoading = false;
+      hasLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  /// Returns the server's message on failure, null on success.
+  Future<String?> cancel(String bookingId) async {
+    _busy.add(bookingId);
+    notifyListeners();
+    try {
+      await _repo.cancel(bookingId);
+      await load();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } finally {
+      _busy.remove(bookingId);
+      notifyListeners();
+    }
+  }
+
+  /// Returns the server's message on failure, null on success.
+  Future<String?> reschedule(String bookingId, String newTripId) async {
+    _busy.add(bookingId);
+    notifyListeners();
+    try {
+      await _repo.reschedule(bookingId: bookingId, newTripId: newTripId);
+      await load();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } finally {
+      _busy.remove(bookingId);
+      notifyListeners();
+    }
   }
 }

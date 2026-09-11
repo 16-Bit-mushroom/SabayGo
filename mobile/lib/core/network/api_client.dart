@@ -75,7 +75,7 @@ class ApiClient {
       final response = await http.Response.fromStream(streamed);
       return _handle(response);
     } on TimeoutException {
-      rethrow;
+      throw const RequestTimeoutException();
     } on http.ClientException {
       throw const NetworkException();
     } on FormatException {

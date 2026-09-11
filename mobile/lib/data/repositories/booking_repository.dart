@@ -14,6 +14,8 @@ class BookingSummary {
     required this.routeName,
     required this.boardingStop,
     required this.alightingStop,
+    required this.boardingTerminal,
+    required this.alightingTerminal,
     required this.fare,
     required this.status,
     required this.canReschedule,
@@ -28,6 +30,8 @@ class BookingSummary {
   final String routeName;
   final int boardingStop;
   final int alightingStop;
+  final String boardingTerminal;
+  final String alightingTerminal;
   final double fare;
   final String status;
   final String? qrPayload;
@@ -69,6 +73,8 @@ class BookingSummary {
         routeName: j['route_name'] as String? ?? '',
         boardingStop: j['boarding_stop'] as int,
         alightingStop: j['alighting_stop'] as int,
+        boardingTerminal: j['boarding_terminal'] as String? ?? '',
+        alightingTerminal: j['alighting_terminal'] as String? ?? '',
         fare: double.parse(j['fare_amount'].toString()),
         status: j['status'] as String,
         qrPayload: j['qr_payload'] as String?,

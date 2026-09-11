@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_v2_uv_express/views/reservations/payment_gateway_sheet.dart';
 import '../../../models/uv_trip_model.dart';
 import 'package:intl/intl.dart';
 
@@ -14,10 +13,7 @@ class TripDetailsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
-    // MOCK DATA: Using a fixed cost structure matching our objective specs
-    final DateTime eta = trip.departureTime.add(const Duration(hours: 2)); 
-    const double approxFare = 150.00; // Mapped value for payment gateway pipeline
+    final eta = trip.estimatedArrivalTime;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -55,9 +51,8 @@ class TripDetailsSheet extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('₱${approxFare.toStringAsFixed(0)}', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: const Color(0xFF00A859))),
-                    // Altered label to denote definitive e-payment rates instead of estimates
-                    Text('Fare Rate', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    Text('₱${trip.approximateFare.toStringAsFixed(2)}', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: const Color(0xFF00A859))),
+                    Text('Fare', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   ],
                 )
               ],
@@ -82,7 +77,7 @@ class TripDetailsSheet extends StatelessWidget {
                     isLast: false,
                   ),
                   _buildTimelineRow(
-                    time: _formatTime(eta),
+                    time: eta == null ? '—' : _formatTime(eta),
                     location: trip.destination.name,
                     label: 'Est. Arrival',
                     iconColor: const Color(0xFFD9534F),
@@ -107,9 +102,9 @@ class TripDetailsSheet extends StatelessWidget {
                 children: [
                   const Text('VEHICLE DETAILS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1, color: Colors.grey)),
                   const SizedBox(height: 12),
-                  _buildDetailRow(Icons.directions_car, 'Vehicle Type', 'Toyota Hiace Commuter'),
+                  _buildDetailRow(Icons.directions_car, 'Vehicle Type', 'UV Express'),
                   const Divider(height: 20),
-                  _buildDetailRow(Icons.pin, 'Plate Number', 'DVO-1234'),
+                  _buildDetailRow(Icons.pin, 'Plate Number', trip.plateNumber ?? '—'),
                 ],
               ),
             ),
@@ -135,22 +130,9 @@ class TripDetailsSheet extends StatelessWidget {
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: trip.isFull 
-                    ? null 
-                    : () {
-                        Navigator.pop(context); // Dismiss current sheet
-                        
-                        // Launch PayMongo Checkout Interface instead of instant booking execution
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (context) => PaymentGatewaySheet(
-                            fare: approxFare,
-                            onPaymentSuccess: onBook, // Book trip upon tokenized verification
-                          ),
-                        );
-                      },
+                // Reserve first, pay on the ticket screen: the space has
+                // to be held before there is anything to charge for.
+                onPressed: trip.isFull ? null : onBook,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00A859),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

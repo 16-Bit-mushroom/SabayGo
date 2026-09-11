@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/uv_trip_model.dart';
+import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
+import '../../core/network/api_client.dart';
 import '../../data/repositories/booking_repository.dart';
+import '../../models/transit_node_model.dart';
+import '../../models/uv_trip_model.dart';
+import '../../viewmodels/auth_provider.dart';
 import '../../viewmodels/ticket_viewmodel.dart';
 
 class TicketScreen extends StatefulWidget {
@@ -18,21 +24,55 @@ class TicketScreen extends StatefulWidget {
     this.reservation,
   });
 
+  /// Open an existing booking from the list. Everything the ticket shows
+  /// is on the booking itself, so the trip is rebuilt from it rather than
+  /// fetched again.
+  TicketScreen.fromBooking({super.key, required BookingSummary booking})
+      : bookedTrip = UvTripModel(
+          id: booking.tripId,
+          tripLabel: booking.routeName,
+          departureTime: booking.departure,
+          origin: TransitNodeModel(
+            id: 'stop-${booking.boardingStop}',
+            name: booking.boardingTerminal,
+            area: '',
+            stopSequence: booking.boardingStop,
+          ),
+          destination: TransitNodeModel(
+            id: 'stop-${booking.alightingStop}',
+            name: booking.alightingTerminal,
+            area: '',
+            stopSequence: booking.alightingStop,
+          ),
+          boardingStop: booking.boardingStop,
+          alightingStop: booking.alightingStop,
+          availableSeats: 0,
+          approximateFare: booking.fare,
+        ),
+        reservation = ReservationResult(
+          bookingId: booking.bookingId,
+          ticketNumber: booking.ticketNumber,
+          fare: booking.fare,
+          status: booking.status,
+          qrPayload: booking.qrPayload,
+        );
+
   @override
   State<TicketScreen> createState() => _TicketScreenState();
 }
 
 class _TicketScreenState extends State<TicketScreen> {
   late final TicketViewModel _viewModel;
-  
-  // Hardcoded for UI visualization. Later, this will be updated by your 
-  // NAHGM background location tracker.
-  bool _isAtTerminal = false; 
 
   @override
   void initState() {
     super.initState();
-    _viewModel = TicketViewModel(bookedTrip: widget.bookedTrip)..addListener(_onStateChanged);
+    final api = context.read<ApiClient>();
+    _viewModel = TicketViewModel(
+      repository: BookingRepository(api),
+      bookedTrip: widget.bookedTrip,
+      reservation: widget.reservation,
+    )..addListener(_onStateChanged);
   }
 
   void _onStateChanged() => setState(() {});
@@ -46,8 +86,9 @@ class _TicketScreenState extends State<TicketScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ticket = _viewModel.activeTicket;
-    final trip = ticket.trip;
+    final trip = _viewModel.trip;
+    final profile = context.watch<AuthProvider>().profile;
+    final passengerName = profile?.displayName ?? profile?.email ?? '—';
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
@@ -75,7 +116,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: _viewModel.isCancelled ? Colors.red.shade100 : const Color(0xFFE5F6EE),
+                        color: _headerColor(),
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                       ),
                       child: Row(
@@ -86,72 +127,67 @@ class _TicketScreenState extends State<TicketScreen> {
                               trip.operatorName ?? trip.plateNumber ?? "—",
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: _viewModel.isCancelled ? Colors.red.shade900 : const Color(0xFF00A859),
+                                color: _headerTextColor(),
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            _viewModel.isCancelled ? 'CANCELLED' : 'CONFIRMED',
+                            _statusLabel(),
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: _viewModel.isCancelled ? Colors.red.shade900 : const Color(0xFF00A859),
+                              color: _headerTextColor(),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    
-                    // QR Code Area
+
+                    // QR Code / Payment Area
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Column(
                         children: [
-                          // NEW: Geofence / NAHGM Status Badge (Objective 1.3.2.1)
-                          if (!_viewModel.isCancelled)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: _isAtTerminal ? Colors.green.shade50 : Colors.orange.shade50,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: _isAtTerminal ? Colors.green.shade200 : Colors.orange.shade200),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _isAtTerminal ? Icons.check_circle : Icons.location_on, 
-                                    size: 16, 
-                                    color: _isAtTerminal ? Colors.green.shade700 : Colors.orange.shade800
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _isAtTerminal ? 'At Terminal - Ready to Board' : 'Awaiting Terminal Arrival', 
-                                    style: TextStyle(
-                                      fontSize: 12, 
-                                      color: _isAtTerminal ? Colors.green.shade700 : Colors.orange.shade800, 
-                                      fontWeight: FontWeight.bold
-                                    )
-                                  ),
-                                ],
-                              ),
-                            ),
-                          
+                          if (_viewModel.hasLiveBooking && !_viewModel.isCancelled)
+                            _buildGeofenceBadge(),
+
                           const SizedBox(height: 16),
 
-                          Opacity(
-                            opacity: _viewModel.isCancelled ? 0.3 : 1.0,
-                            child: const Icon(Icons.qr_code_2, size: 120, color: Color(0xFF2D2059)),
-                          ),
+                          _buildQrArea(),
+
                           const SizedBox(height: 12),
-                          Text('Ticket ID: ${ticket.ticketId}', style: const TextStyle(letterSpacing: 1.5, color: Colors.grey, fontWeight: FontWeight.bold)),
+                          Text(
+                            'Ticket ID: ${_viewModel.ticketNumber.isNotEmpty ? _viewModel.ticketNumber : trip.id}',
+                            style: const TextStyle(letterSpacing: 1.5, color: Colors.grey, fontWeight: FontWeight.bold),
+                          ),
                           const SizedBox(height: 4),
                           const Text('Present this to the dispatcher', style: TextStyle(color: Colors.grey, fontSize: 12)),
+
+                          if (_viewModel.checkInMessage != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _viewModel.checkInMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _viewModel.isCheckedIn ? Colors.green.shade700 : Colors.orange.shade800,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                          if (_viewModel.error != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _viewModel.error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    
+
                     // Divider with cutouts
                     Row(
                       children: [
@@ -172,15 +208,9 @@ class _TicketScreenState extends State<TicketScreen> {
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [
-                          _buildInfoRow(Icons.person_outline, 'Passenger', ticket.passengerName),
+                          _buildInfoRow(Icons.person_outline, 'Passenger', passengerName),
                           const SizedBox(height: 12),
-                          _buildInfoRow(Icons.access_time_outlined, 'Booked On', DateFormat('MMM dd, yyyy - hh:mm a').format(ticket.bookingTime)),
-                          
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Divider(),
-                          ),
-                          
+
                           _buildInfoRow(Icons.trip_origin, 'Origin', trip.origin.name, iconColor: const Color(0xFF00A859)),
                           const SizedBox(height: 12),
                           _buildInfoRow(Icons.location_on, 'Destination', trip.destination.name, iconColor: const Color(0xFFD9534F)),
@@ -188,34 +218,10 @@ class _TicketScreenState extends State<TicketScreen> {
                           _buildInfoRow(Icons.departure_board, 'Departure', _formatTime(trip.departureTime)),
                           const SizedBox(height: 12),
                           _buildInfoRow(Icons.flag_outlined, 'Est. Arrival', _formatTime(trip.estimatedArrivalTime)),
-                          
+
                           const SizedBox(height: 20),
-                          
-                          // NEW: PayMongo Verified Receipt Box (Objective 1.3.2.2)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.blue.shade200),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.verified_user, color: Colors.blue.shade700, size: 20),
-                                    const SizedBox(width: 8),
-                                    Text('Paid via PayMongo', style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                                Text(
-                                  '₱${trip.approximateFare.toStringAsFixed(2)}', 
-                                  style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 16)
-                                ),
-                              ],
-                            ),
-                          )
+
+                          _buildPaymentBox(),
                         ],
                       ),
                     ),
@@ -225,18 +231,197 @@ class _TicketScreenState extends State<TicketScreen> {
 
               const SizedBox(height: 24),
 
+              if (_viewModel.isAwaitingPayment) ...[
+                FilledButton.icon(
+                  onPressed: _viewModel.isStartingCheckout ? null : _viewModel.startCheckout,
+                  icon: _viewModel.isStartingCheckout
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.payment),
+                  label: Text(_viewModel.isStartingCheckout ? 'Opening PayMongo…' : 'Pay ₱${_viewModel.fare.toStringAsFixed(2)}'),
+                ),
+                if (_viewModel.isPolling) ...[
+                  const SizedBox(height: 12),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 10),
+                      Text('Waiting for payment confirmation…', style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ] else if (_viewModel.hasLiveBooking) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _viewModel.refreshStatus,
+                    child: const Text('Still pending — check again'),
+                  ),
+                ],
+                const SizedBox(height: 12),
+              ],
+
+              if (_viewModel.canCheckIn)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: FilledButton.icon(
+                    onPressed: _viewModel.isCheckingIn ? null : _viewModel.checkIn,
+                    icon: _viewModel.isCheckingIn
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.location_on),
+                    label: Text(_viewModel.isCheckingIn ? 'Checking in…' : "I'm at the terminal"),
+                  ),
+                ),
+
               // Cancel Button
-              if (!_viewModel.isCancelled)
+              if (!_viewModel.isCancelled && !_viewModel.isCheckedIn && !_viewModel.isBoarded)
                 TextButton.icon(
-                  onPressed: () {
-                    _viewModel.cancelTicket();
-                  },
+                  onPressed: _confirmCancel,
                   icon: const Icon(Icons.cancel_outlined, color: Colors.red),
                   label: const Text('Cancel Reservation', style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold)),
                 )
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _confirmCancel() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel this reservation?'),
+        content: const Text(
+          'Your space will be released. The cooperative does not issue '
+          'refunds, so any fare already paid is not returned.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cancel reservation', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _viewModel.cancelTicket();
+  }
+
+  Color _headerColor() {
+    if (_viewModel.isCancelled) return Colors.red.shade100;
+    if (_viewModel.isAwaitingPayment) return Colors.orange.shade50;
+    return const Color(0xFFE5F6EE);
+  }
+
+  Color _headerTextColor() {
+    if (_viewModel.isCancelled) return Colors.red.shade900;
+    if (_viewModel.isAwaitingPayment) return Colors.orange.shade800;
+    return const Color(0xFF00A859);
+  }
+
+  String _statusLabel() => switch (_viewModel.status) {
+        'pending' => 'AWAITING PAYMENT',
+        'confirmed' => 'CONFIRMED',
+        'checked_in' => 'CHECKED IN',
+        'boarded' => 'BOARDED',
+        'cancelled' => 'CANCELLED',
+        _ => _viewModel.status.toUpperCase(),
+      };
+
+  Widget _buildQrArea() {
+    if (_viewModel.isAwaitingPayment) {
+      return Column(
+        children: [
+          Icon(Icons.lock_clock, size: 100, color: Colors.orange.shade300),
+          const SizedBox(height: 8),
+          const Text('Pay to unlock your QR ticket', style: TextStyle(color: Colors.grey)),
+        ],
+      );
+    }
+    if (_viewModel.hasUsableTicket) {
+      return QrImageView(
+        data: _viewModel.qrPayload!,
+        size: 160,
+        backgroundColor: Colors.white,
+      );
+    }
+    return Opacity(
+      opacity: _viewModel.isCancelled ? 0.3 : 1.0,
+      child: const Icon(Icons.qr_code_2, size: 120, color: Color(0xFF2D2059)),
+    );
+  }
+
+  Widget _buildGeofenceBadge() {
+    final bool ready = _viewModel.isCheckedIn || _viewModel.isBoarded;
+    final String label = _viewModel.isBoarded
+        ? 'On Board'
+        : _viewModel.isCheckedIn
+            ? 'Checked In - Ready to Board'
+            : 'Awaiting Terminal Arrival';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: ready ? Colors.green.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: ready ? Colors.green.shade200 : Colors.orange.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            ready ? Icons.check_circle : Icons.location_on,
+            size: 16,
+            color: ready ? Colors.green.shade700 : Colors.orange.shade800,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: ready ? Colors.green.shade700 : Colors.orange.shade800,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentBox() {
+    final paid = !_viewModel.isAwaitingPayment && !_viewModel.isCancelled;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: paid ? Colors.blue.shade50 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: paid ? Colors.blue.shade200 : Colors.grey.shade300),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(paid ? Icons.verified_user : Icons.hourglass_top, color: paid ? Colors.blue.shade700 : Colors.grey.shade600, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                paid ? 'Paid via PayMongo' : 'Payment pending',
+                style: TextStyle(color: paid ? Colors.blue.shade900 : Colors.grey.shade700, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          Text(
+            '₱${_viewModel.fare.toStringAsFixed(2)}',
+            style: TextStyle(color: paid ? Colors.blue.shade900 : Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ],
       ),
     );
   }
@@ -256,7 +441,7 @@ class _TicketScreenState extends State<TicketScreen> {
         const SizedBox(width: 16),
         Expanded(
           child: Text(
-            value, 
+            value,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             textAlign: TextAlign.right,
           ),
