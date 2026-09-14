@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../modules/ai_audit_queue/screens/audit_dashboard_screen.dart';
 import '../../modules/trip_dispatcher/screens/dispatch_board_screen.dart';
 import '../../modules/fleet_management/screens/fleet_roster_screen.dart';
+import '../../modules/schedule_management/screens/schedule_screen.dart';
+import '../../modules/policy_editor/screens/policy_editor_screen.dart';
+import '../../modules/revenue/screens/revenue_screen.dart';
+import '../../viewmodels/auth_provider.dart';
 
 class OperatorShell extends StatefulWidget {
   const OperatorShell({super.key});
@@ -15,9 +20,12 @@ class _OperatorShellState extends State<OperatorShell> {
 
   // The array of operational modules
   final List<Widget> _modules = [
-    const AuditDashboardScreen(),
+    const RevenueScreen(),
     const DispatchBoardScreen(),
+    const ScheduleScreen(),
     const FleetRosterScreen(),
+    const PolicyEditorScreen(),
+    const AuditDashboardScreen(),
   ];
 
   @override
@@ -58,9 +66,9 @@ class _OperatorShellState extends State<OperatorShell> {
             ),
             destinations: const [
               NavigationRailDestination(
-                icon: Icon(Icons.policy_outlined),
-                selectedIcon: Icon(Icons.policy),
-                label: Text('YOLOv8 Audits'),
+                icon: Icon(Icons.payments_outlined),
+                selectedIcon: Icon(Icons.payments),
+                label: Text('Revenue'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.route_outlined),
@@ -68,11 +76,53 @@ class _OperatorShellState extends State<OperatorShell> {
                 label: Text('Trip Dispatcher'),
               ),
               NavigationRailDestination(
+                icon: Icon(Icons.calendar_month_outlined),
+                selectedIcon: Icon(Icons.calendar_month),
+                label: Text('Schedules'),
+              ),
+              NavigationRailDestination(
                 icon: Icon(Icons.directions_car_outlined),
                 selectedIcon: Icon(Icons.directions_car),
                 label: Text('Fleet & Crew'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.tune_outlined),
+                selectedIcon: Icon(Icons.tune),
+                label: Text('Policies'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.policy_outlined),
+                selectedIcon: Icon(Icons.policy),
+                label: Text('YOLOv8 Audits'),
+              ),
             ],
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Consumer<AuthProvider>(
+                  builder: (context, auth, _) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 12),
+                    child: Column(
+                      children: [
+                        Text(
+                          auth.profile?.displayName ?? auth.profile?.email ?? '',
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () => auth.signOut(),
+                          icon: const Icon(Icons.logout, size: 16, color: Colors.white54),
+                          label: const Text('Sign Out',
+                              style: TextStyle(color: Colors.white54, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           
           const VerticalDivider(thickness: 1, width: 1, color: Colors.black12),

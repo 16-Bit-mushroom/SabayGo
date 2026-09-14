@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../core/network/api_exception.dart';
+import '../../../data/repositories/dispatch_repository.dart';
+import '../../../data/repositories/fleet_repository.dart';
 
 class FleetRosterScreen extends StatefulWidget {
   const FleetRosterScreen({super.key});
@@ -8,21 +13,98 @@ class FleetRosterScreen extends StatefulWidget {
 }
 
 class _FleetRosterScreenState extends State<FleetRosterScreen> {
-  // Mock Data mapped from your Vans table
-  final List<Map<String, dynamic>> _vans = [
-    {'vanId': 'V-001', 'plate': 'ABC-1234', 'model': 'Toyota Hiace', 'capacity': 14, 'status': 'Active'},
-    {'vanId': 'V-002', 'plate': 'DEF-5555', 'model': 'Nissan Urvan', 'capacity': 18, 'status': 'Active'},
-    {'vanId': 'V-003', 'plate': 'GHI-7777', 'model': 'Toyota Hiace', 'capacity': 14, 'status': 'Maintenance'},
-    {'vanId': 'V-004', 'plate': 'JKL-8888', 'model': 'Foton Traveller', 'capacity': 16, 'status': 'Active'},
-  ];
+  late final FleetRepository _fleet = context.read<FleetRepository>();
+  late final DispatchRepository _dispatch = context.read<DispatchRepository>();
 
-  // Mock Data mapped from your Drivers table
-  final List<Map<String, dynamic>> _drivers = [
-    {'driverId': 'D-101', 'name': 'Juan Dela Cruz', 'license': 'N01-22-3333', 'status': 'Active', 'flag': 'Clear'},
-    {'driverId': 'D-102', 'name': 'Pedro Penduko', 'license': 'N02-44-5555', 'status': 'Active', 'flag': 'Clear'},
-    {'driverId': 'D-103', 'name': 'Mario Reyes', 'license': 'N03-66-7777', 'status': 'Suspended', 'flag': '₱300 Unremitted'},
-    {'driverId': 'D-104', 'name': 'Cardo Dalisay', 'license': 'N04-88-9999', 'status': 'Active', 'flag': 'Clear'},
-  ];
+  List<Van>? _vans;
+  List<StaffMember>? _crew;
+  List<RouteSummary> _routes = [];
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await Future.wait([
+        _fleet.listVans(),
+        _fleet.listCrew(),
+        _dispatch.listRoutes(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _vans = results[0] as List<Van>;
+        _crew = results[1] as List<StaffMember>;
+        _routes = results[2] as List<RouteSummary>;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? const Color(0xFFBF616A) : const Color(0xFF8FBCBB),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _setVanStatus(Van van, String status) async {
+    try {
+      await _fleet.setVanStatus(van.vanId, status);
+      _showSnack('${van.plateNumber} marked $status.');
+      await _load();
+    } on ApiException catch (e) {
+      _showSnack(e.message, isError: true);
+    }
+  }
+
+  Future<void> _setCrewStatus(StaffMember staff, String status) async {
+    try {
+      await _fleet.setCrewStatus(staff.userId, status);
+      _showSnack('${staff.fullName} marked $status.');
+      await _load();
+    } on ApiException catch (e) {
+      _showSnack(e.message, isError: true);
+    }
+  }
+
+  Future<void> _openAddVanDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (_) => _AddVanDialog(fleet: _fleet, routes: _routes),
+    );
+    if (created == true) {
+      _showSnack('Van added to the fleet.');
+      await _load();
+    }
+  }
+
+  Future<void> _openAddCrewDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (_) => _AddCrewDialog(fleet: _fleet),
+    );
+    if (created == true) {
+      _showSnack('Crew member provisioned.');
+      await _load();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,31 +117,44 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Fleet & Crew Roster',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+              Row(
+                children: [
+                  const Text(
+                    'Fleet & Crew Roster',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: _loading ? null : _load,
+                    icon: const Icon(Icons.refresh, color: Colors.white70),
+                    tooltip: 'Refresh',
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
-              
               Expanded(
-                child: isDesktop 
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: _buildVansTable()),
-                          const SizedBox(width: 24),
-                          Expanded(child: _buildDriversTable()),
-                        ],
-                      )
-                    : SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            _buildVansTable(),
-                            const SizedBox(height: 24),
-                            _buildDriversTable(),
-                          ],
-                        ),
-                      ),
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                        ? _buildError(_error!)
+                        : isDesktop
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: _buildVansTable()),
+                                  const SizedBox(width: 24),
+                                  Expanded(child: _buildDriversTable()),
+                                ],
+                              )
+                            : SingleChildScrollView(
+                                child: Column(
+                                  children: [
+                                    _buildVansTable(),
+                                    const SizedBox(height: 24),
+                                    _buildDriversTable(),
+                                  ],
+                                ),
+                              ),
               ),
             ],
           ),
@@ -68,76 +163,138 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     );
   }
 
+  Widget _buildError(String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
+          const SizedBox(height: 12),
+          Text(message, style: const TextStyle(color: Colors.white70)),
+          const SizedBox(height: 12),
+          ElevatedButton(onPressed: _load, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVansTable() {
+    final vans = _vans ?? [];
     return _buildCardWrapper(
       title: 'Active Fleet (Vans)',
       icon: Icons.directions_car_filled_outlined,
-      child: DataTable(
-        headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
-        dataRowMinHeight: 50,
-        dataRowMaxHeight: 60,
-        headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
-        columns: const [
-          DataColumn(label: Text('Plate No.')),
-          DataColumn(label: Text('Model')),
-          DataColumn(label: Text('Seats')),
-          DataColumn(label: Text('Status')),
-        ],
-        rows: _vans.map((van) {
-          final isActive = van['status'] == 'Active';
-          return DataRow(
-            cells: [
-              DataCell(Text(van['plate'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-              DataCell(Text(van['model'], style: const TextStyle(color: Colors.white70))),
-              DataCell(Text(van['capacity'].toString(), style: const TextStyle(color: Colors.white70))),
-              DataCell(_buildStatusChip(van['status'], isActive)),
-            ],
-          );
-        }).toList(),
-      ),
+      onAdd: _openAddVanDialog,
+      child: vans.isEmpty
+          ? _buildEmpty('No vans registered yet.')
+          : DataTable(
+              headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
+              dataRowMinHeight: 50,
+              dataRowMaxHeight: 60,
+              headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
+              columns: const [
+                DataColumn(label: Text('Plate No.')),
+                DataColumn(label: Text('Model')),
+                DataColumn(label: Text('Seats')),
+                DataColumn(label: Text('Status')),
+                DataColumn(label: Text('')),
+              ],
+              rows: vans.map((van) {
+                final isActive = van.operationalStatus == 'active';
+                return DataRow(
+                  cells: [
+                    DataCell(Text(van.plateNumber,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                    DataCell(Text(
+                        [van.brand, van.model].where((s) => s != null && s.isNotEmpty).join(' '),
+                        style: const TextStyle(color: Colors.white70))),
+                    DataCell(Text(van.seatCapacity.toString(),
+                        style: const TextStyle(color: Colors.white70))),
+                    DataCell(_buildStatusChip(van.operationalStatus, isActive)),
+                    DataCell(_buildVanStatusMenu(van)),
+                  ],
+                );
+              }).toList(),
+            ),
     );
   }
 
   Widget _buildDriversTable() {
+    final crew = _crew ?? [];
     return _buildCardWrapper(
-      title: 'Registered Crew (Drivers)',
+      title: 'Registered Crew',
       icon: Icons.badge_outlined,
-      child: DataTable(
-        headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
-        dataRowMinHeight: 50,
-        dataRowMaxHeight: 60,
-        headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
-        columns: const [
-          DataColumn(label: Text('Driver Name')),
-          DataColumn(label: Text('License ID')),
-          DataColumn(label: Text('Status')),
-          DataColumn(label: Text('System Flag')),
-        ],
-        rows: _drivers.map((driver) {
-          final isActive = driver['status'] == 'Active';
-          final hasFlag = driver['flag'] != 'Clear';
-          return DataRow(
-            cells: [
-              DataCell(Text(driver['name'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-              DataCell(Text(driver['license'], style: const TextStyle(color: Colors.white70))),
-              DataCell(_buildStatusChip(driver['status'], isActive)),
-              DataCell(
-                Text(
-                  driver['flag'], 
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: hasFlag ? Theme.of(context).colorScheme.error : const Color(0xFFA3BE8C),
-                  )
-                )
-              ),
-            ],
-          );
-        }).toList(),
-      ),
+      onAdd: _openAddCrewDialog,
+      child: crew.isEmpty
+          ? _buildEmpty('No crew provisioned yet.')
+          : DataTable(
+              headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
+              dataRowMinHeight: 50,
+              dataRowMaxHeight: 60,
+              headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
+              columns: const [
+                DataColumn(label: Text('Name')),
+                DataColumn(label: Text('Role')),
+                DataColumn(label: Text('License')),
+                DataColumn(label: Text('Status')),
+                DataColumn(label: Text('')),
+              ],
+              rows: crew.map((staff) {
+                final isActive = staff.employmentStatus == 'active';
+                return DataRow(
+                  cells: [
+                    DataCell(Text(staff.fullName,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                    DataCell(Text(staff.role, style: const TextStyle(color: Colors.white70))),
+                    DataCell(Text(staff.licenseNumber ?? '—',
+                        style: const TextStyle(color: Colors.white70))),
+                    DataCell(_buildStatusChip(staff.employmentStatus, isActive)),
+                    DataCell(_buildCrewStatusMenu(staff)),
+                  ],
+                );
+              }).toList(),
+            ),
     );
   }
 
-  Widget _buildCardWrapper({required String title, required IconData icon, required Widget child}) {
+  Widget _buildVanStatusMenu(Van van) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.white54, size: 20),
+      color: const Color(0xFF2C3244),
+      onSelected: (status) => _setVanStatus(van, status),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: Colors.white))),
+        PopupMenuItem(
+            value: 'maintenance', child: Text('Maintenance', style: TextStyle(color: Colors.white))),
+        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: Colors.white))),
+      ],
+    );
+  }
+
+  Widget _buildCrewStatusMenu(StaffMember staff) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.white54, size: 20),
+      color: const Color(0xFF2C3244),
+      onSelected: (status) => _setCrewStatus(staff, status),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: Colors.white))),
+        PopupMenuItem(
+            value: 'suspended', child: Text('Suspended', style: TextStyle(color: Colors.white))),
+        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: Colors.white))),
+      ],
+    );
+  }
+
+  Widget _buildEmpty(String message) => Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Center(child: Text(message, style: const TextStyle(color: Colors.white54))),
+      );
+
+  Widget _buildCardWrapper({
+    required String title,
+    required IconData icon,
+    required Widget child,
+    required VoidCallback onAdd,
+  }) {
     return Card(
       elevation: 4,
       color: Theme.of(context).colorScheme.surface,
@@ -152,7 +309,15 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
               children: [
                 Icon(icon, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 12),
-                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                Expanded(
+                  child: Text(title,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+                TextButton.icon(
+                  onPressed: onAdd,
+                  icon: Icon(Icons.add, color: Theme.of(context).colorScheme.primary, size: 18),
+                  label: Text('Add', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                ),
               ],
             ),
           ),
@@ -176,16 +341,305 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isPositive ? const Color(0xFFA3BE8C) : const Color(0xFFEBCB8B),
-        )
+        ),
       ),
       child: Text(
-        text, 
+        text,
         style: TextStyle(
-          color: isPositive ? const Color(0xFFA3BE8C) : const Color(0xFFEBCB8B), 
-          fontSize: 12, 
-          fontWeight: FontWeight.bold
-        )
+          color: isPositive ? const Color(0xFFA3BE8C) : const Color(0xFFEBCB8B),
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
+}
+
+class _AddVanDialog extends StatefulWidget {
+  const _AddVanDialog({required this.fleet, required this.routes});
+  final FleetRepository fleet;
+  final List<RouteSummary> routes;
+
+  @override
+  State<_AddVanDialog> createState() => _AddVanDialogState();
+}
+
+class _AddVanDialogState extends State<_AddVanDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _plate = TextEditingController();
+  final _brand = TextEditingController();
+  final _model = TextEditingController();
+  final _seats = TextEditingController(text: '14');
+  String? _routeId;
+  bool _hasCamera = false;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _plate.dispose();
+    _brand.dispose();
+    _model.dispose();
+    _seats.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await widget.fleet.createVan(
+        plateNumber: _plate.text,
+        brand: _brand.text,
+        model: _model.text,
+        seatCapacity: int.parse(_seats.text),
+        registeredRouteId: _routeId,
+        hasCabinCamera: _hasCamera,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF222736),
+      title: const Text('Add Van', style: TextStyle(color: Colors.white)),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_error != null) ...[
+                  Text(_error!, style: const TextStyle(color: Color(0xFFBF616A))),
+                  const SizedBox(height: 12),
+                ],
+                _field(_plate, 'Plate Number', validator: (v) =>
+                    (v == null || v.trim().length < 3) ? 'Required' : null),
+                const SizedBox(height: 12),
+                _field(_brand, 'Brand (optional)'),
+                const SizedBox(height: 12),
+                _field(_model, 'Model (optional)'),
+                const SizedBox(height: 12),
+                _field(_seats, 'Seat Capacity', keyboardType: TextInputType.number,
+                    validator: (v) {
+                  final n = int.tryParse(v ?? '');
+                  if (n == null || n < 1 || n > 14) return '1-14 seats';
+                  return null;
+                }),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  decoration: _decoration('Registered Route (optional)'),
+                  dropdownColor: const Color(0xFF2C3244),
+                  style: const TextStyle(color: Colors.white),
+                  value: _routeId,
+                  items: widget.routes
+                      .map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _routeId = v),
+                ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  value: _hasCamera,
+                  onChanged: (v) => setState(() => _hasCamera = v ?? false),
+                  title: const Text('Has cabin camera', style: TextStyle(color: Colors.white70)),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: const Color(0xFF8FBCBB),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Add Van'),
+        ),
+      ],
+    );
+  }
+
+  Widget _field(TextEditingController controller, String label,
+      {TextInputType? keyboardType, String? Function(String?)? validator}) {
+    return TextFormField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white),
+      keyboardType: keyboardType,
+      decoration: _decoration(label),
+      validator: validator,
+    );
+  }
+
+  InputDecoration _decoration(String label) => InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white54),
+        filled: true,
+        fillColor: const Color(0xFF151923),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+      );
+}
+
+class _AddCrewDialog extends StatefulWidget {
+  const _AddCrewDialog({required this.fleet});
+  final FleetRepository fleet;
+
+  @override
+  State<_AddCrewDialog> createState() => _AddCrewDialogState();
+}
+
+class _AddCrewDialogState extends State<_AddCrewDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
+  final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _password = TextEditingController();
+  final _license = TextEditingController();
+  // Only conductor/driver are valid Role values for crew. The backend's
+  // StaffIn model still accepts a stale "operator" literal left over from
+  // before migration 010 renamed that role to coop_admin -- there is no
+  // such Role any more, so it is never offered here.
+  String _role = 'conductor';
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _firstName.dispose();
+    _lastName.dispose();
+    _email.dispose();
+    _phone.dispose();
+    _password.dispose();
+    _license.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await widget.fleet.createCrew(
+        email: _email.text,
+        phoneNumber: _phone.text,
+        password: _password.text,
+        role: _role,
+        firstName: _firstName.text,
+        lastName: _lastName.text,
+        licenseNumber: _role == 'driver' ? _license.text : null,
+        licenseExpiryDate: _role == 'driver'
+            ? DateTime.now().add(const Duration(days: 365))
+            : null,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF222736),
+      title: const Text('Provision Crew', style: TextStyle(color: Colors.white)),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_error != null) ...[
+                  Text(_error!, style: const TextStyle(color: Color(0xFFBF616A))),
+                  const SizedBox(height: 12),
+                ],
+                DropdownButtonFormField<String>(
+                  decoration: _decoration('Role'),
+                  dropdownColor: const Color(0xFF2C3244),
+                  style: const TextStyle(color: Colors.white),
+                  value: _role,
+                  items: const [
+                    DropdownMenuItem(value: 'conductor', child: Text('Conductor')),
+                    DropdownMenuItem(value: 'driver', child: Text('Driver')),
+                  ],
+                  onChanged: (v) => setState(() => _role = v ?? 'conductor'),
+                ),
+                const SizedBox(height: 12),
+                _field(_firstName, 'First Name', required: true),
+                const SizedBox(height: 12),
+                _field(_lastName, 'Last Name', required: true),
+                const SizedBox(height: 12),
+                _field(_email, 'Email (must end .dev in dev seed data)', required: true),
+                const SizedBox(height: 12),
+                _field(_phone, 'Phone Number', required: true),
+                const SizedBox(height: 12),
+                _field(_password, 'Temporary Password', required: true, obscure: true),
+                if (_role == 'driver') ...[
+                  const SizedBox(height: 12),
+                  _field(_license, 'License Number', required: true),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Add Crew'),
+        ),
+      ],
+    );
+  }
+
+  Widget _field(TextEditingController controller, String label,
+      {bool required = false, bool obscure = false}) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      style: const TextStyle(color: Colors.white),
+      decoration: _decoration(label),
+      validator: required
+          ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
+          : null,
+    );
+  }
+
+  InputDecoration _decoration(String label) => InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white54),
+        filled: true,
+        fillColor: const Color(0xFF151923),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+      );
 }

@@ -148,6 +148,35 @@ class RouteIn(BaseModel):
     stops: list[RouteStopIn] = Field(min_length=2)
 
 
+class RouteOut(BaseModel):
+    route_id: str
+    route_code: str
+    route_name: str
+    is_active: bool
+    stop_count: int
+
+
+@router.get("/routes", response_model=list[RouteOut],
+            dependencies=[Depends(COOP_ADMIN)])
+async def list_routes(session: SessionDep) -> list[RouteOut]:
+    """Routes for pickers -- dispatching a special trip, assigning a van.
+
+    `stops` is eager-loaded (see the Route model), so this is one query,
+    not N+1.
+    """
+    result = await session.execute(select(Route).order_by(Route.route_name))
+    return [
+        RouteOut(
+            route_id=r.route_id,
+            route_code=r.route_code,
+            route_name=r.route_name,
+            is_active=r.is_active,
+            stop_count=len(r.stops),
+        )
+        for r in result.scalars()
+    ]
+
+
 @router.post("/routes", status_code=201, dependencies=[Depends(COOP_ADMIN)])
 async def create_route(payload: RouteIn, session: SessionDep) -> dict:
     """Create a route with its ordered stop sequence.
