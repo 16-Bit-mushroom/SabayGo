@@ -5,13 +5,14 @@ from __future__ import annotations
 import datetime as dt
 from decimal import Decimal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
-from app.api.v1.deps import SessionDep
+from app.api.v1.deps import CurrentUser, SessionDep, require_roles
+from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError
-from app.domain.enums import TripStatus
+from app.domain.enums import Role, TripStatus
 from app.domain.value_objects import Segment
 from app.infrastructure.models import FareMatrix, RouteStop, Terminal, Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
@@ -137,6 +138,83 @@ async def search_trips(
             )
         )
     return out
+
+
+class AssignedTrip(BaseModel):
+    trip_id: str
+    trip_label: str | None
+    route_name: str
+    service_date: dt.date
+    departure_datetime: dt.datetime
+    status: str
+    plate_number: str | None
+    seat_capacity: int
+    role_on_trip: str
+    stops: list[StopOut]
+
+
+@router.get(
+    "/assigned",
+    response_model=list[AssignedTrip],
+    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER))],
+)
+async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[AssignedTrip]:
+    """The trips this crew member is rostered to, today onward.
+
+    This list is the boundary of what the crew app can act on: every
+    scan, walk-in and headcount is guarded server-side by the same
+    assignment, so there is no point offering a trip the guard would
+    refuse. Stops ride along because the scanner and the walk-in form
+    need the sequence numbers immediately.
+    """
+    today = app_tz.now().date()
+    result = await session.execute(
+        select(Trip)
+        .where(
+            or_(Trip.conductor_id == user.user_id, Trip.driver_id == user.user_id),
+            Trip.service_date >= today,
+            Trip.status != TripStatus.CANCELLED.value,
+        )
+        .order_by(Trip.departure_datetime)
+        .limit(20)
+    )
+    trips = result.scalars().all()
+
+    route_ids = {t.route_id for t in trips}
+    stops_by_route: dict[str, list[StopOut]] = {}
+    if route_ids:
+        rows = await session.execute(
+            select(RouteStop, Terminal)
+            .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
+            .where(RouteStop.route_id.in_(route_ids))
+            .order_by(RouteStop.route_id, RouteStop.stop_sequence)
+        )
+        for rs, t in rows.all():
+            stops_by_route.setdefault(rs.route_id, []).append(
+                StopOut(
+                    stop_sequence=rs.stop_sequence,
+                    terminal_id=t.terminal_id,
+                    terminal_name=t.terminal_name,
+                    city=t.city,
+                    offset_minutes=rs.offset_minutes,
+                )
+            )
+
+    return [
+        AssignedTrip(
+            trip_id=t.trip_id,
+            trip_label=t.trip_label,
+            route_name=t.route.route_name if t.route else "",
+            service_date=t.service_date,
+            departure_datetime=t.departure_datetime,
+            status=t.status,
+            plate_number=t.van.plate_number if t.van else None,
+            seat_capacity=t.seat_capacity,
+            role_on_trip="driver" if t.driver_id == user.user_id else "conductor",
+            stops=stops_by_route.get(t.route_id, []),
+        )
+        for t in trips
+    ]
 
 
 @router.get("/{trip_id}/stops", response_model=list[StopOut])

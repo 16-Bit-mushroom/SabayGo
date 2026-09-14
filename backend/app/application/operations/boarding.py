@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError
 from app.domain.enums import BookingStatus, TripStatus
 from app.infrastructure.models import BoardingScan
@@ -80,7 +81,7 @@ class ScanTicketUseCase:
         scanned_by_user_id: str,
         client_recorded_at: datetime | None = None,
     ) -> ScanResult:
-        now = datetime.now(timezone.utc)
+        now = app_tz.now()
 
         result = await self.session.execute(
             select(BookingRow).where(BookingRow.qr_payload == qr_payload)
@@ -231,7 +232,7 @@ class DepartTripUseCase:
         if trip is None:
             raise NotFoundError("Trip not found.")
 
-        now = datetime.now(timezone.utc)
+        now = app_tz.now()
         result = await self.session.execute(
             select(BookingRow).where(
                 BookingRow.trip_id == trip_id,
