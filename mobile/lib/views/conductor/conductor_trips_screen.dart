@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
+import '../../data/repositories/operations_repository.dart';
+import '../../viewmodels/shift_viewmodel.dart';
+import 'trip_manifest_screen.dart';
 
-/// The trips this crew member is rostered to today.
+/// The trips this crew member is rostered to.
 ///
 /// A conductor is restricted server-side to trips they are assigned to,
 /// so this list is also the boundary of what they can act on: tapping a
 /// trip opens its manifest, and nothing outside the list is reachable.
-///
-/// Phase 3 replaces the placeholder state with a repository call to
-/// GET /trips/assigned. The loading, empty and error states are built
-/// now because retro-fitting them later means revisiting every screen.
 class ConductorTripsScreen extends StatefulWidget {
   const ConductorTripsScreen({super.key});
 
@@ -19,38 +20,54 @@ class ConductorTripsScreen extends StatefulWidget {
 }
 
 class _ConductorTripsScreenState extends State<ConductorTripsScreen> {
-  bool _loading = false;
-  String? _error;
-  final List<Object> _trips = const [];
-
-  Future<void> _refresh() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+  @override
+  void initState() {
+    super.initState();
+    // load() calls notifyListeners() before its first await (to flip on
+    // the spinner), which the framework refuses mid-build — defer to
+    // after this frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final shift = context.read<ShiftViewModel>();
+      if (!shift.hasLoaded) shift.load();
     });
-    // Phase 3: final trips = await context.read<TripRepository>().assigned();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    if (mounted) setState(() => _loading = false);
+  }
+
+  void _open(CrewTrip trip) {
+    final shift = context.read<ShiftViewModel>();
+    shift.select(trip);
+    // Pushed routes sit outside the shell's subtree, so the shift state
+    // is carried across explicitly.
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider.value(
+          value: shift,
+          child: TripManifestScreen(trip: trip),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    final shift = context.watch<ShiftViewModel>();
+
+    if (shift.isLoading && !shift.hasLoaded) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_error != null) {
+    if (shift.error != null && shift.trips.isEmpty) {
       return _Message(
         icon: Icons.cloud_off,
         title: 'Could not load your trips',
-        body: _error!,
-        action: FilledButton(onPressed: _refresh, child: const Text('Retry')),
+        body: shift.error!,
+        action: FilledButton(onPressed: shift.load, child: const Text('Retry')),
       );
     }
 
-    if (_trips.isEmpty) {
+    if (shift.trips.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _refresh,
+        onRefresh: shift.load,
         child: ListView(
           children: const [
             SizedBox(height: 80),
@@ -67,11 +84,97 @@ class _ConductorTripsScreenState extends State<ConductorTripsScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _trips.length,
-        itemBuilder: (_, i) => const SizedBox.shrink(),
+      onRefresh: shift.load,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        itemCount: shift.trips.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (_, i) => _TripCard(
+          trip: shift.trips[i],
+          isActive: shift.active?.tripId == shift.trips[i].tripId,
+          onTap: () => _open(shift.trips[i]),
+        ),
+      ),
+    );
+  }
+}
+
+class _TripCard extends StatelessWidget {
+  const _TripCard({required this.trip, required this.isActive, required this.onTap});
+
+  final CrewTrip trip;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = trip.stops.isEmpty ? '' : trip.stops.first.terminalName;
+    final last = trip.stops.isEmpty ? '' : trip.stops.last.terminalName;
+    final (label, colour) = switch (trip.status) {
+      'boarding' => ('BOARDING', AppColors.accent),
+      'departed' => ('DEPARTED', AppColors.textMuted),
+      'completed' => ('COMPLETED', AppColors.textMuted),
+      _ => ('SCHEDULED', AppColors.primary),
+    };
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isActive ? AppColors.accent : const Color(0xFFE6E6EE),
+              width: isActive ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      trip.title,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: colour.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(label,
+                        style: TextStyle(color: colour, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('$first → $last', style: const TextStyle(color: AppColors.textMuted)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.schedule, size: 16, color: AppColors.textMuted),
+                  const SizedBox(width: 6),
+                  Text(DateFormat('EEE, MMM d • hh:mm a').format(trip.departure),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  if (trip.plateNumber != null) ...[
+                    const Icon(Icons.directions_car, size: 16, color: AppColors.textMuted),
+                    const SizedBox(width: 6),
+                    Text(trip.plateNumber!, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
