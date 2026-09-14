@@ -178,7 +178,7 @@ Changing any of these is a schema migration, not a config change.
 
 ---
 
-## State as of 11 September 2026
+## State as of 14 September 2026
 
 ### Backend — complete
 
@@ -186,29 +186,36 @@ Schema (11 migrations) · JWT auth · segment booking with pessimistic
 locking · PayMongo checkout and verified webhooks · cash remittance ·
 geofenced check-in · QR boarding · manifest · driver headcount · YOLOv8
 audit · revenue reconciliation · trip generation · fleet/crew/route/fare/
-policy CRUD · scheduling conflict detection · NAHGM live tracking.
+policy CRUD · scheduling conflict detection · NAHGM live tracking ·
+`GET /trips/assigned` for crew.
 
-Journey suite: **90 passed, 2 failed** — both fixture self-conflict, not
+Journey suite: **87 passed, 2 failed** — both fixture self-conflict, not
 defects.
 
 Concurrency experiment: 50 simultaneous bookings, **0 double-bookings**,
 advance cap respected. A controlled comparison is recorded — with the cap
 checked *outside* the lock, 14 bookings passed a limit of 10.
 
-### Mobile — Phase 2 passenger loop complete
+### Mobile — Phase 2 passenger loop and Phase 3 conductor workflow complete
 
 Done: `ApiClient` with typed exceptions · `flutter_secure_storage` for the
-JWT · Provider · role-based routing from the server · conductor shell ·
-registration · trip search · reserve · PayMongo checkout with status
-polled from the server · real QR from `qr_payload` · geofenced check-in
-via `geolocator` · my bookings · reschedule · cancel.
+JWT · Provider · role-based routing from the server · registration · trip
+search · reserve · PayMongo checkout with status polled from the server ·
+real QR from `qr_payload` · geofenced check-in via `geolocator` · my
+bookings · reschedule · cancel · conductor trip list and manifest · QR
+boarding scan (valid/already-boarded/unpaid/cancelled/wrong-stop/
+wrong-trip verdicts) · walk-in and roadside cash logging with a
+conductor-set fare · driver/conductor headcount cross-check · depart with
+automatic no-show release · cash remittance with variance flagging.
 
-Verified on a physical device against the backend on 11 September:
-reserve → webhook-confirmed → QR → check-in rejection → cancel →
-reschedule → reschedule limit. No Dart exceptions.
+Verified on a physical device on 11 and 14 September: the full passenger
+loop (reserve → webhook-confirmed → QR → check-in rejection → cancel →
+reschedule → reschedule limit) and the full conductor loop (load assigned
+trips → open boarding → scan valid/already-boarded/wrong-stop → walk-in →
+headcount, incl. rejecting a negative count → depart with no-shows →
+roadside pickup → remit cash with a real variance). No Dart exceptions.
 
-Not done: conductor scanning · walk-in and roadside logging · remittance ·
-live map · chat.
+Not done: live map, chat.
 
 ### Operator console — untouched
 
@@ -218,10 +225,14 @@ Three Flutter Web modules on mock data.
 
 ## Next
 
-1. **Conductor** — scanning, walk-in and roadside, remittance.
-2. **Operator console** — wire the three modules.
-3. **Chat** — messages in MySQL, delivered via FCM. Not Firestore: the
+1. **Operator console** — wire the three modules.
+2. **Chat** — messages in MySQL, delivered via FCM. Not Firestore: the
    ERD would have a hole where the data model should be.
+3. **Auto-detect "Van is at"** — the conductor currently sets the current
+   stop by hand on the manifest screen, which is poor UX for someone
+   whose hands are full at the door. `geolocator` is already a dependency
+   (used for passenger check-in); reuse it to snap to the nearest
+   terminal automatically, keeping the dropdown as a manual override.
 
 ---
 
@@ -239,6 +250,15 @@ Three Flutter Web modules on mock data.
   Deferred deliberately.
 - Dev-account chips on the sign-in screen are guarded by
   `AppConfig.isDebug`. Confirm they are absent from a release build.
+- `boarding.py` wrote `scanned_at`/`departed_at` with
+  `datetime.now(timezone.utc)` instead of `app.core.timezone` — fixed
+  14 September. The same anti-pattern still exists in `seat_repository.py`
+  (seat-hold expiry), `payments.py` and `trigger_audit.py` (created_at/
+  resolved_at). Same 8-hour-skew risk; not fixed yet because
+  `seat_repository.py` is the thesis file and any change there needs its
+  own review, not a drive-by alongside an unrelated feature.
+- The conductor sets "Van is at" manually on the manifest screen — see
+  Next, item 3.
 
 ---
 
