@@ -22,17 +22,18 @@ import base64
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.notifications.service import NotificationService
+from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import AuditResolution
 from app.infrastructure.clients.ai_node_client import AiNodeClient
-from app.infrastructure.models import Trip, Yolov8AuditLog
+from app.infrastructure.models import Trip, User, Yolov8AuditLog
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
@@ -120,9 +121,20 @@ class TriggerAuditUseCase:
                     if alert
                     else AuditResolution.RECONCILED.value
                 ),
-                captured_at=datetime.now(timezone.utc),
+                captured_at=app_tz.now(),
             )
         )
+        # Same transaction as the audit row: a flagged variance that exists
+        # without its alerts is exactly the silent failure E.1 closes.
+        if alert:
+            await NotificationService(self.session).notify_variance(
+                audit_id=audit_id,
+                trip=trip,
+                leg_sequence=leg_sequence,
+                visual_count=capture.visual_count,
+                booked_count=booked_count,
+                variance=variance,
+            )
         await self.session.commit()
 
         if variance > 0:
@@ -175,7 +187,7 @@ class TriggerAuditUseCase:
             return None
         try:
             MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-            name = f"{trip_id}_{datetime.now(timezone.utc):%Y%m%d%H%M%S}_{uuid.uuid4().hex[:6]}.jpg"
+            name = f"{trip_id}_{app_tz.now():%Y%m%d%H%M%S}_{uuid.uuid4().hex[:6]}.jpg"
             (MEDIA_ROOT / name).write_bytes(base64.b64decode(b64))
             return f"/media/audits/{name}"
         except (OSError, ValueError) as exc:
@@ -212,7 +224,7 @@ class ResolveAuditUseCase:
 
         audit.resolution_status = resolution
         audit.resolved_by_user_id = resolved_by_user_id
-        audit.resolved_at = datetime.now(timezone.utc)
+        audit.resolved_at = app_tz.now()
         audit.resolution_notes = notes.strip()
         await self.session.commit()
 
@@ -224,18 +236,46 @@ class ResolveAuditUseCase:
 
 
 class AuditQueueUseCase:
-    """Pending variances, newest first -- backs the cooperative administrator console queue."""
+    """Variance queue and history -- backs the cooperative administrator console.
+
+    `pending` is the work list. `history` (G.2) is everything that has left
+    it -- reconciled, resolved, ignored, failed -- so the office can look
+    back at what was decided and by whom. An audit *trail* that only shows
+    open items is not a trail.
+    """
 
     def __init__(self, session: AsyncSession):
         self.session = session
 
     async def pending(self, limit: int = 50) -> list[dict]:
+        return await self._list(
+            Yolov8AuditLog.resolution_status == AuditResolution.PENDING.value,
+            limit=limit,
+        )
+
+    async def history(
+        self,
+        *,
+        limit: int = 100,
+        status: str | None = None,
+        trip_id: str | None = None,
+    ) -> list[dict]:
+        if status is not None:
+            if status not in {r.value for r in AuditResolution}:
+                raise ConflictError(f"Unknown resolution status '{status}'.")
+            where = Yolov8AuditLog.resolution_status == status
+        else:
+            where = Yolov8AuditLog.resolution_status != AuditResolution.PENDING.value
+        if trip_id is not None:
+            where = where & (Yolov8AuditLog.trip_id == trip_id)
+        return await self._list(where, limit=limit)
+
+    async def _list(self, where, *, limit: int) -> list[dict]:
         result = await self.session.execute(
-            select(Yolov8AuditLog, Trip)
+            select(Yolov8AuditLog, Trip, User.email)
             .join(Trip, Trip.trip_id == Yolov8AuditLog.trip_id)
-            .where(
-                Yolov8AuditLog.resolution_status == AuditResolution.PENDING.value
-            )
+            .outerjoin(User, User.user_id == Yolov8AuditLog.resolved_by_user_id)
+            .where(where)
             .order_by(Yolov8AuditLog.captured_at.desc())
             .limit(limit)
         )
@@ -246,6 +286,7 @@ class AuditQueueUseCase:
                 "trip_label": t.trip_label,
                 "service_date": t.service_date,
                 "leg_sequence": a.leg_sequence,
+                "trigger_type": a.trigger_type,
                 "visual_count": a.visual_count,
                 "booked_count": a.booked_count,
                 "variance": a.variance,
@@ -254,6 +295,10 @@ class AuditQueueUseCase:
                 "inference_ms": a.inference_ms,
                 "model_version": a.model_version,
                 "captured_at": a.captured_at,
+                "resolution_status": a.resolution_status,
+                "resolved_by": resolver_email,
+                "resolved_at": a.resolved_at,
+                "resolution_notes": a.resolution_notes,
             }
-            for a, t in result.all()
+            for a, t, resolver_email in result.all()
         ]

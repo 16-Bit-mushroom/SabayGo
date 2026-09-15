@@ -7,6 +7,10 @@ import '../../modules/schedule_management/screens/schedule_screen.dart';
 import '../../modules/policy_editor/screens/policy_editor_screen.dart';
 import '../../modules/revenue/screens/revenue_screen.dart';
 import '../../viewmodels/auth_provider.dart';
+import '../../core/network/api_client.dart';
+import '../../data/repositories/notification_repository.dart';
+import '../../viewmodels/notification_provider.dart';
+import 'notification_bell.dart';
 
 class OperatorShell extends StatefulWidget {
   const OperatorShell({super.key});
@@ -17,6 +21,23 @@ class OperatorShell extends StatefulWidget {
 
 class _OperatorShellState extends State<OperatorShell> {
   int _selectedIndex = 0;
+  static const _auditsIndex = 5;
+  late final NotificationProvider _notifications;
+
+  @override
+  void initState() {
+    super.initState();
+    // Lives with the shell: polling starts at sign-in and stops at sign-out.
+    _notifications = NotificationProvider(
+      NotificationRepository(context.read<ApiClient>()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _notifications.dispose();
+    super.dispose();
+  }
 
   // The array of operational modules
   final List<Widget> _modules = [
@@ -30,7 +51,9 @@ class _OperatorShellState extends State<OperatorShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ChangeNotifierProvider<NotificationProvider>.value(
+      value: _notifications,
+      child: Scaffold(
       body: Row(
         children: [
           // ==========================================
@@ -51,17 +74,25 @@ class _OperatorShellState extends State<OperatorShell> {
                 _selectedIndex = index;
               });
             },
-            leading: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32.0),
-              child: Text(
-                'SABAYGO\nCOMMAND',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 3.0,
-                ),
+            leading: Padding(
+              padding: const EdgeInsets.only(top: 32.0, bottom: 16.0),
+              child: Column(
+                children: [
+                  const Text(
+                    'SABAYGO\nCOMMAND',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3.0,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  NotificationBell(
+                    onOpenAudits: () => setState(() => _selectedIndex = _auditsIndex),
+                  ),
+                ],
               ),
             ),
             destinations: const [
@@ -134,6 +165,7 @@ class _OperatorShellState extends State<OperatorShell> {
             child: _modules[_selectedIndex],
           ),
         ],
+      ),
       ),
     );
   }

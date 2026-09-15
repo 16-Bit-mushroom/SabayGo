@@ -1,21 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../core/network/api_client.dart';
+import '../../data/repositories/notification_repository.dart';
 import '../../models/notification_model.dart';
 import '../../viewmodels/notifications_viewmodel.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  /// Pass a [viewModel] to share one already polling elsewhere (the
+  /// conductor's app-bar badge); omit it and the screen owns its own.
+  const NotificationsScreen({super.key, this.viewModel});
+
+  final NotificationsViewModel? viewModel;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  final NotificationsViewModel _viewModel = NotificationsViewModel();
+  late final NotificationsViewModel _viewModel;
+  late final bool _ownsViewModel;
 
   @override
   void initState() {
     super.initState();
+    _ownsViewModel = widget.viewModel == null;
+    _viewModel = widget.viewModel ??
+        NotificationsViewModel(NotificationRepository(context.read<ApiClient>()));
     _viewModel.addListener(_onStateChanged);
   }
 
@@ -24,7 +35,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void dispose() {
     _viewModel.removeListener(_onStateChanged);
-    _viewModel.dispose();
+    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
   }
 
@@ -57,36 +68,42 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           
           // --- Notifications List ---
           Expanded(
-            child: notifications.isEmpty
-                ? _buildEmptyState()
-                : ListView.separated(
-                    itemCount: notifications.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final notification = notifications[index];
-                      // Swipe to delete widget
-                      return Dismissible(
-                        key: Key(notification.id),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          color: Colors.red,
-                          child: const Icon(Icons.delete_outline, color: Colors.white),
-                        ),
-                        onDismissed: (_) {
-                          _viewModel.deleteNotification(notification.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Notification deleted'), duration: Duration(seconds: 2)),
-                          );
-                        },
-                        child: _buildNotificationItem(notification),
-                      );
-                    },
-                  ),
+            child: RefreshIndicator(
+              onRefresh: _viewModel.load,
+              child: _buildBody(notifications),
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBody(List<NotificationModel> notifications) {
+    if (_viewModel.isLoading && notifications.isEmpty && _viewModel.error == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_viewModel.error != null && notifications.isEmpty) {
+      // Inside a scrollable so pull-to-refresh still works from the error.
+      return ListView(
+        children: [
+          const SizedBox(height: 120),
+          Icon(Icons.cloud_off_outlined, size: 64, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            'Could not load notifications.\nPull down to try again.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+          ),
+        ],
+      );
+    }
+    if (notifications.isEmpty) {
+      return ListView(children: [SizedBox(height: 320, child: _buildEmptyState())]);
+    }
+    return ListView.separated(
+      itemCount: notifications.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemBuilder: (context, index) => _buildNotificationItem(notifications[index]),
     );
   }
 
@@ -133,6 +150,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case NotificationType.policyUpdate:
       case NotificationType.terminalPolicy:
         icon = Icons.article_outlined;
+        iconColor = Colors.grey.shade700;
+        break;
+      case NotificationType.varianceAlert:
+        icon = Icons.people_alt_outlined;
+        iconColor = Colors.deepOrange;
+        break;
+      case NotificationType.unremittedFare:
+        icon = Icons.payments_outlined;
+        iconColor = Colors.red;
+        break;
+      case NotificationType.departureReminder:
+        icon = Icons.schedule;
+        iconColor = Colors.orange;
+        break;
+      case NotificationType.scheduleChange:
+        icon = Icons.event_repeat;
+        iconColor = Colors.blue;
+        break;
+      case NotificationType.systemAlert:
+        icon = Icons.notifications_active_outlined;
         iconColor = Colors.grey.shade700;
         break;
     }

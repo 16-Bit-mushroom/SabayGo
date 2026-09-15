@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/auth_provider.dart';
+import '../../viewmodels/notifications_viewmodel.dart';
 import '../../viewmodels/shift_viewmodel.dart';
+import '../notifications/notifications_screen.dart';
 import 'conductor_trips_screen.dart';
 import 'qr_scanner_screen.dart';
 
@@ -26,16 +29,24 @@ class ConductorMainScreen extends StatefulWidget {
 
 class _ConductorMainScreenState extends State<ConductorMainScreen> {
   late final ShiftViewModel _shift;
+  late final NotificationsViewModel _notifications;
 
   @override
   void initState() {
     super.initState();
     _shift = ShiftViewModel(OperationsRepository(context.read<ApiClient>()));
+    // A flagged headcount should reach the crew while the van is still on
+    // that leg, so the badge polls rather than waiting for the screen.
+    _notifications = NotificationsViewModel(
+      NotificationRepository(context.read<ApiClient>()),
+      pollEvery: const Duration(seconds: 30),
+    );
   }
 
   @override
   void dispose() {
     _shift.dispose();
+    _notifications.dispose();
     super.dispose();
   }
 
@@ -60,6 +71,26 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
         builder: (_) => ChangeNotifierProvider.value(
           value: _shift,
           child: QRScannerScreen(trip: trip, stopSequence: _shift.currentStop),
+        ),
+      ),
+    );
+  }
+
+  void _openNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(
+            title: const Text('Notifications'),
+            actions: [
+              if (_notifications.unreadCount > 0)
+                TextButton(
+                  onPressed: _notifications.markAllRead,
+                  child: const Text('Mark all read', style: TextStyle(color: Colors.white)),
+                ),
+            ],
+          ),
+          body: NotificationsScreen(viewModel: _notifications),
         ),
       ),
     );
@@ -137,6 +168,24 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
             ],
           ),
           actions: [
+            ListenableBuilder(
+              listenable: _notifications,
+              builder: (context, _) {
+                final unread = _notifications.unreadCount;
+                return IconButton(
+                  tooltip: unread == 0 ? 'Notifications' : '$unread unread',
+                  onPressed: _openNotifications,
+                  icon: Badge(
+                    isLabelVisible: unread > 0,
+                    label: Text('$unread'),
+                    child: Icon(
+                      unread > 0 ? Icons.notifications_active : Icons.notifications_none,
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+            ),
             IconButton(
               tooltip: 'End shift',
               icon: const Icon(Icons.logout, color: Colors.white),

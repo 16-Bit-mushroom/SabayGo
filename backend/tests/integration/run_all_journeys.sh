@@ -85,6 +85,22 @@ for journey in passenger conductor driver_operator; do
   fi
 done
 
+# E.1: flagged variance -> notifications. Python because it swaps the
+# camera for a fake capture; the HTTP side is real.
+{
+  echo
+  echo "==================================================================="
+  echo "  NOTIFICATIONS (E.1)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 ) || \
+( cd .. && ./db/reset-dev.sh >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  python tests/integration/test_notifications.py 2>&1 | strip_ansi >> "$REPORT"
+else
+  python tests/integration/test_notifications.py 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────
