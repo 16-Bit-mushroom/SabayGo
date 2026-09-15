@@ -11,10 +11,10 @@ from sqlalchemy import or_, select
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.core import timezone as app_tz
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, PolicyViolationError
 from app.domain.enums import Role, TripStatus
 from app.domain.value_objects import Segment
-from app.infrastructure.models import FareMatrix, RouteStop, Terminal, Trip
+from app.infrastructure.models import FareMatrix, Route, RouteStop, Terminal, Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -47,54 +47,119 @@ class TerminalOut(BaseModel):
     terminal_id: str
     terminal_name: str
     city: str
+    # Position on the FIRST route that serves this terminal. Kept for the
+    # older client; a terminal has no single sequence once it sits on more
+    # than one route, so new clients search by terminal_id instead.
     stop_sequence: int
 
 
 @router.get("/terminals", response_model=list[TerminalOut])
 async def list_terminals(session: SessionDep) -> list[TerminalOut]:
-    """Terminals in route order -- populates the origin/destination pickers."""
+    """Distinct terminals on any active route -- populates the pickers.
+
+    One row per terminal, not per route stop: Ecoland is stop 1 on every
+    outbound route and must appear once. Ordered by how early it appears
+    on a route, then by name, so a picker still reads roughly outward.
+    """
     result = await session.execute(
-        select(RouteStop, Terminal)
+        select(RouteStop, Terminal, Route.is_active)
         .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
-        .where(Terminal.is_active.is_(True))
-        .order_by(RouteStop.stop_sequence)
+        .join(Route, Route.route_id == RouteStop.route_id)
+        .where(Terminal.is_active.is_(True), Route.is_active.is_(True))
+        .order_by(RouteStop.stop_sequence, Terminal.terminal_name)
     )
-    return [
-        TerminalOut(
+    seen: dict[str, TerminalOut] = {}
+    for rs, t, _ in result.all():
+        if t.terminal_id in seen:
+            continue
+        seen[t.terminal_id] = TerminalOut(
             terminal_id=t.terminal_id,
             terminal_name=t.terminal_name,
             city=t.city,
             stop_sequence=rs.stop_sequence,
         )
-        for rs, t in result.all()
-    ]
+    return list(seen.values())
+
+
+async def _segments_between(
+    session: SessionDep, origin_terminal_id: str, destination_terminal_id: str
+) -> dict[str, tuple[int, int]]:
+    """route_id -> (boarding_seq, alighting_seq) for every route that passes
+    the origin before the destination. Empty when no route links them in
+    that direction -- the reverse direction is a different LTFRB route."""
+    rows = await session.execute(
+        select(RouteStop.route_id, RouteStop.terminal_id, RouteStop.stop_sequence)
+        .join(Route, Route.route_id == RouteStop.route_id)
+        .where(
+            Route.is_active.is_(True),
+            RouteStop.terminal_id.in_([origin_terminal_id, destination_terminal_id]),
+        )
+    )
+    by_route: dict[str, dict[str, int]] = {}
+    for route_id, terminal_id, seq in rows.all():
+        by_route.setdefault(route_id, {})[terminal_id] = seq
+    out: dict[str, tuple[int, int]] = {}
+    for route_id, seqs in by_route.items():
+        a, b = seqs.get(origin_terminal_id), seqs.get(destination_terminal_id)
+        if a is not None and b is not None and a < b:
+            out[route_id] = (a, b)
+    return out
 
 
 @router.get("/search", response_model=list[TripSummary])
 async def search_trips(
     session: SessionDep,
-    boarding_stop: int = Query(ge=1),
-    alighting_stop: int = Query(ge=2),
+    origin_terminal_id: str | None = None,
+    destination_terminal_id: str | None = None,
+    boarding_stop: int | None = Query(None, ge=1),
+    alighting_stop: int | None = Query(None, ge=2),
+    route_id: str | None = None,
     service_date: dt.date | None = None,
 ) -> list[TripSummary]:
-    """Find bookable trips covering a segment on a given date.
+    """Find bookable trips between two terminals on a given date.
+
+    Pass `origin_terminal_id` + `destination_terminal_id`; the server works
+    out, per route, which stop sequences those are. A terminal is stop 2
+    on one route and stop 5 on another, so raw sequence numbers only make
+    sense once a route is known. `boarding_stop`/`alighting_stop` remain
+    for the older client and the test scripts and apply the same pair to
+    every route -- fine with one route, ambiguous with several -- unless
+    `route_id` pins them, which is what reschedule does: same journey,
+    same route, different departure.
 
     `seats_available` is a non-locking read -- a display hint, not a
     reservation. Availability can change between this call and the reserve
     call, which is exactly why the authoritative check happens under lock
     in allocate_seat() rather than here.
     """
-    segment = Segment(boarding_stop, alighting_stop)
-    target = service_date or dt.date.today()
+    target = service_date or app_tz.now().date()
 
-    result = await session.execute(
-        select(Trip)
-        .where(
-            Trip.service_date == target,
-            Trip.status == TripStatus.SCHEDULED.value,
-            Trip.departure_datetime > dt.datetime.now(),
+    segment_by_route: dict[str, tuple[int, int]] | None
+    if origin_terminal_id and destination_terminal_id:
+        segment_by_route = await _segments_between(
+            session, origin_terminal_id, destination_terminal_id
         )
-        .order_by(Trip.departure_datetime)
+        if not segment_by_route:
+            return []
+    elif boarding_stop is not None and alighting_stop is not None:
+        Segment(boarding_stop, alighting_stop)  # validates the pair
+        segment_by_route = None
+    else:
+        raise PolicyViolationError(
+            "Pass origin_terminal_id and destination_terminal_id."
+        )
+
+    where = [
+        Trip.service_date == target,
+        Trip.status == TripStatus.SCHEDULED.value,
+        Trip.departure_datetime > app_tz.now().replace(tzinfo=None),
+    ]
+    if segment_by_route is not None:
+        where.append(Trip.route_id.in_(segment_by_route))
+    if route_id is not None:
+        where.append(Trip.route_id == route_id)
+    result = await session.execute(
+        select(Trip).where(*where).order_by(Trip.departure_datetime)
     )
     trips = list(result.scalars().all())
     if not trips:
@@ -105,6 +170,9 @@ async def search_trips(
     out: list[TripSummary] = []
 
     for trip in trips:
+        if segment_by_route is not None:
+            boarding_stop, alighting_stop = segment_by_route[trip.route_id]
+        segment = Segment(boarding_stop, alighting_stop)
         fare = await session.execute(
             select(FareMatrix)
             .where(
@@ -129,8 +197,8 @@ async def search_trips(
                 departure_datetime=trip.departure_datetime,
                 boarding_stop=boarding_stop,
                 alighting_stop=alighting_stop,
-                boarding_terminal=stop_names.get(boarding_stop, ""),
-                alighting_terminal=stop_names.get(alighting_stop, ""),
+                boarding_terminal=stop_names.get((trip.route_id, boarding_stop), ""),
+                alighting_terminal=stop_names.get((trip.route_id, alighting_stop), ""),
                 fare_amount=fare_row.fare_amount,
                 seats_available=available,
                 plate_number=trip.van.plate_number if trip.van else None,
@@ -241,10 +309,12 @@ async def trip_stops(trip_id: str, session: SessionDep) -> list[StopOut]:
     ]
 
 
-async def _stop_name_map(session: SessionDep) -> dict[int, str]:
+async def _stop_name_map(session: SessionDep) -> dict[tuple[str, int], str]:
+    """(route_id, stop_sequence) -> terminal name. Keyed by route because
+    the same sequence number is a different terminal on every route."""
     result = await session.execute(
-        select(RouteStop.stop_sequence, Terminal.terminal_name).join(
+        select(RouteStop.route_id, RouteStop.stop_sequence, Terminal.terminal_name).join(
             Terminal, Terminal.terminal_id == RouteStop.terminal_id
         )
     )
-    return {seq: name for seq, name in result.all()}
+    return {(rid, seq): name for rid, seq, name in result.all()}

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 from fastapi import APIRouter
 from pydantic import BaseModel, EmailStr, Field
@@ -13,6 +12,7 @@ from app.application.identity.register_passenger import (
     RegisterPassengerCommand,
     RegisterPassengerUseCase,
 )
+from app.core import timezone as app_tz
 from app.core.exceptions import AuthenticationError
 from app.core.security import create_access_token, verify_password
 from app.infrastructure.models import User
@@ -101,7 +101,7 @@ async def login(payload: LoginRequest, session: SessionDep) -> TokenResponse:
     if user.account_status != "active":
         raise AuthenticationError(f"Account is {user.account_status}.")
 
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = app_tz.now()
     await session.commit()
 
     return TokenResponse(

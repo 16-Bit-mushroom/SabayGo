@@ -137,12 +137,40 @@ class TripRepository {
   /// until the journey is known, so there is nothing meaningful to return
   /// for "trips from Ecoland" on its own.
   Future<List<TripSummary>> search({
+    required String originTerminalId,
+    required String destinationTerminalId,
+    DateTime? serviceDate,
+  }) async {
+    final date = serviceDate ?? DateTime.now();
+    // Terminals, not stop sequences: the server resolves the pair per
+    // route, because the same terminal is a different stop number on
+    // every route that passes it. Each result carries its own
+    // boarding/alighting sequence for the reserve call.
+    final json = await _api.get('/trips/search', query: {
+      'origin_terminal_id': originTerminalId,
+      'destination_terminal_id': destinationTerminalId,
+      'service_date':
+          '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+    }) as List<dynamic>;
+    return json
+        .map((e) => TripSummary.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Other departures of the SAME journey on the SAME route -- what
+  /// reschedule offers. Sequence numbers are only meaningful once the
+  /// route is pinned, hence `routeId` is required here.
+  Future<List<TripSummary>> searchSameRoute({
+    required String routeId,
     required int boardingStop,
     required int alightingStop,
     DateTime? serviceDate,
   }) async {
     final date = serviceDate ?? DateTime.now();
     final json = await _api.get('/trips/search', query: {
+      'route_id': routeId,
       'boarding_stop': boardingStop,
       'alighting_stop': alightingStop,
       'service_date':

@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError
 from app.core.security import hash_password
 from app.domain.enums import AccountStatus, Role
@@ -77,7 +77,7 @@ class RegisterPassengerUseCase:
             field = "email address" if clash.email == email.value else "phone number"
             raise ConflictError(f"That {field} is already registered.")
 
-        now = datetime.now(timezone.utc)
+        now = app_tz.now()
         user_id = str(uuid.uuid4())
 
         self.session.add(

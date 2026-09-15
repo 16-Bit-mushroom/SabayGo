@@ -6,13 +6,13 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import BookingStatus, PaymentStatus
 from app.infrastructure.clients.paymongo_client import PayMongoClient
@@ -81,7 +81,7 @@ class StartCheckoutUseCase:
                 provider_ref_id=session_data["checkout_session_id"],
                 amount=booking.fare_amount,
                 status=PaymentStatus.PENDING.value,
-                created_at=datetime.now(timezone.utc),
+                created_at=app_tz.now(),
             )
         )
         await self.session.commit()
@@ -153,11 +153,11 @@ class SettlePaymentUseCase:
                 provider="paymongo",
                 amount=booking.fare_amount,
                 status=PaymentStatus.PENDING.value,
-                created_at=datetime.now(timezone.utc),
+                created_at=app_tz.now(),
             )
             self.session.add(payment)
 
-        now = datetime.now(timezone.utc)
+        now = app_tz.now()
         payment.provider_event_id = event_id
         payment.raw_payload = json.dumps(event)[:65000]
 

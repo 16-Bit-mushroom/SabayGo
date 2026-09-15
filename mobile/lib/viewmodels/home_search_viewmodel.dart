@@ -58,23 +58,20 @@ class HomeSearchViewModel extends ChangeNotifier {
 
   List<TransitNodeModel> get nodes => _nodes;
   bool get hasSearched => _hasSearched;
+  // Direction is the server's call: it knows which routes run origin ->
+  // destination. The client only refuses the degenerate case.
   bool get canSearch =>
-      selectedOrigin?.stopSequence != null &&
-      selectedDestination?.stopSequence != null &&
-      selectedOrigin!.stopSequence! < selectedDestination!.stopSequence!;
+      selectedOrigin != null &&
+      selectedDestination != null &&
+      selectedOrigin!.id != selectedDestination!.id;
 
   /// Why the search button is disabled, phrased for the person rather
   /// than as a validation code.
   String? get searchBlockedReason {
     if (selectedOrigin == null) return 'Choose where you are boarding.';
     if (selectedDestination == null) return 'Choose where you are going.';
-    final from = selectedOrigin!.stopSequence;
-    final to = selectedDestination!.stopSequence;
-    if (from == null || to == null) return 'This terminal is not on a route.';
-    if (from == to) return 'Boarding and destination are the same.';
-    if (from > to) {
-      return 'This route runs ${_nodes.first.name} outward. '
-          'Swap your terminals to travel the other way.';
+    if (selectedOrigin!.id == selectedDestination!.id) {
+      return 'Boarding and destination are the same.';
     }
     return null;
   }
@@ -160,8 +157,8 @@ class HomeSearchViewModel extends ChangeNotifier {
 
     try {
       final results = await _repo.search(
-        boardingStop: selectedOrigin!.stopSequence!,
-        alightingStop: selectedDestination!.stopSequence!,
+        originTerminalId: selectedOrigin!.id,
+        destinationTerminalId: selectedDestination!.id,
         serviceDate: serviceDate,
       );
       // Names come back scoped to the searched journey, so the terminals

@@ -41,7 +41,8 @@ class _RescheduleSheetState extends State<RescheduleSheet> {
       _error = null;
     });
     try {
-      final all = await widget.trips.search(
+      final all = await widget.trips.searchSameRoute(
+        routeId: widget.booking.routeId,
         boardingStop: widget.booking.boardingStop,
         alightingStop: widget.booking.alightingStop,
         serviceDate: _date,

@@ -21,6 +21,8 @@ contribution.
 
 ## Read these first
 
+@docs/SESSION_RULES.md — token discipline, loaded every session.
+
 | File | Why |
 |---|---|
 | `docs/RULES.md` | Business rules vs application rules, in plain language |
@@ -178,19 +180,35 @@ Changing any of these is a schema migration, not a config change.
 
 ---
 
-## State as of 14 September 2026
+## State as of 15 September 2026
 
 ### Backend — complete
 
-Schema (11 migrations) · JWT auth · segment booking with pessimistic
+Schema (13 migrations) · JWT auth · segment booking with pessimistic
 locking · PayMongo checkout and verified webhooks · cash remittance ·
-geofenced check-in · QR boarding · manifest · driver headcount · YOLOv8
+geofenced check-in (window against the passenger's own stop, undoable) ·
+QR boarding · manifest · driver headcount · YOLOv8
 audit · revenue reconciliation · trip generation · fleet/crew/route/fare/
 policy CRUD · scheduling conflict detection · NAHGM live tracking ·
-`GET /trips/assigned` for crew.
+`GET /trips/assigned` for crew · in-app notifications (`/notifications`),
+written when a YOLOv8 audit flags a variance — office, driver and conductor
+each get a row in the same transaction as the audit log · `GET
+/bookings/{id}` · `GET /audits/history` (who closed what, with notes) ·
+`GET /revenue/export?format=xlsx|csv` (openpyxl; totals row, About sheet).
 
-Journey suite: **87 passed, 2 failed** — both fixture self-conflict, not
-defects.
+Trip search takes `origin_terminal_id` + `destination_terminal_id` and
+resolves the stop pair per route (a terminal is stop 2 on one route and
+stop 5 on another); the sequence form stays for reschedule (`route_id`
+pinned) and the test scripts. `/trips/terminals` is one row per terminal.
+
+Journey suite: **126 passed, 2 failed** — both fixture self-conflict, not
+defects. `test_notifications.py` fakes the camera so E.1 is repeatable.
+
+**Check-in is a heads-up, not a gate** (Group D, decided 15 Sep). The
+conductor's manifest shows "AT TERMINAL"; a scan never requires it. The
+window is `departure + route_stops.offset_minutes` for the boarding stop,
+and `DELETE /bookings/{id}/check-in` withdraws it while still
+`checked_in` — the `check_ins` row stays, stamped `undone_at`.
 
 Concurrency experiment: 50 simultaneous bookings, **0 double-bookings**,
 advance cap respected. A controlled comparison is recorded — with the cap
@@ -215,17 +233,59 @@ trips → open boarding → scan valid/already-boarded/wrong-stop → walk-in �
 headcount, incl. rejecting a negative count → depart with no-shows →
 roadside pickup → remit cash with a real variance). No Dart exceptions.
 
+Notifications: passenger tab and a conductor app-bar bell (30 s poll) read
+`/notifications`; the console has the same bell in its sidebar, and a
+variance alert jumps to the audit queue.
+
+Console (15 Sep): the Audits tab has a Queue / History switch — a closed
+audit shows outcome, resolver, time and notes instead of the buttons. The
+Revenue tab has an Export menu (`.xlsx` / `.csv`) for the date range shown;
+bytes go through the authenticated `ApiClient.getBytes` and
+`core/util/download.dart` (`package:web`) hands them to the browser.
+
 Not done: live map, chat.
 
-### Operator console — untouched
+### Operator console — complete
 
-Three Flutter Web modules on mock data.
+All six coop_admin modules on the live backend (`1708ace`, 14 Sep): Fleet &
+Crew, Trip Dispatcher, Schedules, Policy Editor, YOLOv8 Audits, Revenue.
+Same `ApiClient` / typed exception / `flutter_secure_storage` shape as
+`mobile/`. `GET /config/routes` was added to the backend for its route
+pickers. Verified by CDP click-through: 0 exceptions, 0 network errors.
+
+### Hardening — started 15 Sep
+
+- `db/seed/002_demo_dataset.sql`: three more routes (Tagum, Digos, Mati),
+  eight crew, six passengers, five vans, departures for three days, and
+  two days of completed trips with remittances in every state and audits
+  in every state. Placeholders shaped like the Davao network — swap for
+  A2Z's own. The fixture in `001` is untouched; `reset-dev.sh` re-dates
+  only `TRIP-DEMO-*`.
+- The seed surfaced two real defects, both fixed: search was single-route
+  (above), and `v_trip_revenue_reconciliation` fanned out — two audit rows
+  on a trip doubled its fares (migration 013; the view now aggregates each
+  side before joining, and no longer counts `pending` holds as owed fare).
+- `backend/scripts/demo_rehearsal.sh` walks the Tier 1 loop in demo order
+  and stops at the first failure; `docs/DEMO_SCRIPT.md` is the talk track.
+- `datetime.now(timezone.utc)` removed from `payments.py`,
+  `register_passenger.py`, `auth.py`, `trips.py` (see Known issues).
+
+### Non-code milestones — clear
+
+Objectives approved by adviser. Paper revision adviser-approved; research
+coordinator reviewing the week of 15 Sep. A2Z reconciled as pilot partner;
+alpha testing from 6 Oct.
 
 ---
 
 ## Next
 
-1. **Operator console** — wire the three modules.
+1. **Hardening, continued** — replace the placeholder routes in
+   `002_demo_dataset.sql` with A2Z's real routes, fares and templates once
+   they answer; run `scripts/demo_rehearsal.sh` on the demo machine with
+   the AI node up; confirm the release build hides the dev-account chips.
+   Remaining Group G items (roster, profile edit, account deletion) in
+   `docs/REMAINING_WORK.md` if time allows.
 2. **Chat** — messages in MySQL, delivered via FCM. Not Firestore: the
    ERD would have a hole where the data model should be.
 3. **Auto-detect "Van is at"** — the conductor currently sets the current
@@ -233,6 +293,8 @@ Three Flutter Web modules on mock data.
    whose hands are full at the door. `geolocator` is already a dependency
    (used for passenger check-in); reuse it to snap to the nearest
    terminal automatically, keeping the dropdown as a manual override.
+
+For the demo itself: `docs/DEMO_SCRIPT.md`.
 
 ---
 
@@ -242,21 +304,21 @@ Three Flutter Web modules on mock data.
   check-in testable and reschedule untestable at the same time. The same
   applies on the device: the reschedule button is correctly hidden on a
   `--soon` trip because the 6-hour cutoff has already passed.
-- The ticket screen polls `/bookings/mine` every 4 s while a booking is
-  pending, capped at ~2 min, because there is no single-booking GET
-  (REMAINING_WORK G.7). After the cap it offers a manual "check again".
+- The ticket screen polls `GET /bookings/{id}` every 4 s while a booking
+  is pending, capped at ~2 min; after the cap it offers a manual "check
+  again". A webhook-driven push would remove the poll, but that is FCM.
 - Passenger avatar hits `i.pravatar.cc` on every build; fails offline.
 - AGP 8.11.1 and Kotlin 2.2.20 are below what Flutter will soon require.
   Deferred deliberately.
 - Dev-account chips on the sign-in screen are guarded by
   `AppConfig.isDebug`. Confirm they are absent from a release build.
-- `boarding.py` wrote `scanned_at`/`departed_at` with
-  `datetime.now(timezone.utc)` instead of `app.core.timezone` — fixed
-  14 September. The same anti-pattern still exists in `seat_repository.py`
-  (seat-hold expiry), `payments.py` and `trigger_audit.py` (created_at/
-  resolved_at). Same 8-hour-skew risk; not fixed yet because
-  `seat_repository.py` is the thesis file and any change there needs its
-  own review, not a drive-by alongside an unrelated feature.
+- `datetime.now(timezone.utc)` written into a naive Manila DATETIME
+  column skews it eight hours. Fixed in `boarding.py` (14 Sep),
+  `trigger_audit.py`, `payments.py`, `register_passenger.py`, `auth.py`
+  and the `trips.py` search guard (15 Sep). The only remaining use is
+  `seat_repository.py` (seat-hold expiry), left alone because it is the
+  thesis file and any change there needs its own review — and
+  `security.py`, where UTC is correct because JWT `exp` is epoch time.
 - The conductor sets "Van is at" manually on the manifest screen — see
   Next, item 3.
 
@@ -264,14 +326,16 @@ Three Flutter Web modules on mock data.
 
 ## Open questions for the cooperative
 
-Answerable in ten minutes by any dispatcher at Ecoland:
+Answerable in ten minutes by any A2Z dispatcher. A printable plain-language
+version in English, Tagalog and Bisaya is in
+`docs/QUESTIONS_FOR_COOPERATIVE.md` — hand that one over, not this list.
 
 1. Do passengers GCash conductors directly? It behaves like cash, but the
    office counts a handover of banknotes differently from one partly in
    an e-wallet.
 2. Cancellation deadline — useful, and how many hours?
-3. Would knowing in advance who has arrived help dispatch? This decides
-   whether check-in survives as more than advisory.
+3. Would knowing in advance who has arrived help dispatch? Check-in is
+   built as advisory; this confirms whether dispatch will use it.
 4. How far across the terminal compound might a waiting passenger be? A
    terminal is not a point; too tight a radius fails honest passengers.
 

@@ -14,7 +14,14 @@ chmod +x db/apply.sh
 
 Adminer GUI: <http://127.0.0.1:8080> (server `mysql`, user `sabaygo_app`).
 
-Rebuild from scratch: `./db/apply.sh --reset --seed`
+Rebuild from scratch: `./db/apply.sh --reset --seed`. Day to day use
+`./db/reset-dev.sh [--soon]`, which also sets the dev passwords and
+re-dates the two fixture trips.
+
+Seeds load in order: `001_dev_seed.sql` is the fixture the journey suite
+pins (one route, two trips, four dev users); `002_demo_dataset.sql` is the
+realistic multi-route backdrop for the demo — placeholder routes shaped
+like the Davao network, to be replaced with A2Z's own.
 
 ## Migration order
 
@@ -26,6 +33,7 @@ Rebuild from scratch: `./db/apply.sh --reset --seed`
 | `004_scheduling` | schedule_templates, trips, trip_legs, **seat_inventory** |
 | `005_transactions` | bookings, payments, check_ins, boarding_scans |
 | `006_audit_and_alerts` | yolov8_audit_logs, ticket booklets, headcounts, notifications |
+| `007`–`013` | roadside pickup + manual fares · cash remittance + revenue view · coop_admin rename · location pings · check-in undo · revenue view without fan-out (013) |
 
 ## Six decisions worth knowing before you redraw the ERD
 

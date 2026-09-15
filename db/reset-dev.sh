@@ -22,12 +22,15 @@ docker compose exec -T -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql mysql -u root
   "${MYSQL_DATABASE}" <<SQL
 UPDATE users SET email = REPLACE(email, '@sabaygo.test', '@sabaygo.dev');
 UPDATE users SET password_hash = '${HASH}' WHERE email LIKE '%@sabaygo.dev';
+-- Only the two fixture trips the journey suite pins. The 002 demo dataset
+-- dates its own trips relative to today and must keep its history.
 UPDATE trips
    SET service_date = ${DATE_SQL},
        departure_datetime = ${DEPART_SQL},
        status = 'scheduled',
        departed_at = NULL,
-       completed_at = NULL;
+       completed_at = NULL
+ WHERE trip_id IN ('TRIP-DEMO-00000001', 'TRIP-DEMO-00000002');
 -- The seeded trip departs 20 min out with --soon, so a 2-hour
 -- cancellation deadline would refuse everything. The fixture starts
 -- permissive; test_group_f.sh sets its own value to exercise the rule.
@@ -35,10 +38,11 @@ UPDATE cooperative_policies SET policy_value = '0'
  WHERE policy_key IN ('cancel_cutoff_hours', 'reschedule_cutoff_hours');
 UPDATE trip_legs l JOIN trips t ON t.trip_id = l.trip_id
    SET l.departs_at = t.departure_datetime
-       + INTERVAL (l.leg_sequence - 1) * 90 MINUTE;
+       + INTERVAL (l.leg_sequence - 1) * 90 MINUTE
+ WHERE t.trip_id IN ('TRIP-DEMO-00000001', 'TRIP-DEMO-00000002');
 SELECT
   (SELECT COUNT(*) FROM seat_inventory WHERE status='available') AS free_seat_legs,
   (SELECT COUNT(*) FROM bookings) AS bookings,
   (SELECT COUNT(*) FROM users WHERE email LIKE '%@sabaygo.dev') AS dev_users,
-  (SELECT departure_datetime FROM trips LIMIT 1) AS departs;
+  (SELECT departure_datetime FROM trips WHERE trip_id = 'TRIP-DEMO-00000001') AS departs;
 SQL
