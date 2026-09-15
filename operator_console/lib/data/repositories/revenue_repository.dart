@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../core/network/api_client.dart';
 
 class RevenueSummary {
@@ -119,6 +121,18 @@ class RevenueRepository {
     });
     return RevenueSummary.fromJson(json as Map<String, dynamic>);
   }
+
+  /// The reconciliation as a spreadsheet (G.1). `format` is 'xlsx' or 'csv'.
+  Future<Uint8List> export({
+    String format = 'xlsx',
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) =>
+      _api.getBytes('/revenue/export', query: {
+        'format': format,
+        if (dateFrom != null) 'date_from': _dateOnly(dateFrom),
+        if (dateTo != null) 'date_to': _dateOnly(dateTo),
+      });
 
   Future<List<TripRevenue>> trips({DateTime? dateFrom, DateTime? dateTo, int limit = 100}) async {
     final json = await _api.get('/revenue/trips', query: {

@@ -17,6 +17,8 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
 
   List<PendingAudit>? _logs;
   int _selectedIndex = 0;
+  /// G.2: false = the open queue, true = everything that has left it.
+  bool _showHistory = false;
   bool _loading = true;
   String? _error;
 
@@ -32,7 +34,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
       _error = null;
     });
     try {
-      final logs = await _audits.pending();
+      final logs = _showHistory ? await _audits.history() : await _audits.pending();
       if (!mounted) return;
       setState(() {
         _logs = logs;
@@ -93,9 +95,27 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Live YOLOv8 Audit Queue',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                  Text(
+                    _showHistory ? 'YOLOv8 Audit History' : 'Live YOLOv8 Audit Queue',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(width: 24),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('Queue'), icon: Icon(Icons.pending_actions)),
+                      ButtonSegment(value: true, label: Text('History'), icon: Icon(Icons.history)),
+                    ],
+                    selected: {_showHistory},
+                    showSelectedIcon: false,
+                    onSelectionChanged: _loading
+                        ? null
+                        : (sel) {
+                            setState(() {
+                              _showHistory = sel.first;
+                              _selectedIndex = 0;
+                            });
+                            _load();
+                          },
                   ),
                   const Spacer(),
                   IconButton(
@@ -155,14 +175,18 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
   }
 
   Widget _buildEmpty() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.check_circle_outline, color: Color(0xFFA3BE8C), size: 40),
-          SizedBox(height: 12),
-          Text('No pending variances. The cabin matches the manifest.',
-              style: TextStyle(color: Colors.white54)),
+          const Icon(Icons.check_circle_outline, color: Color(0xFFA3BE8C), size: 40),
+          const SizedBox(height: 12),
+          Text(
+            _showHistory
+                ? 'No audits have been closed yet.'
+                : 'No pending variances. The cabin matches the manifest.',
+            style: const TextStyle(color: Colors.white54),
+          ),
         ],
       ),
     );
@@ -183,12 +207,14 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
               dataRowMinHeight: 50,
               dataRowMaxHeight: 60,
               headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
-              columns: const [
-                DataColumn(label: Text('Trip')),
-                DataColumn(label: Text('Leg')),
-                DataColumn(label: Text('Manifest')),
-                DataColumn(label: Text('YOLO Count')),
-                DataColumn(label: Text('Variance')),
+              columns: [
+                const DataColumn(label: Text('Trip')),
+                const DataColumn(label: Text('Leg')),
+                const DataColumn(label: Text('Manifest')),
+                const DataColumn(label: Text('YOLO Count')),
+                const DataColumn(label: Text('Variance')),
+                if (_showHistory) const DataColumn(label: Text('Outcome')),
+                if (_showHistory) const DataColumn(label: Text('Closed')),
               ],
               rows: List<DataRow>.generate(logs.length, (index) {
                 final log = logs[index];
@@ -219,6 +245,14 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                             fontWeight: rowAlert ? FontWeight.bold : FontWeight.normal),
                       ),
                     ),
+                    if (_showHistory) DataCell(_buildOutcomeChip(log.resolutionStatus)),
+                    if (_showHistory)
+                      DataCell(Text(
+                        log.resolvedAt == null
+                            ? '—'
+                            : DateFormat.jm().add_MMMd().format(log.resolvedAt!),
+                        style: const TextStyle(color: Colors.white70),
+                      )),
                   ],
                 );
               }),
@@ -288,7 +322,28 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
               if (log.confidenceAvg != null)
                 _buildDetailRow('Model Confidence', '${(log.confidenceAvg! * 100).toStringAsFixed(0)}%'),
               const SizedBox(height: 32),
-              if (isAlert)
+              if (!log.isPending) ...[
+                // G.2: a closed audit shows its disposition instead of the buttons.
+                Row(
+                  children: [
+                    const Text('Outcome', style: TextStyle(color: Colors.white54)),
+                    const Spacer(),
+                    _buildOutcomeChip(log.resolutionStatus),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildDetailRow('Closed by', log.resolvedBy ?? '—'),
+                _buildDetailRow(
+                  'Closed at',
+                  log.resolvedAt == null ? '—' : DateFormat.jm().add_yMMMd().format(log.resolvedAt!),
+                ),
+                if ((log.resolutionNotes ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('Notes', style: TextStyle(color: Colors.white54)),
+                  const SizedBox(height: 4),
+                  Text(log.resolutionNotes!, style: const TextStyle(color: Colors.white, height: 1.4)),
+                ],
+              ] else if (isAlert)
                 Row(
                   children: [
                     Expanded(
@@ -339,6 +394,25 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOutcomeChip(String status) {
+    final (label, color) = switch (status) {
+      'resolved' => ('Flagged', Theme.of(context).colorScheme.error),
+      'ignored' => ('Ignored', Colors.white54),
+      'reconciled' => ('Matched', const Color(0xFFA3BE8C)),
+      'failed' => ('Camera failed', Colors.orange),
+      _ => (status, Colors.white70),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
+      ),
+      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 

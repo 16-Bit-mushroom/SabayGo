@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import csv
 import datetime as dt
+import io
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
+from app.core import timezone as app_tz
 from app.application.audit.trigger_audit import (
     AuditQueueUseCase,
     ResolveAuditUseCase,
@@ -89,6 +93,19 @@ async def pending_audits(session: SessionDep, limit: int = Query(50, le=200)) ->
     return await AuditQueueUseCase(session).pending(limit=limit)
 
 
+@router.get("/audits/history", dependencies=[Depends(COOP_ADMIN)])
+async def audit_history(
+    session: SessionDep,
+    status: str | None = Query(None, description="reconciled | resolved | ignored | failed"),
+    trip_id: str | None = None,
+    limit: int = Query(100, le=500),
+) -> list:
+    """Audits that have left the queue, newest first, with who resolved them (G.2)."""
+    return await AuditQueueUseCase(session).history(
+        limit=limit, status=status, trip_id=trip_id
+    )
+
+
 @router.get("/audits/node-health", dependencies=[Depends(CREW)])
 async def node_health() -> dict:
     """Is the van's camera node reachable? Check before relying on a demo."""
@@ -136,6 +153,12 @@ async def trip_revenue(
     The view already joins bookings, payments and audits; querying it
     directly keeps a five-way join out of the application layer.
     """
+    return await _trip_rows(session, date_from, date_to, limit)
+
+
+async def _trip_rows(
+    session, date_from: dt.date | None, date_to: dt.date | None, limit: int
+) -> list[TripRevenueOut]:
     clauses, params = [], {"limit": limit}
     if date_from:
         clauses.append("service_date >= :date_from")
@@ -157,6 +180,126 @@ async def trip_revenue(
         params,
     )
     return [TripRevenueOut(**dict(row._mapping)) for row in result]
+
+
+# G.1 -- the cooperative keeps its books in a spreadsheet, so the
+# reconciliation must leave the system in one. Column order mirrors the
+# on-screen table; headings are the office's words, not the view's.
+_EXPORT_COLUMNS: list[tuple[str, str]] = [
+    ("service_date", "Date"),
+    ("departure_datetime", "Departure"),
+    ("route_name", "Route"),
+    ("plate_number", "Plate"),
+    ("seat_capacity", "Capacity"),
+    ("total_bookings", "Passengers"),
+    ("app_bookings", "App"),
+    ("walkin_bookings", "Walk-in"),
+    ("expected_fare", "Expected (PHP)"),
+    ("collected_fare", "Collected (PHP)"),
+    ("cash_in_hand", "Cash in hand (PHP)"),
+    ("unreconciled_amount", "Unreconciled (PHP)"),
+    ("max_yolo_variance", "Max variance"),
+    ("pending_audits", "Pending audits"),
+    ("trip_id", "Trip ID"),
+]
+
+
+def _export_rows(trips: list[TripRevenueOut]) -> list[list]:
+    out = []
+    for t in trips:
+        d = t.model_dump()
+        out.append([d[key] for key, _ in _EXPORT_COLUMNS])
+    return out
+
+
+def _to_csv(trips: list[TripRevenueOut]) -> bytes:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([label for _, label in _EXPORT_COLUMNS])
+    for row in _export_rows(trips):
+        w.writerow(["" if v is None else v for v in row])
+    return buf.getvalue().encode("utf-8-sig")  # BOM so Excel reads UTF-8
+
+
+def _to_xlsx(trips: list[TripRevenueOut], date_from, date_to) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Trip revenue"
+    ws.append([label for _, label in _EXPORT_COLUMNS])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    money_cols = {i + 1 for i, (k, _) in enumerate(_EXPORT_COLUMNS) if k.endswith(("fare", "amount", "in_hand"))}
+    for row in _export_rows(trips):
+        ws.append([float(v) if isinstance(v, Decimal) else v for v in row])
+    for r in ws.iter_rows(min_row=2):
+        for c in r:
+            if c.column in money_cols:
+                c.number_format = "#,##0.00"
+            elif isinstance(c.value, dt.datetime):
+                c.number_format = "yyyy-mm-dd hh:mm"
+            elif isinstance(c.value, dt.date):
+                c.number_format = "yyyy-mm-dd"
+    for i, (_, label) in enumerate(_EXPORT_COLUMNS, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = max(12, len(label) + 2)
+    ws.freeze_panes = "A2"
+
+    # Totals row -- what the bookkeeper actually wants at the bottom.
+    if trips:
+        last = ws.max_row
+        ws.append([])
+        total_row = ["Total", "", "", "", ""]
+        for i, (k, _) in enumerate(_EXPORT_COLUMNS[5:], start=6):
+            col = get_column_letter(i)
+            if k in ("total_bookings", "app_bookings", "walkin_bookings") or i in money_cols:
+                total_row.append(f"=SUM({col}2:{col}{last})")
+            else:
+                total_row.append("")
+        ws.append(total_row)
+        for c in ws[ws.max_row]:
+            c.font = Font(bold=True)
+            if c.column in money_cols:
+                c.number_format = "#,##0.00"
+
+    meta = wb.create_sheet("About")
+    meta.append(["Generated", app_tz.now().strftime("%Y-%m-%d %H:%M")])
+    meta.append(["From", str(date_from or "(all)")])
+    meta.append(["To", str(date_to or "(all)")])
+    meta.append(["Source", "SabayGo v_trip_revenue_reconciliation"])
+    meta.append([])
+    meta.append(["Cash in hand", "Cash the crew has collected but not yet remitted. Money in a pocket, not money missing."])
+    meta.append(["Unreconciled", "Expected fare minus everything accounted for. This is the number to chase."])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@router.get("/revenue/export", dependencies=[Depends(COOP_ADMIN)], tags=["revenue"])
+async def revenue_export(
+    session: SessionDep,
+    format: str = Query("xlsx", pattern="^(csv|xlsx)$"),
+    date_from: dt.date | None = None,
+    date_to: dt.date | None = None,
+) -> Response:
+    """Per-trip reconciliation as a spreadsheet (G.1). `xlsx` by default;
+    `csv` for anything that cannot open Excel."""
+    trips = await _trip_rows(session, date_from, date_to, limit=5000)
+    span = f"{date_from or 'all'}_to_{date_to or 'all'}"
+    if format == "csv":
+        return Response(
+            content=_to_csv(trips),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="sabaygo_revenue_{span}.csv"'},
+        )
+    return Response(
+        content=_to_xlsx(trips, date_from, date_to),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="sabaygo_revenue_{span}.xlsx"'},
+    )
 
 
 @router.get("/revenue/summary", dependencies=[Depends(COOP_ADMIN)], tags=["revenue"])

@@ -14,6 +14,10 @@ class PendingAudit {
     this.snapshotUrl,
     this.confidenceAvg,
     required this.capturedAt,
+    this.resolutionStatus = 'pending',
+    this.resolvedBy,
+    this.resolvedAt,
+    this.resolutionNotes,
   });
 
   final String auditId;
@@ -27,6 +31,15 @@ class PendingAudit {
   final String? snapshotUrl;
   final double? confidenceAvg;
   final DateTime capturedAt;
+
+  /// G.2: history rows carry how the audit was closed and by whom.
+  /// `pending` rows leave these null.
+  final String resolutionStatus;
+  final String? resolvedBy;
+  final DateTime? resolvedAt;
+  final String? resolutionNotes;
+
+  bool get isPending => resolutionStatus == 'pending';
 
   /// The snapshot path the backend returns is server-relative
   /// (`/media/audits/...`), served off the API host but outside the
@@ -51,6 +64,12 @@ class PendingAudit {
         snapshotUrl: json['snapshot_url'] as String?,
         confidenceAvg: (json['confidence_avg'] as num?)?.toDouble(),
         capturedAt: DateTime.parse(json['captured_at'] as String),
+        resolutionStatus: json['resolution_status'] as String? ?? 'pending',
+        resolvedBy: json['resolved_by'] as String?,
+        resolvedAt: json['resolved_at'] == null
+            ? null
+            : DateTime.parse(json['resolved_at'] as String),
+        resolutionNotes: json['resolution_notes'] as String?,
       );
 }
 
@@ -60,6 +79,18 @@ class AuditRepository {
 
   Future<List<PendingAudit>> pending() async {
     final json = await _api.get('/audits/pending');
+    return (json as List)
+        .map((e) => PendingAudit.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Audits that have left the queue, newest first (G.2). Pass `status`
+  /// to narrow to one of reconciled / resolved / ignored / failed.
+  Future<List<PendingAudit>> history({String? status}) async {
+    final json = await _api.get(
+      '/audits/history',
+      query: {if (status != null) 'status': status},
+    );
     return (json as List)
         .map((e) => PendingAudit.fromJson(e as Map<String, dynamic>))
         .toList();

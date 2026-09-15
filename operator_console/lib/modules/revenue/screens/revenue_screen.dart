@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/util/download.dart';
 import '../../../data/repositories/revenue_repository.dart';
 
 /// Per-trip revenue reconciliation.
@@ -25,6 +26,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
   RevenueSummary? _summary;
   List<TripRevenue>? _trips;
   bool _loading = true;
+  bool _exporting = false;
   String? _error;
 
   late DateTime _dateFrom = DateTime.now().subtract(const Duration(days: 6));
@@ -58,6 +60,30 @@ class _RevenueScreenState extends State<RevenueScreen> {
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// G.1: the same date range the screen shows, as a file the office can
+  /// open in Excel or Sheets. Bytes come back through the authenticated
+  /// client -- a plain link would carry no JWT.
+  Future<void> _export(String format) async {
+    setState(() => _exporting = true);
+    final span =
+        '${DateFormat('yyyy-MM-dd').format(_dateFrom)}_to_${DateFormat('yyyy-MM-dd').format(_dateTo)}';
+    try {
+      final bytes = await _revenue.export(format: format, dateFrom: _dateFrom, dateTo: _dateTo);
+      downloadBytes(
+        bytes,
+        filename: 'sabaygo_revenue_$span.$format',
+        mimeType: format == 'csv'
+            ? 'text/csv'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: ${e.message}')));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
     }
   }
 
@@ -100,6 +126,27 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 icon: const Icon(Icons.date_range, size: 18),
                 label: Text(
                     '${DateFormat.MMMd().format(_dateFrom)} – ${DateFormat.MMMd().format(_dateTo)}'),
+              ),
+              const SizedBox(width: 12),
+              PopupMenuButton<String>(
+                enabled: !_loading && !_exporting,
+                tooltip: 'Export',
+                onSelected: _export,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'xlsx', child: Text('Excel workbook (.xlsx)')),
+                  PopupMenuItem(value: 'csv', child: Text('CSV (.csv)')),
+                ],
+                child: OutlinedButton.icon(
+                  onPressed: null,
+                  style: OutlinedButton.styleFrom(
+                    disabledForegroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                  ),
+                  icon: _exporting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.download, size: 18),
+                  label: Text(_exporting ? 'Exporting…' : 'Export'),
+                ),
               ),
               const SizedBox(width: 12),
               IconButton(

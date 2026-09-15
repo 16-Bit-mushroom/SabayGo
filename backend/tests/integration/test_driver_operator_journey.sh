@@ -219,8 +219,21 @@ if [ "$S" = "200" ]; then
 
     S=$(code POST "/audits/$AID/resolve" '{"resolution":"ignored","notes":"again"}' "$OT")
     [ "$S" = "409" ] && ok "double resolve rejected (409)" || bad "double resolve gave $S"
+
+    # G.2 -- the resolved audit must now appear in the history, with the resolver
+    S=$(code GET "/audits/history?status=resolved" "" "$OT")
+    H=$(python3 -c "import json;r=[a for a in json.load(open('/tmp/resp.json')) if a['audit_id']=='$AID'];print(r[0]['resolved_by'] if r and r[0].get('resolution_notes') else '')" 2>/dev/null)
+    [ "$S" = "200" ] && [ -n "$H" ] && ok "audit history shows it resolved by $H" || bad "history gave $S / $H"
   fi
 else bad "audit queue gave $S"; fi
+
+S=$(code GET /audits/history "" "$OT")
+if [ "$S" = "200" ]; then
+  P=$(python3 -c "import json;print(sum(1 for a in json.load(open('/tmp/resp.json')) if a['resolution_status']=='pending'))")
+  [ "$P" = "0" ] && ok "audit history excludes the pending queue" || bad "history contains $P pending"
+else bad "audit history gave $S"; fi
+S=$(code GET "/audits/history?status=bogus" "" "$OT")
+[ "$S" = "409" ] || [ "$S" = "422" ] && ok "unknown history status rejected ($S)" || bad "bogus status gave $S"
 if [ -z "${AID:-}" ]; then
   gap "no flagged audit to test empty-note rejection"
 else
@@ -248,11 +261,17 @@ S=$(code GET /revenue/trips "" "$OT")
 
 hdr "OPERATOR — 7. Gaps"
 
-S=$(code GET "/revenue/export?format=csv" "" "$OT")
-[ "$S" = "404" ] && gap "no CSV/report export -- operators will want this" || ok "export"
-
-S=$(code GET /audits/history "" "$OT")
-[ "$S" = "404" ] && gap "no resolved-audit history -- only the pending queue is readable" || ok "audit history"
+# G.1 -- spreadsheet export of the reconciliation
+S=$(curl -s -o /tmp/export.csv -w '%{http_code}' -H "Authorization: Bearer $OT" "$API/revenue/export?format=csv")
+if [ "$S" = "200" ] && head -n 1 /tmp/export.csv | grep -q "Date,Departure,Route"; then
+  ok "CSV export ($(($(wc -l < /tmp/export.csv) - 1)) trip rows)"
+else bad "csv export gave $S"; fi
+S=$(curl -s -o /tmp/export.xlsx -w '%{http_code}' -H "Authorization: Bearer $OT" "$API/revenue/export")
+if [ "$S" = "200" ] && python3 -c "import zipfile,sys;z=zipfile.ZipFile('/tmp/export.xlsx');sys.exit(0 if 'xl/workbook.xml' in z.namelist() else 1)"; then
+  ok "XLSX export is a real workbook"
+else bad "xlsx export gave $S"; fi
+S=$(code GET "/revenue/export?format=pdf" "" "$OT")
+[ "$S" = "422" ] && ok "unknown export format rejected (422)" || bad "pdf format gave $S"
 
 S=$(code GET /fleet/crew/schedule "" "$OT")
 [ "$S" = "404" ] && gap "no crew roster view -- cannot see who is driving what, when" || ok "crew schedule"
