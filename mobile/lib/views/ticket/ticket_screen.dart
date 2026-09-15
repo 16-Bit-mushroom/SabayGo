@@ -18,10 +18,14 @@ class TicketScreen extends StatefulWidget {
   /// opened from a list rather than straight after reserving.
   final ReservationResult? reservation;
 
+  /// When check-in opens at the passenger's own stop (from /bookings/mine).
+  final DateTime? checkinOpensAt;
+
   const TicketScreen({
     super.key,
     required this.bookedTrip,
     this.reservation,
+    this.checkinOpensAt,
   });
 
   /// Open an existing booking from the list. Everything the ticket shows
@@ -55,7 +59,8 @@ class TicketScreen extends StatefulWidget {
           fare: booking.fare,
           status: booking.status,
           qrPayload: booking.qrPayload,
-        );
+        ),
+        checkinOpensAt = booking.checkinOpensAt;
 
   @override
   State<TicketScreen> createState() => _TicketScreenState();
@@ -72,6 +77,7 @@ class _TicketScreenState extends State<TicketScreen> {
       repository: BookingRepository(api),
       bookedTrip: widget.bookedTrip,
       reservation: widget.reservation,
+      checkinOpensAt: widget.checkinOpensAt,
     )..addListener(_onStateChanged);
   }
 
@@ -263,6 +269,15 @@ class _TicketScreenState extends State<TicketScreen> {
                 const SizedBox(height: 12),
               ],
 
+              if (_viewModel.canCheckIn && _viewModel.checkinOpensAt != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Check-in opens ${DateFormat('h:mm a').format(_viewModel.checkinOpensAt!)} at ${trip.origin.name}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ),
               if (_viewModel.canCheckIn)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -277,6 +292,15 @@ class _TicketScreenState extends State<TicketScreen> {
                         : const Icon(Icons.location_on),
                     label: Text(_viewModel.isCheckingIn ? 'Checking in…' : "I'm at the terminal"),
                   ),
+                ),
+
+              // D.2: an accidental "I'm here" can be taken back until the
+              // conductor scans the ticket.
+              if (_viewModel.canUndoCheckIn)
+                TextButton.icon(
+                  onPressed: _viewModel.isUndoingCheckIn ? null : _viewModel.undoCheckIn,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: Text(_viewModel.isUndoingCheckIn ? 'Undoing…' : 'Undo check-in'),
                 ),
 
               // Cancel Button

@@ -11,6 +11,7 @@ class BookingSummary {
     required this.ticketNumber,
     required this.tripId,
     required this.departure,
+    required this.routeId,
     required this.routeName,
     required this.boardingStop,
     required this.alightingStop,
@@ -21,12 +22,15 @@ class BookingSummary {
     required this.canReschedule,
     this.qrPayload,
     this.rescheduleDeadline,
+    this.boardingDueAt,
+    this.checkinOpensAt,
   });
 
   final String bookingId;
   final String ticketNumber;
   final String tripId;
   final DateTime departure;
+  final String routeId;
   final String routeName;
   final int boardingStop;
   final int alightingStop;
@@ -41,6 +45,12 @@ class BookingSummary {
   /// on the actual request — this only decides whether to offer it.
   final bool canReschedule;
   final DateTime? rescheduleDeadline;
+
+  /// When the van is due at *this passenger's* boarding stop, and when
+  /// check-in there opens. Computed server-side from the stop's offset
+  /// on the route; a stop-3 passenger is not at the origin at departure.
+  final DateTime? boardingDueAt;
+  final DateTime? checkinOpensAt;
 
   bool get isAwaitingPayment => status == 'pending';
   bool get isConfirmed => status == 'confirmed';
@@ -70,6 +80,7 @@ class BookingSummary {
         ticketNumber: j['ticket_number'] as String,
         tripId: j['trip_id'] as String,
         departure: DateTime.parse(j['departure_datetime'] as String),
+        routeId: j['route_id'] as String? ?? '',
         routeName: j['route_name'] as String? ?? '',
         boardingStop: j['boarding_stop'] as int,
         alightingStop: j['alighting_stop'] as int,
@@ -82,6 +93,12 @@ class BookingSummary {
         rescheduleDeadline: j['reschedule_deadline'] == null
             ? null
             : DateTime.parse(j['reschedule_deadline'] as String),
+        boardingDueAt: j['boarding_due_at'] == null
+            ? null
+            : DateTime.parse(j['boarding_due_at'] as String),
+        checkinOpensAt: j['checkin_opens_at'] == null
+            ? null
+            : DateTime.parse(j['checkin_opens_at'] as String),
       );
 }
 
@@ -143,6 +160,13 @@ class BookingRepository {
         .toList();
   }
 
+  /// One of the caller's own bookings, same shape as an element of [mine].
+  /// The ticket screen polls this while a checkout is pending (G.7).
+  Future<BookingSummary> byId(String bookingId) async {
+    final json = await _api.get('/bookings/$bookingId');
+    return BookingSummary.fromJson(json as Map<String, dynamic>);
+  }
+
   /// Move a booking to another departure on the same route.
   ///
   /// The journey stays the same — only the trip changes. Allowing the
@@ -193,6 +217,13 @@ class BookingRepository {
       'longitude': longitude,
       if (accuracyM != null) 'gps_accuracy_m': accuracyM,
     });
+    return json as Map<String, dynamic>;
+  }
+
+  /// Withdraw an accidental check-in. Allowed only while the booking is
+  /// still `checked_in`; once scanned aboard there is nothing to retract.
+  Future<Map<String, dynamic>> undoCheckIn(String bookingId) async {
+    final json = await _api.delete('/bookings/$bookingId/check-in');
     return json as Map<String, dynamic>;
   }
 }

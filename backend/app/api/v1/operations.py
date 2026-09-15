@@ -16,7 +16,11 @@ from app.application.operations.boarding import (
     ManifestUseCase,
     ScanTicketUseCase,
 )
-from app.application.operations.check_in import CheckInCommand, CheckInUseCase
+from app.application.operations.check_in import (
+    CheckInCommand,
+    CheckInUseCase,
+    UndoCheckInUseCase,
+)
 from app.application.operations.guards import assert_assigned_to_trip
 from app.core.exceptions import NotFoundError
 from app.core.timezone import APP_TZ
@@ -74,6 +78,27 @@ async def check_in(
         distance_m=result.distance_m,
         geofence_radius_m=result.geofence_radius_m,
         message=f"Checked in at {result.terminal_name} ({result.distance_m:.0f}m).",
+    )
+
+
+class UndoCheckInResponse(BaseModel):
+    booking_id: str
+    status: str
+    message: str
+
+
+@router.delete("/bookings/{booking_id}/check-in", response_model=UndoCheckInResponse)
+async def undo_check_in(
+    booking_id: str,
+    session: SessionDep,
+    user: CurrentUser,
+) -> UndoCheckInResponse:
+    """Withdraw a check-in (D.2). Only while the booking is still `checked_in`."""
+    result = await UndoCheckInUseCase(session).execute(
+        booking_id=booking_id, passenger_user_id=user.user_id
+    )
+    return UndoCheckInResponse(
+        booking_id=result.booking_id, status=result.status, message=result.message
     )
 
 

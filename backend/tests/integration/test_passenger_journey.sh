@@ -73,7 +73,21 @@ S=$(code GET /trips/terminals)
                  || bad "terminals gave $S"
 
 S=$(code "GET" "/trips/search?boarding_stop=1&alighting_stop=4")
-[ "$S" = "200" ] && ok "search trips" || bad "search gave $S"
+[ "$S" = "200" ] && ok "search trips by sequence (legacy)" || bad "search gave $S"
+
+# Terminals are unique in the picker even when they sit on several routes
+DUP=$(code GET /trips/terminals >/dev/null; python3 -c "import json;ids=[t['terminal_id'] for t in json.load(open('/tmp/resp.json'))];print(len(ids)-len(set(ids)))")
+[ "$DUP" = "0" ] && ok "terminal picker has no duplicates" || bad "$DUP duplicate terminals in picker"
+
+TODAY=$(date +%F)
+S=$(code "GET" "/trips/search?origin_terminal_id=TERM-ECOLAND-000001&destination_terminal_id=TERM-COTABATO-00001&service_date=$TODAY")
+N=$(python3 -c "import json;d=json.load(open('/tmp/resp.json'));print(len(d) if isinstance(d,list) else -1)")
+[ "$S" = "200" ] && [ "$N" -ge 1 ] && ok "search by terminals: $N departure(s) Ecoland -> Cotabato" || bad "terminal search gave $S / $N"
+S=$(code "GET" "/trips/search?origin_terminal_id=TERM-COTABATO-00001&destination_terminal_id=TERM-ECOLAND-000001&service_date=$TODAY")
+N=$(python3 -c "import json;d=json.load(open('/tmp/resp.json'));print(len(d) if isinstance(d,list) else -1)")
+[ "$S" = "200" ] && [ "$N" = "0" ] && ok "reverse direction finds nothing (different LTFRB route)" || bad "reverse search gave $S / $N"
+S=$(code "GET" "/trips/search?service_date=$TODAY")
+[ "$S" = "422" ] && ok "search with no terminals rejected (422)" || bad "bare search gave $S"
 
 S=$(code GET "/trips/$TRIP/stops")
 [ "$S" = "200" ] && ok "view route stops" || bad "stops gave $S"
@@ -99,9 +113,12 @@ S=$(code GET /bookings/mine "" "$TOKEN")
 [ "$S" = "200" ] && ok "list my bookings" || bad "mine gave $S"
 
 S=$(code GET "/bookings/$BID" "" "$TOKEN")
-if [ "$S" = "404" ] || [ "$S" = "405" ]; then
-  gap "GET /bookings/{id} -- no single-booking detail endpoint"
-else ok "booking detail"; fi
+if [ "$S" = "200" ] && [ "$(j "['booking_id']" < /tmp/resp.json)" = "$BID" ]; then
+  ok "booking detail ($(j "['status']" < /tmp/resp.json))"
+else bad "GET /bookings/{id} gave $S"; fi
+
+S=$(code GET "/bookings/BKG-DOES-NOT-EXIST" "" "$TOKEN")
+[ "$S" = "404" ] && ok "unknown booking id -> 404" || bad "unknown booking gave $S"
 
 # ═══════════════════════════════════════════════ 4. PAYMENT
 hdr "4. Payment"
@@ -152,9 +169,14 @@ S=$(code POST "/bookings/$ABANDON/cancel" "" "$TOKEN")
 # ═══════════════════════════════════════════════ 6. TRAVEL DAY
 hdr "6. Travel day"
 
+# D.2: nothing to undo yet -> 409, never 404/405
+S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
+[ "$S" = "409" ] && ok "undo before check-in rejected (409)" || bad "undo before check-in gave $S"
+
 S=$(code POST "/bookings/$BID/check-in" \
   "{\"latitude\":$LAT,\"longitude\":$LNG,\"gps_accuracy_m\":8.5}" "$TOKEN")
-if [ "$S" = "200" ]; then ok "checked in at the terminal"
+CHECKED_IN=0
+if [ "$S" = "200" ]; then ok "checked in at the terminal"; CHECKED_IN=1
 elif [ "$S" = "422" ]; then
   gap "check-in -- $(j "['detail']" < /tmp/resp.json)"
 else bad "check-in gave $S"; fi
@@ -163,10 +185,26 @@ S=$(code POST "/bookings/$BID/check-in" \
   "{\"latitude\":7.20,\"longitude\":125.40,\"gps_accuracy_m\":8.5}" "$TOKEN")
 { [ "$S" = "422" ] || [ "$S" = "409" ]; } && ok "far check-in rejected ($S)" || bad "far check-in gave $S"
 
-S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
-if [ "$S" = "404" ] || [ "$S" = "405" ]; then
-  gap "undo check-in -- no way to reverse an accidental check-in"
-else ok "check-in undone"; fi
+# D.1: /bookings/mine tells the app when check-in opens at the passenger's own stop
+S=$(code GET /bookings/mine "" "$TOKEN")
+if [ "$S" = "200" ] && j "[0]['checkin_opens_at']" < /tmp/resp.json >/dev/null 2>&1; then
+  ok "my bookings carry checkin_opens_at / boarding_due_at"
+else bad "my bookings missing checkin_opens_at (HTTP $S)"; fi
+
+# D.2: undo, then check in again -- the undo must not consume the booking
+if [ "$CHECKED_IN" = "1" ]; then
+  S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
+  [ "$S" = "200" ] && ok "check-in undone ($(j "['status']" < /tmp/resp.json))" || bad "undo check-in gave $S"
+
+  S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
+  [ "$S" = "409" ] && ok "double undo rejected (409)" || bad "double undo gave $S"
+
+  S=$(code POST "/bookings/$BID/check-in" \
+    "{\"latitude\":$LAT,\"longitude\":$LNG,\"gps_accuracy_m\":8.5}" "$TOKEN")
+  [ "$S" = "200" ] && ok "checked in again after undo" || bad "re-check-in gave $S"
+else
+  gap "undo check-in -- skipped, check-in itself was not accepted"
+fi
 
 # ═══════════════════════════════════════════════ 7. SELF-SERVICE
 hdr "7. Managing the account"

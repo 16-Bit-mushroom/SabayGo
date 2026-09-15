@@ -8,6 +8,19 @@ client that decides its own geofence result can simply lie.
 Both the raw coordinate and the computed distance are stored. The verdict
 drives business logic; the distance is what lets you report GPS accuracy
 in the Results chapter.
+
+Check-in is a heads-up for dispatch, not a gate (Group D decision, 15 Sep):
+the conductor sees who is already at the terminal and can release the
+space of someone who is not coming. It never blocks a scan -- the
+conductor looking at a passenger is better proof of presence than a phone
+reading. Two consequences:
+
+* The time window is measured against the passenger's OWN boarding stop
+  (`departure + route_stops.offset_minutes`), not the origin departure.
+  Someone boarding at Kidapawan is not at Ecoland when the van leaves.
+* A confirmation can be withdrawn while the booking is still `checked_in`.
+  The `check_ins` row is kept and stamped `undone_at`, so the trail is
+  intact and a second, genuine check-in is simply a new row.
 """
 
 from __future__ import annotations
@@ -16,17 +29,17 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.timezone import APP_TZ
+from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.enums import BookingStatus
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import CheckIn, RouteStop, Terminal, Trip
+from app.infrastructure.models import CheckIn, RouteStop, Trip
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
@@ -68,6 +81,13 @@ class CheckInResult:
     reason: str | None
 
 
+def stop_departure(trip: Trip, stop: RouteStop) -> datetime:
+    """When the van is due at this stop: origin departure plus the stop's offset."""
+    return app_tz.localize(trip.departure_datetime) + timedelta(
+        minutes=stop.offset_minutes
+    )
+
+
 class CheckInUseCase:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -92,9 +112,8 @@ class CheckInUseCase:
         if trip is None:
             raise NotFoundError("Trip not found.")
 
-        terminal = await self._boarding_terminal(
-            trip.route_id, booking.boarding_stop_sequence
-        )
+        stop = await self._boarding_stop(trip.route_id, booking.boarding_stop_sequence)
+        terminal = stop.terminal
 
         distance = haversine_m(
             cmd.latitude, cmd.longitude,
@@ -106,13 +125,15 @@ class CheckInUseCase:
         )
         within_fence = distance <= radius
 
+        # D.1: the window is anchored on the passenger's own stop. On a
+        # three-stop route the van leaves the origin long before it reaches
+        # stop 3, and a stop-3 passenger checking in at origin time would be
+        # rejected for being "late" while the van is still an hour away.
         window_minutes = await self.policies.get_int("checkin_window_minutes")
-        departure = trip.departure_datetime
-        if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=APP_TZ)
-        now = datetime.now(APP_TZ)
-        opens = departure - timedelta(minutes=window_minutes)
-        within_window = opens <= now <= departure
+        due_at = stop_departure(trip, stop)
+        now = app_tz.now()
+        opens = due_at - timedelta(minutes=window_minutes)
+        within_window = opens <= now <= due_at
 
         reason: str | None = None
         if not within_fence:
@@ -122,9 +143,13 @@ class CheckInUseCase:
             )
         elif not within_window:
             reason = (
-                f"Check-in opens {window_minutes} minutes before departure."
+                f"Check-in at {terminal.terminal_name} opens at "
+                f"{opens:%H:%M}, {window_minutes} minutes before the van is due."
                 if now < opens
-                else "Check-in has closed; the trip has departed."
+                else (
+                    f"Check-in has closed; the van was due at "
+                    f"{terminal.terminal_name} at {due_at:%H:%M}."
+                )
             )
 
         # The attempt is recorded either way. A rejected check-in is
@@ -178,16 +203,74 @@ class CheckInUseCase:
             reason=None,
         )
 
-    async def _boarding_terminal(self, route_id: str, stop_sequence: int) -> Terminal:
+    async def _boarding_stop(self, route_id: str, stop_sequence: int) -> RouteStop:
         result = await self.session.execute(
-            select(Terminal)
-            .join(RouteStop, RouteStop.terminal_id == Terminal.terminal_id)
-            .where(
+            select(RouteStop).where(
                 RouteStop.route_id == route_id,
                 RouteStop.stop_sequence == stop_sequence,
             )
         )
-        terminal = result.scalar_one_or_none()
-        if terminal is None:
+        stop = result.scalar_one_or_none()  # .terminal is lazy="joined"
+        if stop is None:
             raise NotFoundError("Boarding terminal not found for this route.")
-        return terminal
+        return stop
+
+
+@dataclass(frozen=True)
+class UndoCheckInResult:
+    booking_id: str
+    status: str
+    message: str
+
+
+class UndoCheckInUseCase:
+    """D.2: withdraw an accidental "I'm here".
+
+    Allowed only while the booking is `checked_in`. Once the conductor has
+    scanned the ticket the passenger is aboard and presence is no longer
+    the phone's claim to retract.
+    """
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def execute(
+        self, *, booking_id: str, passenger_user_id: str
+    ) -> UndoCheckInResult:
+        booking = await self.session.get(BookingRow, booking_id)
+        if booking is None or booking.passenger_user_id != passenger_user_id:
+            raise NotFoundError("Booking not found.")
+        if booking.status == BookingStatus.BOARDED.value:
+            raise ConflictError("You have already boarded; check-in cannot be undone.")
+        if booking.status != BookingStatus.CHECKED_IN.value:
+            raise ConflictError(
+                f"This booking is {booking.status}, not checked in."
+            )
+
+        now = app_tz.now()
+        # Stamp the accepted row rather than deleting it -- see module docstring.
+        result = await self.session.execute(
+            select(CheckIn)
+            .where(
+                CheckIn.booking_id == booking_id,
+                CheckIn.is_within_geofence.is_(True),
+                CheckIn.is_within_window.is_(True),
+                CheckIn.undone_at.is_(None),
+            )
+            .order_by(CheckIn.checked_in_at.desc())
+            .limit(1)
+        )
+        accepted = result.scalar_one_or_none()
+        if accepted is not None:
+            accepted.undone_at = now
+
+        booking.status = BookingStatus.CONFIRMED.value
+        booking.updated_at = now
+        await self.session.commit()
+        log.info("Check-in undone for booking %s", booking_id)
+
+        return UndoCheckInResult(
+            booking_id=booking_id,
+            status=BookingStatus.CONFIRMED.value,
+            message="Check-in withdrawn. You can check in again when you arrive.",
+        )

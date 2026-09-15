@@ -8,6 +8,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.application.booking.reschedule import (
@@ -19,9 +20,11 @@ from app.application.booking.reserve_seat import (
     ReserveSeatUseCase,
 )
 from app.core import timezone as app_tz
+from app.core.exceptions import NotFoundError
 from app.domain.enums import BookingType, Role
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import RouteStop, Terminal, Trip
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
 from app.domain.value_objects import Segment
 
@@ -185,6 +188,7 @@ class MyBookingOut(BaseModel):
     ticket_number: str
     trip_id: str
     departure_datetime: datetime
+    route_id: str
     route_name: str
     boarding_stop: int
     alighting_stop: int
@@ -195,36 +199,44 @@ class MyBookingOut(BaseModel):
     qr_payload: str | None
     can_reschedule: bool
     reschedule_deadline: datetime | None
+    # D.1: when the van is due at the passenger's OWN stop, and when
+    # check-in there opens. The app shows these; the server enforces them.
+    boarding_due_at: datetime
+    checkin_opens_at: datetime
 
 
-@router.get("/mine", response_model=list[MyBookingOut])
-async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingOut]:
-    """The passenger's own bookings, newest first.
+async def _render_bookings(
+    session: AsyncSession, rows: list[tuple[BookingRow, Trip]]
+) -> list[MyBookingOut]:
+    """Shape booking rows for the passenger. Shared by `/mine` and
+    `/{booking_id}` so the ticket screen sees one identical object either way.
 
     `can_reschedule` and `reschedule_deadline` are computed server-side so
     the app never has to reimplement the policy -- it just enables or
     disables the button. The server re-checks on the actual request.
     """
-    result = await session.execute(
-        select(BookingRow, Trip)
-        .join(Trip, Trip.trip_id == BookingRow.trip_id)
-        .where(BookingRow.passenger_user_id == user.user_id)
-        .order_by(BookingRow.booked_at.desc())
-        .limit(50)
-    )
-    rows = result.all()
-
     # One name lookup for every route on the page, rather than one per booking.
     route_ids = {trip.route_id for _, trip in rows}
     stop_names: dict[tuple[str, int], str] = {}
+    stop_offsets: dict[tuple[str, int], int] = {}
     if route_ids:
         stops = await session.execute(
-            select(RouteStop.route_id, RouteStop.stop_sequence, Terminal.terminal_name)
+            select(
+                RouteStop.route_id,
+                RouteStop.stop_sequence,
+                RouteStop.offset_minutes,
+                Terminal.terminal_name,
+            )
             .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
             .where(RouteStop.route_id.in_(route_ids))
         )
-        stop_names = {(rid, seq): name for rid, seq, name in stops.all()}
+        for rid, seq, offset, name in stops.all():
+            stop_names[(rid, seq)] = name
+            stop_offsets[(rid, seq)] = offset
 
+    checkin_window = timedelta(
+        minutes=await PolicyRepository(session).get_int("checkin_window_minutes")
+    )
     now = app_tz.now()
     active = {"pending", "confirmed", "checked_in"}
     out: list[MyBookingOut] = []
@@ -232,6 +244,9 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
     for booking, trip in rows:
         departure = app_tz.localize(trip.departure_datetime)
         deadline = departure - timedelta(hours=trip.reschedule_cutoff_hours)
+        boarding_due_at = departure + timedelta(
+            minutes=stop_offsets.get((trip.route_id, booking.boarding_stop_sequence), 0)
+        )
 
         out.append(
             MyBookingOut(
@@ -239,6 +254,7 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
                 ticket_number=booking.ticket_number,
                 trip_id=booking.trip_id,
                 departure_datetime=trip.departure_datetime,
+                route_id=trip.route_id,
                 route_name=trip.route.route_name if trip.route else "",
                 boarding_stop=booking.boarding_stop_sequence,
                 alighting_stop=booking.alighting_stop_sequence,
@@ -253,9 +269,49 @@ async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingO
                 qr_payload=booking.qr_payload,
                 can_reschedule=booking.status in active and now < deadline,
                 reschedule_deadline=deadline,
+                boarding_due_at=boarding_due_at,
+                checkin_opens_at=boarding_due_at - checkin_window,
             )
         )
     return out
+
+
+@router.get("/mine", response_model=list[MyBookingOut])
+async def my_bookings(session: SessionDep, user: CurrentUser) -> list[MyBookingOut]:
+    """The passenger's own bookings, newest first."""
+    result = await session.execute(
+        select(BookingRow, Trip)
+        .join(Trip, Trip.trip_id == BookingRow.trip_id)
+        .where(BookingRow.passenger_user_id == user.user_id)
+        .order_by(BookingRow.booked_at.desc())
+        .limit(50)
+    )
+    return await _render_bookings(session, result.all())
+
+
+@router.get("/{booking_id}", response_model=MyBookingOut)
+async def my_booking(
+    booking_id: str, session: SessionDep, user: CurrentUser
+) -> MyBookingOut:
+    """One of the passenger's own bookings (G.7).
+
+    Same shape as one element of `/mine`, so the ticket screen can poll a
+    single row while a checkout is pending instead of fetching the list.
+    Another passenger's booking is a 404, not a 403 -- the ID's existence is
+    not the caller's business.
+    """
+    result = await session.execute(
+        select(BookingRow, Trip)
+        .join(Trip, Trip.trip_id == BookingRow.trip_id)
+        .where(
+            BookingRow.booking_id == booking_id,
+            BookingRow.passenger_user_id == user.user_id,
+        )
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise NotFoundError("Booking not found.")
+    return (await _render_bookings(session, [row]))[0]
 
 
 @router.post("/{booking_id}/reschedule", response_model=RescheduleResponse)

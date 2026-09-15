@@ -19,6 +19,7 @@ class TicketViewModel extends ChangeNotifier {
     required BookingRepository repository,
     required UvTripModel bookedTrip,
     ReservationResult? reservation,
+    this.checkinOpensAt,
   })  : _repo = repository,
         trip = bookedTrip {
     if (reservation != null) {
@@ -48,8 +49,11 @@ class TicketViewModel extends ChangeNotifier {
 
   bool isStartingCheckout = false;
   bool isCheckingIn = false;
+  bool isUndoingCheckIn = false;
   bool isPolling = false;
   String? checkInMessage;
+  /// From /bookings/{id}: when check-in opens at this passenger's own stop.
+  DateTime? checkinOpensAt;
   String? error;
 
   Timer? _pollTimer;
@@ -63,6 +67,7 @@ class TicketViewModel extends ChangeNotifier {
   bool get isBoarded => status == 'boarded';
   bool get isCancelled => status == 'cancelled';
   bool get canCheckIn => hasLiveBooking && isConfirmed;
+  bool get canUndoCheckIn => hasLiveBooking && isCheckedIn;
   bool get hasUsableTicket =>
       qrPayload != null && !isAwaitingPayment && !isCancelled;
 
@@ -110,19 +115,17 @@ class TicketViewModel extends ChangeNotifier {
   }
 
   Future<void> _refreshStatus() async {
+    final id = bookingId;
+    if (id == null) return;
     _pollAttempts++;
     try {
-      final bookings = await _repo.mine();
-      BookingSummary? match;
-      for (final b in bookings) {
-        if (b.bookingId == bookingId) {
-          match = b;
-          break;
-        }
-      }
-      if (match != null && (match.status != status || match.qrPayload != qrPayload)) {
+      final match = await _repo.byId(id);
+      if (match.status != status ||
+          match.qrPayload != qrPayload ||
+          match.checkinOpensAt != checkinOpensAt) {
         status = match.status;
         qrPayload = match.qrPayload ?? qrPayload;
+        checkinOpensAt = match.checkinOpensAt;
         notifyListeners();
       }
     } on ApiException {
@@ -184,6 +187,26 @@ class TicketViewModel extends ChangeNotifier {
       error = 'SabayGo needs location permission to check you in at the terminal.';
     } finally {
       isCheckingIn = false;
+      notifyListeners();
+    }
+  }
+
+  /// Withdraw the check-in (D.2). The booking goes back to `confirmed`
+  /// and the button to check in again reappears.
+  Future<void> undoCheckIn() async {
+    if (!canUndoCheckIn || isUndoingCheckIn) return;
+    isUndoingCheckIn = true;
+    error = null;
+    notifyListeners();
+
+    try {
+      final result = await _repo.undoCheckIn(bookingId!);
+      status = result['status'] as String? ?? 'confirmed';
+      checkInMessage = result['message'] as String?;
+    } on ApiException catch (e) {
+      error = e.message;
+    } finally {
+      isUndoingCheckIn = false;
       notifyListeners();
     }
   }

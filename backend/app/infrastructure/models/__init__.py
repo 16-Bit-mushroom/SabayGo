@@ -370,6 +370,7 @@ class CheckIn(Base):
     is_within_window: Mapped[bool] = mapped_column(Boolean)
     rejection_reason: Mapped[str | None] = mapped_column(String(255))
     checked_in_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    undone_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
 
 
 class BoardingScan(Base):
