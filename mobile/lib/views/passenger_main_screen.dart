@@ -34,14 +34,7 @@ class PassengerMainScreen extends StatelessWidget {
               Tab(icon: Icon(Icons.home_filled, size: 28)),
               Tab(icon: Icon(Icons.confirmation_number_outlined, size: 26)),
               Tab(icon: Icon(Icons.notifications_none, size: 28)),
-              Tab(
-                icon: CircleAvatar(
-                  radius: 14,
-                  // Mock Avatar - replace with actual user profile image later
-                  backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=47'),
-                  backgroundColor: Colors.grey,
-                ),
-              ),
+              Tab(icon: Icon(Icons.person_outline, size: 26)),
             ],
           ),
         ),

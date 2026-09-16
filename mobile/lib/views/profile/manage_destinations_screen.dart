@@ -1,35 +1,119 @@
 import 'package:flutter/material.dart';
-import '../../models/transit_node_model.dart';
+import 'package:provider/provider.dart';
+
+import '../../models/saved_destination_model.dart';
+import '../../viewmodels/profile_viewmodel.dart';
 
 class ManageDestinationsScreen extends StatefulWidget {
-  final List<TransitNodeModel> destinations;
-  
-  const ManageDestinationsScreen({super.key, required this.destinations});
+  const ManageDestinationsScreen({super.key});
 
   @override
   State<ManageDestinationsScreen> createState() => _ManageDestinationsScreenState();
 }
 
 class _ManageDestinationsScreenState extends State<ManageDestinationsScreen> {
-  late List<TransitNodeModel> _myDestinations;
-
-  @override
-  void initState() {
-    super.initState();
-    _myDestinations = List.from(widget.destinations);
+  Future<void> _deleteDestination(SavedDestinationModel dest) async {
+    final message =
+        await context.read<ProfileViewModel>().removeSavedDestination(dest.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message ?? 'Destination removed')),
+    );
   }
 
-  void _deleteDestination(int index) {
-    setState(() {
-      _myDestinations.removeAt(index);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Destination removed')),
+  Future<void> _showAddDestinationSheet() async {
+    final labelCtrl = TextEditingController();
+    final addressCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    String? error;
+    bool saving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+          ),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Add Destination', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                if (error != null) ...[
+                  Text(error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                  const SizedBox(height: 8),
+                ],
+                TextFormField(
+                  controller: labelCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Label (e.g. "Mom\'s house")',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: addressCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Address (optional)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (!formKey.currentState!.validate()) return;
+                            setSheetState(() => saving = true);
+                            final message = await context
+                                .read<ProfileViewModel>()
+                                .addSavedDestination(
+                                  label: labelCtrl.text.trim(),
+                                  address: addressCtrl.text.trim(),
+                                );
+                            if (message != null) {
+                              setSheetState(() {
+                                saving = false;
+                                error = message;
+                              });
+                              return;
+                            }
+                            if (sheetContext.mounted) Navigator.pop(sheetContext);
+                          },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF00A859),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final destinations = context.watch<ProfileViewModel>().savedDestinations;
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
@@ -39,22 +123,20 @@ class _ManageDestinationsScreenState extends State<ManageDestinationsScreen> {
         iconTheme: const IconThemeData(color: Colors.black87),
         actions: [
           IconButton(
-            onPressed: () {
-              // TODO: Open Add Destination Modal
-            },
+            onPressed: _showAddDestinationSheet,
             icon: const Icon(Icons.add, color: Color(0xFF00A859)),
           )
         ],
       ),
       body: SafeArea(
-        child: _myDestinations.isEmpty
+        child: destinations.isEmpty
             ? _buildEmptyState()
             : ListView.separated(
                 padding: const EdgeInsets.all(20),
-                itemCount: _myDestinations.length,
+                itemCount: destinations.length,
                 separatorBuilder: (context, index) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
-                  final node = _myDestinations[index];
+                  final dest = destinations[index];
                   return Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -63,58 +145,30 @@ class _ManageDestinationsScreenState extends State<ManageDestinationsScreen> {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(color: const Color(0xFFD9534F).withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.location_on, color: Color(0xFFD9534F), size: 20),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(node.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                    const SizedBox(height: 2),
-                                    Text(node.area, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () {
-                                  // TODO: Update destination logic
-                                },
-                                icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
-                              ),
-                              IconButton(
-                                onPressed: () => _deleteDestination(index),
-                                icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                              ),
-                            ],
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(color: const Color(0xFFD9534F).withValues(alpha: 0.1), shape: BoxShape.circle),
+                            child: const Icon(Icons.location_on, color: Color(0xFFD9534F), size: 20),
                           ),
-                          const Divider(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: () {
-                                // TODO: Navigate to Home Screen and auto-filter by this destination
-                                DefaultTabController.of(context).animateTo(0);
-                                Navigator.pop(context);
-                              },
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF00A859).withValues(alpha: 0.1),
-                                foregroundColor: const Color(0xFF00A859),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: const Icon(Icons.search, size: 18),
-                              label: const Text('Check Available Trips', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(dest.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                if (dest.address != null && dest.address!.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(dest.address!, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                ],
+                              ],
                             ),
-                          )
+                          ),
+                          IconButton(
+                            onPressed: () => _deleteDestination(dest),
+                            icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                          ),
                         ],
                       ),
                     ),

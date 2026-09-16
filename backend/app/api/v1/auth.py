@@ -8,9 +8,17 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 
 from app.api.v1.deps import CurrentUser, SessionDep
+from app.application.identity.close_account import (
+    CloseAccountCommand,
+    CloseAccountUseCase,
+)
 from app.application.identity.register_passenger import (
     RegisterPassengerCommand,
     RegisterPassengerUseCase,
+)
+from app.application.identity.update_profile import (
+    UpdateProfileCommand,
+    UpdateProfileUseCase,
 )
 from app.core import timezone as app_tz
 from app.core.exceptions import AuthenticationError
@@ -38,6 +46,37 @@ class MeResponse(BaseModel):
     role: str
     account_status: str
     display_name: str | None = None
+    # Populated for a passenger only -- a staff profile has no phone here,
+    # emergency contact or trust rating to show on a self-service screen.
+    phone_number: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    home_address: str | None = None
+    gender: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_relation: str | None = None
+    emergency_contact_number: str | None = None
+    avatar_url: str | None = None
+    trust_rating: float | None = None
+
+
+class UpdateMeRequest(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    phone_number: str | None = None
+    home_address: str | None = None
+    gender: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_relation: str | None = None
+    emergency_contact_number: str | None = None
+    current_password: str | None = None
+    new_password: str | None = Field(default=None, min_length=8)
+
+
+class CloseAccountRequest(BaseModel):
+    password: str
 
 
 class RegisterRequest(BaseModel):
@@ -111,14 +150,68 @@ async def login(payload: LoginRequest, session: SessionDep) -> TokenResponse:
     )
 
 
-@router.get("/me", response_model=MeResponse)
-async def me(user: CurrentUser) -> MeResponse:
+def _to_me_response(user: User) -> MeResponse:
     profile = user.passenger_profile or user.staff_profile
     name = f"{profile.first_name} {profile.last_name}" if profile else None
+    passenger = user.passenger_profile
     return MeResponse(
         user_id=user.user_id,
         email=user.email,
         role=user.role,
         account_status=user.account_status,
         display_name=name,
+        phone_number=user.phone_number,
+        first_name=passenger.first_name if passenger else None,
+        last_name=passenger.last_name if passenger else None,
+        middle_name=passenger.middle_name if passenger else None,
+        home_address=passenger.home_address if passenger else None,
+        gender=passenger.gender if passenger else None,
+        emergency_contact_name=passenger.emergency_contact_name if passenger else None,
+        emergency_contact_relation=(
+            passenger.emergency_contact_relation if passenger else None
+        ),
+        emergency_contact_number=(
+            passenger.emergency_contact_number if passenger else None
+        ),
+        avatar_url=passenger.avatar_url if passenger else None,
+        trust_rating=float(passenger.trust_rating) if passenger else None,
+    )
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(user: CurrentUser) -> MeResponse:
+    return _to_me_response(user)
+
+
+@router.patch("/me", response_model=MeResponse)
+async def update_me(
+    payload: UpdateMeRequest, session: SessionDep, user: CurrentUser
+) -> MeResponse:
+    """Passenger self-service profile edit: name, phone, password (G.4)."""
+    updated = await UpdateProfileUseCase(session).execute(
+        UpdateProfileCommand(
+            user_id=user.user_id,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            middle_name=payload.middle_name,
+            phone_number=payload.phone_number,
+            home_address=payload.home_address,
+            gender=payload.gender,
+            emergency_contact_name=payload.emergency_contact_name,
+            emergency_contact_relation=payload.emergency_contact_relation,
+            emergency_contact_number=payload.emergency_contact_number,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    )
+    return _to_me_response(updated)
+
+
+@router.post("/me/close", status_code=204)
+async def close_my_account(
+    payload: CloseAccountRequest, session: SessionDep, user: CurrentUser
+) -> None:
+    """Passenger closes their own account (G.5)."""
+    await CloseAccountUseCase(session).execute(
+        CloseAccountCommand(user_id=user.user_id, password=payload.password)
     )
