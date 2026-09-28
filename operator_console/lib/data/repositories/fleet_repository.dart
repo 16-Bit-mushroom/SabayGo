@@ -11,6 +11,10 @@ class Van {
     required this.operationalStatus,
     this.registeredRouteId,
     required this.hasCabinCamera,
+    this.cameraDeviceId,
+    this.cpcCaseNo,
+    this.cpcNumber,
+    this.cameraInstalledAt,
   });
 
   final String vanId;
@@ -22,6 +26,10 @@ class Van {
   final String operationalStatus; // active | maintenance | inactive
   final String? registeredRouteId;
   final bool hasCabinCamera;
+  final String? cameraDeviceId;
+  final String? cpcCaseNo;
+  final String? cpcNumber;
+  final DateTime? cameraInstalledAt;
 
   factory Van.fromJson(Map<String, dynamic> json) => Van(
         vanId: json['van_id'] as String,
@@ -33,6 +41,12 @@ class Van {
         operationalStatus: json['operational_status'] as String,
         registeredRouteId: json['registered_route_id'] as String?,
         hasCabinCamera: json['has_cabin_camera'] as bool? ?? false,
+        cameraDeviceId: json['camera_device_id'] as String?,
+        cpcCaseNo: json['cpc_case_no'] as String?,
+        cpcNumber: json['cpc_number'] as String?,
+        cameraInstalledAt: json['camera_installed_at'] == null
+            ? null
+            : DateTime.parse(json['camera_installed_at'] as String),
       );
 }
 
@@ -47,31 +61,51 @@ class StaffMember {
   const StaffMember({
     required this.userId,
     required this.email,
+    this.phoneNumber,
     required this.role,
     required this.firstName,
+    this.middleName,
     required this.lastName,
     required this.employmentStatus,
+    this.cooperativeName,
+    this.assignedTerminalId,
     this.licenseNumber,
+    this.licenseExpiryDate,
+    this.cttmoIdNumber,
   });
 
   final String userId;
   final String email;
+  final String? phoneNumber;
   final String role;
   final String firstName;
+  final String? middleName;
   final String lastName;
   final String employmentStatus; // active | suspended | inactive
+  final String? cooperativeName;
+  final String? assignedTerminalId;
   final String? licenseNumber;
+  final DateTime? licenseExpiryDate;
+  final String? cttmoIdNumber;
 
   String get fullName => '$firstName $lastName';
 
   factory StaffMember.fromJson(Map<String, dynamic> json) => StaffMember(
         userId: json['user_id'] as String,
         email: json['email'] as String,
+        phoneNumber: json['phone_number'] as String?,
         role: json['role'] as String,
         firstName: json['first_name'] as String,
+        middleName: json['middle_name'] as String?,
         lastName: json['last_name'] as String,
         employmentStatus: json['employment_status'] as String,
+        cooperativeName: json['cooperative_name'] as String?,
+        assignedTerminalId: json['assigned_terminal_id'] as String?,
         licenseNumber: json['license_number'] as String?,
+        licenseExpiryDate: json['license_expiry_date'] == null
+            ? null
+            : DateTime.parse(json['license_expiry_date'] as String),
+        cttmoIdNumber: json['cttmo_id_number'] as String?,
       );
 }
 

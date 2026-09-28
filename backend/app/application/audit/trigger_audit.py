@@ -32,7 +32,7 @@ from app.application.notifications.service import NotificationService
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import AuditResolution
-from app.infrastructure.clients.ai_node_client import AiNodeClient
+from app.infrastructure.clients.ai_node_client import AiNodeClient, CaptureResult
 from app.infrastructure.models import Trip, User, Yolov8AuditLog
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
@@ -72,6 +72,46 @@ class TriggerAuditUseCase:
         triggered_by_user_id: str,
         trigger_type: str = "manual",
     ) -> AuditResult:
+        trip, booked_count = await self._load_trip_and_manifest(trip_id, leg_sequence)
+
+        # Any failure here propagates as 502. Deliberately no fallback.
+        capture = await self.ai.capture()
+
+        return await self._finish(
+            trip=trip,
+            leg_sequence=leg_sequence,
+            triggered_by_user_id=triggered_by_user_id,
+            trigger_type=trigger_type,
+            booked_count=booked_count,
+            capture=capture,
+        )
+
+    async def execute_from_upload(
+        self,
+        *,
+        trip_id: str,
+        leg_sequence: int,
+        triggered_by_user_id: str,
+        image_bytes: bytes,
+        trigger_type: str = "manual",
+    ) -> AuditResult:
+        """Same reconciliation as execute(), for a frame the AI node received
+        as an upload (the phone-as-camera PoC) rather than pulling from its
+        own attached webcam."""
+        trip, booked_count = await self._load_trip_and_manifest(trip_id, leg_sequence)
+
+        capture = await self.ai.upload(image_bytes)
+
+        return await self._finish(
+            trip=trip,
+            leg_sequence=leg_sequence,
+            triggered_by_user_id=triggered_by_user_id,
+            trigger_type=trigger_type,
+            booked_count=booked_count,
+            capture=capture,
+        )
+
+    async def _load_trip_and_manifest(self, trip_id: str, leg_sequence: int):
         from app.application.operations.boarding import ManifestUseCase
 
         trip = await self.session.get(Trip, trip_id)
@@ -87,10 +127,19 @@ class TriggerAuditUseCase:
         booked_count = await ManifestUseCase(self.session).booked_count_on_leg(
             trip_id, leg_sequence
         )
+        return trip, booked_count
 
-        # Any failure here propagates as 502. Deliberately no fallback.
-        capture = await self.ai.capture()
-
+    async def _finish(
+        self,
+        *,
+        trip: Trip,
+        leg_sequence: int,
+        triggered_by_user_id: str,
+        trigger_type: str,
+        booked_count: int,
+        capture: CaptureResult,
+    ) -> AuditResult:
+        trip_id = trip.trip_id
         variance = capture.visual_count - booked_count
         threshold = await self.policies.get_int("variance_alert_threshold")
         alert = abs(variance) >= threshold

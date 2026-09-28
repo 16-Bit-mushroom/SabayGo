@@ -40,24 +40,46 @@ class AiNodeClient:
         audit is recoverable; a fabricated one that flags a driver for
         theft is not.
         """
+        return await self._post(
+            "/api/audit/capture",
+            unreachable_message="The van's camera node did not respond. No audit was recorded.",
+            handle_503=True,
+        )
+
+    async def upload(self, image_bytes: bytes, filename: str = "capture.jpg") -> CaptureResult:
+        """Same contract as capture(), for a frame that arrives as a file
+        (the phone-as-camera PoC) instead of a server-attached webcam."""
+        return await self._post(
+            "/api/audit/capture-upload",
+            files={"image": (filename, image_bytes, "image/jpeg")},
+            unreachable_message="The AI node did not respond. No audit was recorded.",
+        )
+
+    async def _post(
+        self,
+        path: str,
+        *,
+        unreachable_message: str,
+        files: dict | None = None,
+        handle_503: bool = False,
+    ) -> CaptureResult:
         if not self.api_key:
             raise UpstreamServiceError("AI node API key is not configured.")
 
         try:
             async with httpx.AsyncClient(timeout=settings.ai_node_timeout_s) as client:
                 r = await client.post(
-                    f"{self.base_url}/api/audit/capture",
+                    f"{self.base_url}{path}",
                     headers={"X-API-Key": self.api_key},
+                    files=files,
                 )
         except httpx.RequestError as exc:
             log.error("AI node unreachable at %s: %s", self.base_url, exc)
-            raise UpstreamServiceError(
-                "The van's camera node did not respond. No audit was recorded."
-            ) from exc
+            raise UpstreamServiceError(unreachable_message) from exc
 
         if r.status_code == 401:
             raise UpstreamServiceError("AI node rejected the API key.")
-        if r.status_code == 503:
+        if handle_503 and r.status_code == 503:
             raise UpstreamServiceError("The van's camera is unavailable.")
         if r.status_code >= 400:
             log.error("AI node error %s: %s", r.status_code, r.text[:300])

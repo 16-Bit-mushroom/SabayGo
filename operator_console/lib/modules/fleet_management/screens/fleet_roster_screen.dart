@@ -95,6 +95,21 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     }
   }
 
+  void _showVanDetail(Van van) {
+    String? routeName;
+    for (final r in _routes) {
+      if (r.routeId == van.registeredRouteId) {
+        routeName = r.routeName;
+        break;
+      }
+    }
+    showDialog<void>(context: context, builder: (_) => _VanDetailDialog(van: van, routeName: routeName));
+  }
+
+  void _showCrewDetail(StaffMember staff) {
+    showDialog<void>(context: context, builder: (_) => _CrewDetailDialog(staff: staff));
+  }
+
   Future<void> _openAddCrewDialog() async {
     final created = await showDialog<bool>(
       context: context,
@@ -201,6 +216,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
               rows: vans.map((van) {
                 final isActive = van.operationalStatus == 'active';
                 return DataRow(
+                  onSelectChanged: (_) => _showVanDetail(van),
                   cells: [
                     DataCell(Text(van.plateNumber,
                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
@@ -241,6 +257,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
               rows: crew.map((staff) {
                 final isActive = staff.employmentStatus == 'active';
                 return DataRow(
+                  onSelectChanged: (_) => _showCrewDetail(staff),
                   cells: [
                     DataCell(Text(staff.fullName,
                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
@@ -642,4 +659,113 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
         fillColor: const Color(0xFF151923),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
       );
+}
+
+/// Row-click detail views. Fields the roster table has no room for --
+/// CPC papers, the camera unit's device id, a driver's full licence and
+/// CTTMO record -- already exist on the backend; this just surfaces them
+/// instead of adding new ones. No photos yet: `vans` has no photo column
+/// at all, and wiring one up (migration + upload endpoint + storage) is
+/// separate follow-on work.
+class _DetailDialog extends StatelessWidget {
+  const _DetailDialog({required this.title, required this.rows});
+  final String title;
+  final List<(String, String)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF222736),
+      title: Text(title, style: const TextStyle(color: Colors.white)),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (label, value) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 140,
+                      child: Text(label, style: const TextStyle(color: Colors.white54)),
+                    ),
+                    Expanded(
+                      child: Text(value,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+      ],
+    );
+  }
+}
+
+class _VanDetailDialog extends StatelessWidget {
+  const _VanDetailDialog({required this.van, this.routeName});
+  final Van van;
+  final String? routeName;
+
+  @override
+  Widget build(BuildContext context) {
+    final brandModel = [van.brand, van.model].where((s) => s != null && s.isNotEmpty).join(' ');
+    return _DetailDialog(
+      title: van.plateNumber,
+      rows: [
+        ('Brand / Model', brandModel.isEmpty ? '—' : brandModel),
+        ('Color', van.color ?? '—'),
+        ('Seat capacity', van.seatCapacity.toString()),
+        ('Status', van.operationalStatus),
+        ('Registered route', routeName ?? '—'),
+        ('CPC case no.', van.cpcCaseNo ?? '—'),
+        ('CPC number', van.cpcNumber ?? '—'),
+        ('Cabin camera', van.hasCabinCamera ? 'Installed' : 'Not installed'),
+        if (van.hasCabinCamera) ('Camera device ID', van.cameraDeviceId ?? '—'),
+        if (van.hasCabinCamera)
+          (
+            'Camera installed',
+            van.cameraInstalledAt == null
+                ? '—'
+                : '${van.cameraInstalledAt!.year}-${van.cameraInstalledAt!.month.toString().padLeft(2, '0')}-${van.cameraInstalledAt!.day.toString().padLeft(2, '0')}'
+          ),
+      ],
+    );
+  }
+}
+
+class _CrewDetailDialog extends StatelessWidget {
+  const _CrewDetailDialog({required this.staff});
+  final StaffMember staff;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DetailDialog(
+      title: staff.fullName,
+      rows: [
+        ('Role', staff.role),
+        ('Status', staff.employmentStatus),
+        ('Email', staff.email),
+        ('Phone', staff.phoneNumber ?? '—'),
+        ('Cooperative', staff.cooperativeName ?? '—'),
+        if (staff.role == 'driver') ...[
+          ('License number', staff.licenseNumber ?? '—'),
+          (
+            'License expiry',
+            staff.licenseExpiryDate == null
+                ? '—'
+                : '${staff.licenseExpiryDate!.year}-${staff.licenseExpiryDate!.month.toString().padLeft(2, '0')}-${staff.licenseExpiryDate!.day.toString().padLeft(2, '0')}'
+          ),
+          ('CTTMO ID', staff.cttmoIdNumber ?? '—'),
+        ],
+      ],
+    );
+  }
 }

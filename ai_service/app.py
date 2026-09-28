@@ -17,6 +17,17 @@ against the authoritative manifest in MySQL, not by a client.
            writes yolov8_audit_logs, returns the audit row
     <- audit result
 
+A second entry point exists for the same pipeline: a phone acting as the
+camera instead of a server-attached webcam.
+
+    ai_capture_app (phone)
+        -> this service  POST /api/audit/capture-upload  (multipart image)
+        <- {visual_count, snapshot, timings}
+
+Same model, same thresholds, same never-fabricate-a-count rule -- only the
+frame's origin differs, so it reuses inference/annotation and just skips
+the Camera class.
+
 Run:
     export AI_NODE_API_KEY="something-long-and-random"
     python app.py
@@ -171,39 +182,12 @@ def require_api_key() -> bool:
 
 
 # --------------------------------------------------------------------------
-# Routes
+# Shared inference tail -- capture (server webcam) and capture-upload
+# (phone photo) differ only in where `frame` comes from. Everything from
+# "run the model" onward is identical, including the never-fabricate-a-
+# count error handling, so both routes call this.
 # --------------------------------------------------------------------------
-@app.get("/health")
-def health():
-    return jsonify({
-        "status": "ok",
-        "model": MODEL_PATH,
-        "model_version": MODEL_VERSION,
-        "camera_index": CAMERA_INDEX,
-        "conf_threshold": CONF_THRESHOLD,
-    })
-
-
-# POST, not GET: this activates physical hardware and has side effects.
-@app.post("/api/audit/capture")
-def capture_audit():
-    if not require_api_key():
-        return jsonify({"error": "unauthorized"}), 401
-
-    started = time.perf_counter()
-    log.info("--- LIVE AUDIT TRIGGERED ---")
-
-    try:
-        t0 = time.perf_counter()
-        frame = camera.capture()
-        capture_ms = int((time.perf_counter() - t0) * 1000)
-    except RuntimeError as exc:
-        # Fail loudly. The Flutter client must show an error state and must
-        # never fabricate a count -- a silently faked audit is worse than
-        # no audit, because it looks authoritative.
-        log.error("Capture failed: %s", exc)
-        return jsonify({"error": "camera_unavailable", "detail": str(exc)}), 503
-
+def _infer_and_package(frame: np.ndarray, capture_ms: int, started: float):
     try:
         t0 = time.perf_counter()
         results = model(
@@ -249,6 +233,72 @@ def capture_audit():
     log.info("Visual count=%s conf_avg=%s inference=%sms",
              person_count, confidence_avg, inference_ms)
     return jsonify(asdict(result))
+
+
+# --------------------------------------------------------------------------
+# Routes
+# --------------------------------------------------------------------------
+@app.get("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "model": MODEL_PATH,
+        "model_version": MODEL_VERSION,
+        "camera_index": CAMERA_INDEX,
+        "conf_threshold": CONF_THRESHOLD,
+    })
+
+
+# POST, not GET: this activates physical hardware and has side effects.
+@app.post("/api/audit/capture")
+def capture_audit():
+    if not require_api_key():
+        return jsonify({"error": "unauthorized"}), 401
+
+    started = time.perf_counter()
+    log.info("--- LIVE AUDIT TRIGGERED (server camera) ---")
+
+    try:
+        t0 = time.perf_counter()
+        frame = camera.capture()
+        capture_ms = int((time.perf_counter() - t0) * 1000)
+    except RuntimeError as exc:
+        # Fail loudly. The Flutter client must show an error state and must
+        # never fabricate a count -- a silently faked audit is worse than
+        # no audit, because it looks authoritative.
+        log.error("Capture failed: %s", exc)
+        return jsonify({"error": "camera_unavailable", "detail": str(exc)}), 503
+
+    return _infer_and_package(frame, capture_ms, started)
+
+
+# The phone-as-camera path: no server-attached webcam involved, the frame
+# arrives as a multipart file. Everything downstream (model, thresholds,
+# annotation, response shape) is identical to /api/audit/capture.
+@app.post("/api/audit/capture-upload")
+def capture_upload_audit():
+    if not require_api_key():
+        return jsonify({"error": "unauthorized"}), 401
+
+    started = time.perf_counter()
+    log.info("--- LIVE AUDIT TRIGGERED (phone upload) ---")
+
+    file = request.files.get("image")
+    if file is None or file.filename == "":
+        return jsonify({"error": "no_image", "detail": "Missing 'image' file field."}), 400
+
+    t0 = time.perf_counter()
+    data = np.frombuffer(file.read(), dtype=np.uint8)
+    frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    decode_ms = int((time.perf_counter() - t0) * 1000)
+
+    if frame is None:
+        return jsonify({"error": "decode_failed", "detail": "Not a decodable image."}), 400
+
+    # Reuses the capture_ms field: for this path it times decode rather
+    # than a camera grab, which is the equivalent "getting the frame
+    # ready" cost.
+    return _infer_and_package(frame, decode_ms, started)
 
 
 if __name__ == "__main__":

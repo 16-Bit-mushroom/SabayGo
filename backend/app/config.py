@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # does. Unset in development leaves the ping endpoint open.
     tracker_api_key: str | None = None
 
+    # Shared key for the phone-as-camera PoC (ai_capture_app), standing in
+    # for the Orange Pi until that hardware arrives. Kept separate from
+    # tracker_api_key -- a camera device and a GPS dongle are different
+    # trust boundaries even though both are unattended devices.
+    phone_capture_api_key: str | None = None
+
     # --- payments -------------------------------------------------------
     paymongo_secret_key: str | None = None
     paymongo_webhook_secret: str | None = None

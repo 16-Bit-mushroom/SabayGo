@@ -7,18 +7,21 @@ import datetime as dt
 import io
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Header, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.core import timezone as app_tz
+from app.core.exceptions import AuthenticationError, ConflictError
+from app.application.audit import phone_capture_queue
 from app.application.audit.trigger_audit import (
     AuditQueueUseCase,
     ResolveAuditUseCase,
     TriggerAuditUseCase,
 )
+from app.config import settings
 from app.domain.enums import Role
 from app.infrastructure.clients.ai_node_client import AiNodeClient
 
@@ -26,6 +29,16 @@ router = APIRouter(tags=["audit"])
 
 COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
 CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN, Role.ADMIN)
+
+
+def verify_phone_device(x_device_key: str | None = Header(default=None)) -> None:
+    """Authenticate the phone-as-camera PoC the same way the AI node and
+    tracking units are authenticated -- a device cannot hold a user
+    session. Retires with ai_capture_app once the Orange Pi is in hand."""
+    if not settings.phone_capture_api_key:
+        return  # unset in development; the endpoint stays open
+    if x_device_key != settings.phone_capture_api_key:
+        raise AuthenticationError("Invalid device key.")
 
 
 class TriggerAuditRequest(BaseModel):
@@ -87,13 +100,41 @@ async def resolve_audit(
     )
 
 
-@router.get("/audits/pending", dependencies=[Depends(COOP_ADMIN)])
+class AuditQueueOut(BaseModel):
+    audit_id: str
+    trip_id: str
+    trip_label: str
+    service_date: dt.date
+    leg_sequence: int
+    trigger_type: str
+    visual_count: int
+    booked_count: int
+    variance: int
+    snapshot_url: str | None
+    # AuditQueueUseCase._list() hands this straight off SQLAlchemy as a
+    # Decimal. Without a response_model, FastAPI's default JSON encoder
+    # renders Decimal as a *string* -- harmless for a client that re-parses
+    # loosely, but a hard TypeError for one that expects a JSON number
+    # (the console's `as num?` cast). Declaring float here makes Pydantic
+    # coerce it for every caller, the same way AuditResponse already does
+    # for /audits/trigger.
+    confidence_avg: float | None
+    inference_ms: int | None
+    model_version: str | None
+    captured_at: dt.datetime
+    resolution_status: str
+    resolved_by: str | None
+    resolved_at: dt.datetime | None
+    resolution_notes: str | None
+
+
+@router.get("/audits/pending", response_model=list[AuditQueueOut], dependencies=[Depends(COOP_ADMIN)])
 async def pending_audits(session: SessionDep, limit: int = Query(50, le=200)) -> list:
     """Unresolved variances -- the cooperative administrator console's audit queue."""
     return await AuditQueueUseCase(session).pending(limit=limit)
 
 
-@router.get("/audits/history", dependencies=[Depends(COOP_ADMIN)])
+@router.get("/audits/history", response_model=list[AuditQueueOut], dependencies=[Depends(COOP_ADMIN)])
 async def audit_history(
     session: SessionDep,
     status: str | None = Query(None, description="reconciled | resolved | ignored | failed"),
@@ -110,6 +151,68 @@ async def audit_history(
 async def node_health() -> dict:
     """Is the van's camera node reachable? Check before relying on a demo."""
     return await AiNodeClient().health()
+
+
+# ===================================================================
+# Phone-as-camera PoC -- a stand-in for the Orange Pi before that
+# hardware is in hand. The Pi accepts an inbound call because it is
+# always-on van hardware; a phone can't be called into, so it polls a
+# pending-request slot instead. Retire this block when the Pi arrives.
+# ===================================================================
+class TriggerPhoneRequest(BaseModel):
+    trip_id: str
+    leg_sequence: int = Field(ge=1)
+
+
+@router.post("/audits/trigger-phone", dependencies=[Depends(CREW)])
+async def trigger_phone_capture(payload: TriggerPhoneRequest, user: CurrentUser) -> dict:
+    """Ask the demo phone to capture next time it polls. A later trigger
+    overwrites one the phone hasn't fulfilled yet -- one phone, one slot."""
+    req = await phone_capture_queue.set_pending(
+        trip_id=payload.trip_id,
+        leg_sequence=payload.leg_sequence,
+        requested_by_user_id=user.user_id,
+    )
+    return {
+        "status": "pending",
+        "trip_id": req.trip_id,
+        "leg_sequence": req.leg_sequence,
+        "requested_at": req.requested_at,
+    }
+
+
+@router.get("/audits/phone/pending", dependencies=[Depends(verify_phone_device)])
+async def phone_pending() -> dict:
+    """Polled by ai_capture_app. Empty object when nothing is waiting."""
+    req = await phone_capture_queue.peek_pending()
+    if req is None:
+        return {}
+    return {
+        "trip_id": req.trip_id,
+        "leg_sequence": req.leg_sequence,
+        "requested_at": req.requested_at,
+    }
+
+
+@router.post(
+    "/audits/phone/fulfill",
+    response_model=AuditResponse,
+    dependencies=[Depends(verify_phone_device)],
+)
+async def phone_fulfill(session: SessionDep, image: UploadFile = File(...)) -> AuditResponse:
+    """The demo phone's answer to a pending request: the photo it took,
+    reconciled against the manifest exactly like a direct AI-node capture."""
+    req = await phone_capture_queue.consume_pending()
+    if req is None:
+        raise ConflictError("No pending capture request for this device.")
+
+    result = await TriggerAuditUseCase(session).execute_from_upload(
+        trip_id=req.trip_id,
+        leg_sequence=req.leg_sequence,
+        triggered_by_user_id=req.requested_by_user_id,
+        image_bytes=await image.read(),
+    )
+    return AuditResponse(**result.__dict__)
 
 
 # ===================================================================

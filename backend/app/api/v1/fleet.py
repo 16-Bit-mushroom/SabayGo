@@ -60,6 +60,9 @@ class VanOut(BaseModel):
     registered_route_id: str | None
     has_cabin_camera: bool
     camera_device_id: str | None
+    cpc_case_no: str | None
+    cpc_number: str | None
+    camera_installed_at: dt.date | None
 
 
 class VanStatusIn(BaseModel):
@@ -151,12 +154,17 @@ class StaffIn(BaseModel):
 class StaffOut(BaseModel):
     user_id: str
     email: str
+    phone_number: str | None
     role: str
     first_name: str
+    middle_name: str | None
     last_name: str
     employment_status: str
+    cooperative_name: str | None
     assigned_terminal_id: str | None
     license_number: str | None = None
+    license_expiry_date: dt.date | None = None
+    cttmo_id_number: str | None = None
 
 
 @router.get("/crew", response_model=list[StaffOut], dependencies=[Depends(COOP_ADMIN)])
@@ -177,12 +185,17 @@ async def list_crew(session: SessionDep, role: str | None = None) -> list[StaffO
             StaffOut(
                 user_id=user.user_id,
                 email=user.email,
+                phone_number=user.phone_number,
                 role=user.role,
                 first_name=profile.first_name,
+                middle_name=profile.middle_name,
                 last_name=profile.last_name,
                 employment_status=profile.employment_status,
+                cooperative_name=profile.cooperative_name,
                 assigned_terminal_id=profile.assigned_terminal_id,
                 license_number=credential.license_number if credential else None,
+                license_expiry_date=credential.license_expiry_date if credential else None,
+                cttmo_id_number=credential.cttmo_id_number if credential else None,
             )
         )
     return out
@@ -259,12 +272,17 @@ async def create_staff(payload: StaffIn, session: SessionDep) -> StaffOut:
     return StaffOut(
         user_id=user_id,
         email=email,
+        phone_number=phone,
         role=payload.role,
         first_name=payload.first_name,
+        middle_name=payload.middle_name,
         last_name=payload.last_name,
         employment_status="active",
+        cooperative_name=payload.cooperative_name,
         assigned_terminal_id=payload.assigned_terminal_id,
         license_number=licence.value if licence else None,
+        license_expiry_date=payload.license_expiry_date if licence else None,
+        cttmo_id_number=payload.cttmo_id_number if licence else None,
     )
 
 

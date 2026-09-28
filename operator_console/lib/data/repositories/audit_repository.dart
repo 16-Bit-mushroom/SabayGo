@@ -108,4 +108,19 @@ class AuditRepository {
       'notes': notes,
     });
   }
+
+  /// Asks the phone-as-camera PoC (ai_capture_app) to capture next time it
+  /// polls -- the same role the Orange Pi will fill once that hardware is
+  /// in hand. Returns immediately; the reconciled result lands in
+  /// pending()/history() once the phone captures and uploads, same as any
+  /// other trigger.
+  Future<void> triggerPhone({
+    required String tripId,
+    required int legSequence,
+  }) async {
+    await _api.post('/audits/trigger-phone', body: {
+      'trip_id': tripId,
+      'leg_sequence': legSequence,
+    });
+  }
 }

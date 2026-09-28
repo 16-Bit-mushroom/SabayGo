@@ -324,6 +324,9 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 220,
+      // Fixed so every card matches regardless of whether it has a `sub`
+      // line -- Trips/Collected Fare/Pending Audits don't, the rest do.
+      height: 112,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,

@@ -430,6 +430,30 @@ class Notification(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    conversation_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
+    participant_one_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    participant_two_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    last_message_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    message_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.conversation_id"))
+    sender_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    sender_role: Mapped[str] = mapped_column(String(16))
+    body: Mapped[str] = mapped_column(String(1000))
+    read_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
 class DriverHeadcount(Base):
     __tablename__ = "driver_headcounts"
 

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/audit_repository.dart';
+import '../../../data/repositories/dispatch_repository.dart';
 
 class AuditDashboardScreen extends StatefulWidget {
   const AuditDashboardScreen({super.key});
@@ -14,6 +17,7 @@ class AuditDashboardScreen extends StatefulWidget {
 
 class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
   late final AuditRepository _audits = context.read<AuditRepository>();
+  late final DispatchRepository _dispatch = context.read<DispatchRepository>();
 
   List<PendingAudit>? _logs;
   int _selectedIndex = 0;
@@ -21,11 +25,25 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
   bool _showHistory = false;
   bool _loading = true;
   String? _error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // The screen is kept alive by the shell's IndexedStack -- initState
+    // only runs once, so without a poll a variance that lands after that
+    // (including one the notification bell "jumps" you here for) never
+    // appears until a manual refresh. Mirrors the bell's own 30s poll.
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!_loading) _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -80,6 +98,52 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
     }
   }
 
+  bool _triggering = false;
+
+  Future<void> _openTriggerPhoneDialog() async {
+    setState(() => _triggering = true);
+    List<TripBoardRow> trips;
+    try {
+      trips = await _dispatch.todaysTrips();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _triggering = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _triggering = false);
+
+    final request = await showDialog<({String tripId, int legSequence})>(
+      context: context,
+      builder: (_) => _TriggerPhoneDialog(trips: trips),
+    );
+    if (request == null) return;
+
+    try {
+      await _audits.triggerPhone(tripId: request.tripId, legSequence: request.legSequence);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Capture requested. Waiting for the phone to take the photo.'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      // The result lands here once the phone captures and uploads -- give
+      // that a moment, then refresh so it doesn't take a manual reload.
+      await Future.delayed(const Duration(seconds: 8));
+      if (mounted) await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -118,6 +182,21 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                           },
                   ),
                   const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: _triggering ? null : _openTriggerPhoneDialog,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                    ),
+                    icon: _triggering
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.phone_android),
+                    label: const Text('Trigger phone capture'),
+                  ),
+                  const SizedBox(width: 12),
                   IconButton(
                     onPressed: _loading ? null : _load,
                     icon: const Icon(Icons.refresh, color: Colors.white70),
@@ -483,6 +562,104 @@ class _ResolveNotesDialogState extends State<_ResolveNotesDialog> {
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
           child: const Text('Confirm'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Which trip/leg to ask the demo phone to capture for. A phone stands in
+/// for the Orange Pi (no attached camera of its own to trigger), so this
+/// asks for a target instead of just firing.
+class _TriggerPhoneDialog extends StatefulWidget {
+  const _TriggerPhoneDialog({required this.trips});
+  final List<TripBoardRow> trips;
+
+  @override
+  State<_TriggerPhoneDialog> createState() => _TriggerPhoneDialogState();
+}
+
+class _TriggerPhoneDialogState extends State<_TriggerPhoneDialog> {
+  String? _tripId;
+  final _legController = TextEditingController(text: '1');
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.trips.isNotEmpty) _tripId = widget.trips.first.tripId;
+  }
+
+  @override
+  void dispose() {
+    _legController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF222736),
+      title: const Text('Trigger phone capture', style: TextStyle(color: Colors.white)),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.trips.isEmpty)
+              const Text(
+                'No trips today. A trip must be boarding or departed before '
+                'it can be audited.',
+                style: TextStyle(color: Colors.white70),
+              )
+            else ...[
+              const Text('Trip', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 4),
+              DropdownButtonFormField<String>(
+                initialValue: _tripId,
+                dropdownColor: const Color(0xFF222736),
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF151923),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                ),
+                items: widget.trips
+                    .map((t) => DropdownMenuItem(
+                          value: t.tripId,
+                          child: Text('${t.routeName} — ${DateFormat.jm().format(t.departureDatetime)}'),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _tripId = v),
+              ),
+              const SizedBox(height: 16),
+              const Text('Leg sequence', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 4),
+              TextField(
+                controller: _legController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF151923),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: _tripId == null
+              ? null
+              : () {
+                  final leg = int.tryParse(_legController.text.trim());
+                  if (leg == null || leg < 1) return;
+                  Navigator.of(context).pop((tripId: _tripId!, legSequence: leg));
+                },
+          child: const Text('Request capture'),
         ),
       ],
     );
