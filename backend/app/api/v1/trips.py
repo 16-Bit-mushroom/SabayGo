@@ -26,6 +26,24 @@ class StopOut(BaseModel):
     terminal_name: str
     city: str
     offset_minutes: int
+    # The node's own position. NAHGM map-matches against these terminals,
+    # so a client drawing the route has to plot the same nodes the server
+    # measured against -- a separately sourced coordinate would put the
+    # van marker beside a pin that is not the node it was matched to.
+    latitude: float
+    longitude: float
+
+    @classmethod
+    def from_row(cls, stop: RouteStop, terminal: Terminal) -> "StopOut":
+        return cls(
+            stop_sequence=stop.stop_sequence,
+            terminal_id=terminal.terminal_id,
+            terminal_name=terminal.terminal_name,
+            city=terminal.city,
+            offset_minutes=stop.offset_minutes,
+            latitude=float(terminal.latitude),
+            longitude=float(terminal.longitude),
+        )
 
 
 class TripSummary(BaseModel):
@@ -259,13 +277,7 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
         )
         for rs, t in rows.all():
             stops_by_route.setdefault(rs.route_id, []).append(
-                StopOut(
-                    stop_sequence=rs.stop_sequence,
-                    terminal_id=t.terminal_id,
-                    terminal_name=t.terminal_name,
-                    city=t.city,
-                    offset_minutes=rs.offset_minutes,
-                )
+                StopOut.from_row(rs, t)
             )
 
     return [
@@ -297,16 +309,7 @@ async def trip_stops(trip_id: str, session: SessionDep) -> list[StopOut]:
         .where(RouteStop.route_id == trip.route_id)
         .order_by(RouteStop.stop_sequence)
     )
-    return [
-        StopOut(
-            stop_sequence=rs.stop_sequence,
-            terminal_id=t.terminal_id,
-            terminal_name=t.terminal_name,
-            city=t.city,
-            offset_minutes=rs.offset_minutes,
-        )
-        for rs, t in result.all()
-    ]
+    return [StopOut.from_row(rs, t) for rs, t in result.all()]
 
 
 async def _stop_name_map(session: SessionDep) -> dict[tuple[str, int], str]:

@@ -102,6 +102,8 @@ class RouteStopDetail {
     required this.terminalName,
     required this.city,
     required this.offsetMinutes,
+    required this.latitude,
+    required this.longitude,
   });
 
   final int stopSequence;
@@ -110,12 +112,21 @@ class RouteStopDetail {
   final String city;
   final int offsetMinutes;
 
+  /// The node's own position -- the same coordinate NAHGM map-matches
+  /// against server-side. Drawing the route from these, rather than from
+  /// a geocoded name, is what keeps the van marker consistent with the
+  /// stop the server says it is nearest to.
+  final double latitude;
+  final double longitude;
+
   factory RouteStopDetail.fromJson(Map<String, dynamic> j) => RouteStopDetail(
         stopSequence: j['stop_sequence'] as int,
         terminalId: j['terminal_id'] as String,
         terminalName: j['terminal_name'] as String,
         city: j['city'] as String,
         offsetMinutes: j['offset_minutes'] as int? ?? 0,
+        latitude: (j['latitude'] as num).toDouble(),
+        longitude: (j['longitude'] as num).toDouble(),
       );
 }
 

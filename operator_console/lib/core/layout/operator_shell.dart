@@ -6,6 +6,8 @@ import '../../modules/fleet_management/screens/fleet_roster_screen.dart';
 import '../../modules/schedule_management/screens/schedule_screen.dart';
 import '../../modules/policy_editor/screens/policy_editor_screen.dart';
 import '../../modules/revenue/screens/revenue_screen.dart';
+import '../../modules/messaging/screens/messages_screen.dart';
+import '../../modules/live_map/screens/fleet_map_screen.dart';
 import '../../viewmodels/auth_provider.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/notification_repository.dart';
@@ -21,7 +23,6 @@ class OperatorShell extends StatefulWidget {
 
 class _OperatorShellState extends State<OperatorShell> {
   int _selectedIndex = 0;
-  static const _auditsIndex = 5;
   late final NotificationProvider _notifications;
 
   @override
@@ -39,15 +40,29 @@ class _OperatorShellState extends State<OperatorShell> {
     super.dispose();
   }
 
-  // The array of operational modules
-  final List<Widget> _modules = [
-    const RevenueScreen(),
-    const DispatchBoardScreen(),
-    const ScheduleScreen(),
-    const FleetRosterScreen(),
-    const PolicyEditorScreen(),
-    const AuditDashboardScreen(),
+  // Screen and rail entry declared together. They used to be two lists
+  // indexed by the same integer, with the audit tab's position written out
+  // as a constant -- inserting a module in the middle silently pointed the
+  // variance alert at the wrong tab.
+  static const _modules = <_Module>[
+    _Module('Revenue', Icons.payments_outlined, Icons.payments, RevenueScreen()),
+    _Module('Trip Dispatcher', Icons.route_outlined, Icons.route,
+        DispatchBoardScreen()),
+    _Module('Live Fleet', Icons.my_location_outlined, Icons.my_location,
+        FleetMapScreen()),
+    _Module('Schedules', Icons.calendar_month_outlined, Icons.calendar_month,
+        ScheduleScreen()),
+    _Module('Fleet & Crew', Icons.directions_car_outlined, Icons.directions_car,
+        FleetRosterScreen()),
+    _Module('Policies', Icons.tune_outlined, Icons.tune, PolicyEditorScreen()),
+    _Module('YOLOv8 Audits', Icons.policy_outlined, Icons.policy,
+        AuditDashboardScreen()),
+    _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble,
+        MessagesScreen()),
   ];
+
+  static final _auditsIndex =
+      _modules.indexWhere((m) => m.screen is AuditDashboardScreen);
 
   @override
   Widget build(BuildContext context) {
@@ -95,37 +110,13 @@ class _OperatorShellState extends State<OperatorShell> {
                 ],
               ),
             ),
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.payments_outlined),
-                selectedIcon: Icon(Icons.payments),
-                label: Text('Revenue'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.route_outlined),
-                selectedIcon: Icon(Icons.route),
-                label: Text('Trip Dispatcher'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.calendar_month_outlined),
-                selectedIcon: Icon(Icons.calendar_month),
-                label: Text('Schedules'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.directions_car_outlined),
-                selectedIcon: Icon(Icons.directions_car),
-                label: Text('Fleet & Crew'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.tune_outlined),
-                selectedIcon: Icon(Icons.tune),
-                label: Text('Policies'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.policy_outlined),
-                selectedIcon: Icon(Icons.policy),
-                label: Text('YOLOv8 Audits'),
-              ),
+            destinations: [
+              for (final m in _modules)
+                NavigationRailDestination(
+                  icon: Icon(m.icon),
+                  selectedIcon: Icon(m.selectedIcon),
+                  label: Text(m.label),
+                ),
             ],
             trailing: Expanded(
               child: Align(
@@ -162,11 +153,21 @@ class _OperatorShellState extends State<OperatorShell> {
           // MAIN CONTENT AREA
           // ==========================================
           Expanded(
-            child: _modules[_selectedIndex],
+            child: _modules[_selectedIndex].screen,
           ),
         ],
       ),
       ),
     );
   }
+}
+
+/// One sidebar entry and the screen it shows.
+class _Module {
+  const _Module(this.label, this.icon, this.selectedIcon, this.screen);
+
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+  final Widget screen;
 }

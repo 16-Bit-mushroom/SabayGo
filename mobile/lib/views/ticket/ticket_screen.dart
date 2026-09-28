@@ -9,6 +9,7 @@ import '../../models/transit_node_model.dart';
 import '../../models/uv_trip_model.dart';
 import '../../viewmodels/auth_provider.dart';
 import '../../viewmodels/ticket_viewmodel.dart';
+import '../tracking/live_map_screen.dart';
 
 class TicketScreen extends StatefulWidget {
   final UvTripModel bookedTrip;
@@ -268,6 +269,36 @@ class _TicketScreenState extends State<TicketScreen> {
                 ],
                 const SizedBox(height: 12),
               ],
+
+              // Live tracking. Offered from the moment the booking is paid
+              // for, not only once the van is moving: a passenger deciding
+              // when to leave the house needs to see that it has not
+              // started reporting yet just as much as they need a position.
+              if (!_viewModel.isAwaitingPayment && !_viewModel.isCancelled)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LiveMapScreen(
+                          tripId: trip.id,
+                          title: 'Track the van',
+                          boardingStop: trip.boardingStop,
+                          alightingStop: trip.alightingStop,
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text('Track the van'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
 
               if (_viewModel.canCheckIn && _viewModel.checkinOpensAt != null)
                 Padding(

@@ -9,6 +9,7 @@ import 'data/repositories/dispatch_repository.dart';
 import 'data/repositories/fleet_repository.dart';
 import 'data/repositories/policy_repository.dart';
 import 'data/repositories/revenue_repository.dart';
+import 'data/repositories/tracking_repository.dart';
 import 'data/repositories/schedule_repository.dart';
 import 'core/layout/operator_shell.dart';
 import 'modules/auth/screens/login_screen.dart';
@@ -61,6 +62,7 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         Provider<ScheduleRepository>(create: (_) => ScheduleRepository(_api)),
         Provider<PolicyRepository>(create: (_) => PolicyRepository(_api)),
         Provider<RevenueRepository>(create: (_) => RevenueRepository(_api)),
+        Provider<TrackingRepository>(create: (_) => TrackingRepository(_api)),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
       ],
       child: MaterialApp(

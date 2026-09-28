@@ -37,6 +37,15 @@ dependencies:
   connectivity_plus: ^6.1.0     # offline detection for the manifest
   url_launcher: ^6.3.1          # PayMongo checkout redirect
 
+  # --- maps ---
+  # NAHGM's client half. OpenStreetMap tiles via flutter_map rather than the
+  # Google Maps SDK: no API key, no billing account and no per-load quota
+  # standing between the panel and a working demo, and the same widget runs
+  # on Android and on Flutter Web, so the console and the handset draw the
+  # route with one implementation instead of two.
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
