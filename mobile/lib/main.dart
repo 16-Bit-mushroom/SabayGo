@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'core/config/app_config.dart';
+import 'core/design/tokens.dart';
+import 'core/design/theme.dart';
 import 'core/network/api_client.dart';
 import 'core/offline/walk_in_sync_service.dart';
 import 'core/storage/token_storage.dart';

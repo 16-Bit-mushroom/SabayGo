@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/design/tokens.dart';
 import '../../viewmodels/auth_provider.dart';
 import 'signup_screen.dart';
 

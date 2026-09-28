@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/config/app_config.dart';
+import '../../../core/design/tokens.dart';
 import '../../../models/transit_node_model.dart';
 import '../../../viewmodels/home_search_viewmodel.dart';
 

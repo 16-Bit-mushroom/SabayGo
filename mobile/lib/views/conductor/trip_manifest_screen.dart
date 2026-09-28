@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/config/app_config.dart';
+import '../../core/design/components/status_chip.dart';
+import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/offline/pending_walk_in.dart';
@@ -250,11 +251,11 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
       );
 
   Widget _statusPanel(CrewTrip trip, Manifest m, ShiftViewModel shift) {
-    final (label, colour) = switch (m.status) {
-      'boarding' => ('BOARDING', AppColors.accent),
-      'departed' => ('DEPARTED', AppColors.textMuted),
-      'completed' => ('COMPLETED', AppColors.textMuted),
-      _ => ('SCHEDULED', AppColors.primary),
+    final (label, tone) = switch (m.status) {
+      'boarding' => ('BOARDING', StatusTone.success),
+      'departed' => ('DEPARTED', StatusTone.muted),
+      'completed' => ('COMPLETED', StatusTone.muted),
+      _ => ('SCHEDULED', StatusTone.brand),
     };
 
     return Container(
@@ -265,15 +266,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: colour.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(label,
-                    style: TextStyle(color: colour, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
-              ),
+              StatusChip(label, tone: tone),
               const Spacer(),
               Text(
                 DateFormat('MMM dd • hh:mm a').format(m.departure),
@@ -284,8 +277,8 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           const SizedBox(height: 16),
           Row(
             children: [
-              _stat('Boarded', m.boarded, AppColors.accent),
-              _stat('Checked in', m.checkedIn, Colors.blue),
+              _stat('Boarded', m.boarded, AppColors.success),
+              _stat('Checked in', m.checkedIn, AppColors.info),
               _stat('Awaiting', m.awaiting, AppColors.warning),
               _stat('Unpaid', m.unpaid, AppColors.textMuted),
             ],
@@ -425,14 +418,14 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
   }
 
   Widget _passengerTile(CrewTrip trip, ManifestPassenger p) {
-    final (label, colour) = switch (p.status) {
-      'boarded' => ('BOARDED', AppColors.accent),
-      'checked_in' => ('AT TERMINAL', Colors.blue),
-      'confirmed' => ('NOT YET', AppColors.warning),
-      'pending' => ('UNPAID', AppColors.textMuted),
-      'no_show' => ('NO-SHOW', AppColors.danger),
-      'pending_sync' => ('PENDING SYNC', AppColors.warning),
-      _ => (p.status.toUpperCase(), AppColors.textMuted),
+    final (label, tone) = switch (p.status) {
+      'boarded' => ('BOARDED', StatusTone.success),
+      'checked_in' => ('AT TERMINAL', StatusTone.info),
+      'confirmed' => ('NOT YET', StatusTone.warning),
+      'pending' => ('UNPAID', StatusTone.muted),
+      'no_show' => ('NO-SHOW', StatusTone.danger),
+      'pending_sync' => ('PENDING SYNC', StatusTone.info),
+      _ => (p.status.toUpperCase(), StatusTone.muted),
     };
 
     // How the passenger got on the manifest — booked ahead through the
@@ -440,8 +433,8 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     // road. A conductor scans a queue of strangers; this has to be
     // legible at a glance, not a suffix at the end of a grey line.
     final (methodLabel, methodColour, methodIcon) = switch (p) {
-      _ when p.isRoadsidePickup => ('ROADSIDE', Colors.deepOrange, Icons.pan_tool_alt),
-      _ when p.isWalkIn => ('TERMINAL CASH', Colors.teal, Icons.storefront),
+      _ when p.isRoadsidePickup => ('ROADSIDE', AppColors.warning, Icons.pan_tool_alt),
+      _ when p.isWalkIn => ('TERMINAL CASH', AppColors.success, Icons.storefront),
       _ => ('APP BOOKING', AppColors.primary, Icons.smartphone),
     };
 
@@ -498,14 +491,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: colour.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(label, style: TextStyle(color: colour, fontSize: 10, fontWeight: FontWeight.bold)),
-          ),
+          StatusChip(label, tone: tone),
           const SizedBox(height: 4),
           Text(
             p.isPendingSync

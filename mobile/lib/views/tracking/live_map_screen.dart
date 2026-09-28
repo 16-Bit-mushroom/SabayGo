@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/config/app_config.dart';
+import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/tracking_repository.dart';
 import '../../data/repositories/trip_repository.dart';

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/config/app_config.dart';
+import '../../core/design/tokens.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
 import 'trip_manifest_screen.dart';

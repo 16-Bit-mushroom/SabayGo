@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/config/app_config.dart';
+import '../../core/design/tokens.dart';
 import '../../core/network/api_exception.dart';
 import '../../data/repositories/booking_repository.dart';
 import '../../data/repositories/trip_repository.dart';
