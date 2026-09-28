@@ -114,6 +114,43 @@ reuse the same `NotificationService` and appear in it without client work.
    node; release-build check for the dev chips. `seat_repository.py`
    keeps its own review
 
+### Van kit stand-in — verified 16 Sep, no kit needed to keep building
+
+Neither piece of the physical van kit (camera, GPS) blocks development.
+Both are designed to run as an HTTP client against the same production
+endpoints a real kit would hit, so nothing changes on the backend when
+the real hardware shows up — only where the AI node's camera and the GPS
+device point.
+
+- **Camera**: `ai_service/app.py` opens `cv2.VideoCapture(AI_NODE_CAMERA_INDEX)`
+  (env var, defaults to `0`). On this dev machine that's the laptop's
+  built-in webcam — confirmed working end to end: `GET /health` reports
+  `camera_index: 0`, `POST /api/audit/capture` returns a real
+  `visual_count` from an actual frame, and `POST /audits/trigger`
+  (backend) returns 200 with a genuine count and a saved snapshot. The
+  backend only calls the AI node's HTTP API and never touches the camera,
+  so it needs no changes when the real kit arrives.
+  **When the kit arrives:** if its camera enumerates as a normal
+  V4L2/USB device, just point `AI_NODE_CAMERA_INDEX` at it. If it's an
+  IP/RTSP camera, `CAMERA_INDEX` currently only parses as `int()` — that
+  will need a small follow-up to accept a URL string (`cv2.VideoCapture`
+  itself already accepts one).
+- **GPS**: `backend/scripts/tracking_simulator.py` posts to the real
+  production `POST /tracking/trips/{trip}/ping` endpoint (not a mock
+  table) — confirmed end to end: a simulated run against
+  `TRIP-DEMO-00000001` produced 49 pings and `GET
+  .../position` correctly reflected the van's final location. A real GPS
+  unit authenticates the same way, with the same `X-Tracker-Key` header.
+  **When the kit arrives:** point it at the same ping endpoint with the
+  same header — no backend change needed.
+  **Open decision:** `TRACKER_API_KEY` is unset in `backend/.env`, so
+  `verify_tracker` currently accepts pings with no auth at all. Fine for
+  a laptop simulator on localhost; worth setting before a real device
+  pings the endpoint over a real network. Auth is also one shared secret
+  for every van, not per-device (`vans.camera_device_id` exists but isn't
+  wired to tracking auth) — flagged in `tracking.py` as its own future
+  work, not blocking.
+
 ---
 
 ## Questions for A2Z

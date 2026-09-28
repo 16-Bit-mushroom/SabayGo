@@ -111,6 +111,13 @@ python app.py
 cd mobile
 flutter run -d 192.168.1.2:5555 --dart-define=API_BASE_URL=http://192.168.1.8:8000/api/v1
 
+# operator console
+cd operator_console
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000/api/v1
+
+# The live map needs no key or extra flag -- OpenStreetMap tiles via
+# flutter_map. Internet access for the tiles is the only requirement.
+
 # tests
 cd backend && ./tests/integration/run_all_journeys.sh
 python tests/integration/test_concurrency.py --requests 50
@@ -243,7 +250,7 @@ Revenue tab has an Export menu (`.xlsx` / `.csv`) for the date range shown;
 bytes go through the authenticated `ApiClient.getBytes` and
 `core/util/download.dart` (`package:web`) hands them to the browser.
 
-Not done: live map, chat.
+Not done: chat.
 
 ### Operator console — complete
 
@@ -285,7 +292,9 @@ alpha testing from 6 Oct.
    they answer; run `scripts/demo_rehearsal.sh` on the demo machine with
    the AI node up; confirm the release build hides the dev-account chips.
    Remaining Group G items (roster, profile edit, account deletion) in
-   `docs/REMAINING_WORK.md` if time allows.
+   `docs/REMAINING_WORK.md` if time allows. The van kit (camera, GPS) is
+   not a blocker — the laptop webcam and `tracking_simulator.py` are
+   verified plug-in stand-ins for both, see `docs/REMAINING_WORK.md`.
 2. **Chat** — messages in MySQL, delivered via FCM. Not Firestore: the
    ERD would have a hole where the data model should be.
 3. **Auto-detect "Van is at"** — the conductor currently sets the current
@@ -293,10 +302,59 @@ alpha testing from 6 Oct.
    whose hands are full at the door. `geolocator` is already a dependency
    (used for passenger check-in); reuse it to snap to the nearest
    terminal automatically, keeping the dropdown as a manual override.
+4. **Phone camera as the AI capture device** — YOLOv8 stays server-side
+   in `ai_service` on the server PC, never on the edge device; a phone
+   just captures a photo and uploads it there for inference. Needs a new
+   `ai_service` endpoint that accepts an uploaded image, since
+   `POST /api/audit/capture` only pulls a frame from a server-attached
+   camera (`camera.capture()`) — it takes no upload today. The Flutter
+   side is a small standalone app, not a `mobile/` feature: take a photo,
+   POST it to the new endpoint, show the returned count. Same
+   never-fabricate-a-count rule applies — a failed upload or inference is
+   an error state, not a placeholder number.
 
 For the demo itself: `docs/DEMO_SCRIPT.md`.
 
 ---
+
+### Live map — complete (28 Sep)
+
+NAHGM's client half, the other side of the pipeline in `cfa189c`.
+`GET /trips/{id}/stops` now carries each node's `latitude`/`longitude` —
+the same coordinates NAHGM map-matches against server-side, so the marker
+and the node it was matched to cannot disagree.
+
+Passenger: "Track the van" on the boarding pass opens
+`views/tracking/live_map_screen.dart` — route nodes, the passenger's own
+boarding and alighting stops picked out, the travelled trail, the van with
+its heading, and the ETA list. Polls `/tracking/trips/{id}/position` every
+10 s. A trip with no fix yet is *not* an error: the route draws and the
+panel says tracking begins at departure. A stale fix is labelled as a last
+known position, never dressed up as current.
+
+Console: a **Live Fleet** tab on `/tracking/fleet`, refreshing every 15 s;
+selecting a van draws its route. A silent van is chipped `SILENT`.
+
+Route legs are drawn straight between terminals, not snapped to roads —
+NAHGM measures haversine hops node to node, and a road-following line
+would draw a path its ETAs never came from.
+
+Tiles are **OpenStreetMap via `flutter_map`**, not the Google Maps SDK.
+No API key, no billing account and no per-load quota between the panel and
+a working demo, and one widget runs on both Android and Flutter Web, so the
+handset and the console draw the route with the same implementation. ODbL
+attribution is on both maps -- a licence condition, not decoration, so do
+not remove it.
+
+Note this contradicts **§2.3.5 of the manuscript**, which says the client
+"integrates the Google Maps SDK". That sentence needs rewording to name
+OpenStreetMap; the tile vendor is incidental to NAHGM, which is where the
+contribution is.
+
+`operator_shell.dart` paired each module with its sidebar entry in the
+process — the two parallel lists and the hand-written `_auditsIndex = 5`
+would have sent the variance alert to the wrong tab the moment a module
+was inserted.
 
 ## Known issues
 
@@ -312,6 +370,12 @@ For the demo itself: `docs/DEMO_SCRIPT.md`.
   Deferred deliberately.
 - Dev-account chips on the sign-in screen are guarded by
   `AppConfig.isDebug`. Confirm they are absent from a release build.
+- The live map needs internet access for OpenStreetMap tiles. OSM's tile
+  policy is for modest use and asks for an identifying user agent, which
+  both maps send; a defence-room demo is well inside it, but heavy
+  automated polling is not.
+- §2.3.5 of the manuscript still claims the Google Maps SDK. The code uses
+  OpenStreetMap. Reword before submission.
 - `datetime.now(timezone.utc)` written into a naive Manila DATETIME
   column skews it eight hours. Fixed in `boarding.py` (14 Sep),
   `trigger_audit.py`, `payments.py`, `register_passenger.py`, `auth.py`
