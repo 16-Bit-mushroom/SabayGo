@@ -50,6 +50,14 @@ QR=$(j "['qr_payload']" < /tmp/resp.json)
 python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1 \
   && ok "passenger booked and paid" || gap "webhook secret not set -- ticket stays unpaid"
 
+# A second ticket, deliberately left unpaid. Reserved here rather than at
+# the scan below because APP_BOOKABLE is {scheduled} -- once boarding
+# opens, reserve is correctly refused and the QR came back empty, which
+# made the unpaid scan look like wrong_trip and tested nothing.
+code POST /bookings/reserve \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
+UNPAID_QR=$(j "['qr_payload']" < /tmp/resp.json)
+
 # ═══════════════════════════════════════════════ 2. BOARDING
 hdr "2. Boarding"
 
@@ -81,10 +89,7 @@ R=$(j "['result']" < /tmp/resp.json)
 [ "$R" = "already_boarded" ] || [ "$R" = "wrong_stop" ] \
   && ok "wrong stop handled ($R)" || bad "wrong stop returned $R"
 
-# unpaid ticket
-code POST /bookings/reserve \
-  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
-UNPAID_QR=$(j "['qr_payload']" < /tmp/resp.json)
+# unpaid ticket -- reserved in section 1, while the trip was still scheduled
 S=$(code POST /scans \
   "{\"qr_payload\":\"$UNPAID_QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
 R=$(j "['result']" < /tmp/resp.json)

@@ -1,0 +1,369 @@
+===================================================================
+  SabayGo - Role Journey Test Report
+===================================================================
+
+  Generated : 2026-09-28 18:10:18 PST
+  Host      : cachyos-x8664
+  Git       : 6a327da on main
+  API       : http://127.0.0.1:8000
+
+  Legend
+    PASS  assertion held
+    FAIL  regression - something that worked is now broken
+    GAP   endpoint not built yet (a checklist item, not a defect)
+
+-------------------------------------------------------------------
+
+PREFLIGHT
+  ok    API responding
+  ok    AI node responding
+
+===================================================================
+  PASSENGER JOURNEY
+===================================================================
+
+── 1. Account ────────────────────────────────
+  PASS  register (201)
+  PASS  duplicate phone rejected (409)
+  PASS  short password rejected (422)
+  PASS  wrong password rejected (401)
+  PASS  login (200)
+  PASS  profile: Journey Tester
+  PASS  unauthenticated request rejected (401)
+
+── 2. Finding a trip ────────────────────────────────
+  PASS  list terminals (10 found)
+  PASS  search trips by sequence (legacy)
+  PASS  terminal picker has no duplicates
+  PASS  search by terminals: 2 departure(s) Ecoland -> Cotabato
+  PASS  reverse direction finds nothing (different LTFRB route)
+  PASS  search with no terminals rejected (422)
+  PASS  view route stops
+  PASS  check availability (14 seats)
+
+── 3. Booking ────────────────────────────────
+  PASS  reserve seat 
+  PASS  reversed segment rejected (422)
+  PASS  list my bookings
+  PASS  booking detail (pending)
+  PASS  unknown booking id -> 404
+
+── 4. Payment ────────────────────────────────
+  GAP   checkout -- PAYMONGO_SECRET_KEY not set (expected)
+  PASS  payment confirmed via signed webhook
+  PASS  booking is now confirmed
+  GAP   abandon checkout -- seat stays held for 10 min with no way to release it
+
+── 5. Changing plans ────────────────────────────────
+  FAIL  reschedule gave 422
+  PASS  cancel (no refund, seat released)
+  PASS  double cancel rejected (409)
+
+── 6. Travel day ────────────────────────────────
+  PASS  undo before check-in rejected (409)
+  PASS  checked in at the terminal
+  PASS  far check-in rejected (409)
+  PASS  my bookings carry checkin_opens_at / boarding_due_at
+  PASS  check-in undone (confirmed)
+  PASS  double undo rejected (409)
+  PASS  checked in again after undo
+
+── 7. Managing the account ────────────────────────────────
+  PASS  profile updated
+  GAP   change password -- not implemented
+  PASS  notifications listed
+  GAP   saved destinations -- table and ORM model exist, no endpoints
+  GAP   notification settings -- passenger_settings unreachable
+  GAP   delete/deactivate account -- no way for a passenger to leave
+
+── 8. Passengers cannot act as crew ────────────────────────────────
+  PASS  /scans blocked (403)
+  PASS  /trips/TRIP-DEMO-00000001/manifest blocked (403)
+  PASS  /audits/pending blocked (403)
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /revenue/summary blocked (403)
+
+═══ SUMMARY ═══
+  passed  39
+  failed  1
+  gaps    6
+
+Failures above are real regressions.
+
+===================================================================
+  CONDUCTOR JOURNEY
+===================================================================
+
+── 1. Conductor signs in ────────────────────────────────
+  PASS  login
+  PASS  role is conductor
+  PASS  profile: Ramon Villanueva
+
+──    (setting up a paid passenger) ────────────────────────────────
+  PASS  passenger booked and paid
+
+── 2. Boarding ────────────────────────────────
+  PASS  boarding opened
+  PASS  valid ticket accepted
+  PASS  duplicate scan flagged (already_boarded)
+  PASS  unknown QR rejected without raising (wrong_trip)
+  PASS  wrong stop handled (already_boarded)
+  FAIL  unpaid scan returned wrong_trip
+
+── 3. Cash walk-ins ────────────────────────────────
+  PASS  anonymous walk-in logged -- status confirmed
+  PASS  walk-in with receipt details -- P330.00
+  PASS  short-segment walk-in (stop 3->4)
+
+── 4. Manifest ────────────────────────────────
+        capacity=14  total=4  boarded=1  awaiting=3  unpaid=0
+        1->4  boarded     app
+        1->4  confirmed   walk-in
+        2->4  confirmed   Maria Santos
+        3->4  confirmed   walk-in
+  PASS  manifest retrieved
+  PASS  seats still sellable end-to-end: 10
+  GAP   passenger lookup -- no way to find a booking by name or ticket number
+
+── 5. Headcount audit ────────────────────────────────
+  PASS  AI node reachable (yolov8n-1.0)
+        visual=2  manifest=2  variance=+0  2395ms
+        Headcount matches the manifest.
+  PASS  audit recorded
+
+── 6. Departure ────────────────────────────────
+  PASS  headcount confirmed -- variance 2
+  PASS  departed -- 3 no-show(s) recorded
+  PASS  bookings closed after departure (409)
+
+── 7. A conductor is not a cooperative administrator ────────────────────────────────
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /revenue/summary blocked (403)
+  PASS  /audits/pending blocked (403)
+  PASS  cannot add vans (403)
+
+═══ SUMMARY ═══
+  passed  24
+  failed  1
+  gaps    1
+
+
+===================================================================
+  DRIVER OPERATOR JOURNEY
+===================================================================
+
+── DRIVER — 1. Sign in ────────────────────────────────
+  PASS  login
+  PASS  role is driver
+  PASS  can read the manifest for their van
+
+── DRIVER — 2. Headcount before departure ────────────────────────────────
+  PASS  headcount 3 -- variance 3
+  PASS  corrected to 5 -- variance now 5
+  PASS  count above 14 rejected (422)
+
+── DRIVER — 3. Issue a ticket at an unstaffed stop ────────────────────────────────
+  PASS  cash walk-in logged -- P175.00
+  PASS  can check the camera node
+
+── DRIVER — 4. Boundaries ────────────────────────────────
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /revenue/summary blocked (403)
+  PASS  /audits/pending blocked (403)
+
+── OPERATOR — 1. Sign in ────────────────────────────────
+  PASS  login
+
+── OPERATOR — 2. Fleet ────────────────────────────────
+  PASS  list vans (7)
+  PASS  van added with camera
+  PASS  van flagged out of service (monitoring only, not a maintenance module)
+  PASS  van returned to service
+
+── OPERATOR — 3. Crew ────────────────────────────────
+  PASS  list crew (11)
+  PASS  driver provisioned with licence
+  PASS  expired licence rejected (409)
+  PASS  crew member suspended (deactivated, not deleted)
+  PASS  suspended account cannot log in (401)
+
+── OPERATOR — 4. Configuration ────────────────────────────────
+  PASS  read all policies
+  PASS  variance threshold set to 2
+  PASS  unknown policy key rejected (404)
+  PASS  terminal created
+  PASS  route created -- 1 leg(s), 1 fare pair(s) needed
+  PASS  non-contiguous stop sequence rejected (409)
+  PASS  fare matrix set
+  PASS  reversed fare pair rejected (422)
+
+── OPERATOR — 5. Schedules ────────────────────────────────
+  PASS  weekday template created
+  PASS  malformed day mask rejected (422)
+        2026-09-28  created=1  skipped=8
+        2026-09-29  created=3  skipped=6
+        2026-09-30  created=4  skipped=5
+  PASS  trips generated
+  PASS  re-run is idempotent (created=0)
+  PASS  special trip created -- 14 seat-legs
+  PASS  special trip in the past rejected (409)
+
+── OPERATOR — 6. Audit queue and revenue ────────────────────────────────
+  PASS  audit queue: 1 pending
+  PASS  variance dispositioned with a note
+  PASS  double resolve rejected (409)
+  PASS  audit history shows it resolved by coopadmin@sabaygo.dev
+  PASS  audit history excludes the pending queue
+  PASS  unknown history status rejected (409)
+  PASS  resolution without a note rejected (422)
+        trips=34  bookings=37  app=17  walk-in=20 (54.1%)
+        collected=P3515.00  expected=P3980.00  unreconciled=P0.00
+  PASS  revenue summary
+  PASS  per-trip reconciliation
+
+── OPERATOR — 7. Gaps ────────────────────────────────
+  PASS  CSV export (34 trip rows)
+  PASS  XLSX export is a real workbook
+  PASS  unknown export format rejected (422)
+  GAP   no crew roster view -- cannot see who is driving what, when
+
+═══ SUMMARY ═══
+  passed  48
+  failed  0
+  gaps    1
+
+
+===================================================================
+  NOTIFICATIONS (E.1)
+===================================================================
+== audit c4b7ec6e-63fa-4417-91d3-d86e04b9117c variance=+1 alert=True
+  PASS  variance meets threshold -> alert raised
+  PASS  coop_admin received one variance_alert
+  PASS  coop_admin row typed variance_alert
+  PASS  coop_admin row unread
+  PASS  coop_admin unread_count +1
+  PASS  driver received one variance_alert
+  PASS  driver row typed variance_alert
+  PASS  driver row unread
+  PASS  driver unread_count +1
+  PASS  conductor received one variance_alert
+  PASS  conductor row typed variance_alert
+  PASS  conductor row unread
+  PASS  conductor unread_count +1
+  PASS  driver cannot mark coop_admin's row read
+  PASS  coop_admin marks own row read
+  PASS  coop_admin unread_count back to baseline
+  PASS  conductor read-all
+  PASS  matching headcount produces no notification
+
+ALL PASSED
+
+===================================================================
+  AUTOMATIC AI CAPTURE (2.3.5)
+===================================================================
+Automatic gps_node audit skipped (trip=TRIP-DEMO-00000001 leg=2): The van's camera node did not respond.
+
+== GPS-node departure is a transition, not a state
+  PASS  left stop 1 -> leg 1
+  PASS  still inside stop 1's fence -> no trigger
+  PASS  already between nodes -> no trigger
+  PASS  first ping of the trip -> no trigger
+  PASS  left final stop 4 -> no trigger
+
+== an automatic capture writes an unattributed audit row
+  PASS  door_close fires a capture
+  PASS  exactly one row on leg 1
+  PASS  row labelled door_close
+  PASS  triggered_by_user_id is NULL -- nobody asked
+
+== one automatic audit per leg
+  PASS  a second automatic trigger on leg 1 is suppressed
+  PASS  still exactly one row on leg 1
+
+== a manual spot check does not satisfy the quota
+  PASS  gps_node still fires on a manually audited leg
+  PASS  leg 3 holds both rows: ['gps_node', 'manual']
+
+== a position report out of the terminal fires the capture
+  PASS  record_ping produced one audit on leg 1
+  PASS  row labelled gps_node
+  PASS  count came from the camera, not a guess
+
+== a dead camera loses the audit, never the operation
+  PASS  schedule() returned without raising
+  PASS  no row written -- not a zero, not a placeholder
+
+ALL PASSED
+
+===================================================================
+  SOS EMERGENCY ALERTS (2.3.5)
+===================================================================
+
+── conductor raises an SOS from the van ─────────────────────
+  PASS  alert recorded (4c40685d-2895-4876-afd6-8ba72c96839a)
+        in-app  : 2 recipient(s)
+        sms     : attempted 0, sent 0, skipped 0
+        told    : Alert recorded. 2 in-app alert(s) sent to the office. No SMS was sent: no emergency contact numbers are set.
+
+── the alert survives a silent SMS channel ─────────────────────
+  PASS  office alerted in-app even with 0 SMS delivered
+
+── a repeat press does not raise a second emergency ─────────────────────
+  PASS  second press returned the open alert, not a new one
+
+── a passenger cannot raise an alert against a trip they are not on ─────────────────────
+  PASS  refused (403): no booking on that trip
+
+── an SOS with no trip is always allowed ─────────────────────
+  PASS  terminal-side alert accepted (c8ef39c4-18ef-4290-b2b0-b4513fd3da44)
+
+── crew cannot read the office queue ─────────────────────
+  PASS  queue is office-only (403)
+
+── office sees both alerts, newest first ─────────────────────
+        open         security  passenger  Sarah Kalaw            no location
+        open         medical   conductor  Ramon Villanueva       https://www.openstreetmap.org/?mlat=7.0731&mlon=125.6128
+  PASS  2 open alert(s) in the queue
+
+── closing an emergency without a note is refused ─────────────────────
+  PASS  a closed emergency must say what happened (409)
+
+── office acknowledges; the raiser is told a human has it ─────────────────────
+  PASS  acknowledged
+        conductor inbox: The cooperative office has acknowledged your emergency alert and is responding.
+  PASS  the person who pressed the button was told
+
+── acknowledging twice is refused ─────────────────────
+  PASS  already acknowledged (409)
+
+── office resolves with a note ─────────────────────
+  PASS  resolved
+        resolved  by Maria Santos  -- Ambulance met the van at Panabo. Passenger stable.
+
+── a resolved alert clears the way for the next one ─────────────────────
+  PASS  a new emergency is a new alert once the last is closed
+
+SOS: 13 passed, 0 failed
+
+===================================================================
+  TOTALS
+===================================================================
+    passed   161
+    failed     2
+    gaps       8
+
+  2 regression(s) - review the FAIL lines above.
+
+  Unbuilt endpoints flagged this run:
+    -  abandon checkout -- seat stays held for 10 min with no way to release it
+    -  change password -- not implemented
+    -  checkout -- PAYMONGO_SECRET_KEY not set (expected)
+    -  delete/deactivate account -- no way for a passenger to leave
+    -  no crew roster view -- cannot see who is driving what, when
+    -  notification settings -- passenger_settings unreachable
+    -  passenger lookup -- no way to find a booking by name or ticket number
+    -  saved destinations -- table and ORM model exist, no endpoints
+
