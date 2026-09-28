@@ -53,6 +53,11 @@ class WalkInRequest(BaseModel):
     # distance, so the conductor sets the price.
     fare_override: Decimal | None = Field(default=None, ge=0)
     fare_note: str | None = None
+    # Set by the mobile client only when this walk-in was queued
+    # offline. A sync retry after an ambiguous connectivity drop is
+    # recognised by this id and returns the original booking instead of
+    # creating a second one.
+    client_request_id: str | None = None
 
 
 class BookingResponse(BaseModel):
@@ -124,7 +129,34 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
     option.
 
     Passenger details are optional; supply them only for a receipt.
+
+    A `client_request_id` is a replay signal, not a new request: the
+    mobile offline queue sets it when a walk-in may have already reached
+    the server on a previous attempt whose response was lost. If a
+    booking with that id already exists for this trip, it is returned
+    as-is rather than reserving a second space.
     """
+    if payload.client_request_id is not None:
+        existing = await session.execute(
+            select(BookingRow).where(
+                BookingRow.trip_id == payload.trip_id,
+                BookingRow.client_request_id == payload.client_request_id,
+            )
+        )
+        row = existing.scalar_one_or_none()
+        if row is not None:
+            return BookingResponse(
+                booking_id=row.booking_id,
+                ticket_number=row.ticket_number,
+                boarding_stop=row.boarding_stop_sequence,
+                alighting_stop=row.alighting_stop_sequence,
+                fare_amount=row.fare_amount,
+                fare_is_manual=row.fare_is_manual,
+                status=row.status,
+                qr_payload=row.qr_payload,
+                is_roadside_pickup=row.is_roadside_pickup,
+            )
+
     result = await ReserveSeatUseCase(session).execute(
         ReserveSeatCommand(
             trip_id=payload.trip_id,
@@ -138,6 +170,7 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
             pickup_landmark=payload.pickup_landmark,
             fare_override=payload.fare_override,
             fare_note=payload.fare_note,
+            client_request_id=payload.client_request_id,
         )
     )
     return BookingResponse(

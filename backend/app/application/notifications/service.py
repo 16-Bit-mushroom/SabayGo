@@ -84,6 +84,97 @@ class NotificationService:
             )
         return len(recipients)
 
+    async def notify_sos(
+        self, *, alert, raiser_name: str, raiser_role: str, trip: Trip | None,
+        where: str,
+    ) -> int:
+        """Alert the office, and the crew of the trip it came from.
+
+        Same contract as notify_variance: rows are added to the session and
+        the caller owns the transaction, so the alert and the notices that
+        it happened land together. The person who raised it is not notified
+        of their own emergency.
+        """
+        detail = alert.note.strip() if alert.note else "No details given."
+        route = ""
+        if trip is not None:
+            plate = trip.van.plate_number if trip.van is not None else "unassigned van"
+            route_name = trip.route.route_name if trip.route is not None else trip.route_id
+            route = f"{route_name} · {plate} · "
+        message = (
+            f"{raiser_name} ({raiser_role}) raised a {alert.category} SOS. "
+            f"{route}{where}. {detail}"
+        )
+
+        recipients: list[tuple[str, str]] = []
+        office = await self.session.scalars(
+            select(User.user_id).where(
+                User.role == Role.COOP_ADMIN.value,
+                User.account_status == "active",
+            )
+        )
+        recipients.extend((uid, Role.COOP_ADMIN.value) for uid in office)
+        if trip is not None:
+            if trip.driver_id:
+                recipients.append((trip.driver_id, Role.DRIVER.value))
+            if trip.conductor_id:
+                recipients.append((trip.conductor_id, Role.CONDUCTOR.value))
+
+        now = app_tz.now()
+        sent = 0
+        for user_id, audience in recipients:
+            if user_id == alert.raised_by_user_id:
+                continue
+            self.session.add(
+                Notification(
+                    notification_id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    audience=audience,
+                    type="sos_alert",
+                    title=f"SOS · {alert.category.upper()}"[:100],
+                    message=message[:500],
+                    related_entity_type="sos",
+                    related_entity_id=alert.sos_id,
+                    is_read=False,
+                    delivery_status="queued",
+                    created_at=now,
+                )
+            )
+            sent += 1
+        return sent
+
+    async def notify_sos_acknowledged(self, *, alert) -> None:
+        """Tell the person who pressed the button that a human has it.
+
+        Everything else about an emergency flows away from the raiser --
+        to the office, to the crew, to a phone number on a policy row.
+        This is the one message that flows back.
+        """
+        self.session.add(
+            Notification(
+                notification_id=str(uuid.uuid4()),
+                user_id=alert.raised_by_user_id,
+                # notifications.audience has no 'admin' member -- the
+                # system administrator reads the office's queue.
+                audience=(
+                    Role.COOP_ADMIN.value
+                    if alert.raised_by_role == Role.ADMIN.value
+                    else alert.raised_by_role
+                ),
+                type="sos_alert",
+                title="Your SOS has been seen",
+                message=(
+                    "The cooperative office has acknowledged your emergency "
+                    "alert and is responding."
+                ),
+                related_entity_type="sos",
+                related_entity_id=alert.sos_id,
+                is_read=False,
+                delivery_status="queued",
+                created_at=app_tz.now(),
+            )
+        )
+
     # ------------------------------------------------------------------
     # Consumers
     # ------------------------------------------------------------------

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/offline/walk_in_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 
 /// Hand over the cash from a trip.
@@ -120,6 +121,8 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   @override
   Widget build(BuildContext context) {
     final r = _remit;
+    final pendingCount =
+        context.watch<WalkInSyncService>().pendingCountFor(widget.trip.tripId);
     return Scaffold(
       appBar: AppBar(title: const Text('Remit cash')),
       body: _loading
@@ -167,19 +170,56 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    if (r.isSubmitted) _submittedView(r) else _form(),
+                    if (!r.isSubmitted && pendingCount > 0) _pendingSyncNotice(pendingCount),
+                    if (r.isSubmitted)
+                      _submittedView(r)
+                    else
+                      _form(blocked: pendingCount > 0),
                   ],
                 ),
     );
   }
 
-  Widget _form() => Column(
+  /// The expected figure above comes from bookings the server knows
+  /// about. Cash from a walk-in still sitting in the offline queue isn't
+  /// counted in it yet, so remitting now would understate what's
+  /// actually owed -- same reasoning as keeping `pending` cash separate
+  /// from `unreconciled` everywhere else in this app.
+  Widget _pendingSyncNotice(int count) => Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off, size: 20, color: AppColors.warning),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$count passenger${count == 1 ? '' : 's'} logged offline for this trip '
+                "haven't synced yet. The figure above doesn't include them -- "
+                'connect and sync before remitting.',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.read<WalkInSyncService>().flush(),
+              child: const Text('Sync now'),
+            ),
+          ],
+        ),
+      );
+
+  Widget _form({required bool blocked}) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Amount handing over (₱)', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textMuted)),
           const SizedBox(height: 6),
           TextField(
             controller: _declared,
+            enabled: !blocked,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
           ),
@@ -188,12 +228,13 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
           const SizedBox(height: 6),
           TextField(
             controller: _notes,
+            enabled: !blocked,
             maxLines: 3,
             decoration: const InputDecoration(hintText: 'e.g. one passenger paid via GCash to me directly'),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: _submitting ? null : _submit,
+            onPressed: (_submitting || blocked) ? null : _submit,
             icon: _submitting
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.payments),

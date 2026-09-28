@@ -13,7 +13,8 @@ enum NotificationType {
   varianceAlert,     // variance_alert -- YOLOv8 headcount differs from manifest
   unremittedFare,    // unremitted_fare
   departureReminder, // departure_reminder
-  scheduleChange;    // schedule_change
+  scheduleChange,    // schedule_change
+  sosAlert;          // sos_alert -- an emergency raised from a handset
 
   static NotificationType fromServer(String value) => switch (value) {
         'tailored_schedule' => NotificationType.tailoredTrip,
@@ -23,6 +24,7 @@ enum NotificationType {
         'unremitted_fare' => NotificationType.unremittedFare,
         'departure_reminder' => NotificationType.departureReminder,
         'schedule_change' => NotificationType.scheduleChange,
+        'sos_alert' => NotificationType.sosAlert,
         _ => NotificationType.systemAlert,
       };
 }

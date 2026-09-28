@@ -321,6 +321,10 @@ class Booking(Base):
     booking_type: Mapped[str] = mapped_column(String(16))
     is_roadside_pickup: Mapped[bool] = mapped_column(Boolean, default=False)
     pickup_landmark: Mapped[str | None] = mapped_column(String(255))
+    # Set only on a walk-in the mobile client may retry after an
+    # ambiguous connectivity drop. Lets /bookings/walk-in recognise a
+    # replay instead of double-booking. NULL for every other path.
+    client_request_id: Mapped[str | None] = mapped_column(String(64))
     boarding_stop_sequence: Mapped[int] = mapped_column(SmallInteger)
     alighting_stop_sequence: Mapped[int] = mapped_column(SmallInteger)
     seat_number: Mapped[int] = mapped_column(TINYINT(unsigned=True))
@@ -523,3 +527,60 @@ class TripLocationPing(Base):
     # zone must not have its history collapsed to the upload moment.
     recorded_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     received_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+# ======================================================================
+# Safety
+# ======================================================================
+class SosAlert(Base):
+    """One emergency raised from a handset (spec 2.3.5).
+
+    The row is the record of the emergency. Whether anyone's phone
+    actually buzzed is a separate fact, in SosDispatch -- see the
+    docstring on db/migrations/016_sos_alerts.sql.
+    """
+
+    __tablename__ = "sos_alerts"
+
+    sos_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    raised_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    raised_by_role: Mapped[str] = mapped_column(String(16))
+    trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
+    category: Mapped[str] = mapped_column(String(16), default="other")
+    note: Mapped[str | None] = mapped_column(String(255))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    accuracy_m: Mapped[Decimal | None] = mapped_column(Numeric(7, 1))
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    acknowledged_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.user_id")
+    )
+    acknowledged_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    resolved_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.user_id")
+    )
+    resolved_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    resolution_notes: Mapped[str | None] = mapped_column(String(512))
+    raised_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+    trip: Mapped[Trip | None] = relationship(lazy="selectin")
+    dispatches: Mapped[list[SosDispatch]] = relationship(
+        back_populates="alert", lazy="selectin", order_by="SosDispatch.dispatch_id"
+    )
+
+
+class SosDispatch(Base):
+    """One SMS attempt for one alert, recorded with its real outcome."""
+
+    __tablename__ = "sos_alert_dispatches"
+
+    dispatch_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    sos_id: Mapped[str] = mapped_column(ForeignKey("sos_alerts.sos_id"))
+    provider: Mapped[str] = mapped_column(String(32))
+    recipient: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(16))
+    provider_message_id: Mapped[str | None] = mapped_column(String(128))
+    error: Mapped[str | None] = mapped_column(String(255))
+    attempted_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+    alert: Mapped[SosAlert] = relationship(back_populates="dispatches")

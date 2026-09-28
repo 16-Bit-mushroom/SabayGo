@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
-import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/offline/walk_in_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
 
@@ -25,7 +25,7 @@ class WalkInScreen extends StatefulWidget {
 }
 
 class _WalkInScreenState extends State<WalkInScreen> {
-  late final OperationsRepository _ops;
+  late final WalkInSyncService _sync;
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
@@ -42,7 +42,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
   @override
   void initState() {
     super.initState();
-    _ops = OperationsRepository(context.read<ApiClient>());
+    _sync = context.read<WalkInSyncService>();
     _roadside = widget.roadside;
     final stops = widget.trip.stops;
     _boarding = context.read<ShiftViewModel>().currentStop;
@@ -62,7 +62,8 @@ class _WalkInScreenState extends State<WalkInScreen> {
     if (!_form.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      final r = await _ops.walkIn(
+      final fareOverride = _roadside ? double.tryParse(_fare.text) : null;
+      final submission = await _sync.submitOrQueue(
         tripId: widget.trip.tripId,
         boardingStop: _boarding,
         alightingStop: _alighting,
@@ -71,26 +72,52 @@ class _WalkInScreenState extends State<WalkInScreen> {
         wantsReceipt: _wantsReceipt,
         isRoadsidePickup: _roadside,
         pickupLandmark: _landmark.text.trim(),
-        fareOverride: _roadside ? double.tryParse(_fare.text) : null,
+        fareOverride: fareOverride,
         fareNote: _fareNote.text.trim(),
       );
       if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          icon: const Icon(Icons.check_circle, color: AppColors.accent, size: 40),
-          title: const Text('Logged'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(r.ticketNumber, style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
-              const SizedBox(height: 8),
-              Text(
-                'Collect ₱${r.fare.toStringAsFixed(2)}${r.fareIsManual ? ' (conductor-set)' : ''}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-            ],
+          icon: Icon(
+            submission.queued ? Icons.cloud_off : Icons.check_circle,
+            color: submission.queued ? AppColors.textMuted : AppColors.accent,
+            size: 40,
           ),
+          title: Text(submission.queued ? 'Logged — offline' : 'Logged'),
+          content: submission.queued
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'No connection right now. Saved on this phone and will '
+                      'sync — and get a real ticket number — once you\'re back '
+                      'online.',
+                    ),
+                    if (fareOverride != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Collect ₱${fareOverride.toStringAsFixed(2)} (conductor-set)',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      submission.result!.ticketNumber,
+                      style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Collect ₱${submission.result!.fare.toStringAsFixed(2)}'
+                      '${submission.result!.fareIsManual ? ' (conductor-set)' : ''}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
           actions: [
             FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
           ],

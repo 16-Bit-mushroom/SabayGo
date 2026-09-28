@@ -8,6 +8,7 @@ class PendingAudit {
     this.tripLabel,
     required this.serviceDate,
     required this.legSequence,
+    required this.triggerType,
     required this.visualCount,
     required this.bookedCount,
     required this.variance,
@@ -25,6 +26,13 @@ class PendingAudit {
   final String? tripLabel;
   final DateTime serviceDate;
   final int legSequence;
+
+  /// How the capture began: `manual` (someone asked), `door_close` (the
+  /// crew closed boarding and departed) or `gps_node` (the van left a
+  /// terminal's geofence). The last two are the systematic check -- worth
+  /// showing, because an audit the crew cannot decline is a different
+  /// piece of evidence from one they chose to run.
+  final String triggerType;
   final int visualCount;
   final int bookedCount;
   final int variance;
@@ -40,6 +48,17 @@ class PendingAudit {
   final String? resolutionNotes;
 
   bool get isPending => resolutionStatus == 'pending';
+
+  bool get isAutomatic => triggerType != 'manual';
+
+  /// The office's words, not the enum's.
+  String get triggerLabel => switch (triggerType) {
+        'door_close' => 'Automatic — doors closed',
+        'gps_node' => 'Automatic — left terminal',
+        'scheduled' => 'Automatic — scheduled',
+        'manual' => 'Manual — requested',
+        _ => triggerType,
+      };
 
   /// The snapshot path the backend returns is server-relative
   /// (`/media/audits/...`), served off the API host but outside the
@@ -58,6 +77,7 @@ class PendingAudit {
         tripLabel: json['trip_label'] as String?,
         serviceDate: DateTime.parse(json['service_date'] as String),
         legSequence: json['leg_sequence'] as int,
+        triggerType: json['trigger_type'] as String? ?? 'manual',
         visualCount: json['visual_count'] as int,
         bookedCount: json['booked_count'] as int,
         variance: json['variance'] as int,

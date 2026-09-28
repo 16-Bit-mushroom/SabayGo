@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+
+import '../core/location/current_position.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/network/api_exception.dart';
@@ -211,28 +213,7 @@ class TicketViewModel extends ChangeNotifier {
     }
   }
 
-  Future<Position> _resolvePosition() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) throw const LocationServiceDisabledException();
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        throw PermissionDeniedException('Location permission denied');
-      }
-    }
-    if (permission == LocationPermission.deniedForever) {
-      throw PermissionDeniedException('Location permission permanently denied');
-    }
-
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 15),
-      ),
-    );
-  }
+  Future<Position> _resolvePosition() => CurrentPosition.resolve();
 
   @override
   void dispose() {

@@ -5,11 +5,14 @@ import '../../data/repositories/notification_repository.dart';
 import '../../viewmodels/notification_provider.dart';
 
 /// Bell with an unread badge for the sidebar. Opens a panel listing the
-/// office's notifications; a variance alert jumps to the audit queue.
+/// office's notifications; one that points at a module -- a variance, an
+/// SOS -- hands that notification back to the shell, which owns the
+/// mapping from kind to tab. The bell deliberately knows nothing about
+/// module positions.
 class NotificationBell extends StatelessWidget {
-  const NotificationBell({super.key, required this.onOpenAudits});
+  const NotificationBell({super.key, required this.onOpen});
 
-  final VoidCallback onOpenAudits;
+  final void Function(AppNotification) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -38,16 +41,16 @@ class NotificationBell extends StatelessWidget {
       barrierColor: Colors.black45,
       builder: (_) => ChangeNotifierProvider<NotificationProvider>.value(
         value: provider,
-        child: _NotificationPanel(onOpenAudits: onOpenAudits),
+        child: _NotificationPanel(onOpen: onOpen),
       ),
     );
   }
 }
 
 class _NotificationPanel extends StatelessWidget {
-  const _NotificationPanel({required this.onOpenAudits});
+  const _NotificationPanel({required this.onOpen});
 
-  final VoidCallback onOpenAudits;
+  final void Function(AppNotification) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +117,7 @@ class _NotificationPanel extends StatelessWidget {
     }
     if (p.items.isEmpty) {
       return const Center(
-        child: Text('Nothing yet. A flagged headcount will appear here.',
+        child: Text('Nothing yet. A flagged headcount or an SOS appears here.',
             style: TextStyle(color: Colors.white54)),
       );
     }
@@ -126,9 +129,9 @@ class _NotificationPanel extends StatelessWidget {
         onTap: () async {
           final n = p.items[i];
           await p.markRead(n);
-          if (n.isVarianceAlert && context.mounted) {
+          if (n.isActionable && context.mounted) {
             Navigator.of(context).pop();
-            onOpenAudits();
+            onOpen(n);
           }
         },
       ),
@@ -144,13 +147,21 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = n.isVarianceAlert ? const Color(0xFFEBCB8B) : const Color(0xFF88C0D0);
+    final accent = n.isSosAlert
+        ? const Color(0xFFBF616A)
+        : n.isVarianceAlert
+            ? const Color(0xFFEBCB8B)
+            : const Color(0xFF88C0D0);
     return ListTile(
       onTap: onTap,
       dense: true,
       tileColor: n.isRead ? null : accent.withValues(alpha: 0.06),
       leading: Icon(
-        n.isVarianceAlert ? Icons.people_alt_outlined : Icons.info_outline,
+        n.isSosAlert
+            ? Icons.emergency_share
+            : n.isVarianceAlert
+                ? Icons.people_alt_outlined
+                : Icons.info_outline,
         color: n.isRead ? Colors.white38 : accent,
         size: 20,
       ),
@@ -169,7 +180,7 @@ class _NotificationTile extends StatelessWidget {
         ),
       ),
       isThreeLine: true,
-      trailing: n.isVarianceAlert
+      trailing: n.isActionable
           ? const Icon(Icons.chevron_right, size: 18, color: Colors.white38)
           : null,
     );

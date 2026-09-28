@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import 'core/config/app_config.dart';
 import 'core/network/api_client.dart';
+import 'core/offline/walk_in_sync_service.dart';
 import 'core/storage/token_storage.dart';
 import 'data/repositories/auth_repository.dart';
+import 'data/repositories/operations_repository.dart';
 import 'viewmodels/auth_provider.dart';
 import 'views/auth/welcome_screen.dart';
 import 'views/conductor/conductor_main_screen.dart';
@@ -26,6 +28,7 @@ class _SabayGoAppState extends State<SabayGoApp> {
   late final TokenStorage _tokens;
   late final ApiClient _api;
   late final AuthProvider _auth;
+  late final WalkInSyncService _walkInSync;
 
   @override
   void initState() {
@@ -36,6 +39,11 @@ class _SabayGoAppState extends State<SabayGoApp> {
       repository: AuthRepository(_api),
       tokens: _tokens,
     );
+    // One queue for the whole app session: a conductor may back out of
+    // the manifest screen and return to it without losing what's
+    // pending, and a reconnect anywhere should flush it.
+    _walkInSync = WalkInSyncService(OperationsRepository(_api))
+      ..loadPendingCounts();
 
     // Any 401, from any repository, drops to sign-in. Wiring it once here
     // means no screen has to remember to handle an expired token.
@@ -47,6 +55,7 @@ class _SabayGoAppState extends State<SabayGoApp> {
   @override
   void dispose() {
     _api.dispose();
+    _walkInSync.dispose();
     super.dispose();
   }
 
@@ -57,6 +66,7 @@ class _SabayGoAppState extends State<SabayGoApp> {
         Provider<ApiClient>.value(value: _api),
         Provider<TokenStorage>.value(value: _tokens),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
+        ChangeNotifierProvider<WalkInSyncService>.value(value: _walkInSync),
       ],
       child: MaterialApp(
         title: 'SabayGo',

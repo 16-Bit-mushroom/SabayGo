@@ -11,6 +11,7 @@ import '../../core/network/api_client.dart';
 import '../../data/repositories/tracking_repository.dart';
 import '../../data/repositories/trip_repository.dart';
 import '../../viewmodels/live_map_viewmodel.dart';
+import '../safety/sos_button.dart';
 
 /// NAHGM's passenger-facing half: the route drawn as its nodes, and the
 /// van's last matched position on it.
@@ -97,7 +98,12 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title),
+        // The passenger's own SOS lives here rather than on the ticket:
+        // this is the screen someone has open while they are in the van.
+        actions: [SosButton(tripId: widget.tripId)],
+      ),
       floatingActionButton: _vm.position == null
           ? null
           : FloatingActionButton(

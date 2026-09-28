@@ -101,6 +101,36 @@ else
   python tests/integration/test_notifications.py 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Automatic captures: door closure and GPS node. Python for the same
+# reason -- a faked camera -- and it needs no running backend, only the
+# database, so it runs against whatever state the reset above left.
+{
+  echo
+  echo "==================================================================="
+  echo "  AUTOMATIC AI CAPTURE (2.3.5)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+if [ "$QUIET" = "1" ]; then
+  python tests/integration/test_auto_audit.py 2>&1 | strip_ansi >> "$REPORT"
+else
+  python tests/integration/test_auto_audit.py 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# SOS emergency alerts. No database reset: the script closes whatever it
+# finds open first, and the state left by the journeys above is exactly
+# the state a real alert would be raised against.
+{
+  echo
+  echo "==================================================================="
+  echo "  SOS EMERGENCY ALERTS (2.3.5)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_sos.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_sos.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────

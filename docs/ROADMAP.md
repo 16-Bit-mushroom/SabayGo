@@ -97,7 +97,7 @@ their own data.
 | Google Maps | Static terminal list, or cut |
 | iOS build | Android only — state in Scope |
 | Ticket booklet inventory | Defer |
-| Twilio SOS | **Remove from architecture diagram** — not in any objective |
+| Twilio SOS | ~~Remove from architecture diagram~~ — **built 28 Sep**: §2.3.5 and Scope both assert it, so the diagram was right and the code was wrong. SMS provider is configurable; the free Android-gateway path is the default |
 | Live PayMongo account | Sandbox only; KYC takes weeks |
 
 ---

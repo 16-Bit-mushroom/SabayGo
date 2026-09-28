@@ -26,18 +26,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError, PermissionDeniedError, PolicyViolationError
+from app.application.identity.naming import display_name as _display_name
 from app.domain.enums import BookingStatus, Role, TripStatus
 from app.infrastructure.models import Booking, Conversation, Message, Route, Trip, User
-
-
-def _display_name(user: User) -> str:
-    if user.passenger_profile is not None:
-        p = user.passenger_profile
-        return f"{p.first_name} {p.last_name}".strip()
-    if user.staff_profile is not None:
-        s = user.staff_profile
-        return f"{s.first_name} {s.last_name}".strip()
-    return user.email
 
 
 def _trip_label(route_name: str, departure: dt.datetime) -> str:

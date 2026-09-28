@@ -106,6 +106,33 @@ class ManifestPassenger {
   bool get isNoShow => status == 'no_show';
   bool get isCancelled => status == 'cancelled';
 
+  /// True only for a synthetic row built from the offline queue: a
+  /// walk-in the conductor logged in a dead zone that has not reached
+  /// the server yet, so it has no real booking id or ticket number.
+  bool get isPendingSync => bookingId.isEmpty;
+
+  /// A placeholder row for a walk-in still sitting in the offline queue.
+  /// Never shown as a real booking -- `isPendingSync` distinguishes it
+  /// from anything the server has actually recorded.
+  factory ManifestPassenger.pendingSync({
+    required int boardingStop,
+    required int alightingStop,
+    required bool isRoadsidePickup,
+    String? name,
+  }) =>
+      ManifestPassenger(
+        bookingId: '',
+        ticketNumber: 'PENDING SYNC',
+        boardingStop: boardingStop,
+        alightingStop: alightingStop,
+        bookingType: 'walk_in',
+        status: 'pending_sync',
+        fare: 0,
+        fareIsManual: false,
+        isRoadsidePickup: isRoadsidePickup,
+        name: name,
+      );
+
   factory ManifestPassenger.fromJson(Map<String, dynamic> j) => ManifestPassenger(
         bookingId: j['booking_id'] as String,
         ticketNumber: j['ticket_number'] as String,
@@ -331,6 +358,9 @@ class OperationsRepository {
     String? pickupLandmark,
     double? fareOverride,
     String? fareNote,
+    // Set only by the offline sync queue, so a retry after a lost
+    // response is recognised as a replay rather than a second booking.
+    String? clientRequestId,
   }) async {
     final json = await _api.post('/bookings/walk-in', body: {
       'trip_id': tripId,
@@ -344,6 +374,7 @@ class OperationsRepository {
         'pickup_landmark': pickupLandmark,
       if (fareOverride != null) 'fare_override': fareOverride.toStringAsFixed(2),
       if (fareNote != null && fareNote.isNotEmpty) 'fare_note': fareNote,
+      'client_request_id': ?clientRequestId,
     });
     return WalkInResult.fromJson(json as Map<String, dynamic>);
   }

@@ -22,6 +22,10 @@ class AppNotification {
   final DateTime createdAt;
 
   bool get isVarianceAlert => type == 'variance_alert';
+  bool get isSosAlert => type == 'sos_alert';
+
+  /// Notifications that point at a module worth opening.
+  bool get isActionable => isVarianceAlert || isSosAlert;
 
   AppNotification copyWith({bool? isRead}) => AppNotification(
         notificationId: notificationId,

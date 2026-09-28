@@ -68,6 +68,11 @@ class ReserveSeatCommand:
     # Conductor-set fare. Required for roadside, optional otherwise.
     fare_override: Decimal | None = None
     fare_note: str | None = None
+    # Set by the mobile client when a walk-in was queued offline, so a
+    # retried sync can be recognised as a replay. The duplicate check
+    # itself lives at the API boundary (bookings.py); this only persists
+    # the id onto the row it created.
+    client_request_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -161,6 +166,7 @@ class ReserveSeatUseCase:
                 booking_type=booking.booking_type.value,
                 is_roadside_pickup=cmd.is_roadside_pickup,
                 pickup_landmark=cmd.pickup_landmark,
+                client_request_id=cmd.client_request_id,
                 boarding_stop_sequence=segment.boarding_stop,
                 alighting_stop_sequence=segment.alighting_stop,
                 seat_number=slot,

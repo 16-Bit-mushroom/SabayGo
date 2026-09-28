@@ -157,6 +157,20 @@ endpoint returns 502. An earlier prototype substituted `visual_count = 1`
 and displayed it as real, which would flag an innocent driver on an
 invented number.
 
+**An SOS is recorded before any SMS is attempted, and a text message is
+never reported as sent unless the gateway accepted it.** `RaiseSosUseCase`
+commits the alert and its notifications first, then dispatches, then
+commits one `sos_alert_dispatches` row per number with the real outcome.
+A dead gateway loses the text, never the emergency. Same rule as the AI
+node: an unreachable device is an error state, not a fabricated success.
+
+**SMS has two providers and neither is required.** `SMS_PROVIDER` is
+`disabled` (development), `android_gateway` (a handset on the
+cooperative's own SIM -- FOSS, no per-message charge) or `twilio` (the
+vendor §2.3.5 names; paid, trial reaches verified numbers only). Who gets
+texted is the `sos_contact_numbers` cooperative policy, edited in the
+console's Policy Editor, not an env var.
+
 **MySQL stores naive local time (Asia/Manila).** Use `app.core.timezone`.
 Treating those timestamps as UTC shifts everything eight hours and breaks
 check-in windows silently.
@@ -201,7 +215,26 @@ policy CRUD · scheduling conflict detection · NAHGM live tracking ·
 written when a YOLOv8 audit flags a variance — office, driver and conductor
 each get a row in the same transaction as the audit log · `GET
 /bookings/{id}` · `GET /audits/history` (who closed what, with notes) ·
-`GET /revenue/export?format=xlsx|csv` (openpyxl; totals row, About sheet).
+`GET /revenue/export?format=xlsx|csv` (openpyxl; totals row, About sheet) ·
+SOS emergency alerts (`/sos`, migration 016): any signed-in role raises
+one, the office and the trip's crew get in-app rows, and the numbers in
+the `sos_contact_numbers` policy are texted.
+
+**Automatic AI capture (28 Sep, §2.3.5).** Captures no longer need a
+person. `application/audit/auto_trigger.py` fires two system events:
+`door_close` when `DepartTripUseCase` closes boarding (leg 1 is final —
+no-shows released, everyone aboard), and `gps_node` when `record_ping`
+sees the van cross out of a terminal's geofence (leg *k* just entered).
+Both fire on *leaving* a node, never arriving: an undocumented passenger
+boards at a terminal, and leg *k* is the stretch they are now riding.
+Three rules the module exists to keep — one automatic audit per leg
+counted over automatic rows only, so a conductor's manual spot check
+cannot satisfy the quota and pre-empt the systematic check; the work is
+detached, so a departure never waits at the door for a camera and a GPS
+ping is never rejected because one is down; and a failed capture writes
+no row at all. `POST /audits/trigger` no longer accepts `trigger_type` —
+provenance is the server's to set, or the audited party could label its
+own audit `gps_node`. The console's audit panel shows the trigger.
 
 Trip search takes `origin_terminal_id` + `destination_terminal_id` and
 resolves the stop pair per route (a terminal is stop 2 on one route and
@@ -240,9 +273,25 @@ trips → open boarding → scan valid/already-boarded/wrong-stop → walk-in �
 headcount, incl. rejecting a negative count → depart with no-shows →
 roadside pickup → remit cash with a real variance). No Dart exceptions.
 
+SOS (28 Sep): a red `SosButton` in the conductor manifest app bar and on
+the passenger's live-map app bar. Two taps -- icon, then category and
+optional note -- so a control used all day cannot fire by accident.
+Location is best-effort via `CurrentPosition.tryResolve()` (extracted from
+`TicketViewModel`); a denied permission sends the alert without a fix
+rather than blocking it. The confirmation repeats the server's own
+sentence about SMS delivery and never invents one.
+
 Notifications: passenger tab and a conductor app-bar bell (30 s poll) read
 `/notifications`; the console has the same bell in its sidebar, and a
 variance alert jumps to the audit queue.
+
+Console (28 Sep): an **Emergency (SOS)** tab -- Open / History, 10 s poll,
+Acknowledge and Close-with-a-note, each alert showing its SMS row by row
+(sent / failed / skipped, with the gateway's own error). Acknowledging
+writes a notification back to the person who raised it, the one message in
+the system that flows toward the passenger rather than away. The
+notification bell now hands the whole notification to the shell, which
+maps kind to tab, so the SOS and variance destinations cannot drift apart.
 
 Console (15 Sep): the Audits tab has a Queue / History switch — a closed
 audit shows outcome, resolver, time and notes instead of the buttons. The
@@ -254,7 +303,7 @@ Not done: chat.
 
 ### Operator console — complete
 
-All six coop_admin modules on the live backend (`1708ace`, 14 Sep): Fleet &
+All coop_admin modules on the live backend (`1708ace`, 14 Sep): Fleet &
 Crew, Trip Dispatcher, Schedules, Policy Editor, YOLOv8 Audits, Revenue.
 Same `ApiClient` / typed exception / `flutter_secure_storage` shape as
 `mobile/`. `GET /config/routes` was added to the backend for its route
@@ -376,6 +425,17 @@ was inserted.
   automated polling is not.
 - §2.3.5 of the manuscript still claims the Google Maps SDK. The code uses
   OpenStreetMap. Reword before submission.
+- §2.3.5 and Scope name **Twilio** for SOS SMS. Twilio is implemented and
+  works, but it is not the default: it costs roughly US$0.04-0.10 per
+  segment to a Philippine number, and a trial account texts only numbers
+  verified in its console. The default is a cooperative-owned Android
+  SMS gateway on its own SIM, which is free at the margin. Reword to
+  "an SMS gateway (Twilio, or a cooperative-operated Android SMS
+  gateway)" rather than naming one vendor as the mechanism.
+- No SOS contact numbers are seeded. Until the office sets
+  `sos_contact_numbers` in the Policy Editor, alerts are recorded and
+  shown in-app but no SMS is attempted -- the console says so on each
+  alert. Set it before the demo.
 - `datetime.now(timezone.utc)` written into a naive Manila DATETIME
   column skews it eight hours. Fixed in `boarding.py` (14 Sep),
   `trigger_audit.py`, `payments.py`, `register_passenger.py`, `auth.py`
@@ -385,6 +445,17 @@ was inserted.
   `security.py`, where UTC is correct because JWT `exp` is epoch time.
 - The conductor sets "Van is at" manually on the manifest screen — see
   Next, item 3.
+- **There is no physical door sensor.** §2.3.5's "door closures" is
+  implemented as the conductor closing boarding and departing, which is
+  the closest event the system genuinely observes. Say it that way in the
+  paper rather than implying a reed switch on the sliding door; the van
+  kit has a camera and a GPS unit, not door hardware. The `gps_node`
+  trigger needs no proxy — it is the real thing.
+- Automatic captures are in-process, like `HoldSweeper` and the phone
+  capture slot. With more than one backend worker the per-leg check
+  against `yolov8_audit_logs` still holds, but the in-flight guard does
+  not, so a simultaneous double-fire could write two rows for one leg.
+  One more entry for the single-process list in Limitations.
 
 ---
 

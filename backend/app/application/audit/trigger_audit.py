@@ -69,7 +69,9 @@ class TriggerAuditUseCase:
         *,
         trip_id: str,
         leg_sequence: int,
-        triggered_by_user_id: str,
+        # None when no person asked -- an automatic door-close or GPS-node
+        # trigger. See application/audit/auto_trigger.py.
+        triggered_by_user_id: str | None,
         trigger_type: str = "manual",
     ) -> AuditResult:
         trip, booked_count = await self._load_trip_and_manifest(trip_id, leg_sequence)
@@ -91,7 +93,7 @@ class TriggerAuditUseCase:
         *,
         trip_id: str,
         leg_sequence: int,
-        triggered_by_user_id: str,
+        triggered_by_user_id: str | None,
         image_bytes: bytes,
         trigger_type: str = "manual",
     ) -> AuditResult:
@@ -134,7 +136,7 @@ class TriggerAuditUseCase:
         *,
         trip: Trip,
         leg_sequence: int,
-        triggered_by_user_id: str,
+        triggered_by_user_id: str | None,
         trigger_type: str,
         booked_count: int,
         capture: CaptureResult,

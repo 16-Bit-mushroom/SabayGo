@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../models/notification_model.dart';
@@ -155,6 +156,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case NotificationType.varianceAlert:
         icon = Icons.people_alt_outlined;
         iconColor = Colors.deepOrange;
+        break;
+      case NotificationType.sosAlert:
+        icon = Icons.emergency_share;
+        iconColor = AppColors.danger;
         break;
       case NotificationType.unremittedFare:
         icon = Icons.payments_outlined;

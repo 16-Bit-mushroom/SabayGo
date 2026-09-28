@@ -8,6 +8,7 @@ import '../../modules/policy_editor/screens/policy_editor_screen.dart';
 import '../../modules/revenue/screens/revenue_screen.dart';
 import '../../modules/messaging/screens/messages_screen.dart';
 import '../../modules/live_map/screens/fleet_map_screen.dart';
+import '../../modules/emergency/screens/sos_console_screen.dart';
 import '../../viewmodels/auth_provider.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/notification_repository.dart';
@@ -57,12 +58,25 @@ class _OperatorShellState extends State<OperatorShell> {
     _Module('Policies', Icons.tune_outlined, Icons.tune, PolicyEditorScreen()),
     _Module('YOLOv8 Audits', Icons.policy_outlined, Icons.policy,
         AuditDashboardScreen()),
+    _Module('Emergency (SOS)', Icons.emergency_outlined, Icons.emergency,
+        SosConsoleScreen()),
     _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble,
         MessagesScreen()),
   ];
 
-  static final _auditsIndex =
-      _modules.indexWhere((m) => m.screen is AuditDashboardScreen);
+  /// Where a notification lands when the office clicks it. Looked up by
+  /// screen type rather than written out as a constant -- the two
+  /// parallel lists this replaced sent a variance alert to whichever
+  /// module happened to sit at index 5.
+  int _indexOfScreen(bool Function(Widget) test) =>
+      _modules.indexWhere((m) => test(m.screen));
+
+  void _openFor(AppNotification n) {
+    final index = n.isSosAlert
+        ? _indexOfScreen((w) => w is SosConsoleScreen)
+        : _indexOfScreen((w) => w is AuditDashboardScreen);
+    if (index >= 0) setState(() => _selectedIndex = index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,9 +118,7 @@ class _OperatorShellState extends State<OperatorShell> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  NotificationBell(
-                    onOpenAudits: () => setState(() => _selectedIndex = _auditsIndex),
-                  ),
+                  NotificationBell(onOpen: _openFor),
                 ],
               ),
             ),

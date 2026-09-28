@@ -5,8 +5,11 @@ import 'package:provider/provider.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/offline/pending_walk_in.dart';
+import '../../core/offline/walk_in_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
+import '../safety/sos_button.dart';
 import 'qr_scanner_screen.dart';
 import 'remittance_screen.dart';
 import 'walk_in_screen.dart';
@@ -176,12 +179,18 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     final trip = shift.active?.tripId == widget.trip.tripId ? shift.active! : widget.trip;
     final m = _manifest;
     final departed = trip.isDeparted;
+    final sync = context.watch<WalkInSyncService>();
+    final pending = sync.pendingFor(trip.tripId);
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
         title: Text(trip.title, style: const TextStyle(fontSize: 18)),
         actions: [
+          // Beside Refresh, not buried in the action list: hands are full
+          // at the van door, and this is the one control that cannot be
+          // hunted for.
+          SosButton(tripId: trip.tripId),
           IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
@@ -199,10 +208,14 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                     padding: const EdgeInsets.only(bottom: 24),
                     children: [
                       _statusPanel(trip, m!, shift),
+                      if (pending.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _pendingSyncBanner(pending.length, sync),
+                      ],
                       const SizedBox(height: 8),
                       _actions(trip, departed),
                       const SizedBox(height: 8),
-                      _passengerList(trip, m),
+                      _passengerList(trip, m, pending),
                     ],
                   ),
                 ),
@@ -303,6 +316,28 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     );
   }
 
+  /// Cash the conductor has already collected but the server doesn't
+  /// know about yet -- logged in a dead zone, waiting on the queue.
+  /// Never hidden: a variance the office can't see coming is worse than
+  /// one flagged in advance.
+  Widget _pendingSyncBanner(int count, WalkInSyncService sync) => Container(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off, size: 18, color: AppColors.warning),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$count passenger${count == 1 ? '' : 's'} logged offline, not yet synced.',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton(onPressed: sync.flush, child: const Text('Sync now')),
+          ],
+        ),
+      );
+
   Widget _stat(String label, int value, Color colour) => Expanded(
         child: Column(
           children: [
@@ -347,9 +382,17 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     );
   }
 
-  Widget _passengerList(CrewTrip trip, Manifest m) {
-    final visible = m.passengers.where((p) => !p.isCancelled).toList()
-      ..sort((a, b) => a.boardingStop.compareTo(b.boardingStop));
+  Widget _passengerList(CrewTrip trip, Manifest m, List<PendingWalkIn> pending) {
+    final visible = <ManifestPassenger>[
+      ...m.passengers.where((p) => !p.isCancelled),
+      for (final p in pending)
+        ManifestPassenger.pendingSync(
+          boardingStop: p.boardingStop,
+          alightingStop: p.alightingStop,
+          isRoadsidePickup: p.isRoadsidePickup,
+          name: p.name,
+        ),
+    ]..sort((a, b) => a.boardingStop.compareTo(b.boardingStop));
 
     return Container(
       color: Colors.white,
@@ -388,6 +431,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
       'confirmed' => ('NOT YET', AppColors.warning),
       'pending' => ('UNPAID', AppColors.textMuted),
       'no_show' => ('NO-SHOW', AppColors.danger),
+      'pending_sync' => ('PENDING SYNC', AppColors.warning),
       _ => (p.status.toUpperCase(), AppColors.textMuted),
     };
 
@@ -464,7 +508,9 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            '₱${p.fare.toStringAsFixed(0)}${p.fareIsManual ? '*' : ''}',
+            p.isPendingSync
+                ? '—'
+                : '₱${p.fare.toStringAsFixed(0)}${p.fareIsManual ? '*' : ''}',
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],

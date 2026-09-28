@@ -23,6 +23,7 @@ from app.api.v1 import (
     operations,
     payments,
     remittances,
+    sos,
     tracking,
     trips,
     users,
@@ -106,6 +107,7 @@ app.include_router(fleet.router, prefix="/api/v1")
 app.include_router(config_router.router, prefix="/api/v1")
 app.include_router(remittances.router, prefix="/api/v1")
 app.include_router(tracking.router, prefix="/api/v1")
+app.include_router(sos.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 
 # Blurred audit snapshots. Local disk is a prototype choice -- object

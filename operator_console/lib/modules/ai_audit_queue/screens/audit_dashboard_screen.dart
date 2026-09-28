@@ -395,6 +395,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white54, letterSpacing: 1.2)),
               const Divider(color: Colors.white10),
               _buildDetailRow('Captured', DateFormat.jm().add_yMMMd().format(log.capturedAt)),
+              _buildDetailRow('Trigger', log.triggerLabel),
               _buildDetailRow('Digital Manifest', log.bookedCount.toString()),
               _buildDetailRow('Physical Reality', log.visualCount.toString(), isAlert: isAlert),
               _buildDetailRow('Detected Leakage', '+${log.variance} Passengers', isAlert: isAlert),

@@ -6,6 +6,7 @@ import csv
 import datetime as dt
 import io
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Header, Query, UploadFile
 from fastapi.responses import Response
@@ -44,7 +45,13 @@ def verify_phone_device(x_device_key: str | None = Header(default=None)) -> None
 class TriggerAuditRequest(BaseModel):
     trip_id: str
     leg_sequence: int = Field(ge=1)
-    trigger_type: str = Field(default="manual")
+    # Narrowed from a free string to the one value this endpoint can mean.
+    # A call here is a person asking, so the row is `manual`; a caller able
+    # to send `gps_node` could label its own audit as the systematic check
+    # it is the subject of. Automatic provenance is the server's to write
+    # -- see AuditTrigger and application/audit/auto_trigger.py. Existing
+    # clients all send "manual", so this rejects nothing in use today.
+    trigger_type: Literal["manual"] = "manual"
 
 
 class AuditResponse(BaseModel):
@@ -106,6 +113,9 @@ class AuditQueueOut(BaseModel):
     trip_label: str
     service_date: dt.date
     leg_sequence: int
+    # Provenance -- manual, door_close or gps_node. The console shows it,
+    # because an automatic audit indistinguishable from a manual one on
+    # screen gives the office no way to see the systematic check running.
     trigger_type: str
     visual_count: int
     booked_count: int

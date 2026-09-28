@@ -58,6 +58,33 @@ class Settings(BaseSettings):
     payment_success_url: str = "http://localhost:8000/payments/success"
     payment_cancel_url: str = "http://localhost:8000/payments/cancel"
 
+    # --- SMS for SOS emergency alerts (spec 2.3.5) ----------------------
+    # Two providers, because the cooperative's two realistic options are
+    # genuinely different purchases:
+    #
+    #   android_gateway  a spare Android handset on the cooperative's own
+    #                    SIM running an SMS-gateway app, reached over the
+    #                    LAN. FOSS, no vendor account, no per-message
+    #                    charge beyond the SIM's existing unli-text plan.
+    #   twilio           the vendor named in the manuscript. Paid per
+    #                    segment; a trial account reaches verified
+    #                    numbers only, which is enough for the defence.
+    #
+    # "disabled" is the development default. It does not fake a send: the
+    # alert is still recorded and every recipient gets a dispatch row
+    # marked 'skipped', so a demo machine with no SIM never looks like it
+    # delivered a text message it did not send.
+    sms_provider: str = Field(default="disabled")
+    sms_timeout_s: float = 10.0
+
+    sms_gateway_url: str | None = None
+    sms_gateway_username: str | None = None
+    sms_gateway_password: str | None = None
+
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_from_number: str | None = None
+
     cors_origins: list[str] = ["http://localhost:8080", "http://localhost:3000"]
 
     @field_validator("database_url")
@@ -67,6 +94,17 @@ class Settings(BaseSettings):
             raise ValueError(
                 "database_url must use the asyncmy driver "
                 "(mysql+asyncmy://...); a sync driver will block the event loop."
+            )
+        return v
+
+    @field_validator("sms_provider")
+    @classmethod
+    def _known_sms_provider(cls, v: str) -> str:
+        allowed = {"disabled", "android_gateway", "twilio"}
+        if v not in allowed:
+            raise ValueError(
+                f"sms_provider must be one of {sorted(allowed)}; got {v!r}. "
+                "A typo here would silently stop every SOS text message."
             )
         return v
 

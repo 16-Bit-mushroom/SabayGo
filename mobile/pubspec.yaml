@@ -28,6 +28,10 @@ dependencies:
   # plain SharedPreferences is readable by any app on a rooted device,
   # and rooted Android is common on the handsets crew actually carry.
   flutter_secure_storage: ^9.2.2
+  # On-device queue for walk-ins logged in a connectivity dead zone --
+  # the offline-capable conductor manifest (spec section 2.3.5).
+  sqflite: ^2.4.1
+  path: ^1.9.0
 
   # --- device ---
   mobile_scanner: ^7.2.1        # conductor QR scanning
