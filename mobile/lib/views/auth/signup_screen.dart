@@ -128,7 +128,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           const SizedBox(height: 8),
                           Center(
                             child: Text(
-                              'Book a seat on your UV Express route.',
+                              'Book a space on your UV Express route.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 14,

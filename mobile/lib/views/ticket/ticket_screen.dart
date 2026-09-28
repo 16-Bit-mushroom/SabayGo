@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/booking_repository.dart';
 import '../../models/transit_node_model.dart';
@@ -98,10 +99,10 @@ class _TicketScreenState extends State<TicketScreen> {
     final passengerName = profile?.displayName ?? profile?.email ?? '—';
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text('Boarding Pass'),
-        backgroundColor: const Color(0xFF2D2059),
+        backgroundColor: AppColors.primary,
         elevation: 0,
         foregroundColor: Colors.white,
       ),
@@ -165,11 +166,21 @@ class _TicketScreenState extends State<TicketScreen> {
 
                           const SizedBox(height: 12),
                           Text(
-                            'Ticket ID: ${_viewModel.ticketNumber.isNotEmpty ? _viewModel.ticketNumber : trip.id}',
-                            style: const TextStyle(letterSpacing: 1.5, color: Colors.grey, fontWeight: FontWeight.bold),
+                            _viewModel.ticketNumber.isNotEmpty
+                                ? _viewModel.ticketNumber
+                                : trip.id,
+                            style: const TextStyle(
+                              letterSpacing: 1.2,
+                              color: AppColors.textMuted,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text('Present this to the dispatcher', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          const SizedBox(height: AppSpacing.xs),
+                          const Text(
+                            'Show this to the conductor when you board',
+                            style: TextStyle(
+                                color: AppColors.textMuted, fontSize: 13),
+                          ),
 
                           if (_viewModel.checkInMessage != null) ...[
                             const SizedBox(height: 12),
@@ -177,7 +188,9 @@ class _TicketScreenState extends State<TicketScreen> {
                               _viewModel.checkInMessage!,
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: _viewModel.isCheckedIn ? Colors.green.shade700 : Colors.orange.shade800,
+                                color: _viewModel.isCheckedIn
+                                    ? AppColors.success
+                                    : AppColors.warning,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -188,7 +201,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             Text(
                               _viewModel.error!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600),
+                              style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ],
@@ -198,15 +211,15 @@ class _TicketScreenState extends State<TicketScreen> {
                     // Divider with cutouts
                     Row(
                       children: [
-                        Container(height: 20, width: 10, decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)))),
+                        Container(height: 20, width: 10, decoration: BoxDecoration(color: AppColors.surface, borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)))),
                         Expanded(child: LayoutBuilder(builder: (context, constraints) {
                           return Flex(
                             direction: Axis.horizontal,
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: List.generate((constraints.constrainWidth() / 10).floor(), (index) => const SizedBox(width: 5, height: 1, child: DecoratedBox(decoration: BoxDecoration(color: Colors.grey)))),
+                            children: List.generate((constraints.constrainWidth() / 10).floor(), (index) => const SizedBox(width: 5, height: 1, child: DecoratedBox(decoration: BoxDecoration(color: AppColors.divider)))),
                           );
                         })),
-                        Container(height: 20, width: 10, decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)))),
+                        Container(height: 20, width: 10, decoration: BoxDecoration(color: AppColors.surface, borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)))),
                       ],
                     ),
 
@@ -218,9 +231,9 @@ class _TicketScreenState extends State<TicketScreen> {
                           _buildInfoRow(Icons.person_outline, 'Passenger', passengerName),
                           const SizedBox(height: 12),
 
-                          _buildInfoRow(Icons.trip_origin, 'Origin', trip.origin.name, iconColor: const Color(0xFF00A859)),
+                          _buildInfoRow(Icons.trip_origin, 'Origin', trip.origin.name, iconColor: AppColors.success),
                           const SizedBox(height: 12),
-                          _buildInfoRow(Icons.location_on, 'Destination', trip.destination.name, iconColor: const Color(0xFFD9534F)),
+                          _buildInfoRow(Icons.location_on, 'Destination', trip.destination.name, iconColor: AppColors.danger),
                           const SizedBox(height: 12),
                           _buildInfoRow(Icons.departure_board, 'Departure', _formatTime(trip.departureTime)),
                           const SizedBox(height: 12),
@@ -257,7 +270,8 @@ class _TicketScreenState extends State<TicketScreen> {
                     children: [
                       SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       SizedBox(width: 10),
-                      Text('Waiting for payment confirmation…', style: TextStyle(color: Colors.grey)),
+                      Text('Waiting for payment confirmation…',
+                          style: TextStyle(color: AppColors.textMuted)),
                     ],
                   ),
                 ] else if (_viewModel.hasLiveBooking) ...[
@@ -306,7 +320,7 @@ class _TicketScreenState extends State<TicketScreen> {
                   child: Text(
                     'Check-in opens ${DateFormat('h:mm a').format(_viewModel.checkinOpensAt!)} at ${trip.origin.name}',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
                   ),
                 ),
               if (_viewModel.canCheckIn)
@@ -338,8 +352,15 @@ class _TicketScreenState extends State<TicketScreen> {
               if (!_viewModel.isCancelled && !_viewModel.isCheckedIn && !_viewModel.isBoarded)
                 TextButton.icon(
                   onPressed: _confirmCancel,
-                  icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                  label: const Text('Cancel Reservation', style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.cancel_outlined,
+                      color: AppColors.danger),
+                  label: const Text(
+                    'Cancel booking',
+                    style: TextStyle(
+                        color: AppColors.danger,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600),
+                  ),
                 )
             ],
           ),
@@ -352,7 +373,7 @@ class _TicketScreenState extends State<TicketScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel this reservation?'),
+        title: const Text('Cancel this booking?'),
         content: const Text(
           'Your space will be released. The cooperative does not issue '
           'refunds, so any fare already paid is not returned.',
@@ -361,7 +382,8 @@ class _TicketScreenState extends State<TicketScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel reservation', style: TextStyle(color: Colors.red)),
+            child: const Text('Cancel booking',
+                style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -370,15 +392,15 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Color _headerColor() {
-    if (_viewModel.isCancelled) return Colors.red.shade100;
-    if (_viewModel.isAwaitingPayment) return Colors.orange.shade50;
-    return const Color(0xFFE5F6EE);
+    if (_viewModel.isCancelled) return AppColors.dangerContainer;
+    if (_viewModel.isAwaitingPayment) return AppColors.warningContainer;
+    return AppColors.successContainer;
   }
 
   Color _headerTextColor() {
-    if (_viewModel.isCancelled) return Colors.red.shade900;
-    if (_viewModel.isAwaitingPayment) return Colors.orange.shade800;
-    return const Color(0xFF00A859);
+    if (_viewModel.isCancelled) return AppColors.danger;
+    if (_viewModel.isAwaitingPayment) return AppColors.warning;
+    return AppColors.success;
   }
 
   String _statusLabel() => switch (_viewModel.status) {
@@ -394,9 +416,10 @@ class _TicketScreenState extends State<TicketScreen> {
     if (_viewModel.isAwaitingPayment) {
       return Column(
         children: [
-          Icon(Icons.lock_clock, size: 100, color: Colors.orange.shade300),
+          Icon(Icons.lock_clock, size: 96, color: AppColors.warning),
           const SizedBox(height: 8),
-          const Text('Pay to unlock your QR ticket', style: TextStyle(color: Colors.grey)),
+          const Text('Pay to unlock your QR ticket',
+              style: TextStyle(color: AppColors.textMuted)),
         ],
       );
     }
@@ -409,7 +432,7 @@ class _TicketScreenState extends State<TicketScreen> {
     }
     return Opacity(
       opacity: _viewModel.isCancelled ? 0.3 : 1.0,
-      child: const Icon(Icons.qr_code_2, size: 120, color: Color(0xFF2D2059)),
+      child: const Icon(Icons.qr_code_2, size: 120, color: AppColors.primary),
     );
   }
 
@@ -418,15 +441,18 @@ class _TicketScreenState extends State<TicketScreen> {
     final String label = _viewModel.isBoarded
         ? 'On Board'
         : _viewModel.isCheckedIn
-            ? 'Checked In - Ready to Board'
-            : 'Awaiting Terminal Arrival';
+            ? 'Checked in \u2014 ready to board'
+            : 'Tap \u201cI\u2019m at the terminal\u201d when you arrive';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: ready ? Colors.green.shade50 : Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: ready ? Colors.green.shade200 : Colors.orange.shade200),
+        color: ready
+            ? AppColors.successContainer
+            : AppColors.warningContainer,
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(
+            color: ready ? AppColors.success : AppColors.warning),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -434,14 +460,14 @@ class _TicketScreenState extends State<TicketScreen> {
           Icon(
             ready ? Icons.check_circle : Icons.location_on,
             size: 16,
-            color: ready ? Colors.green.shade700 : Colors.orange.shade800,
+            color: ready ? AppColors.success : AppColors.warning,
           ),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
-              color: ready ? Colors.green.shade700 : Colors.orange.shade800,
+              color: ready ? AppColors.success : AppColors.warning,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -455,26 +481,34 @@ class _TicketScreenState extends State<TicketScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: paid ? Colors.blue.shade50 : Colors.grey.shade100,
+        color: paid ? AppColors.infoContainer : AppColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: paid ? Colors.blue.shade200 : Colors.grey.shade300),
+        border: Border.all(
+            color: paid ? AppColors.info : AppColors.border),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Icon(paid ? Icons.verified_user : Icons.hourglass_top, color: paid ? Colors.blue.shade700 : Colors.grey.shade600, size: 20),
+              Icon(paid ? Icons.verified_user : Icons.hourglass_top,
+                  color: paid ? AppColors.info : AppColors.textMuted,
+                  size: 20),
               const SizedBox(width: 8),
               Text(
                 paid ? 'Paid via PayMongo' : 'Payment pending',
-                style: TextStyle(color: paid ? Colors.blue.shade900 : Colors.grey.shade700, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: paid ? AppColors.info : AppColors.textMuted,
+                    fontWeight: FontWeight.bold),
               ),
             ],
           ),
           Text(
             '₱${_viewModel.fare.toStringAsFixed(2)}',
-            style: TextStyle(color: paid ? Colors.blue.shade900 : Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 16),
+            style: TextStyle(
+                color: paid ? AppColors.info : AppColors.textMuted,
+                fontWeight: FontWeight.bold,
+                fontSize: 16),
           ),
         ],
       ),
@@ -488,9 +522,9 @@ class _TicketScreenState extends State<TicketScreen> {
       children: [
         Row(
           children: [
-            Icon(icon, size: 18, color: iconColor ?? Colors.grey.shade600),
+            Icon(icon, size: 18, color: iconColor ?? AppColors.textMuted),
             const SizedBox(width: 8),
-            Text(label, style: const TextStyle(color: Colors.grey)),
+            Text(label, style: const TextStyle(color: AppColors.textMuted)),
           ],
         ),
         const SizedBox(width: 16),

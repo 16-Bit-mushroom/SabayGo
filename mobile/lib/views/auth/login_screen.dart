@@ -63,20 +63,15 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Welcome back',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+                Text('Welcome back',
+                    style: Theme.of(context).textTheme.headlineMedium),
+                const SizedBox(height: AppSpacing.xs + 2),
+                Text(
+                  'Sign in to book a space or start your shift.',
+                  style: Theme.of(context).textTheme.bodyMedium!
+                      .copyWith(color: AppColors.textMuted),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Sign in to book a seat or start your shift.',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 28),
+                const SizedBox(height: AppSpacing.xxl + AppSpacing.xs),
 
                 if (auth.error != null) ...[
                   _ErrorBanner(
@@ -118,6 +113,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       icon: Icon(
                         _obscure ? Icons.visibility_off : Icons.visibility,
                       ),
+                      // Without this a screen reader announces only
+                      // "button", and the control's whole purpose is
+                      // invisible to anyone not looking at the glyph.
+                      tooltip: _obscure ? 'Show password' : 'Hide password',
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
@@ -129,12 +128,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 FilledButton(
                   onPressed: auth.isBusy ? null : _submit,
                   child: auth.isBusy
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            color: Colors.white,
+                      ? Semantics(
+                          label: 'Signing in',
+                          child: const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: Colors.white,
+                            ),
                           ),
                         )
                       : const Text('Sign in'),
@@ -179,18 +181,25 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+    // liveRegion so the failure is announced when it appears. A sighted
+    // user sees the banner slide in; without this, a screen-reader user
+    // presses Sign in and is told nothing at all.
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: Container(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.xs, AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.danger.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+        color: AppColors.dangerContainer,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.danger),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(Icons.error_outline, color: AppColors.danger, size: 20),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.sm + 2),
           // The backend writes messages for people to read, so they are
           // shown verbatim rather than swapped for a generic string.
           Expanded(
@@ -202,10 +211,11 @@ class _ErrorBanner extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.close, size: 18),
             color: AppColors.danger,
+            tooltip: 'Dismiss',
             onPressed: onDismiss,
-            visualDensity: VisualDensity.compact,
           ),
         ],
+      ),
       ),
     );
   }

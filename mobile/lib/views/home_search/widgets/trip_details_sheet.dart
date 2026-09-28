@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/uv_trip_model.dart';
 import 'package:intl/intl.dart';
+import '../../../core/design/tokens.dart';
 
 class TripDetailsSheet extends StatelessWidget {
   final UvTripModel trip;
@@ -31,7 +32,7 @@ class TripDetailsSheet extends StatelessWidget {
               child: Container(
                 width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
               ),
             ),
             
@@ -45,14 +46,14 @@ class TripDetailsSheet extends StatelessWidget {
                   children: [
                     Text(trip.tripLabel, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(trip.operatorName ?? trip.plateNumber ?? "—", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+                    Text(trip.operatorName ?? trip.plateNumber ?? "—", style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w500)),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('₱${trip.approximateFare.toStringAsFixed(2)}', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: const Color(0xFF00A859))),
-                    Text('Fare', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    Text('₱${trip.approximateFare.toStringAsFixed(2)}', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    Text('Fare', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                   ],
                 )
               ],
@@ -63,9 +64,9 @@ class TripDetailsSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50.withValues(alpha: 0.5),
+                color: AppColors.infoContainer,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.blue.shade100),
+                border: Border.all(color: AppColors.info),
               ),
               child: Column(
                 children: [
@@ -73,14 +74,14 @@ class TripDetailsSheet extends StatelessWidget {
                     time: _formatTime(trip.departureTime),
                     location: trip.origin.name,
                     label: 'Departure',
-                    iconColor: const Color(0xFF00A859),
+                    iconColor: AppColors.success,
                     isLast: false,
                   ),
                   _buildTimelineRow(
                     time: eta == null ? '—' : _formatTime(eta),
                     location: trip.destination.name,
-                    label: 'Est. Arrival',
-                    iconColor: const Color(0xFFD9534F),
+                    label: 'Arrives about',
+                    iconColor: AppColors.danger,
                     isLast: true,
                   ),
                 ],
@@ -93,14 +94,14 @@ class TripDetailsSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: AppColors.divider),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('VEHICLE DETAILS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1, color: Colors.grey)),
+                  Text('Vehicle', style: Theme.of(context).textTheme.labelSmall),
                   const SizedBox(height: 12),
                   _buildDetailRow(Icons.directions_car, 'Vehicle Type', 'UV Express'),
                   const Divider(height: 20),
@@ -114,11 +115,22 @@ class TripDetailsSheet extends StatelessWidget {
             // --- Seat Status ---
             Row(
               children: [
-                Icon(Icons.event_seat, color: trip.isFull ? Colors.red : Colors.green),
+                // Not a seat icon: UV Express assigns no seat numbers, and
+                // a diagram of a seat implies a reserved position in the
+                // van that the passenger does not get.
+                Icon(Icons.groups_outlined,
+                    color: trip.isFull ? AppColors.danger : AppColors.success),
                 const SizedBox(width: 8),
                 Text(
-                  trip.isFull ? 'No seats available' : '${trip.availableSeats} out of ${trip.totalSeats} seats left',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: trip.isFull ? Colors.red : Colors.green, fontSize: 16),
+                  trip.isFull
+                      ? 'No spaces left on this trip'
+                      : '${trip.availableSeats} of ${trip.totalSeats} spaces left',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: trip.isFull
+                          ? AppColors.danger
+                          : AppColors.success,
+                      fontSize: 16),
                 ),
               ],
             ),
@@ -134,11 +146,11 @@ class TripDetailsSheet extends StatelessWidget {
                 // to be held before there is anything to charge for.
                 onPressed: trip.isFull ? null : onBook,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00A859),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
-                child: Text(trip.isFull ? 'TRIP FULL' : 'RESERVE SEAT', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                child: Text(
+                    trip.isFull ? 'This trip is full' : 'Reserve a space'),
               ),
             ),
           ],
@@ -164,7 +176,7 @@ class TripDetailsSheet extends StatelessWidget {
             if (!isLast)
               Container(
                 width: 2, height: 30,
-                color: Colors.grey.shade300,
+                color: AppColors.divider,
               ),
           ],
         ),
@@ -174,7 +186,7 @@ class TripDetailsSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(location, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-              Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               if (!isLast) const SizedBox(height: 16),
             ],
           ),
@@ -186,9 +198,9 @@ class TripDetailsSheet extends StatelessWidget {
   Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, color: Colors.grey.shade600, size: 20),
+        Icon(icon, color: AppColors.textMuted, size: 20),
         const SizedBox(width: 12),
-        Text(label, style: TextStyle(color: Colors.grey.shade600)),
+        Text(label, style: const TextStyle(color: AppColors.textMuted)),
         const Spacer(),
         Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
       ],

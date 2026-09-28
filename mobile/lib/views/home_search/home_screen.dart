@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/empty_state.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
@@ -70,8 +71,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _vm.refreshTrips();
     } on ContentionException {
       // Lost a race for the lock rather than sold out. Worth retrying,
-      // and the wording should not imply the trip is full.
-      _snack('The seat map is busy. Please try again.');
+      // and the wording must not imply the trip is full -- nor mention a
+      // "seat map", which is not something this system shows anyone: space
+      // is counted per leg and no seat number is ever assigned.
+      _snack('Someone else is booking this trip right now. Please try again.');
     } on ConflictException catch (e) {
       _snack(e.message);
       _vm.refreshTrips();
@@ -106,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (_vm.error != null) {
-      return _Placeholder(
+      return AppEmptyState(
         icon: Icons.cloud_off,
         title: 'Could not load trips',
         body: _vm.error!,
@@ -122,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // would leave the person unsure whether they had done something
     // wrong.
     if (!_vm.hasSearched) {
-      return const _Placeholder(
+      return const AppEmptyState(
         icon: Icons.route_outlined,
         title: 'Where are you going?',
         body: 'Pick your boarding terminal and destination to see the '
@@ -132,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final trips = _vm.filteredTrips;
     if (trips.isEmpty) {
-      return _Placeholder(
+      return AppEmptyState(
         icon: Icons.event_busy,
         title: 'No departures found',
         body: _vm.selectedTimeBlock == TimeBlock.all
@@ -144,11 +147,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
       itemCount: trips.length,
       itemBuilder: (context, i) {
         final trip = trips[i];
-        return InkWell(
+        final card = TripCard(trip: trip);
+        return Semantics(
+          button: true,
+          // The card owns the sentence, so the spoken and the printed
+          // versions cannot drift apart. Children are excluded to stop a
+          // screen reader reading the same row twice.
+          label: '${card.semanticSummary()} Opens trip details.',
+          excludeSemantics: true,
+          child: InkWell(
           onTap: _booking
               ? null
               : () => showModalBottomSheet<void>(
@@ -163,7 +174,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                   ),
-          child: TripCard(trip: trip),
+          child: card,
+          ),
         );
       },
     );
@@ -177,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
               selected: _vm.selectedTimeBlock,
               onSelected: _vm.setTimeBlock,
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Expanded(child: _tripList()),
         ],
       );
@@ -190,74 +202,17 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Column(
               children: [
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 if (_vm.hasSearched)
                   TimeBlockFilterBar(
                     selected: _vm.selectedTimeBlock,
                     onSelected: _vm.setTimeBlock,
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Expanded(child: _tripList()),
               ],
             ),
           ),
         ],
       );
-}
-
-class _Placeholder extends StatelessWidget {
-  const _Placeholder({
-    required this.icon,
-    required this.title,
-    required this.body,
-    this.action,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: SizedBox(
-          height: constraints.maxHeight,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 52, color: AppColors.textMuted),
-                  const SizedBox(height: 16),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    body,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      height: 1.4,
-                    ),
-                  ),
-                  if (action != null) ...[const SizedBox(height: 20), action!],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
