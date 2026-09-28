@@ -389,6 +389,22 @@ UPDATE payments p JOIN bookings b ON b.booking_id = p.booking_id
 INSERT INTO yolov8_audit_logs (audit_id, trip_id, leg_sequence, triggered_by_user_id, trigger_type, visual_count, booked_count, variance, model_version, inference_ms, confidence_avg, resolution_status, resolved_by_user_id, resolved_at, resolution_notes, captured_at) VALUES
   ('AUD-A2Z-P2-DIG-01', @t, 1, 'USER-DRIVER-0004', 'door_close', 3, 3, 0, 'yolov8n-1.0', 122, 0.951, 'reconciled', NULL, NULL, NULL, @dep + INTERVAL 3 MINUTE);
 
+-- ── SOS recipients ────────────────────────────────────────────────────
+-- Migration 016 ships this policy EMPTY on purpose: in production the
+-- cooperative sets its own numbers in the Policy Editor. The demo needs a
+-- non-empty value so an SOS produces real sos_alert_dispatches rows
+-- instead of an empty list, which is indistinguishable from a broken
+-- gateway when you are standing in front of a panel.
+--
+-- These two are PLACEHOLDERS on the +63 900 prefix, which is not assigned
+-- to any Philippine mobile network, so they cannot reach a real handset
+-- even if someone flips SMS_PROVIDER off `disabled`. Swap them for A2Z's
+-- real dispatcher and officer numbers before the pilot -- and only then,
+-- because from that moment a raised SOS texts actual people.
+UPDATE cooperative_policies
+   SET policy_value = '+639000000001,+639000000002'
+ WHERE policy_key = 'sos_contact_numbers';
+
 DROP PROCEDURE seed_trip;
 DROP PROCEDURE seed_booking;
 

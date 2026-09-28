@@ -28,6 +28,7 @@ contribution.
 | `docs/RULES.md` | Business rules vs application rules, in plain language |
 | `docs/HOW_IT_WORKS.md` | Same, written for the cooperative and the panel |
 | `docs/REMAINING_WORK.md` | What is left, grouped |
+| `docs/MANUSCRIPT_CORRECTIONS.md` | Where the paper and the code disagree, with replacement wording |
 | `docs/FLUTTER_PHASE1_ISSUES.md` | 20 documented setup failures and fixes |
 | `backend/app/infrastructure/repositories/seat_repository.py` | The thesis. Read its docstring before touching it |
 
@@ -241,8 +242,9 @@ resolves the stop pair per route (a terminal is stop 2 on one route and
 stop 5 on another); the sequence form stays for reschedule (`route_id`
 pinned) and the test scripts. `/trips/terminals` is one row per terminal.
 
-Journey suite: **126 passed, 2 failed** — both fixture self-conflict, not
-defects. `test_notifications.py` fakes the camera so E.1 is repeatable.
+Journey suite: **162 passed, 1 failed** (28 Sep) — the one failure is
+fixture self-conflict, not a defect. `test_notifications.py` fakes the
+camera so E.1 is repeatable.
 
 **Check-in is a heads-up, not a gate** (Group D, decided 15 Sep). The
 conductor's manifest shows "AT TERMINAL"; a scan never requires it. The
@@ -407,10 +409,23 @@ was inserted.
 
 ## Known issues
 
-- Two journey-test failures are fixture self-conflict: `--soon` makes
-  check-in testable and reschedule untestable at the same time. The same
-  applies on the device: the reschedule button is correctly hidden on a
-  `--soon` trip because the 6-hour cutoff has already passed.
+- One journey-test failure is fixture self-conflict: `run_all_journeys.sh`
+  resets `--soon` before each journey, so the trip departs in 20 min and
+  the 6-hour reschedule cutoff has already passed — 422
+  `PolicyViolationError`. `--soon` cannot make check-in and reschedule
+  testable at once. Proven not a defect: a direct reschedule call returns
+  200, and the passenger journey passes standalone after a plain reset.
+  The same applies on the device: the reschedule button is correctly
+  hidden on a `--soon` trip.
+- The *second* failure here was long recorded as fixture self-conflict
+  too. It was not — it was a test bug, fixed 28 Sep. The conductor
+  journey reserved its unpaid ticket *after* `start-boarding`, but
+  `APP_BOOKABLE` is `{scheduled}`, so the reserve was refused, `UNPAID_QR`
+  came back empty, and scanning an empty payload returned `wrong_trip`.
+  The unpaid-at-the-door verdict was never actually under test. The
+  reserve now happens while the trip is still `scheduled`. Lesson: a
+  failing assertion inherited as "known fixture noise" is worth
+  re-deriving once.
 - The ticket screen polls `GET /bookings/{id}` every 4 s while a booking
   is pending, capped at ~2 min; after the cap it offers a manual "check
   again". A webhook-driven push would remove the poll, but that is FCM.
@@ -423,19 +438,21 @@ was inserted.
   policy is for modest use and asks for an identifying user agent, which
   both maps send; a defence-room demo is well inside it, but heavy
   automated polling is not.
-- §2.3.5 of the manuscript still claims the Google Maps SDK. The code uses
-  OpenStreetMap. Reword before submission.
-- §2.3.5 and Scope name **Twilio** for SOS SMS. Twilio is implemented and
-  works, but it is not the default: it costs roughly US$0.04-0.10 per
-  segment to a Philippine number, and a trial account texts only numbers
-  verified in its console. The default is a cooperative-owned Android
-  SMS gateway on its own SIM, which is free at the margin. Reword to
-  "an SMS gateway (Twilio, or a cooperative-operated Android SMS
-  gateway)" rather than naming one vendor as the mechanism.
-- No SOS contact numbers are seeded. Until the office sets
-  `sos_contact_numbers` in the Policy Editor, alerts are recorded and
-  shown in-app but no SMS is attempted -- the console says so on each
-  alert. Set it before the demo.
+- **The manuscript claims five things the code does not do.** Google Maps
+  SDK (it is OpenStreetMap via `flutter_map`), Firebase Authentication (it
+  is JWT), FCM background push (rows are polled; FCM is schema-ready,
+  `delivery_status` stays `queued`), Twilio as *the* SOS mechanism (it is
+  one of three `SMS_PROVIDER` options and not the default), and "door
+  closures" (there is no door sensor). Replacement wording for each, ready
+  to paste, is in `docs/MANUSCRIPT_CORRECTIONS.md` — edit the `.docx`, not
+  the `.docx.md`, which is a pandoc export and reaches nothing.
+- SOS contact numbers are seeded for the demo (28 Sep) in
+  `002_demo_dataset.sql`, as two placeholders on the **+63 900** prefix,
+  which is not assigned to any Philippine network — so they cannot reach a
+  real handset even if `SMS_PROVIDER` is switched off `disabled`. Swap
+  them for A2Z's real numbers before the pilot, and only then, because
+  from that moment a raised SOS texts actual people. Migration 016 still
+  ships the policy **empty**, which is correct for production.
 - `datetime.now(timezone.utc)` written into a naive Manila DATETIME
   column skews it eight hours. Fixed in `boarding.py` (14 Sep),
   `trigger_audit.py`, `payments.py`, `register_passenger.py`, `auth.py`
@@ -451,6 +468,19 @@ was inserted.
   paper rather than implying a reed switch on the sliding door; the van
   kit has a camera and a GPS unit, not door hardware. The `gps_node`
   trigger needs no proxy — it is the real thing.
+- **Automatic capture needs a camera on the inference host.**
+  `door_close` and `gps_node` go through `TriggerAuditUseCase.execute()`
+  → `ai.capture()` → the AI node's server-attached camera. On the demo
+  laptop the webcam *is* that camera, so automatic audits run end to end.
+  In a van with no kit there is no such camera, so they write nothing —
+  correctly: `UpstreamServiceError`, a log line, no row, no invented
+  count. The phone path is a different method (`ai.upload()`) reached only
+  when a person creates a pending request the phone polls for, because a
+  handset cannot accept an inbound call — so it is manual-only *by
+  construction* and cannot serve an automatic trigger. Do not bridge the
+  two: the phone slot is an in-memory single-slot stand-in that retires
+  when the Orange Pi arrives. Alpha testing in real vans from 6 Oct will
+  produce no automatic audits until the kit is installed.
 - Automatic captures are in-process, like `HoldSweeper` and the phone
   capture slot. With more than one backend worker the per-leg check
   against `yolov8_audit_logs` still holds, but the in-flight guard does
