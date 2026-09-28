@@ -4,11 +4,14 @@ import 'package:provider/provider.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/messaging_repository.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/auth_provider.dart';
+import '../../viewmodels/conversations_viewmodel.dart';
 import '../../viewmodels/notifications_viewmodel.dart';
 import '../../viewmodels/shift_viewmodel.dart';
+import '../messages/conversations_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'conductor_trips_screen.dart';
 import 'qr_scanner_screen.dart';
@@ -30,6 +33,7 @@ class ConductorMainScreen extends StatefulWidget {
 class _ConductorMainScreenState extends State<ConductorMainScreen> {
   late final ShiftViewModel _shift;
   late final NotificationsViewModel _notifications;
+  late final ConversationsViewModel _conversations;
 
   @override
   void initState() {
@@ -41,12 +45,17 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
       NotificationRepository(context.read<ApiClient>()),
       pollEvery: const Duration(seconds: 30),
     );
+    _conversations = ConversationsViewModel(
+      MessagingRepository(context.read<ApiClient>()),
+      pollEvery: const Duration(seconds: 15),
+    );
   }
 
   @override
   void dispose() {
     _shift.dispose();
     _notifications.dispose();
+    _conversations.dispose();
     super.dispose();
   }
 
@@ -71,6 +80,17 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
         builder: (_) => ChangeNotifierProvider.value(
           value: _shift,
           child: QRScannerScreen(trip: trip, stopSequence: _shift.currentStop),
+        ),
+      ),
+    );
+  }
+
+  void _openMessages() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Messages')),
+          body: ConversationsScreen(viewModel: _conversations),
         ),
       ),
     );
@@ -168,6 +188,24 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
             ],
           ),
           actions: [
+            ListenableBuilder(
+              listenable: _conversations,
+              builder: (context, _) {
+                final unread = _conversations.unreadCount;
+                return IconButton(
+                  tooltip: unread == 0 ? 'Messages' : '$unread unread',
+                  onPressed: _openMessages,
+                  icon: Badge(
+                    isLabelVisible: unread > 0,
+                    label: Text('$unread'),
+                    child: Icon(
+                      unread > 0 ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+            ),
             ListenableBuilder(
               listenable: _notifications,
               builder: (context, _) {

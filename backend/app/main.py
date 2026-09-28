@@ -16,6 +16,7 @@ from app.api.v1 import (
     audits,
     auth,
     bookings,
+    messaging,
     notifications,
     config as config_router,
     fleet,
@@ -100,6 +101,7 @@ app.include_router(payments.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
 app.include_router(audits.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
+app.include_router(messaging.router, prefix="/api/v1")
 app.include_router(fleet.router, prefix="/api/v1")
 app.include_router(config_router.router, prefix="/api/v1")
 app.include_router(remittances.router, prefix="/api/v1")

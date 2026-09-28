@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_v2_uv_express/views/messages/conversations_screen.dart';
 import 'package:mobile_v2_uv_express/views/notifications/notifications_screen.dart';
 import 'package:mobile_v2_uv_express/views/profile/profile_screen.dart';
 import 'package:mobile_v2_uv_express/views/reservations/reservations_screen.dart';
@@ -10,7 +11,7 @@ class PassengerMainScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         backgroundColor: Colors.grey.shade100,
         appBar: AppBar(
@@ -33,6 +34,7 @@ class PassengerMainScreen extends StatelessWidget {
             tabs: const [
               Tab(icon: Icon(Icons.home_filled, size: 28)),
               Tab(icon: Icon(Icons.confirmation_number_outlined, size: 26)),
+              Tab(icon: Icon(Icons.chat_bubble_outline, size: 26)),
               Tab(icon: Icon(Icons.notifications_none, size: 28)),
               Tab(icon: Icon(Icons.person_outline, size: 26)),
             ],
@@ -40,8 +42,9 @@ class PassengerMainScreen extends StatelessWidget {
         ),
         body: const TabBarView(
           children: [
-            HomeScreen(), 
+            HomeScreen(),
             ReservationsScreen(),// The newly simplified Home Screen
+            ConversationsScreen(),
             NotificationsScreen(),
             ProfileScreen()
           ],
