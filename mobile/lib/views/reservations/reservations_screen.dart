@@ -1,15 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/app_card.dart';
+import '../../core/design/components/empty_state.dart';
+import '../../core/design/components/money.dart';
+import '../../core/design/components/journey_strip.dart';
+import '../../core/design/components/section_header.dart';
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
+import '../../core/util/when.dart';
 import '../../data/repositories/booking_repository.dart';
 import '../../data/repositories/trip_repository.dart';
 import '../../viewmodels/reservations_viewmodel.dart';
 import '../ticket/ticket_screen.dart';
 import 'reschedule_sheet.dart';
 
+/// Everything the passenger has booked: the next one, the later ones, and
+/// what has already happened.
+///
+/// The next trip used to be a block of saturated green (or amber when
+/// unpaid) with a fifteen-pixel drop shadow — the loudest surface in the
+/// app, on a tab a passenger opens several times a day. Filling a card with
+/// a status colour also spends the colour before it is needed: white text on
+/// green left the status chip, the fare, the terminals and both buttons all
+/// equally white, so nothing inside the card had any hierarchy left.
+///
+/// Now the card is a card and the *chip* carries the status. That is the one
+/// element whose job is to be noticed, and against white it can be.
 class ReservationsScreen extends StatefulWidget {
   const ReservationsScreen({super.key});
 
@@ -26,7 +44,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     super.initState();
     final api = context.read<ApiClient>();
     _trips = TripRepository(api);
-    _vm = ReservationsViewModel(BookingRepository(api))..addListener(_onChanged);
+    _vm = ReservationsViewModel(BookingRepository(api))
+      ..addListener(_onChanged);
     _vm.load();
   }
 
@@ -60,32 +79,34 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel this reservation?'),
+        title: const Text('Cancel this booking?'),
         content: const Text(
           'Your space will be released. The cooperative does not issue '
           'refunds, so any fare already paid is not returned.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel reservation', style: TextStyle(color: Colors.red)),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Cancel booking'),
           ),
         ],
       ),
     );
     if (ok != true) return;
     final err = await _vm.cancel(b.bookingId);
-    _snack(err ?? 'Reservation cancelled.');
+    _snack(err ?? 'Booking cancelled. The space has been released.');
   }
 
   Future<void> _reschedule(BookingSummary b) async {
     final newTripId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (_) => RescheduleSheet(booking: b, trips: _trips),
     );
     if (newTripId == null) return;
@@ -101,49 +122,36 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         child: RefreshIndicator(
           onRefresh: _vm.load,
           child: NestedScrollView(
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Current Reservation',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: -0.5),
-                        ),
-                        const SizedBox(height: 16),
-                        _currentSection(),
-                        for (final b in _vm.upcoming) ...[
-                          const SizedBox(height: 12),
-                          _upcomingRow(b),
-                        ],
-                      ],
-                    ),
+            headerSliverBuilder: (context, _) => [
+              SliverToBoxAdapter(child: _header()),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _StickyTabBar(
+                  const TabBar(
+                    tabs: [
+                      Tab(text: 'Past trips'),
+                      Tab(text: 'Cancelled'),
+                    ],
                   ),
                 ),
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _StickyTabBarDelegate(
-                    TabBar(
-                      indicatorColor: AppColors.accent,
-                      labelColor: AppColors.accent,
-                      unselectedLabelColor: Colors.grey,
-                      labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                      tabs: const [
-                        Tab(text: 'Trip History'),
-                        Tab(text: 'Canceled'),
-                      ],
-                    ),
-                  ),
-                ),
-              ];
-            },
+              ),
+            ],
             body: TabBarView(
               children: [
-                _list(_vm.history, isCanceled: false),
-                _list(_vm.cancelled, isCanceled: true),
+                _finishedList(
+                  _vm.history,
+                  emptyTitle: 'No past trips yet',
+                  emptyBody: 'Trips you have taken will be listed here once '
+                      'they are complete.',
+                  tone: StatusTone.muted,
+                ),
+                _finishedList(
+                  _vm.cancelled,
+                  emptyTitle: 'Nothing cancelled',
+                  emptyBody: 'Bookings you cancel, and any the cooperative '
+                      'cancels, appear here.',
+                  tone: StatusTone.danger,
+                ),
               ],
             ),
           ),
@@ -152,245 +160,372 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
-  Widget _currentSection() {
-    if (_vm.isLoading && !_vm.hasLoaded) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_vm.error != null && _vm.current == null) {
-      return _placeholder(
-        icon: Icons.cloud_off,
-        text: _vm.error!,
-        action: TextButton(onPressed: _vm.load, child: const Text('Try again')),
-      );
-    }
-    final b = _vm.current;
-    if (b == null) {
-      return _placeholder(icon: Icons.directions_car_outlined, text: 'No upcoming trips');
-    }
-    return _currentCard(b);
-  }
-
-  Widget _currentCard(BookingSummary b) {
-    final busy = _vm.isBusy(b.bookingId);
-    final colour = b.isAwaitingPayment ? AppColors.warning : AppColors.accent;
-    return Container(
-      decoration: BoxDecoration(
-        color: colour,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: colour.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8)),
-        ],
+  Widget _header() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.xl,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            onTap: busy ? null : () => _openTicket(b),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
-                        child: Text(b.statusLabel.toUpperCase(),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1)),
-                      ),
-                      Text(DateFormat('MMM dd').format(b.departure),
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Icon(Icons.departure_board, color: Colors.white),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(b.boardingTerminal,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.only(left: 11, top: 4, bottom: 4),
-                    child: Icon(Icons.more_vert, color: Colors.white54, size: 20),
-                  ),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, color: Colors.white),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(b.alightingTerminal,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Departure', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          Text(DateFormat('hh:mm a').format(b.departure),
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Text('Fare', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          Text('₱${b.fare.toStringAsFixed(2)}',
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      Icon(b.isAwaitingPayment ? Icons.payment : Icons.qr_code, color: Colors.white, size: 32),
-                    ],
-                  ),
-                ],
+          const AppSectionHeader('Next trip'),
+          const SizedBox(height: AppSpacing.md),
+          _currentSection(),
+          if (_vm.upcoming.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xxl),
+            AppSectionHeader(
+              'Also booked',
+              subtitle: '${_vm.upcoming.length} more '
+                  '${_vm.upcoming.length == 1 ? 'trip' : 'trips'} ahead',
+            ),
+            const SizedBox(height: AppSpacing.md),
+            for (final b in _vm.upcoming) ...[
+              _BookingRow(
+                booking: b,
+                tone: _toneFor(b),
+                onTap: () => _openTicket(b),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _currentSection() {
+    if (_vm.isLoading && !_vm.hasLoaded) {
+      return const AppCard(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
+    if (_vm.error != null && _vm.current == null) {
+      return _Notice(
+        icon: Icons.cloud_off,
+        title: 'Could not load your trips',
+        body: _vm.error!,
+        action: FilledButton(
+          onPressed: _vm.load,
+          child: const Text('Try again'),
+        ),
+      );
+    }
+
+    final b = _vm.current;
+    if (b == null) {
+      return const _Notice(
+        icon: Icons.directions_bus_outlined,
+        title: 'No trip booked',
+        body: 'Search for a departure on the Home tab and your next trip '
+            'will show up here.',
+      );
+    }
+    return _nextTripCard(b);
+  }
+
+  /// The one booking that matters right now, in full.
+  Widget _nextTripCard(BookingSummary b) {
+    final busy = _vm.isBusy(b.bookingId);
+    final text = Theme.of(context).textTheme;
+    final canCancel = !b.isCheckedIn && !b.isBoarded;
+
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          Semantics(
+            button: true,
+            label: '${b.statusLabel}. ${dayAndTime(b.departure)}. '
+                '${b.boardingTerminal} to ${b.alightingTerminal}. '
+                '${Money.format(b.fare)}. Opens the boarding pass.',
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: busy ? null : () => _openTicket(b),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadius.lg),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        StatusChip(
+                          b.statusLabel.toUpperCase(),
+                          tone: _toneFor(b),
+                        ),
+                        const Spacer(),
+                        Text(
+                          dayAndTime(b.departure),
+                          style: text.bodyMedium!
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    JourneyStrip(
+                      origin: b.boardingTerminal,
+                      destination: b.alightingTerminal,
+                      originNote: 'Departs ${clockTime(b.departure)}',
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(b.ticketNumber, style: text.bodySmall),
+                        ),
+                        Money(
+                          b.fare,
+                          style: text.titleMedium!
+                              .copyWith(color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          const Divider(height: 1, color: Colors.white24),
+          if (b.canReschedule || canCancel) ...[
+            const Divider(height: 1),
+            Row(
+              children: [
+                if (b.canReschedule)
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: busy ? null : () => _reschedule(b),
+                      icon: const Icon(Icons.event_repeat, size: 18),
+                      label: const Text('Reschedule'),
+                    ),
+                  ),
+                if (b.canReschedule && canCancel)
+                  const SizedBox(
+                    height: AppSizing.minTouchTarget,
+                    child: VerticalDivider(width: 1),
+                  ),
+                if (canCancel)
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: busy ? null : () => _cancel(b),
+                      icon: busy
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.close, size: 18),
+                      label: const Text('Cancel'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.danger,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Past and cancelled bookings. Deliberately quieter than the live ones:
+  /// a finished trip is a record, not a thing to act on.
+  Widget _finishedList(
+    List<BookingSummary> bookings, {
+    required String emptyTitle,
+    required String emptyBody,
+    required StatusTone tone,
+  }) {
+    if (bookings.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.history,
+        title: emptyTitle,
+        body: emptyBody,
+      );
+    }
+
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.section,
+      ),
+      itemCount: bookings.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+      itemBuilder: (context, i) => _BookingRow(
+        booking: bookings[i],
+        tone: tone,
+        showTicketNumber: true,
+      ),
+    );
+  }
+
+  static StatusTone _toneFor(BookingSummary b) {
+    if (b.isCancelled) return StatusTone.danger;
+    if (b.isAwaitingPayment) return StatusTone.warning;
+    if (b.isBoarded || b.isCheckedIn) return StatusTone.success;
+    return StatusTone.info;
+  }
+}
+
+/// A booking in a list: when, where, how much, what state.
+///
+/// Same reading order as a search result — the fact you scan for first, at
+/// the top left; the money at the top right — so a passenger moving between
+/// the two tabs is not learning a second layout.
+class _BookingRow extends StatelessWidget {
+  const _BookingRow({
+    required this.booking,
+    required this.tone,
+    this.onTap,
+    this.showTicketNumber = false,
+  });
+
+  final BookingSummary booking;
+  final StatusTone tone;
+  final VoidCallback? onTap;
+  final bool showTicketNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final b = booking;
+
+    return AppCard(
+      onTap: onTap,
+      semanticLabel: '${dayAndTime(b.departure)}. ${b.boardingTerminal} to '
+          '${b.alightingTerminal}. ${Money.format(b.fare)}. '
+          '${b.statusLabel}.'
+          '${onTap == null ? '' : ' Opens the boarding pass.'}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             children: [
-              if (b.canReschedule)
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: busy ? null : () => _reschedule(b),
-                    icon: const Icon(Icons.event_repeat, color: Colors.white, size: 18),
-                    label: const Text('Reschedule', style: TextStyle(color: Colors.white)),
-                  ),
-                ),
               Expanded(
-                child: TextButton.icon(
-                  onPressed: busy ? null : () => _cancel(b),
-                  icon: busy
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.cancel_outlined, color: Colors.white, size: 18),
-                  label: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                child: Text(
+                  dayAndTime(b.departure),
+                  style: text.titleMedium,
                 ),
               ),
+              const SizedBox(width: AppSpacing.md),
+              Money(
+                b.fare,
+                showCentavos: false,
+                style: text.titleMedium!.copyWith(color: AppColors.textMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  b.boardingTerminal,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodyMedium,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                child: Icon(Icons.arrow_forward,
+                    size: 14, color: AppColors.textMuted),
+              ),
+              Flexible(
+                child: Text(
+                  b.alightingTerminal,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              if (showTicketNumber)
+                Expanded(
+                  child: Text(b.ticketNumber, style: text.bodySmall),
+                )
+              else
+                const Spacer(),
+              StatusChip(b.statusLabel.toUpperCase(), tone: tone),
             ],
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _upcomingRow(BookingSummary b) {
-    return ListTile(
-      onTap: () => _openTicket(b),
-      tileColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      leading: const Icon(Icons.confirmation_number_outlined, color: AppColors.primary),
-      title: Text('${b.boardingTerminal} → ${b.alightingTerminal}',
-          style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-      subtitle: Text('${DateFormat('MMM dd • hh:mm a').format(b.departure)} · ${b.statusLabel}'),
-      trailing: const Icon(Icons.chevron_right),
-    );
-  }
+/// A card that explains why there is nothing to show.
+///
+/// Not [AppEmptyState]: that one measures the viewport to centre itself,
+/// and inside a sliver header the viewport has no height to measure.
+class _Notice extends StatelessWidget {
+  const _Notice({
+    required this.icon,
+    required this.title,
+    required this.body,
+    this.action,
+  });
 
-  Widget _placeholder({required IconData icon, required String text, Widget? action}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
+  final IconData icon;
+  final String title;
+  final String body;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 48, color: Colors.grey.shade400),
-          const SizedBox(height: 12),
-          Text(text, textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
-          ?action,
+          ExcludeSemantics(
+            child: Icon(icon, size: 32, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Semantics(header: true, child: Text(title, style: text.titleMedium)),
+          const SizedBox(height: AppSpacing.xs),
+          Text(body, style: text.bodyMedium!
+              .copyWith(color: AppColors.textMuted, height: 1.5)),
+          if (action != null) ...[
+            const SizedBox(height: AppSpacing.lg),
+            action!,
+          ],
         ],
       ),
-    );
-  }
-
-  Widget _list(List<BookingSummary> bookings, {required bool isCanceled}) {
-    if (bookings.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(40),
-            child: Center(
-              child: Text('No ${isCanceled ? 'canceled' : 'past'} reservations.',
-                  style: const TextStyle(color: Colors.grey)),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return ListView.separated(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(20),
-      itemCount: bookings.length,
-      separatorBuilder: (_, _) => const Divider(height: 32),
-      itemBuilder: (context, index) {
-        final b = bookings[index];
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: isCanceled ? Colors.red.shade50 : Colors.blue.shade50, shape: BoxShape.circle),
-              child: Icon(isCanceled ? Icons.cancel_outlined : Icons.check_circle_outline, color: isCanceled ? Colors.red : Colors.blue),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${b.boardingTerminal} to ${b.alightingTerminal}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 4),
-                  Text(DateFormat('MMM dd, yyyy • hh:mm a').format(b.departure), style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text('${b.ticketNumber} · ${b.statusLabel}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                ],
-              ),
-            ),
-            Text('₱${b.fare.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          ],
-        );
-      },
     );
   }
 }
 
-class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
+class _StickyTabBar extends SliverPersistentHeaderDelegate {
+  const _StickyTabBar(this.tabBar);
+
   final TabBar tabBar;
-  _StickyTabBarDelegate(this.tabBar);
 
   @override
   double get minExtent => tabBar.preferredSize.height;
+
   @override
   double get maxExtent => tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: Colors.grey.shade100,
-      child: tabBar,
-    );
-  }
+  Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
+      // Opaque, or the list scrolls visibly through the pinned header.
+      ColoredBox(color: AppColors.surface, child: tabBar);
 
   @override
-  bool shouldRebuild(_StickyTabBarDelegate oldDelegate) => false;
+  bool shouldRebuild(_StickyTabBar oldDelegate) => false;
 }

@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/design/components/app_card.dart';
+import '../../core/design/components/info_row.dart';
+import '../../core/design/components/journey_strip.dart';
+import '../../core/design/components/money.dart';
+import '../../core/design/components/status_band.dart';
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
+import '../../core/util/when.dart';
 import '../../data/repositories/booking_repository.dart';
 import '../../models/transit_node_model.dart';
 import '../../models/uv_trip_model.dart';
@@ -97,275 +103,399 @@ class _TicketScreenState extends State<TicketScreen> {
     final trip = _viewModel.trip;
     final profile = context.watch<AuthProvider>().profile;
     final passengerName = profile?.displayName ?? profile?.email ?? '—';
+    final state = _state();
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text('Boarding Pass'),
-        backgroundColor: AppColors.primary,
-        elevation: 0,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Boarding pass')),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              // --- THE DIGITAL TICKET ---
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
-                ),
-                child: Column(
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _headerColor(),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              trip.operatorName ?? trip.plateNumber ?? "—",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: _headerTextColor(),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _statusLabel(),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _headerTextColor(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // QR Code / Payment Area
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Column(
-                        children: [
-                          if (_viewModel.hasLiveBooking && !_viewModel.isCancelled)
-                            _buildGeofenceBadge(),
-
-                          const SizedBox(height: 16),
-
-                          _buildQrArea(),
-
-                          const SizedBox(height: 12),
-                          Text(
-                            _viewModel.ticketNumber.isNotEmpty
-                                ? _viewModel.ticketNumber
-                                : trip.id,
-                            style: const TextStyle(
-                              letterSpacing: 1.2,
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          const Text(
-                            'Show this to the conductor when you board',
-                            style: TextStyle(
-                                color: AppColors.textMuted, fontSize: 13),
-                          ),
-
-                          if (_viewModel.checkInMessage != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              _viewModel.checkInMessage!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: _viewModel.isCheckedIn
-                                    ? AppColors.success
-                                    : AppColors.warning,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                          if (_viewModel.error != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              _viewModel.error!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-
-                    // Divider with cutouts
-                    Row(
-                      children: [
-                        Container(height: 20, width: 10, decoration: BoxDecoration(color: AppColors.surface, borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)))),
-                        Expanded(child: LayoutBuilder(builder: (context, constraints) {
-                          return Flex(
-                            direction: Axis.horizontal,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: List.generate((constraints.constrainWidth() / 10).floor(), (index) => const SizedBox(width: 5, height: 1, child: DecoratedBox(decoration: BoxDecoration(color: AppColors.divider)))),
-                          );
-                        })),
-                        Container(height: 20, width: 10, decoration: BoxDecoration(color: AppColors.surface, borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)))),
-                      ],
-                    ),
-
-                    // Trip Info with Icons
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          _buildInfoRow(Icons.person_outline, 'Passenger', passengerName),
-                          const SizedBox(height: 12),
-
-                          _buildInfoRow(Icons.trip_origin, 'Origin', trip.origin.name, iconColor: AppColors.success),
-                          const SizedBox(height: 12),
-                          _buildInfoRow(Icons.location_on, 'Destination', trip.destination.name, iconColor: AppColors.danger),
-                          const SizedBox(height: 12),
-                          _buildInfoRow(Icons.departure_board, 'Departure', _formatTime(trip.departureTime)),
-                          const SizedBox(height: 12),
-                          _buildInfoRow(Icons.flag_outlined, 'Est. Arrival', _formatTime(trip.estimatedArrivalTime)),
-
-                          const SizedBox(height: 20),
-
-                          _buildPaymentBox(),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              if (_viewModel.isAwaitingPayment) ...[
-                FilledButton.icon(
-                  onPressed: _viewModel.isStartingCheckout ? null : _viewModel.startCheckout,
-                  icon: _viewModel.isStartingCheckout
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.payment),
-                  label: Text(_viewModel.isStartingCheckout ? 'Opening PayMongo…' : 'Pay ₱${_viewModel.fare.toStringAsFixed(2)}'),
-                ),
-                if (_viewModel.isPolling) ...[
-                  const SizedBox(height: 12),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 10),
-                      Text('Waiting for payment confirmation…',
-                          style: TextStyle(color: AppColors.textMuted)),
-                    ],
-                  ),
-                ] else if (_viewModel.hasLiveBooking) ...[
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: _viewModel.refreshStatus,
-                    child: const Text('Still pending — check again'),
-                  ),
-                ],
-                const SizedBox(height: 12),
-              ],
-
-              // Live tracking. Offered from the moment the booking is paid
-              // for, not only once the van is moving: a passenger deciding
-              // when to leave the house needs to see that it has not
-              // started reporting yet just as much as they need a position.
-              if (!_viewModel.isAwaitingPayment && !_viewModel.isCancelled)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: OutlinedButton.icon(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LiveMapScreen(
-                          tripId: trip.id,
-                          title: 'Track the van',
-                          boardingStop: trip.boardingStop,
-                          alightingStop: trip.alightingStop,
-                        ),
-                      ),
-                    ),
-                    icon: const Icon(Icons.map_outlined),
-                    label: const Text('Track the van'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-
-              if (_viewModel.canCheckIn && _viewModel.checkinOpensAt != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Check-in opens ${DateFormat('h:mm a').format(_viewModel.checkinOpensAt!)} at ${trip.origin.name}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-                  ),
-                ),
-              if (_viewModel.canCheckIn)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: FilledButton.icon(
-                    onPressed: _viewModel.isCheckingIn ? null : _viewModel.checkIn,
-                    icon: _viewModel.isCheckingIn
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.location_on),
-                    label: Text(_viewModel.isCheckingIn ? 'Checking in…' : "I'm at the terminal"),
-                  ),
-                ),
-
-              // D.2: an accidental "I'm here" can be taken back until the
-              // conductor scans the ticket.
-              if (_viewModel.canUndoCheckIn)
-                TextButton.icon(
-                  onPressed: _viewModel.isUndoingCheckIn ? null : _viewModel.undoCheckIn,
-                  icon: const Icon(Icons.undo, size: 18),
-                  label: Text(_viewModel.isUndoingCheckIn ? 'Undoing…' : 'Undo check-in'),
-                ),
-
-              // Cancel Button
-              if (!_viewModel.isCancelled && !_viewModel.isCheckedIn && !_viewModel.isBoarded)
-                TextButton.icon(
-                  onPressed: _confirmCancel,
-                  icon: const Icon(Icons.cancel_outlined,
-                      color: AppColors.danger),
-                  label: const Text(
-                    'Cancel booking',
-                    style: TextStyle(
-                        color: AppColors.danger,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600),
-                  ),
-                )
-            ],
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.gutter, AppSpacing.lg,
+            AppSpacing.gutter, AppSpacing.section,
           ),
+          children: [
+            // State first, and only once. Whatever else is on this screen,
+            // the passenger's question is "am I sorted, and if not, what do
+            // I do" — so that is the top of the page, in a sentence.
+            StatusBand(
+              tone: state.tone,
+              icon: state.icon,
+              title: state.title,
+              body: state.body,
+              // The status changes underneath the passenger when a payment
+              // webhook lands mid-poll.
+              liveRegion: true,
+            ),
+            ?_message(),
+            const SizedBox(height: AppSpacing.lg),
+            _pass(context, trip, passengerName),
+            const SizedBox(height: AppSpacing.xl),
+            ..._actions(context, trip),
+          ],
         ),
       ),
+    );
+  }
+
+  /// The pass: the QR the conductor scans, then the journey it is for.
+  ///
+  /// One card, two halves, a tear line between them — the QR half is what
+  /// gets held up at the door, the details half is what gets read on the
+  /// way there.
+  Widget _pass(BuildContext context, UvTripModel trip, String passengerName) {
+    final text = Theme.of(context).textTheme;
+
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl, AppSpacing.xl,
+            ),
+            child: Column(
+              children: [
+                _qr(),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  _viewModel.ticketNumber.isNotEmpty
+                      ? _viewModel.ticketNumber
+                      : trip.id,
+                  textAlign: TextAlign.center,
+                  style: text.titleMedium!.copyWith(
+                    letterSpacing: 1.5,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Show this to the conductor when you board',
+                  textAlign: TextAlign.center,
+                  style: text.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const _TearLine(),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                JourneyStrip(
+                  origin: trip.origin.name,
+                  destination: trip.destination.name,
+                  originNote: 'Departs ${clockTime(trip.departureTime)}',
+                  destinationNote: trip.estimatedArrivalTime == null
+                      // The search response carries no arrival: it depends
+                      // on where the passenger gets off, and inventing one
+                      // here would be a promise the route offsets never
+                      // made.
+                      ? null
+                      : 'Arrives about '
+                          '${clockTime(trip.estimatedArrivalTime!)}',
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                const Divider(height: 1),
+                const SizedBox(height: AppSpacing.lg),
+                AppInfoRow(label: 'Passenger', value: passengerName),
+                const SizedBox(height: AppSpacing.md),
+                AppInfoRow(
+                  label: 'Fare',
+                  value: Money.format(_viewModel.fare),
+                  valueWidget: Money(
+                    _viewModel.fare,
+                    style: text.bodyLarge!
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppInfoRow(
+                  label: 'Payment',
+                  value: _viewModel.isAwaitingPayment
+                      ? 'Not paid yet'
+                      : 'Paid via PayMongo',
+                ),
+                if (trip.plateNumber != null ||
+                    trip.operatorName != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  AppInfoRow(
+                    label: 'Van',
+                    value: trip.plateNumber ?? trip.operatorName!,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _qr() {
+    if (_viewModel.isAwaitingPayment) {
+      return Column(
+        children: [
+          const Icon(Icons.lock_outline, size: 64, color: AppColors.warning),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Your QR ticket appears here once the payment is confirmed.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                  color: AppColors.textMuted,
+                ),
+          ),
+        ],
+      );
+    }
+
+    if (_viewModel.hasUsableTicket) {
+      return Semantics(
+        // A blind passenger still holds the phone up to be scanned, so the
+        // code needs naming rather than hiding.
+        label: 'QR boarding ticket. Show this to the conductor.',
+        image: true,
+        excludeSemantics: true,
+        child: QrImageView(
+          data: _viewModel.qrPayload!,
+          size: 184,
+          backgroundColor: Colors.white,
+        ),
+      );
+    }
+
+    return Opacity(
+      opacity: _viewModel.isCancelled ? 0.25 : 1,
+      child: const Icon(Icons.qr_code_2, size: 120, color: AppColors.primary),
+    );
+  }
+
+  /// Feedback from the last action, kept apart from the status band.
+  ///
+  /// The band says what the booking *is*; this says what just happened when
+  /// the passenger pressed something — "you are too far from the terminal"
+  /// is not a status, and reading it as one would leave it on screen after
+  /// it stopped being true.
+  Widget? _message() {
+    final error = _viewModel.error;
+    final note = _viewModel.checkInMessage;
+    if (error == null && note == null) return null;
+
+    final isError = error != null;
+    final tone = isError
+        ? StatusTone.danger
+        : _viewModel.isCheckedIn
+            ? StatusTone.success
+            : StatusTone.warning;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Semantics(
+        liveRegion: true,
+        container: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.info_outline,
+              size: 18,
+              color: tone.fg,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                error ?? note!,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium!
+                    .copyWith(color: tone.fg, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Actions, in the order they become relevant: pay, arrive, board.
+  ///
+  /// Exactly one filled button at a time. Two competing primary actions is
+  /// how someone at a van door taps the wrong one.
+  List<Widget> _actions(BuildContext context, UvTripModel trip) {
+    final actions = <Widget>[];
+
+    if (_viewModel.isAwaitingPayment) {
+      actions.add(
+        FilledButton.icon(
+          onPressed:
+              _viewModel.isStartingCheckout ? null : _viewModel.startCheckout,
+          icon: _viewModel.isStartingCheckout
+              ? const _Spinner()
+              : const Icon(Icons.lock_outline),
+          label: Text(
+            _viewModel.isStartingCheckout
+                ? 'Opening PayMongo…'
+                : 'Pay ${Money.format(_viewModel.fare)}',
+          ),
+        ),
+      );
+      if (_viewModel.isPolling) {
+        actions.add(
+          Semantics(
+            liveRegion: true,
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _Spinner(color: AppColors.primary),
+                SizedBox(width: AppSpacing.md),
+                Text(
+                  'Waiting for the payment to be confirmed…',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else if (_viewModel.hasLiveBooking) {
+        actions.add(
+          TextButton(
+            onPressed: _viewModel.refreshStatus,
+            child: const Text('Still pending — check again'),
+          ),
+        );
+      }
+    } else if (_viewModel.canCheckIn) {
+      actions.add(
+        FilledButton.icon(
+          onPressed: _viewModel.isCheckingIn ? null : _viewModel.checkIn,
+          icon: _viewModel.isCheckingIn
+              ? const _Spinner()
+              : const Icon(Icons.location_on_outlined),
+          label: Text(
+            _viewModel.isCheckingIn ? 'Checking in…' : "I'm at the terminal",
+          ),
+        ),
+      );
+      if (_viewModel.checkinOpensAt != null) {
+        actions.add(
+          Text(
+            'Check-in opens '
+            '${clockTime(_viewModel.checkinOpensAt!)} at '
+            '${trip.origin.name}. It is a heads-up for the conductor, not a '
+            'requirement for boarding.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        );
+      }
+    }
+
+    // Offered from the moment the booking is paid for, not only once the van
+    // is moving: a passenger deciding when to leave the house needs to see
+    // that it has not started reporting yet just as much as they need a
+    // position.
+    if (!_viewModel.isAwaitingPayment && !_viewModel.isCancelled) {
+      actions.add(
+        OutlinedButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LiveMapScreen(
+                tripId: trip.id,
+                title: 'Track the van',
+                boardingStop: trip.boardingStop,
+                alightingStop: trip.alightingStop,
+              ),
+            ),
+          ),
+          icon: const Icon(Icons.map_outlined),
+          label: const Text('Track the van'),
+        ),
+      );
+    }
+
+    // D.2: an accidental "I'm here" can be taken back until the conductor
+    // scans the ticket.
+    if (_viewModel.canUndoCheckIn) {
+      actions.add(
+        TextButton.icon(
+          onPressed:
+              _viewModel.isUndoingCheckIn ? null : _viewModel.undoCheckIn,
+          icon: const Icon(Icons.undo, size: 18),
+          label: Text(
+            _viewModel.isUndoingCheckIn ? 'Undoing…' : 'Undo check-in',
+          ),
+        ),
+      );
+    }
+
+    if (!_viewModel.isCancelled &&
+        !_viewModel.isCheckedIn &&
+        !_viewModel.isBoarded) {
+      actions.add(
+        TextButton.icon(
+          onPressed: _confirmCancel,
+          icon: const Icon(Icons.close, size: 18),
+          label: const Text('Cancel booking'),
+          style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+        ),
+      );
+    }
+
+    return [
+      for (final (i, action) in actions.indexed) ...[
+        if (i > 0) const SizedBox(height: AppSpacing.md),
+        action,
+      ],
+    ];
+  }
+
+  /// Status, as a sentence with a next step.
+  ({StatusTone tone, IconData icon, String title, String body}) _state() {
+    if (_viewModel.isCancelled) {
+      return (
+        tone: StatusTone.danger,
+        icon: Icons.cancel_outlined,
+        title: 'Cancelled',
+        body: 'The space has been released. The cooperative does not issue '
+            'refunds, so any fare already paid is not returned.',
+      );
+    }
+    if (_viewModel.isAwaitingPayment) {
+      return (
+        tone: StatusTone.warning,
+        icon: Icons.schedule,
+        title: 'Waiting for payment',
+        body: 'Your space is held while the payment is pending. Pay to get '
+            'the QR ticket the conductor scans.',
+      );
+    }
+    if (_viewModel.isBoarded) {
+      return (
+        tone: StatusTone.success,
+        icon: Icons.check_circle_outline,
+        title: 'On board',
+        body: 'The conductor has scanned your ticket. Have a safe trip.',
+      );
+    }
+    if (_viewModel.isCheckedIn) {
+      return (
+        tone: StatusTone.success,
+        icon: Icons.how_to_reg_outlined,
+        title: 'Checked in at the terminal',
+        body: 'The conductor can see you are waiting. Show the QR when the '
+            'van is ready to board.',
+      );
+    }
+    return (
+      tone: StatusTone.info,
+      icon: Icons.confirmation_number_outlined,
+      title: 'Confirmed',
+      body: _viewModel.canCheckIn
+          ? 'Your space is booked. Tap "I\'m at the terminal" when you get '
+              'there, then show the QR to the conductor.'
+          : 'Your space is booked. Show the QR to the conductor when you '
+              'board.',
     );
   }
 
@@ -379,168 +509,73 @@ class _TicketScreenState extends State<TicketScreen> {
           'refunds, so any fare already paid is not returned.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel booking',
-                style: TextStyle(color: AppColors.danger)),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Cancel booking'),
           ),
         ],
       ),
     );
     if (ok == true) await _viewModel.cancelTicket();
   }
+}
 
-  Color _headerColor() {
-    if (_viewModel.isCancelled) return AppColors.dangerContainer;
-    if (_viewModel.isAwaitingPayment) return AppColors.warningContainer;
-    return AppColors.successContainer;
-  }
+class _Spinner extends StatelessWidget {
+  const _Spinner({this.color = Colors.white});
 
-  Color _headerTextColor() {
-    if (_viewModel.isCancelled) return AppColors.danger;
-    if (_viewModel.isAwaitingPayment) return AppColors.warning;
-    return AppColors.success;
-  }
+  final Color color;
 
-  String _statusLabel() => switch (_viewModel.status) {
-        'pending' => 'AWAITING PAYMENT',
-        'confirmed' => 'CONFIRMED',
-        'checked_in' => 'CHECKED IN',
-        'boarded' => 'BOARDED',
-        'cancelled' => 'CANCELLED',
-        _ => _viewModel.status.toUpperCase(),
-      };
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(strokeWidth: 2, color: color),
+      );
+}
 
-  Widget _buildQrArea() {
-    if (_viewModel.isAwaitingPayment) {
-      return Column(
-        children: [
-          Icon(Icons.lock_clock, size: 96, color: AppColors.warning),
-          const SizedBox(height: 8),
-          const Text('Pay to unlock your QR ticket',
-              style: TextStyle(color: AppColors.textMuted)),
-        ],
+/// The tear line across the pass.
+///
+/// Drawn rather than assembled: the old one built `width / 10` SizedBoxes
+/// inside a LayoutBuilder on every frame, and the two rounded notches at
+/// either end were containers filled with the scaffold colour, so they only
+/// looked like cut-outs as long as nothing behind the card ever changed.
+class _TearLine extends StatelessWidget {
+  const _TearLine();
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+        child: CustomPaint(
+          painter: _DashPainter(),
+          child: const SizedBox(height: 1.5, width: double.infinity),
+        ),
+      );
+}
+
+class _DashPainter extends CustomPainter {
+  static const _dash = 5.0;
+  static const _gap = 5.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.divider
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+
+    for (var x = AppSpacing.lg; x < size.width - AppSpacing.lg; x += _dash + _gap) {
+      canvas.drawLine(
+        Offset(x, size.height / 2),
+        Offset((x + _dash).clamp(0, size.width - AppSpacing.lg), size.height / 2),
+        paint,
       );
     }
-    if (_viewModel.hasUsableTicket) {
-      return QrImageView(
-        data: _viewModel.qrPayload!,
-        size: 160,
-        backgroundColor: Colors.white,
-      );
-    }
-    return Opacity(
-      opacity: _viewModel.isCancelled ? 0.3 : 1.0,
-      child: const Icon(Icons.qr_code_2, size: 120, color: AppColors.primary),
-    );
   }
 
-  Widget _buildGeofenceBadge() {
-    final bool ready = _viewModel.isCheckedIn || _viewModel.isBoarded;
-    final String label = _viewModel.isBoarded
-        ? 'On Board'
-        : _viewModel.isCheckedIn
-            ? 'Checked in \u2014 ready to board'
-            : 'Tap \u201cI\u2019m at the terminal\u201d when you arrive';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: ready
-            ? AppColors.successContainer
-            : AppColors.warningContainer,
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        border: Border.all(
-            color: ready ? AppColors.success : AppColors.warning),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            ready ? Icons.check_circle : Icons.location_on,
-            size: 16,
-            color: ready ? AppColors.success : AppColors.warning,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: ready ? AppColors.success : AppColors.warning,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentBox() {
-    final paid = !_viewModel.isAwaitingPayment && !_viewModel.isCancelled;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: paid ? AppColors.infoContainer : AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: paid ? AppColors.info : AppColors.border),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(paid ? Icons.verified_user : Icons.hourglass_top,
-                  color: paid ? AppColors.info : AppColors.textMuted,
-                  size: 20),
-              const SizedBox(width: 8),
-              Text(
-                paid ? 'Paid via PayMongo' : 'Payment pending',
-                style: TextStyle(
-                    color: paid ? AppColors.info : AppColors.textMuted,
-                    fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          Text(
-            '₱${_viewModel.fare.toStringAsFixed(2)}',
-            style: TextStyle(
-                color: paid ? AppColors.info : AppColors.textMuted,
-                fontWeight: FontWeight.bold,
-                fontSize: 16),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value, {Color? iconColor}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 18, color: iconColor ?? AppColors.textMuted),
-            const SizedBox(width: 8),
-            Text(label, style: const TextStyle(color: AppColors.textMuted)),
-          ],
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            textAlign: TextAlign.right,
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _formatTime(DateTime? dt) {
-    if (dt == null) return "—";
-    return DateFormat('hh:mm a').format(dt);
-  }
+  @override
+  bool shouldRepaint(_DashPainter oldDelegate) => false;
 }

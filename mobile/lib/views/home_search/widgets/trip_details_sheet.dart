@@ -1,209 +1,150 @@
 import 'package:flutter/material.dart';
-import '../../../models/uv_trip_model.dart';
-import 'package:intl/intl.dart';
-import '../../../core/design/tokens.dart';
 
+import '../../../core/design/components/info_row.dart';
+import '../../../core/design/components/journey_strip.dart';
+import '../../../core/design/components/money.dart';
+import '../../../core/design/components/sheet.dart';
+import '../../../core/design/components/status_band.dart';
+import '../../../core/design/components/status_chip.dart';
+import '../../../core/design/tokens.dart';
+import '../../../core/util/when.dart';
+import '../../../models/uv_trip_model.dart';
+
+/// The last screen before a space is held, so it answers the questions that
+/// decide it: when, where, how much, and how many are left.
+///
+/// It used to answer them in three bordered boxes — a blue-tinted timeline, a
+/// grey vehicle box, and a loose row about spaces — each box a container with
+/// its own fill, border and radius. Three nested frames to hold six facts.
+/// The facts are the same; the frames are gone, and the fare is now the
+/// largest thing on the sheet because it is what the decision turns on.
 class TripDetailsSheet extends StatelessWidget {
+  const TripDetailsSheet({
+    super.key,
+    required this.trip,
+    required this.onBook,
+  });
+
   final UvTripModel trip;
   final VoidCallback onBook;
 
-  const TripDetailsSheet({super.key, required this.trip, required this.onBook});
-
-  String _formatTime(DateTime dt) => DateFormat('hh:mm a').format(dt);
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final text = Theme.of(context).textTheme;
     final eta = trip.estimatedArrivalTime;
+    final scarce = !trip.isFull &&
+        (trip.isNearlyFull || trip.occupancyRatio >= 0.8);
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SafeArea(
+    return AppSheet(
+      title: '${clockTime(trip.departureTime)} departure',
+      subtitle: dayFriendly(trip.departureTime),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl, AppSpacing.sm, AppSpacing.xl, AppSpacing.xl,
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // --- Drag Handle ---
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
-              ),
+            JourneyStrip(
+              origin: trip.origin.name,
+              destination: trip.destination.name,
+              originNote: 'Departs ${clockTime(trip.departureTime)}',
+              // No invented arrival. The search response carries none: it
+              // depends on where the passenger gets off, and a made-up time
+              // on the screen where they commit is the worst place for one.
+              destinationNote:
+                  eta == null ? null : 'Arrives about ${clockTime(eta)}',
             ),
-            
-            // --- Header & Fare ---
+            const SizedBox(height: AppSpacing.xl),
+            const Divider(height: 1),
+            const SizedBox(height: AppSpacing.lg),
+
+            // The fare, at the size of the decision it drives. Exact, from
+            // the LTFRB pairwise terminal matrix for this pair of stops —
+            // not distance-based and not dynamic, so it is not hedged.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(trip.tripLabel, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(trip.operatorName ?? trip.plateNumber ?? "—", style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w500)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Fare for this journey', style: text.bodyMedium),
+                      Text(
+                        'Set by LTFRB for these two terminals',
+                        style: text.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('₱${trip.approximateFare.toStringAsFixed(2)}', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                    Text('Fare', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                  ],
-                )
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // --- The Route & Schedule Timeline ---
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.infoContainer,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.info),
-              ),
-              child: Column(
-                children: [
-                  _buildTimelineRow(
-                    time: _formatTime(trip.departureTime),
-                    location: trip.origin.name,
-                    label: 'Departure',
-                    iconColor: AppColors.success,
-                    isLast: false,
-                  ),
-                  _buildTimelineRow(
-                    time: eta == null ? '—' : _formatTime(eta),
-                    location: trip.destination.name,
-                    label: 'Arrives about',
-                    iconColor: AppColors.danger,
-                    isLast: true,
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-
-            // --- Vehicle Details ---
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.divider),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Vehicle', style: Theme.of(context).textTheme.labelSmall),
-                  const SizedBox(height: 12),
-                  _buildDetailRow(Icons.directions_car, 'Vehicle Type', 'UV Express'),
-                  const Divider(height: 20),
-                  _buildDetailRow(Icons.pin, 'Plate Number', trip.plateNumber ?? '—'),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-
-            // --- Seat Status ---
-            Row(
-              children: [
-                // Not a seat icon: UV Express assigns no seat numbers, and
-                // a diagram of a seat implies a reserved position in the
-                // van that the passenger does not get.
-                Icon(Icons.groups_outlined,
-                    color: trip.isFull ? AppColors.danger : AppColors.success),
-                const SizedBox(width: 8),
-                Text(
-                  trip.isFull
-                      ? 'No spaces left on this trip'
-                      : '${trip.availableSeats} of ${trip.totalSeats} spaces left',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: trip.isFull
-                          ? AppColors.danger
-                          : AppColors.success,
-                      fontSize: 16),
+                const SizedBox(width: AppSpacing.md),
+                Money(
+                  trip.approximateFare,
+                  style: text.headlineMedium!
+                      .copyWith(color: AppColors.primary),
                 ),
               ],
             ),
+            const SizedBox(height: AppSpacing.lg),
+            const Divider(height: 1),
+            const SizedBox(height: AppSpacing.lg),
 
-            const SizedBox(height: 32),
+            AppInfoRow(
+              label: 'Van',
+              value: trip.plateNumber ?? trip.operatorName ?? 'Assigned later',
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppInfoRow(
+              label: 'Route',
+              value: trip.tripLabel.isEmpty ? '—' : trip.tripLabel,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppInfoRow(
+              label: 'Space left',
+              // Not a seat count. UV Express assigns no seat numbers —
+              // capacity is counted per section of road, and a passenger is
+              // never given a position in the van.
+              value: trip.isFull
+                  ? 'None'
+                  : '${trip.availableSeats} of ${trip.totalSeats}',
+              valueWidget: trip.isFull
+                  ? const StatusChip('FULL', tone: StatusTone.danger)
+                  : null,
+            ),
 
-            // --- Full Width Reservation Button ---
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                // Reserve first, pay on the ticket screen: the space has
-                // to be held before there is anything to charge for.
-                onPressed: trip.isFull ? null : onBook,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: Text(
-                    trip.isFull ? 'This trip is full' : 'Reserve a space'),
+            if (scarce) ...[
+              const SizedBox(height: AppSpacing.lg),
+              StatusBand(
+                tone: StatusTone.warning,
+                icon: Icons.priority_high,
+                title: 'Filling up',
+                body: '${trip.availableSeats} '
+                    '${trip.availableSeats == 1 ? 'space' : 'spaces'} left on '
+                    'this departure.',
+              ),
+            ],
+
+            const SizedBox(height: AppSpacing.xxl),
+            FilledButton(
+              // Reserve first, pay on the ticket screen: the space has to be
+              // held before there is anything to charge for.
+              onPressed: trip.isFull ? null : onBook,
+              child: Text(
+                trip.isFull ? 'This trip is full' : 'Reserve a space',
               ),
             ),
+            if (!trip.isFull) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'You pay on the next screen. The space is held while the '
+                'payment is pending.',
+                textAlign: TextAlign.center,
+                style: text.bodySmall,
+              ),
+            ],
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTimelineRow({required String time, required String location, required String label, required Color iconColor, required bool isLast}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 70,
-          child: Text(time, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        ),
-        Column(
-          children: [
-            Container(
-              width: 12, height: 12,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: iconColor),
-            ),
-            if (!isLast)
-              Container(
-                width: 2, height: 30,
-                color: AppColors.divider,
-              ),
-          ],
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(location, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              if (!isLast) const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.textMuted, size: 20),
-        const SizedBox(width: 12),
-        Text(label, style: const TextStyle(color: AppColors.textMuted)),
-        const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ],
     );
   }
 }

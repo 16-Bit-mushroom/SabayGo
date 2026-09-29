@@ -29,7 +29,12 @@ enum StatusTone {
   /// Past or inactive. Deliberately grey, so a finished trip recedes.
   muted;
 
-  Color get _fg => switch (this) {
+  /// Public, because a chip is not the only thing a tone colours: the
+  /// boarding pass states its status in a full-width band, and that band
+  /// needs this exact pair. Exposing the pair on the tone keeps the one
+  /// guarantee that matters — a caller can choose a *meaning*, and never a
+  /// foreground without the background it was verified against.
+  Color get fg => switch (this) {
         StatusTone.success => AppColors.success,
         StatusTone.info => AppColors.info,
         StatusTone.warning => AppColors.warning,
@@ -38,7 +43,7 @@ enum StatusTone {
         StatusTone.muted => AppColors.textMuted,
       };
 
-  Color get _bg => switch (this) {
+  Color get bg => switch (this) {
         StatusTone.success => AppColors.successContainer,
         StatusTone.info => AppColors.infoContainer,
         StatusTone.warning => AppColors.warningContainer,
@@ -73,7 +78,7 @@ class StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = tone._fg;
+    final fg = tone.fg;
     return Semantics(
       label: 'status: $label',
       excludeSemantics: true,
@@ -83,7 +88,7 @@ class StatusChip extends StatelessWidget {
           vertical: AppSpacing.xs + 2,
         ),
         decoration: BoxDecoration(
-          color: tone._bg,
+          color: tone.bg,
           borderRadius: BorderRadius.circular(AppRadius.full),
         ),
         child: Row(
