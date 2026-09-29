@@ -1,0 +1,4 @@
+# Shell scripts must stay LF. A Windows checkout that rewrites them to CRLF
+# makes bash fail with $'\r': command not found -- and every script in db/,
+# backend/scripts/ and setup.sh is bash.
+*.sh text eol=lf

@@ -29,3 +29,6 @@ build/
 
 # Manuscript exports — keep as Markdown in the repo, not binary
 docs/*.pdf
+
+# Handover archives built by the zip command in docs/SETUP.md
+*.zip

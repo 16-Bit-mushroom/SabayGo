@@ -93,6 +93,9 @@ Package name is still `mobile_v2_uv_express` though the folder is
 
 ## Running it
 
+On a machine that is not set up yet, `./setup.sh` does the whole thing and
+`docs/SETUP.md` explains it. Everything below assumes it has been run.
+
 ```fish
 # database
 docker compose up -d
