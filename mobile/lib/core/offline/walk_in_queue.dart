@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -8,6 +9,17 @@ import 'pending_walk_in.dart';
 /// One table, keyed on `client_request_id` so `enqueue` is safe to call
 /// again for the same submission without creating a second row.
 class WalkInQueue {
+  /// `sqflite` has no web implementation, and the queue exists for a
+  /// conductor's handset in a dead zone -- not for a browser. Running
+  /// `mobile/` on Chrome is a development convenience; the real web client
+  /// is `operator_console/`, which has no walk-in flow.
+  ///
+  /// Reads degrade to empty, because "nothing is queued" is true on a
+  /// platform that cannot queue. [enqueue] throws instead: silently
+  /// dropping a cash walk-in would lose a fare the passenger already paid,
+  /// and this codebase does not report a write as done when it was not.
+  static bool get isSupported => !kIsWeb;
+
   Database? _db;
 
   Future<Database> _open() async {
@@ -34,6 +46,12 @@ class WalkInQueue {
   }
 
   Future<void> enqueue(PendingWalkIn item) async {
+    if (!isSupported) {
+      throw UnsupportedError(
+        'Offline walk-ins need on-device storage, which this platform does '
+        'not provide. Log this passenger from the conductor handset.',
+      );
+    }
     final db = await _open();
     await db.insert(
       'pending_walk_ins',
@@ -43,12 +61,14 @@ class WalkInQueue {
   }
 
   Future<List<PendingWalkIn>> all() async {
+    if (!isSupported) return const [];
     final db = await _open();
     final rows = await db.query('pending_walk_ins', orderBy: 'queued_at ASC');
     return rows.map(PendingWalkIn.fromMap).toList();
   }
 
   Future<int> countFor(String tripId) async {
+    if (!isSupported) return 0;
     final db = await _open();
     final rows = await db.query(
       'pending_walk_ins',
@@ -60,6 +80,7 @@ class WalkInQueue {
   }
 
   Future<void> remove(String clientRequestId) async {
+    if (!isSupported) return;
     final db = await _open();
     await db.delete(
       'pending_walk_ins',

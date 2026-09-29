@@ -35,7 +35,13 @@ class WelcomeScreen extends StatelessWidget {
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight -
                   AppSpacing.xxxl * 2),
-              child: Column(
+              // IntrinsicHeight, or the Spacers below have nothing to
+              // divide: minHeight sets a floor but a scroll view's maximum
+              // height is still infinite, and a flex child cannot expand to
+              // fill an unbounded axis. This is what makes "scrolls when
+              // cramped, spreads when roomy" legal in one layout.
+              child: IntrinsicHeight(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Spacer(flex: 2),
@@ -113,6 +119,7 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                 ],
+                ),
               ),
             ),
           ),
