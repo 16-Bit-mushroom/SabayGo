@@ -59,6 +59,12 @@ enum StatusTone {
 /// be constructed in a combination that fails AA — the contrast decision is
 /// made here once instead of at each call site.
 ///
+/// **Wrap it in `Flexible` when it sits in a `Row`.** A `Row` hands an
+/// inflexible child unbounded width, so the chip sizes to its whole label and
+/// shoves its neighbours off the edge; the `Flexible` text inside only
+/// ellipsises once something bounds the chip. "AWAITING PAYMENT" at 200% text
+/// on a 320dp phone is the case that finds this.
+///
 /// The [label] is never decorative. WCAG 1.4.1 forbids carrying meaning by
 /// colour alone, so the word is the status and the colour only reinforces
 /// it; [icon] reinforces it again for anyone who cannot distinguish the

@@ -38,6 +38,12 @@ class TripCard extends StatelessWidget {
   String get _spaces =>
       '${trip.availableSeats} ${trip.availableSeats == 1 ? 'space' : 'spaces'}';
 
+  /// Short on purpose. At 200% text on a 320dp phone this chip, the van's
+  /// plate and an icon share one row, and "ONLY 2 SPACES LEFT" overflowed it
+  /// by 28 pixels. The full sentence is still spoken — see
+  /// [semanticSummary] — so nothing is lost by abbreviating the glance form.
+  String get _shortSpaces => '${trip.availableSeats} LEFT';
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -131,16 +137,25 @@ class TripCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              if (trip.isFull)
-                const StatusChip('FULL', tone: StatusTone.danger)
-              else if (_scarce)
-                StatusChip(
-                  'ONLY $_spaces LEFT',
-                  tone: StatusTone.warning,
-                  icon: Icons.priority_high,
-                )
-              else
-                Text('$_spaces left', style: text.bodySmall),
+              // Flexible, because a chip left inflexible in a Row is handed
+              // unbounded width: it then sizes to its text and pushes
+              // everything beside it off the card instead of ellipsising.
+              Flexible(
+                child: trip.isFull
+                    ? const StatusChip('FULL', tone: StatusTone.danger)
+                    : _scarce
+                        ? StatusChip(
+                            _shortSpaces,
+                            tone: StatusTone.warning,
+                            icon: Icons.priority_high,
+                          )
+                        : Text(
+                            _spaces,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.bodySmall,
+                          ),
+              ),
             ],
           ),
         ],

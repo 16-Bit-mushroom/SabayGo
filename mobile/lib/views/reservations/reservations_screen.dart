@@ -257,15 +257,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                   children: [
                     Row(
                       children: [
-                        StatusChip(
-                          b.statusLabel.toUpperCase(),
-                          tone: _toneFor(b),
+                        Flexible(
+                          child: StatusChip(
+                            b.statusLabel.toUpperCase(),
+                            tone: _toneFor(b),
+                          ),
                         ),
-                        const Spacer(),
-                        Text(
-                          dayAndTime(b.departure),
-                          style: text.bodyMedium!
-                              .copyWith(fontWeight: FontWeight.w600),
+                        const SizedBox(width: AppSpacing.sm),
+                        Flexible(
+                          child: Text(
+                            dayAndTime(b.departure),
+                            textAlign: TextAlign.end,
+                            style: text.bodyMedium!
+                                .copyWith(fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ],
                     ),
@@ -453,11 +458,21 @@ class _BookingRow extends StatelessWidget {
             children: [
               if (showTicketNumber)
                 Expanded(
-                  child: Text(b.ticketNumber, style: text.bodySmall),
+                  child: Text(
+                    b.ticketNumber,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.bodySmall,
+                  ),
                 )
               else
                 const Spacer(),
-              StatusChip(b.statusLabel.toUpperCase(), tone: tone),
+              const SizedBox(width: AppSpacing.sm),
+              // "AWAITING PAYMENT" is a wide chip; flexible so it ellipsises
+              // rather than pushing the ticket number off the card.
+              Flexible(
+                child: StatusChip(b.statusLabel.toUpperCase(), tone: tone),
+              ),
             ],
           ),
         ],

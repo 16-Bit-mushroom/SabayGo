@@ -57,3 +57,23 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Bundled, not fetched and not borrowed from the platform.
+  #
+  # Nothing declared a family before this, so every screen rendered in
+  # whatever face the host supplied: Roboto on stock Android, One UI Sans on
+  # a Samsung, and the browser's default on Flutter Web -- which is how the
+  # console and the defence-room demo run. Three typefaces for one product.
+  #
+  # google_fonts was the alternative and is the wrong tool here: it fetches
+  # at first run, and this app is used in connectivity dead zones by design.
+  # A font that arrives over the network is missing exactly when it matters.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700

@@ -39,43 +39,7 @@ class PassengerMainScreen extends StatefulWidget {
 class _PassengerMainScreenState extends State<PassengerMainScreen> {
   int _index = 0;
 
-  /// Title, icon and label together, so a destination cannot end up with
-  /// the wrong heading. The console learned this the hard way: two parallel
-  /// lists and a hand-written index sent a variance alert to the wrong tab.
-  static const _destinations = <_Destination>[
-    _Destination(
-      // The brand, once, on the screen a passenger opens the app to.
-      title: 'SabayGo',
-      label: 'Home',
-      icon: Icons.search_outlined,
-      selectedIcon: Icons.search,
-    ),
-    _Destination(
-      // Not "Reservations": what a passenger has is a trip they are taking.
-      title: 'My trips',
-      label: 'Trips',
-      icon: Icons.confirmation_number_outlined,
-      selectedIcon: Icons.confirmation_number,
-    ),
-    _Destination(
-      title: 'Messages',
-      label: 'Messages',
-      icon: Icons.chat_bubble_outline,
-      selectedIcon: Icons.chat_bubble,
-    ),
-    _Destination(
-      title: 'Updates',
-      label: 'Updates',
-      icon: Icons.notifications_none,
-      selectedIcon: Icons.notifications,
-    ),
-    _Destination(
-      title: 'Profile',
-      label: 'Profile',
-      icon: Icons.person_outline,
-      selectedIcon: Icons.person,
-    ),
-  ];
+  static const _destinations = PassengerNavBar.destinations;
 
   @override
   Widget build(BuildContext context) {
@@ -93,19 +57,98 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
           ProfileScreen(),
         ],
       ),
-      bottomNavigationBar: DecoratedBox(
-        // A hairline, not a shadow. The bar has to separate from a list
-        // scrolling underneath it; an elevation shadow on a white bar over a
-        // near-white scaffold is a smudge, and it is the first thing to look
-        // dated.
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.divider)),
-        ),
+      bottomNavigationBar: PassengerNavBar(
+        selectedIndex: _index,
+        onSelected: (i) => setState(() => _index = i),
+      ),
+    );
+  }
+}
+
+/// The bar itself, and the list of places it can go.
+///
+/// Separate from the shell so the five destinations have one owner. The
+/// console learned this the hard way: two parallel lists and a hand-written
+/// `_auditsIndex = 5` would have sent a variance alert to the wrong tab the
+/// moment a module was inserted. Here the title, the label and both icons
+/// travel together, and the shell reads its app-bar heading from the same
+/// row that drew the icon.
+class PassengerNavBar extends StatelessWidget {
+  const PassengerNavBar({
+    required this.selectedIndex,
+    required this.onSelected,
+    super.key,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  static const destinations = <PassengerDestination>[
+    PassengerDestination(
+      // The brand, once, on the screen a passenger opens the app to.
+      title: 'SabayGo',
+      label: 'Home',
+      icon: Icons.search_outlined,
+      selectedIcon: Icons.search,
+    ),
+    PassengerDestination(
+      // Not "Reservations": what a passenger has is a trip they are taking.
+      title: 'My trips',
+      label: 'Trips',
+      icon: Icons.confirmation_number_outlined,
+      selectedIcon: Icons.confirmation_number,
+    ),
+    PassengerDestination(
+      title: 'Messages',
+      label: 'Chat',
+      icon: Icons.chat_bubble_outline,
+      selectedIcon: Icons.chat_bubble,
+    ),
+    PassengerDestination(
+      title: 'Updates',
+      label: 'Updates',
+      icon: Icons.notifications_none,
+      selectedIcon: Icons.notifications,
+    ),
+    PassengerDestination(
+      title: 'Profile',
+      label: 'Profile',
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      // A hairline, not a shadow. The bar has to separate from a list
+      // scrolling underneath it; an elevation shadow on a white bar over a
+      // near-white scaffold is a smudge, and it is the first thing to look
+      // dated.
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.divider)),
+      ),
+      // Labels stop growing at 1.3.
+      //
+      // Flutter's NavigationBar gives each destination an equal slice of the
+      // width and does nothing about a label too wide for its slice -- no
+      // ellipsis, no wrap, no clip. Five labels at 200% on a 320dp phone
+      // therefore overflow, whatever the words are: the slice is 64dp and a
+      // five-letter word at 24pt is wider than that.
+      //
+      // Clamping here is a considered trade against WCAG 1.4.4, not an
+      // oversight. Nothing is lost by it: each destination keeps its icon,
+      // its tooltip and its full name, and the name is also the heading of
+      // the screen it opens, at full size and fully scalable. The label is a
+      // redundant second naming of a control that is already named -- and
+      // the alternative is not a bigger label, it is a clipped one.
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.3,
         child: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
+          selectedIndex: selectedIndex,
+          onDestinationSelected: onSelected,
           destinations: [
-            for (final d in _destinations)
+            for (final d in destinations)
               NavigationDestination(
                 icon: Icon(d.icon),
                 selectedIcon: Icon(d.selectedIcon),
@@ -119,15 +162,16 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
   }
 }
 
-class _Destination {
-  const _Destination({
+class PassengerDestination {
+  const PassengerDestination({
     required this.title,
     required this.label,
     required this.icon,
     required this.selectedIcon,
   });
 
-  /// Heading in the app bar. Longer than [label] where that reads better.
+  /// Heading in the app bar, and the tooltip on the icon. Longer than
+  /// [label] where that reads better.
   final String title;
 
   /// Under the icon, so it has to be short.

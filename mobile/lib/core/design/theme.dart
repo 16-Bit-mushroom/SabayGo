@@ -9,11 +9,18 @@ import 'tokens.dart';
 /// hardcoded `Color(0x...)` uses from `lib/views` — they exist because there
 /// was nowhere central to put a decision, so each screen made its own.
 ///
-/// Typeface is the bundled Roboto, deliberately. `google_fonts` fetches at
-/// first run, and this app is used in connectivity dead zones by design —
-/// the conductor's manifest queues walk-ins offline. A font that arrives
-/// over the network is a font that is missing exactly when it matters.
-/// "Premium" here comes from weight, tracking, spacing and restraint.
+/// Typeface is Roboto, bundled from `assets/fonts` — see the note in
+/// pubspec.yaml for why it is carried rather than fetched or borrowed.
+///
+/// [_font] is named on every style in this file, not only on [ThemeData].
+/// A component theme's `TextStyle` replaces the ambient one rather than
+/// merging with it, so a button label with no family declared falls through
+/// to the engine default even when the app has a family set. That is how an
+/// app ends up with body text in one face and every button in another.
+///
+/// "Premium" here comes from weight, tracking, spacing and restraint, which
+/// only hold if the metrics are the same on every device.
+const _font = 'Roboto';
 ThemeData buildAppTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: AppColors.primary,
@@ -39,6 +46,7 @@ ThemeData buildAppTheme() {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: _font,
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.surface,
     splashFactory: InkSparkle.splashFactory,
@@ -50,34 +58,34 @@ ThemeData buildAppTheme() {
     // and no single-line height is hardcoded in the widgets.
     textTheme: const TextTheme(
       headlineLarge: TextStyle(
-        fontSize: 28, height: 1.25, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 28, height: 1.25, fontWeight: FontWeight.w700,
         letterSpacing: -0.5, color: AppColors.textPrimary,
       ),
       headlineMedium: TextStyle(
-        fontSize: 22, height: 1.3, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 22, height: 1.3, fontWeight: FontWeight.w700,
         letterSpacing: -0.3, color: AppColors.textPrimary,
       ),
       titleLarge: TextStyle(
-        fontSize: 18, height: 1.35, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 18, height: 1.35, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
       titleMedium: TextStyle(
-        fontSize: 16, height: 1.4, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 16, height: 1.4, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
       bodyLarge: TextStyle(
-        fontSize: 16, height: 1.5, color: AppColors.textPrimary,
+        fontFamily: _font, fontSize: 16, height: 1.5, color: AppColors.textPrimary,
       ),
       bodyMedium: TextStyle(
-        fontSize: 14, height: 1.5, color: AppColors.textPrimary,
+        fontFamily: _font, fontSize: 14, height: 1.5, color: AppColors.textPrimary,
       ),
       bodySmall: TextStyle(
-        fontSize: 13, height: 1.45, color: AppColors.textMuted,
+        fontFamily: _font, fontSize: 13, height: 1.45, color: AppColors.textMuted,
       ),
       // Uppercase micro-labels ("BOARDING", "AT TERMINAL"). Tracking opened
       // up, because capitals set tight are markedly harder to read.
       labelSmall: TextStyle(
-        fontSize: 11, height: 1.3, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 11, height: 1.3, fontWeight: FontWeight.w700,
         letterSpacing: 0.8, color: AppColors.textMuted,
       ),
     ),
@@ -107,7 +115,7 @@ ThemeData buildAppTheme() {
       centerTitle: false,
       titleSpacing: AppSpacing.gutter,
       iconTheme: IconThemeData(color: AppColors.textPrimary),
-      titleTextStyle: TextStyle(
+      titleTextStyle: TextStyle(fontFamily: _font, 
         fontSize: 20, fontWeight: FontWeight.w700,
         letterSpacing: -0.2, color: AppColors.textPrimary,
       ),
@@ -123,7 +131,7 @@ ThemeData buildAppTheme() {
       indicatorColor: AppColors.primary,
       indicatorSize: TabBarIndicatorSize.label,
       dividerColor: AppColors.divider,
-      labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      labelStyle: TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w700),
       unselectedLabelStyle:
           TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
     ),
@@ -137,7 +145,7 @@ ThemeData buildAppTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        textStyle: const TextStyle(fontFamily: _font, fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -148,7 +156,7 @@ ThemeData buildAppTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        textStyle: const TextStyle(fontFamily: _font, fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -157,7 +165,7 @@ ThemeData buildAppTheme() {
         // A text button is still a target, however small it looks.
         minimumSize: const Size(AppSizing.minTouchTarget,
             AppSizing.minTouchTarget),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        textStyle: const TextStyle(fontFamily: _font, fontSize: 15, fontWeight: FontWeight.w600),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
@@ -184,10 +192,10 @@ ThemeData buildAppTheme() {
       errorBorder: _fieldBorder(AppColors.danger),
       focusedErrorBorder: _fieldBorder(AppColors.danger,
           width: AppSizing.focusOutline),
-      labelStyle: const TextStyle(color: AppColors.textMuted),
+      labelStyle: const TextStyle(fontFamily: _font, color: AppColors.textMuted),
       // Errors must be readable, and must say what to do — the copy is the
       // caller's job, the legibility is this file's.
-      errorStyle: const TextStyle(
+      errorStyle: const TextStyle(fontFamily: _font, 
         color: AppColors.danger, fontSize: 13, fontWeight: FontWeight.w500,
       ),
     ),
@@ -204,7 +212,7 @@ ThemeData buildAppTheme() {
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.primaryContainer,
-      labelStyle: const TextStyle(
+      labelStyle: const TextStyle(fontFamily: _font, 
         fontSize: 12, fontWeight: FontWeight.w600,
         color: AppColors.primary,
       ),
@@ -242,7 +250,7 @@ ThemeData buildAppTheme() {
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: AppColors.textPrimary,
-      contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+      contentTextStyle: const TextStyle(fontFamily: _font, color: Colors.white, fontSize: 14),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
@@ -271,6 +279,7 @@ ThemeData buildAppTheme() {
                 : AppColors.textMuted,
           )),
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            fontFamily: _font,
             fontSize: 12,
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w700

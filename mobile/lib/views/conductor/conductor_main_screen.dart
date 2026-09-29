@@ -106,7 +106,9 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
               if (_notifications.unreadCount > 0)
                 TextButton(
                   onPressed: _notifications.markAllRead,
-                  child: const Text('Mark all read', style: TextStyle(color: Colors.white)),
+                  // Colour comes from the theme: this bar is the light one,
+                  // and a hardcoded white label was invisible on it.
+                  child: const Text('Mark all read'),
                 ),
             ],
           ),
@@ -150,6 +152,14 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
       value: _shift,
       child: Scaffold(
         appBar: AppBar(
+          // Crew chrome stays brand purple where the passenger's went light.
+          // Two reasons, one practical: this header carries white-on-purple
+          // content (the shift block, the SOS control), and a conductor
+          // glancing at a phone in daylight between passengers benefits from
+          // the app announcing which side of the system they are in. The
+          // passenger app has one role and needs no such signal.
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
           titleSpacing: 16,
           centerTitle: false,
           title: Row(
