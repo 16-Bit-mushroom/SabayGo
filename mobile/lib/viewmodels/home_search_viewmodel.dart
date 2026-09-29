@@ -9,12 +9,14 @@ enum TimeBlock { all, nextAvailable, morning, afternoon, evening, lastTrip }
 
 extension TimeBlockLabel on TimeBlock {
   String get label => switch (this) {
-        TimeBlock.all => 'All',
-        TimeBlock.nextAvailable => 'Next Available',
+        // Sentence case, and "Any time" rather than "All": a filter row
+        // reads as a question about this journey, not as a set of headings.
+        TimeBlock.all => 'Any time',
+        TimeBlock.nextAvailable => 'Leaving soon',
         TimeBlock.morning => 'Morning',
         TimeBlock.afternoon => 'Afternoon',
         TimeBlock.evening => 'Evening',
-        TimeBlock.lastTrip => 'Last Trip',
+        TimeBlock.lastTrip => 'Last trip',
       };
 }
 

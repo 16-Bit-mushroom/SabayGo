@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/design/components/empty_state.dart';
+import '../../core/design/components/section_header.dart';
 import '../../core/design/tokens.dart';
+import '../../core/util/when.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../data/repositories/booking_repository.dart';
@@ -141,56 +143,92 @@ class _HomeScreenState extends State<HomeScreen> {
         body: _vm.selectedTimeBlock == TimeBlock.all
             ? 'Nothing runs this journey on the date you picked. Try '
                 'another day.'
-            : 'No departures in this time block. Try "All".',
+            : 'No departures in this part of the day. Try "Any time".',
       );
     }
 
-    return ListView.builder(
+    // Separated, not margined. Spacing between rows belongs to the list
+    // that arranges them; a card that carries its own margin cannot be
+    // reused anywhere the rhythm differs, which is why the old card was
+    // the only thing in the app with a 6px vertical margin.
+    return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter, 0, AppSpacing.gutter, AppSpacing.section,
+      ),
       itemCount: trips.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (context, i) {
         final trip = trips[i];
-        final card = TripCard(trip: trip);
-        return Semantics(
-          button: true,
-          // The card owns the sentence, so the spoken and the printed
-          // versions cannot drift apart. Children are excluded to stop a
-          // screen reader reading the same row twice.
-          label: '${card.semanticSummary()} Opens trip details.',
-          excludeSemantics: true,
-          child: InkWell(
-          onTap: _booking
-              ? null
-              : () => showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (sheetContext) => TripDetailsSheet(
-                      trip: trip,
-                      onBook: () {
-                        Navigator.pop(sheetContext);
-                        _handleBook(trip);
-                      },
-                    ),
-                  ),
-          child: card,
-          ),
+        return TripCard(
+          trip: trip,
+          onTap: _booking ? null : () => _openDetails(trip),
         );
       },
+    );
+  }
+
+  void _openDetails(UvTripModel trip) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => TripDetailsSheet(
+        trip: trip,
+        onBook: () {
+          Navigator.pop(sheetContext);
+          _handleBook(trip);
+        },
+      ),
+    );
+  }
+
+  /// Context for the list: how many departures, and for which day.
+  ///
+  /// Without it the results arrive as an unannounced stack of cards. A count
+  /// also answers the question a short list raises — whether two departures
+  /// is everything there is, or everything that got through the filter.
+  Widget? _resultsHeader() {
+    if (!_vm.hasSearched || _vm.isLoadingTrips || _vm.error != null) {
+      return null;
+    }
+    final count = _vm.filteredTrips.length;
+    if (count == 0) return null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter, AppSpacing.xl, AppSpacing.gutter, AppSpacing.md,
+      ),
+      child: AppSectionHeader(
+        count == 1 ? '1 departure' : '$count departures',
+        subtitle: dayFriendly(_vm.serviceDate),
+      ),
+    );
+  }
+
+  /// Header, filter, list — the same three in both layouts, so a change to
+  /// the results does not have to be made twice.
+  Widget _results() {
+    final header = _resultsHeader();
+    return Column(
+      children: [
+        if (_vm.hasSearched) ...[
+          ?header,
+          TimeBlockFilterBar(
+            selected: _vm.selectedTimeBlock,
+            onSelected: _vm.setTimeBlock,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+        ],
+        Expanded(child: _tripList()),
+      ],
     );
   }
 
   Widget _narrow() => Column(
         children: [
           JourneyPickerCard(vm: _vm),
-          if (_vm.hasSearched)
-            TimeBlockFilterBar(
-              selected: _vm.selectedTimeBlock,
-              onSelected: _vm.setTimeBlock,
-            ),
-          const SizedBox(height: AppSpacing.sm),
-          Expanded(child: _tripList()),
+          Expanded(child: _results()),
         ],
       );
 
@@ -199,20 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           SizedBox(width: 340, child: JourneyPickerCard(vm: _vm)),
           const VerticalDivider(width: 1),
-          Expanded(
-            child: Column(
-              children: [
-                const SizedBox(height: AppSpacing.md),
-                if (_vm.hasSearched)
-                  TimeBlockFilterBar(
-                    selected: _vm.selectedTimeBlock,
-                    onSelected: _vm.setTimeBlock,
-                  ),
-                const SizedBox(height: AppSpacing.sm),
-                Expanded(child: _tripList()),
-              ],
-            ),
-          ),
+          Expanded(child: _results()),
         ],
       );
 }

@@ -83,15 +83,49 @@ ThemeData buildAppTheme() {
     ),
 
     // ── chrome ────────────────────────────────────────────────────────
+    // Light, and the title sits left.
+    //
+    // The bar used to be a solid block of brand purple on every screen. Two
+    // problems. It spent the loudest colour in the palette on the least
+    // important row on the screen, which leaves nothing in reserve for the
+    // thing the passenger actually came to do — a page where everything is
+    // emphasised has no emphasis. And it forced white chrome, so a status
+    // chip or an SOS icon in the bar had to be re-coloured to survive.
+    //
+    // Purple is now spent where it means something: the primary action, the
+    // welcome screen, the rail on a journey. The bar recedes.
+    //
+    // A centred title is a phone-sized convention that stops working the
+    // moment there is a back arrow on one side and an action on the other,
+    // because the title shifts as actions come and go. Left-aligned, it
+    // starts on the same gutter as the content beneath it.
     appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
+      backgroundColor: AppColors.surfaceRaised,
+      foregroundColor: AppColors.textPrimary,
       elevation: 0,
       scrolledUnderElevation: 0,
-      centerTitle: true,
+      centerTitle: false,
+      titleSpacing: AppSpacing.gutter,
+      iconTheme: IconThemeData(color: AppColors.textPrimary),
       titleTextStyle: TextStyle(
-        fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white,
+        fontSize: 20, fontWeight: FontWeight.w700,
+        letterSpacing: -0.2, color: AppColors.textPrimary,
       ),
+    ),
+
+    // The inner tab bars (booking history, the conductor's manifest). The
+    // indicator was the old 3.11:1 green; an indicator is the only thing
+    // saying which tab is current, so it is held to 1.4.11's 3:1 and
+    // reinforced by the label's own colour and weight.
+    tabBarTheme: const TabBarThemeData(
+      labelColor: AppColors.primary,
+      unselectedLabelColor: AppColors.textMuted,
+      indicatorColor: AppColors.primary,
+      indicatorSize: TabBarIndicatorSize.label,
+      dividerColor: AppColors.divider,
+      labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      unselectedLabelStyle:
+          TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
     ),
 
     // ── actions ───────────────────────────────────────────────────────
@@ -213,14 +247,38 @@ ThemeData buildAppTheme() {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
     ),
+    // ── navigation ────────────────────────────────────────────────────
+    // Selected state is carried three ways at once: the pill behind the
+    // icon, the icon filling in, and the label going dark and heavier.
+    // WCAG 1.4.1 rules out doing it by colour alone, and on a cheap screen
+    // in sunlight a tinted pill is the first of the three to disappear.
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AppColors.surfaceRaised,
       indicatorColor: AppColors.primaryContainer,
       elevation: 0,
       height: 68,
-      labelTextStyle: const WidgetStatePropertyAll(
-        TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      // Labels always. Five unlabelled icons ask the passenger to learn an
+      // icon language before they can book a van, and "what does the
+      // envelope do" is not a question a first-time user should have.
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      indicatorShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.full),
       ),
+      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+            size: 24,
+            color: states.contains(WidgetState.selected)
+                ? AppColors.primary
+                : AppColors.textMuted,
+          )),
+      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w700
+                : FontWeight.w500,
+            color: states.contains(WidgetState.selected)
+                ? AppColors.primary
+                : AppColors.textMuted,
+          )),
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
       color: AppColors.primary,
