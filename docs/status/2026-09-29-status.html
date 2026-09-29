@@ -1,0 +1,281 @@
+<title>SabayGo Manifest</title>
+<style>
+  :root{
+    --bg:#F3F5F4;
+    --surface:#FFFFFF;
+    --surface-alt:#EAF0EE;
+    --ink:#17212B;
+    --muted:#5C6B72;
+    --border:#DCE3E1;
+    --accent:#1B4B7A;
+    --accent-soft:#E4ECF3;
+    --good:#1D7A4C;
+    --good-soft:#E3F3EA;
+    --warn:#B8790C;
+    --warn-soft:#FBF0DD;
+    --crit:#B23B3B;
+    --crit-soft:#FBEAEA;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#10161C;
+      --surface:#161E26;
+      --surface-alt:#1C262F;
+      --ink:#E7EDF2;
+      --muted:#93A2AC;
+      --border:#293440;
+      --accent:#6FA8DC;
+      --accent-soft:#1E2E3E;
+      --good:#3FAE72;
+      --good-soft:#173226;
+      --warn:#D99A2B;
+      --warn-soft:#332608;
+      --crit:#E27272;
+      --crit-soft:#3A1E1E;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#10161C;
+    --surface:#161E26;
+    --surface-alt:#1C262F;
+    --ink:#E7EDF2;
+    --muted:#93A2AC;
+    --border:#293440;
+    --accent:#6FA8DC;
+    --accent-soft:#1E2E3E;
+    --good:#3FAE72;
+    --good-soft:#173226;
+    --warn:#D99A2B;
+    --warn-soft:#332608;
+    --crit:#E27272;
+    --crit-soft:#3A1E1E;
+    color-scheme: dark;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Source+Sans+3:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+    padding-inline:16px;
+    padding-block:28px 48px;
+  }
+  h1,h2,h3{ font-family:"Archivo", ui-sans-serif, sans-serif; text-wrap:balance; margin:0; }
+  .mono{ font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .page{ max-width:880px; margin-inline:auto; display:flex; flex-direction:column; gap:28px; }
+
+  /* Masthead */
+  .masthead{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:22px 24px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .masthead-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; }
+  .eyebrow{
+    font-family:"IBM Plex Mono"; font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--accent); font-weight:600;
+  }
+  h1{ font-size:26px; font-weight:800; margin-top:4px; }
+  .subtitle{ color:var(--muted); font-size:14px; margin-top:4px; max-width:46ch; }
+  .as-of{ font-family:"IBM Plex Mono"; font-size:12px; color:var(--muted); white-space:nowrap; text-align:right; }
+
+  .stat-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .stat{
+    flex:1 1 150px;
+    background:var(--surface-alt);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:10px 14px;
+  }
+  .stat .num{ font-family:"IBM Plex Mono"; font-size:20px; font-weight:600; color:var(--accent); }
+  .stat .label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+
+  /* Section label */
+  .section-label{
+    font-family:"IBM Plex Mono"; font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); padding-inline:2px;
+  }
+
+  /* Module grid */
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); gap:14px; }
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:16px 18px; display:flex; flex-direction:column; gap:8px;
+  }
+  .card-head{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .card h3{ font-size:15px; font-weight:700; }
+  .pill{
+    font-family:"IBM Plex Mono"; font-size:10.5px; font-weight:600; letter-spacing:.03em;
+    padding:3px 9px; border-radius:999px; white-space:nowrap;
+  }
+  .pill.done{ background:var(--good-soft); color:var(--good); }
+  .pill.progress{ background:var(--warn-soft); color:var(--warn); }
+  .card p{ margin:0; font-size:13.5px; line-height:1.55; color:var(--ink); }
+  .card .foot{ font-size:12px; color:var(--muted); }
+
+  /* Ledger (milestones) */
+  .ledger{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    overflow:hidden;
+  }
+  .ledger-row{
+    display:flex; gap:12px; align-items:baseline; padding:11px 18px;
+    border-bottom:1px solid var(--border); font-size:13.5px;
+  }
+  .ledger-row:last-child{ border-bottom:none; }
+  .ledger-row:nth-child(even){ background:var(--surface-alt); }
+  .ledger-row .tag{ font-family:"IBM Plex Mono"; font-size:11px; color:var(--accent); min-width:64px; }
+
+  /* Checklist */
+  .checklist{ display:flex; flex-direction:column; gap:8px; }
+  .check-item{
+    display:flex; gap:10px; align-items:flex-start; font-size:13.5px;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px;
+  }
+  .check-item .box{
+    width:15px; height:15px; border-radius:4px; border:1.5px solid var(--muted);
+    flex:0 0 auto; margin-top:2px;
+  }
+
+  /* Issues */
+  .issues{ display:flex; flex-direction:column; gap:6px; }
+  .issue{
+    display:flex; gap:10px; font-size:13px; color:var(--muted);
+    padding-inline:2px;
+  }
+  .issue::before{ content:"—"; color:var(--crit); flex:0 0 auto; }
+
+  footer{
+    font-family:"IBM Plex Mono"; font-size:11px; color:var(--muted);
+    text-align:center; padding-top:8px;
+  }
+</style>
+
+<div class="page">
+
+  <div class="masthead">
+    <div class="masthead-top">
+      <div>
+        <div class="eyebrow">A2Z Transport Cooperative &middot; Davao City</div>
+        <h1>SabayGo — project status</h1>
+        <div class="subtitle">Booking &amp; fleet management for terminal-based UV Express vans. Capstone, BSIT, University of Mindanao.</div>
+      </div>
+      <div class="as-of">AS OF<br>29 SEP 2026</div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="num">27 Sep</div><div class="label">dev deadline — feature work landed, polish continuing</div></div>
+      <div class="stat"><div class="num">7 days</div><div class="label">to alpha testing (6 Oct)</div></div>
+      <div class="stat"><div class="num">21 days</div><div class="label">to final defence (20 Oct)</div></div>
+      <div class="stat"><div class="num">162/163</div><div class="label">journey tests passing</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label" style="margin-bottom:10px;">Build status</div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-head"><h3>Backend</h3><span class="pill done">COMPLETE</span></div>
+        <p>Sixteen migrations. Auth, segment booking with pessimistic locking, PayMongo + verified webhooks, cash remittance, geofenced check-in, QR boarding, YOLOv8 audit, revenue reconciliation &amp; export, fleet/crew/route/fare/policy CRUD, live tracking, notifications, profile self-service — plus, since 16 Sep: in-app messaging, SOS emergency alerts, automatic AI capture, and walk-in idempotency for the offline queue.</p>
+        <div class="foot">162 of 163 journey tests passing; the one failure is the known fixture conflict, not a defect.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Mobile — passenger &amp; conductor</h3><span class="pill done">FEATURE-COMPLETE</span></div>
+        <p>Both loops device-verified 11 &amp; 14 Sep with zero exceptions, and four features added since: the NAHGM live map, a two-tap SOS button, in-app messaging, and a walk-in queue that survives losing signal at the door. Nothing on the roadmap is unbuilt.</p>
+        <div class="foot">Chat and the live map, both listed as "not built" on 16 Sep, shipped 28 Sep.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>UI redesign</h3><span class="pill progress">IN PROGRESS</span></div>
+        <p>Three of four phases done: a design-token layer, five WCAG failures fixed (the worst was 1.97:1 on unpaid/variance status), a labelled bottom navigation bar replacing five unlabelled tabs, a recomposed search, boarding pass, trips list and reserve sheet, and Roboto bundled so type is identical on every handset.</p>
+        <div class="foot">Left: conductor screens (phase 4) and eight passenger screens still in the old composition.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Operator console</h3><span class="pill done">COMPLETE</span></div>
+        <p>Nine coop_admin modules on the live backend — Fleet &amp; Crew, Trip Dispatcher, Schedules, Policy Editor, YOLOv8 Audits (queue + history), Revenue with .xlsx/.csv export, Live Fleet, Emergency (SOS), Messages. The notification bell routes a variance alert to the audit queue and an SOS to the emergency tab.</p>
+        <div class="foot">Verified by click-through, 14 Sep: 0 exceptions, 0 network errors.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>AI headcount — the contribution</h3><span class="pill done">COMPLETE</span></div>
+        <p>Captures no longer need a person to press anything: the system audits a leg automatically when boarding closes and again whenever the van leaves a terminal's geofence, one audit per leg, counted over automatic rows only so a manual spot check cannot satisfy the quota. A variance notifies office, driver and conductor in the same transaction as the audit.</p>
+        <div class="foot">The node never invents a count — an unreachable camera is an error, and writes no row at all.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Live tracking &amp; map</h3><span class="pill done">COMPLETE</span></div>
+        <p>Both halves of NAHGM now exist: the server map-matches GPS pings to route nodes, and the passenger sees the van, its heading, the travelled trail and per-stop ETAs. The console has a Live Fleet board that chips a silent van. OpenStreetMap tiles via <span class="mono">flutter_map</span> — no API key, no billing account, one widget on handset and web.</p>
+        <div class="foot">A trip with no fix yet says tracking begins at departure; a stale fix is labelled last-known, never shown as current.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Hardening &amp; demo readiness</h3><span class="pill progress">IN PROGRESS</span></div>
+        <p>A multi-route demo dataset (3 extra routes, 8 crew, 5 vans, 2 days of trip history), a scripted rehearsal that stops at the first failure, a talk track, seven timezone-bug fixes, and a layout test suite that lays out every recomposed screen at 320dp and 390dp at 100% and 200% text — it caught two overflows <span class="mono">flutter analyze</span> cannot see.</p>
+        <div class="foot">Left: A2Z's real routes/fares, a rehearsal on the demo machine with the AI node up, release-build check.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Van kit stand-in</h3><span class="pill done">VERIFIED</span></div>
+        <p>Still no physical kit needed: the laptop webcam drives the real audit endpoint and the GPS simulator drives the real tracking endpoint, over the same HTTP APIs the installed kit will use. A phone-camera capture path exists as a manual stand-in until the Orange Pi arrives.</p>
+        <div class="foot">Automatic audits need a camera on the inference host, so alpha vans produce none until the kit is fitted.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label" style="margin-bottom:10px;">Non-code milestones</div>
+    <div class="ledger">
+      <div class="ledger-row"><span class="tag">DONE</span><span>Project objectives approved by the adviser.</span></div>
+      <div class="ledger-row"><span class="tag">DONE</span><span>Paper revision adviser-approved; research coordinator review underway.</span></div>
+      <div class="ledger-row"><span class="tag">DONE</span><span>A2Z Transport Cooperative reconciled as pilot partner.</span></div>
+      <div class="ledger-row"><span class="tag">DONE</span><span>Five places where the manuscript claims more than the code does, each with replacement wording ready to paste.</span></div>
+      <div class="ledger-row"><span class="tag">UPCOMING</span><span>Alpha testing with A2Z begins 6 Oct.</span></div>
+      <div class="ledger-row"><span class="tag">UPCOMING</span><span>Final defence 20 Oct.</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label" style="margin-bottom:10px;">Next up</div>
+    <div class="checklist">
+      <div class="check-item"><div class="box"></div><div>Finish the redesign: conductor screens, then the eight remaining passenger screens.</div></div>
+      <div class="check-item"><div class="box"></div><div>Paste the five manuscript corrections into the .docx before the coordinator's pass.</div></div>
+      <div class="check-item"><div class="box"></div><div>Swap in A2Z's real routes, fares and templates once they answer.</div></div>
+      <div class="check-item"><div class="box"></div><div>Swap the placeholder SOS numbers for A2Z's real ones — but only just before the pilot, because from then on a raised alert texts actual people.</div></div>
+      <div class="check-item"><div class="box"></div><div>Run the scripted rehearsal on the demo machine with the AI node up.</div></div>
+      <div class="check-item"><div class="box"></div><div>Confirm the release build hides the dev-account sign-in chips.</div></div>
+      <div class="check-item"><div class="box"></div><div>Point three stale journey-test probes at the endpoints that now exist, and build change-password.</div></div>
+      <div class="check-item"><div class="box"></div><div>Auto-detect "van is at" from GPS instead of the conductor setting it by hand.</div></div>
+      <div class="check-item"><div class="box"></div><div>Crew roster view, checkout-abandon, conductor passenger lookup — if time allows.</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label" style="margin-bottom:10px;">Known issues</div>
+    <div class="issues">
+      <div class="issue">The single journey-test failure is a fixture self-conflict — the "departs in 20 min" reset needed for check-in has already passed the 6-hour reschedule cutoff. A direct reschedule call returns 200.</div>
+      <div class="issue">Three of the eight "not built" flags in the test report are stale: profile settings, saved destinations and account closure exist, but the script probes the old paths. Change-password is genuinely missing.</div>
+      <div class="issue">Push is polled, not pushed — rows are read every 10–30 s. FCM is schema-ready but not wired, so <span class="mono">delivery_status</span> stays queued.</div>
+      <div class="issue">The manuscript names Google Maps, Firebase Auth, FCM push, Twilio and door sensors; the code uses OpenStreetMap, JWT, polling, one of three SMS providers, and the conductor closing boarding. Replacement wording is written.</div>
+      <div class="issue">Automatic capture and the phone capture slot are in-process, so more than one backend worker could double-fire one leg. One for the single-process list in Limitations.</div>
+      <div class="issue">The live map needs internet for OSM tiles; a defence-room demo is well inside OSM's usage policy, heavy automated polling is not.</div>
+      <div class="issue">Passenger avatar fetches an external placeholder image; fails with no network.</div>
+      <div class="issue">Android toolchain (AGP/Kotlin) is a version behind — deferred deliberately.</div>
+      <div class="issue">The data layer still says "seat" where the domain says "space". Nothing a passenger reads does; renaming is a migration, not a UI pass.</div>
+    </div>
+  </div>
+
+  <footer>SABAYGO &middot; BSIT CAPSTONE &middot; UNIVERSITY OF MINDANAO</footer>
+
+</div>
