@@ -58,6 +58,11 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # The official SABAY GO mark. Drawn by `BrandLogo`, never by a screen
+  # directly, so its size steps and screen-reader name have one owner.
+  assets:
+    - assets/branding/sabaygo_logo.png
+
   # Bundled, not fetched and not borrowed from the platform.
   #
   # Nothing declared a family before this, so every screen rendered in

@@ -121,7 +121,7 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
 
   Widget _bubble(ChatMessage m) {
     final align = m.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final color = m.isMine ? AppColors.accent : Colors.grey.shade200;
+    final color = m.isMine ? AppColors.success : Colors.grey.shade200;
     final textColor = m.isMine ? Colors.white : Colors.black87;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -177,7 +177,7 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
             const SizedBox(width: 8),
             IconButton.filled(
               onPressed: _viewModel.isSending ? null : _send,
-              style: IconButton.styleFrom(backgroundColor: AppColors.accent),
+              style: IconButton.styleFrom(backgroundColor: AppColors.success),
               icon: const Icon(Icons.send, color: Colors.white, size: 20),
             ),
           ],

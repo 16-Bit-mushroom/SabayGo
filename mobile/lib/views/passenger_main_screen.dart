@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/design/components/brand_logo.dart';
 import '../core/design/tokens.dart';
 import 'home_search/home_screen.dart';
 import 'messages/conversations_screen.dart';
@@ -45,7 +46,12 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_destinations[_index].title),
+        // Home shows the mark instead of the word -- the one place the brand
+        // is spent inside the app. Every other tab says where you are,
+        // because there a title is wayfinding, not branding.
+        title: _index == 0
+            ? const BrandLogo(height: BrandLogoSize.bar)
+            : Text(_destinations[_index].title),
       ),
       body: IndexedStack(
         index: _index,

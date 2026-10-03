@@ -13,6 +13,7 @@ import '../../viewmodels/shift_viewmodel.dart';
 import '../safety/sos_button.dart';
 import 'qr_scanner_screen.dart';
 import 'remittance_screen.dart';
+import 'drive_panel.dart';
 import 'walk_in_screen.dart';
 
 /// Who is booked on a trip and what has happened to them.
@@ -129,39 +130,12 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
 
   Future<void> _headcount() async {
     final shift = context.read<ShiftViewModel>();
-    final controller = TextEditingController();
-    final count = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('How many people are aboard?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Count everyone physically in the van at '
-              '${widget.trip.stopName(shift.currentStop)}. The system compares '
-              'this with the manifest and the camera.',
-              style: const TextStyle(color: AppColors.textMuted, height: 1.3),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
-              decoration: const InputDecoration(hintText: '0'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, int.tryParse(controller.text)),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
+    // A stepper from zero, not a keyboard pre-filled from the manifest --
+    // see showHeadcountDialog for why both matter.
+    final count = await showHeadcountDialog(
+      context,
+      stopName: widget.trip.stopName(shift.currentStop),
+      seatCapacity: _manifest?.seatCapacity ?? widget.trip.seatCapacity,
     );
     if (count == null) return;
     await _act(() async {
@@ -183,8 +157,12 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     final sync = context.watch<WalkInSyncService>();
     final pending = sync.pendingFor(trip.tripId);
 
+    // The driver of a moving van gets the glance panel instead of the
+    // boarding stats; everything else on the manifest stays reachable
+    // below it for when the van is stopped.
+    final driving = trip.roleOnTrip == 'driver' && departed && m != null;
+
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
         title: Text(trip.title, style: const TextStyle(fontSize: 18)),
         actions: [
@@ -208,7 +186,15 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                   child: ListView(
                     padding: const EdgeInsets.only(bottom: 24),
                     children: [
-                      _statusPanel(trip, m!, shift),
+                      if (driving)
+                        DrivePanel(
+                          trip: trip,
+                          manifest: m,
+                          currentStop: shift.currentStop,
+                          onArrived: shift.setStop,
+                        )
+                      else
+                        _statusPanel(trip, m!, shift),
                       if (pending.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         _pendingSyncBanner(pending.length, sync),
@@ -226,7 +212,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
               onPressed: _acting
                   ? null
                   : () => _push(QRScannerScreen(trip: trip, stopSequence: shift.currentStop)),
-              backgroundColor: AppColors.accent,
+              backgroundColor: AppColors.success,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.qr_code_scanner),
               label: const Text('Scan', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -259,7 +245,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     };
 
     return Container(
-      color: Colors.white,
+      color: AppColors.surfaceRaised,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,7 +300,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
   /// Never hidden: a variance the office can't see coming is worse than
   /// one flagged in advance.
   Widget _pendingSyncBanner(int count, WalkInSyncService sync) => Container(
-        color: AppColors.warning.withValues(alpha: 0.12),
+        color: AppColors.warningContainer,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
@@ -335,7 +321,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         child: Column(
           children: [
             Text('$value', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: colour)),
-            Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+            Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
           ],
         ),
       );
@@ -356,21 +342,39 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
       ],
     ];
 
+    // A two-column grid of equal 56dp targets rather than a wrap of
+    // label-sized chips: every action is the same size and in the same
+    // place trip after trip, so a hand can find it without a search
+    // (Fitts's law; consistency). The old wrap reflowed with the labels.
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Wrap(spacing: 8, runSpacing: 8, children: buttons),
+      color: AppColors.surfaceRaised,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: LayoutBuilder(builder: (context, c) {
+        final w = (c.maxWidth - AppSpacing.sm) / 2;
+        return Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [for (final b in buttons) SizedBox(width: w, child: b)],
+        );
+      }),
     );
   }
 
   Widget _actionButton(IconData icon, String label, VoidCallback onTap, {Color? colour}) {
+    final c = colour ?? AppColors.textPrimary;
     return OutlinedButton.icon(
       onPressed: _acting ? null : onTap,
-      icon: Icon(icon, size: 18, color: colour),
-      label: Text(label, style: TextStyle(color: colour)),
+      icon: Icon(icon, size: 22, color: c),
+      label: Text(label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: c, fontSize: 15, fontWeight: FontWeight.w700)),
       style: OutlinedButton.styleFrom(
-        side: BorderSide(color: colour ?? const Color(0xFFDDDDE5)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        minimumSize: const Size.fromHeight(56),
+        // Destructive actions (Depart) carry their colour on the outline
+        // too; the rest use the 3:1 control border, not a hairline.
+        side: BorderSide(color: colour ?? AppColors.border, width: colour != null ? 1.5 : 1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       ),
     );
   }
@@ -388,7 +392,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     ]..sort((a, b) => a.boardingStop.compareTo(b.boardingStop));
 
     return Container(
-      color: Colors.white,
+      color: AppColors.surfaceRaised,
       child: Column(
         children: [
           Padding(
@@ -397,7 +401,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('PASSENGER MANIFEST',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted, letterSpacing: 1.2)),
                 Text('${m.totalBookings} booked · ${m.seatCapacity} spaces',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ],
@@ -447,7 +451,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         p.name ?? (p.isWalkIn ? 'Cash passenger' : 'App passenger'),
         style: TextStyle(
           fontWeight: FontWeight.bold,
-          color: p.isNoShow ? Colors.grey : Colors.black87,
+          color: p.isNoShow ? AppColors.textMuted : AppColors.textPrimary,
           decoration: p.isNoShow ? TextDecoration.lineThrough : null,
         ),
       ),
@@ -465,7 +469,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                 ),
                 child: Text(
                   methodLabel,
-                  style: TextStyle(color: methodColour, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.4),
+                  style: TextStyle(color: methodColour, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.4),
                 ),
               ),
               if (p.pickupLandmark != null) ...[
@@ -473,7 +477,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                 Expanded(
                   child: Text(
                     p.pickupLandmark!,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -483,7 +487,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           const SizedBox(height: 3),
           Text(
             '${p.ticketNumber} · ${trip.stopName(p.boardingStop)} → ${trip.stopName(p.alightingStop)}',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
           ),
         ],
       ),

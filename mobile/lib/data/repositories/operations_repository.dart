@@ -327,6 +327,19 @@ class OperationsRepository {
     return Manifest.fromJson(json as Map<String, dynamic>);
   }
 
+  /// Approved fare per (boarding, alighting) stop pair on this trip's
+  /// route. A preview for the walk-in screen only: the server computes the
+  /// fare it actually charges. `fare_amount` is a Decimal, which arrives as
+  /// a string, so it is parsed from either form.
+  Future<Map<(int, int), double>> fares(String tripId) async {
+    final json = await _api.get('/trips/$tripId/fares') as List<dynamic>;
+    return {
+      for (final e in json.cast<Map<String, dynamic>>())
+        (e['from_stop_sequence'] as int, e['to_stop_sequence'] as int):
+            double.parse(e['fare_amount'].toString()),
+    };
+  }
+
   /// Validate a ticket at the door. The server answers 200 for every
   /// outcome; read `accepted`.
   Future<ScanVerdict> scan({

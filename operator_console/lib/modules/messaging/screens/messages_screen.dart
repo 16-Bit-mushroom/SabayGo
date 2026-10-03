@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_client.dart';
 import '../../../data/repositories/messaging_repository.dart';
 import '../../../viewmodels/messaging_provider.dart';
+import '../../../core/design/tokens.dart';
 
 /// The cooperative office's shared inbox: every passenger, conductor and
 /// driver thread with coop_admin lands here, and any signed-in office
@@ -85,7 +86,7 @@ class _ConversationList extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text('Could not load messages.\n${p.listError}',
-              textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54)),
+              textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
         ),
       );
     }
@@ -94,7 +95,7 @@ class _ConversationList extends StatelessWidget {
     }
     if (p.conversations.isEmpty) {
       return const Center(
-        child: Text('No conversations yet.', style: TextStyle(color: Colors.white54)),
+        child: Text('No conversations yet.', style: TextStyle(color: AppColors.textMuted)),
       );
     }
     return ListView.separated(
@@ -106,7 +107,7 @@ class _ConversationList extends StatelessWidget {
         final unread = c.unreadCount > 0;
         return ListTile(
           selected: isOpen,
-          selectedTileColor: Colors.white.withValues(alpha: 0.05),
+          selectedTileColor: AppColors.surfaceSunken,
           leading: CircleAvatar(child: Icon(_iconFor(c.peerRole), size: 18)),
           title: Text(c.peerName,
               style: TextStyle(fontSize: 13, fontWeight: unread ? FontWeight.w700 : FontWeight.w500)),
@@ -114,15 +115,15 @@ class _ConversationList extends StatelessWidget {
             c.lastMessage ?? 'No messages yet',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: unread ? Colors.white70 : Colors.white38),
+            style: TextStyle(fontSize: 12, color: unread ? AppColors.textPrimary : AppColors.textMuted),
           ),
           trailing: unread
               ? Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                   decoration:
-                      BoxDecoration(color: const Color(0xFF88C0D0), borderRadius: BorderRadius.circular(10)),
+                      BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
                   child: Text('${c.unreadCount}',
-                      style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                      style: const TextStyle(fontSize: 11, color: Colors.white)),
                 )
               : null,
           onTap: () => p.openConversation(c.conversationId),
@@ -155,7 +156,7 @@ class _Thread extends StatelessWidget {
     final p = context.watch<MessagingProvider>();
     if (p.openConversationId == null) {
       return const Center(
-        child: Text('Select a conversation.', style: TextStyle(color: Colors.white38)),
+        child: Text('Select a conversation.', style: TextStyle(color: AppColors.textMuted)),
       );
     }
     return Column(
@@ -202,14 +203,14 @@ class _Thread extends StatelessWidget {
     if (p.threadError != null && p.messages.isEmpty) {
       return Center(
         child: Text('Could not load this conversation.\n${p.threadError}',
-            textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54)),
+            textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
       );
     }
     if (p.isLoadingThread && p.messages.isEmpty) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (p.messages.isEmpty) {
-      return const Center(child: Text('No messages yet.', style: TextStyle(color: Colors.white38)));
+      return const Center(child: Text('No messages yet.', style: TextStyle(color: AppColors.textMuted)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -220,7 +221,7 @@ class _Thread extends StatelessWidget {
 
   Widget _bubble(ConsoleMessage m) {
     final align = m.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final color = m.isMine ? const Color(0xFF5E81AC) : const Color(0xFF2E3440);
+    final color = m.isMine ? AppColors.info : AppColors.surfaceSunken;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
@@ -230,12 +231,12 @@ class _Thread extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 420),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-            child: Text(m.body, style: const TextStyle(color: Colors.white, fontSize: 13)),
+            child: Text(m.body, style: TextStyle(color: m.isMine ? Colors.white : AppColors.textPrimary, fontSize: 14)),
           ),
           Padding(
             padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
             child: Text(DateFormat('MMM dd, hh:mm a').format(m.createdAt),
-                style: const TextStyle(fontSize: 10, color: Colors.white38)),
+                style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
           ),
         ],
       ),

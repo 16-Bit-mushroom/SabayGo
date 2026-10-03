@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/design/components/brand_logo.dart';
+import 'core/design/theme.dart';
 import 'core/network/api_client.dart';
 import 'core/storage/token_storage.dart';
 import 'data/repositories/auth_repository.dart';
@@ -70,15 +72,7 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
       child: MaterialApp(
         title: 'SabayGo Operator Console',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          scaffoldBackgroundColor: const Color(0xFF151923),
-          colorScheme: const ColorScheme.dark(
-            primary: Color(0xFF8FBCBB),
-            surface: Color(0xFF222736),
-            error: Color(0xFFBF616A),
-          ),
-          useMaterial3: true,
-        ),
+        theme: buildConsoleTheme(),
         home: const _RootRouter(),
       ),
     );
@@ -109,12 +103,18 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF151923),
       body: Center(
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF8FBCBB)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            BrandLogo(height: 96),
+            SizedBox(height: 24),
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+          ],
         ),
       ),
     );

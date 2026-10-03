@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../viewmodels/auth_provider.dart';
+import '../../../core/design/components/brand_logo.dart';
+import '../../../core/design/tokens.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF151923),
+      backgroundColor: AppColors.surface,
       body: Center(
         child: SingleChildScrollView(
           child: ConstrainedBox(
@@ -45,9 +47,8 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Card(
-                elevation: 8,
-                color: const Color(0xFF222736),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                // Flat, edged by the theme's divider: on a light page a
+                // shadow is a second way of drawing the same boundary.
                 child: Padding(
                   padding: const EdgeInsets.all(32.0),
                   child: Form(
@@ -56,41 +57,34 @@ class _LoginScreenState extends State<LoginScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'SABAYGO\nCOMMAND',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 3.0,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        // The mark, then what this door is for: everyone
+                        // who signs in here is office staff.
+                        const Center(child: BrandLogo(height: 96)),
+                        const SizedBox(height: AppSpacing.md),
                         const Text(
                           'Cooperative office console',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white54, fontSize: 13),
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                         ),
                         const SizedBox(height: 32),
                         if (auth.error != null) ...[
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFBF616A).withOpacity(0.15),
+                              color: AppColors.dangerContainer,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFBF616A)),
+                              border: Border.all(color: AppColors.danger),
                             ),
                             child: Text(
                               auth.error!,
-                              style: const TextStyle(color: Color(0xFFBF616A)),
+                              style: const TextStyle(color: AppColors.danger),
                             ),
                           ),
                           const SizedBox(height: 20),
                         ],
                         TextFormField(
                           controller: _emailController,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: AppColors.textPrimary),
                           keyboardType: TextInputType.emailAddress,
                           decoration: _inputDecoration('Email', Icons.email_outlined),
                           validator: (v) =>
@@ -100,13 +94,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _passwordController,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: AppColors.textPrimary),
                           obscureText: _obscure,
                           decoration: _inputDecoration('Password', Icons.lock_outline).copyWith(
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                                color: Colors.white54,
+                                color: AppColors.textMuted,
                               ),
                               onPressed: () => setState(() => _obscure = !_obscure),
                             ),
@@ -121,8 +115,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: ElevatedButton(
                             onPressed: auth.isBusy ? null : _submit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF8FBCBB),
-                              foregroundColor: const Color(0xFF151923),
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8)),
                             ),
@@ -131,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     width: 22,
                                     height: 22,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2.5, color: Color(0xFF151923)),
+                                        strokeWidth: 2.5, color: Colors.white),
                                   )
                                 : const Text('Sign In',
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
@@ -149,14 +143,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.white54),
-      prefixIcon: Icon(icon, color: Colors.white54),
-      filled: true,
-      fillColor: const Color(0xFF151923),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-    );
-  }
+  // Label and icon only; fill, outline and focus come from the theme. The
+  // old borderless field on a near-identical fill had no visible edge,
+  // which fails WCAG 1.4.11 on the one control every session starts at.
+  InputDecoration _inputDecoration(String label, IconData icon) =>
+      InputDecoration(labelText: label, prefixIcon: Icon(icon));
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/brand_logo.dart';
 import '../../core/design/tokens.dart';
 import '../../viewmodels/auth_provider.dart';
 
@@ -75,33 +76,23 @@ class _SignupScreenState extends State<SignupScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      // Light, like sign-in. The purple gradient header put the heading in
+      // white on a fading fill and the back arrow in a translucent disc --
+      // two contrast questions that a white surface does not ask.
+      backgroundColor: AppColors.surfaceRaised,
       body: Stack(
         children: [
-          Container(
-            height: 280,
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primary, Color(0xFF4A3592)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
           SafeArea(
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(AppSpacing.xs),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: CircleAvatar(
-                      backgroundColor: Colors.white.withValues(alpha: 0.2),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
+                    child: IconButton(
+                      tooltip: 'Back',
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ),
                 ),
@@ -113,44 +104,30 @@ class _SignupScreenState extends State<SignupScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(height: 10),
-                          const Center(
-                            child: Text(
-                              'Create Your Account',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
+                          // Same header as sign-in -- mark, heading, one
+                          // line -- so the two forms read as one pair.
+                          const BrandLogo(height: BrandLogoSize.header),
+                          const SizedBox(height: AppSpacing.xl),
+                          Text(
+                            'Create your account',
+                            style: Theme.of(context).textTheme.headlineMedium,
                           ),
-                          const SizedBox(height: 8),
-                          Center(
-                            child: Text(
-                              'Book a space on your UV Express route.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white.withValues(alpha: 0.85),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                          const SizedBox(height: AppSpacing.xs + 2),
+                          Text(
+                            'Book a space on your UV Express route.',
+                            style: Theme.of(context).textTheme.bodyMedium!
+                                .copyWith(color: AppColors.textMuted),
                           ),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: AppSpacing.xxl),
 
+                          // The fields sit on the page, not in a floating
+                          // card: on a white surface a shadowed white card
+                          // is a box drawn around the only thing there is.
                           Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 20,
-                                  offset: Offset(0, 10),
-                                ),
-                              ],
+                            padding: const EdgeInsets.only(
+                                bottom: AppSpacing.xxl),
+                            decoration: const BoxDecoration(
+                              color: AppColors.surfaceRaised,
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,7 +241,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                       ListTileControlAffinity.leading,
                                   contentPadding: EdgeInsets.zero,
                                   dense: true,
-                                  activeColor: AppColors.accent,
+                                  activeColor: AppColors.primary,
                                   title: const Text(
                                     'I agree to the terms of use and privacy notice.',
                                     style: TextStyle(fontSize: 13),
@@ -380,9 +357,9 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
       decoration: BoxDecoration(
-        color: AppColors.danger.withValues(alpha: 0.08),
+        color: AppColors.dangerContainer,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.danger),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -150,22 +150,37 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       style: const TextStyle(color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 24),
+                    // White with an ink outline rather than a black slab:
+                    // the figure is the point, and black-on-white at 18:1
+                    // reads in sun where white-on-black blooms.
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(AppSpacing.xl),
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(16),
+                        color: AppColors.surfaceRaised,
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        border: Border.all(color: AppColors.primary, width: 2),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('CASH IN HAND', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w700)),
+                          const Text('CASH IN HAND',
+                              style: TextStyle(
+                                  color: AppColors.textMuted, fontSize: 12.5, letterSpacing: 0.8, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 6),
-                          Text('₱${r!.expectedAmount.toStringAsFixed(2)}',
-                              style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w800)),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text('₱${r!.expectedAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.w800,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                )),
+                          ),
                           const SizedBox(height: 4),
                           Text('from ${r.bookingCount} cash passenger${r.bookingCount == 1 ? '' : 's'} you logged',
-                              style: const TextStyle(color: Colors.white70)),
+                              style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
                         ],
                       ),
                     ),
@@ -189,7 +204,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.warning.withValues(alpha: 0.12),
+          color: AppColors.warningContainer,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -201,7 +216,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 '$count passenger${count == 1 ? '' : 's'} logged offline for this trip '
                 "haven't synced yet. The figure above doesn't include them -- "
                 'connect and sync before remitting.',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
             TextButton(
@@ -222,6 +237,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             enabled: !blocked,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+            decoration: const InputDecoration(prefixText: '₱ '),
           ),
           const SizedBox(height: 16),
           const Text('Notes (optional)', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textMuted)),
@@ -244,22 +260,22 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       );
 
   Widget _submittedView(Remittance r) {
-    final (label, colour) = switch (r.status) {
-      'received' => ('RECEIVED BY OFFICE', AppColors.accent),
-      'disputed' => ('VARIANCE FLAGGED', AppColors.danger),
-      _ => ('SUBMITTED — AWAITING OFFICE', AppColors.warning),
+    final (label, colour, fill) = switch (r.status) {
+      'received' => ('RECEIVED BY OFFICE', AppColors.success, AppColors.successContainer),
+      'disputed' => ('VARIANCE FLAGGED', AppColors.danger, AppColors.dangerContainer),
+      _ => ('SUBMITTED — AWAITING OFFICE', AppColors.warning, AppColors.warningContainer),
     };
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.08),
+        color: fill,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colour.withValues(alpha: 0.4)),
+        border: Border.all(color: colour),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: colour, fontWeight: FontWeight.w800, letterSpacing: 1, fontSize: 12)),
+          Text(label, style: TextStyle(color: colour, fontWeight: FontWeight.w800, letterSpacing: 0.8, fontSize: 13)),
           const SizedBox(height: 12),
           _row('Declared', '₱${(r.declaredAmount ?? 0).toStringAsFixed(2)}'),
           if (r.receivedAmount != null) _row('Office counted', '₱${r.receivedAmount!.toStringAsFixed(2)}'),

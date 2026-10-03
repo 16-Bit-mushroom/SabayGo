@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/fleet_repository.dart';
+import '../../../core/design/tokens.dart';
 
 class FleetRosterScreen extends StatefulWidget {
   const FleetRosterScreen({super.key});
@@ -21,6 +22,15 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
   List<RouteSummary> _routes = [];
   String? _error;
   bool _loading = true;
+  final _vansScroll = ScrollController();
+  final _crewScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _vansScroll.dispose();
+    _crewScroll.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -58,7 +68,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? const Color(0xFFBF616A) : const Color(0xFF8FBCBB),
+        backgroundColor: isError ? AppColors.danger : AppColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -136,12 +146,12 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
                 children: [
                   const Text(
                     'Fleet & Crew Roster',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: _loading ? null : _load,
-                    icon: const Icon(Icons.refresh, color: Colors.white70),
+                    icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
                     tooltip: 'Refresh',
                   ),
                 ],
@@ -185,7 +195,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
         children: [
           Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
           const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: Colors.white70)),
+          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
           const SizedBox(height: 12),
           ElevatedButton(onPressed: _load, child: const Text('Retry')),
         ],
@@ -195,179 +205,339 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
 
   Widget _buildVansTable() {
     final vans = _vans ?? [];
-    return _buildCardWrapper(
-      title: 'Active Fleet (Vans)',
-      icon: Icons.directions_car_filled_outlined,
+    return _RosterCard(
+      title: 'Fleet (Vans)',
+      count: vans.length,
+      icon: Icons.airport_shuttle_outlined,
+      addLabel: 'Add van',
       onAdd: _openAddVanDialog,
-      child: vans.isEmpty
-          ? _buildEmpty('No vans registered yet.')
-          : DataTable(
-              headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
-              dataRowMinHeight: 50,
-              dataRowMaxHeight: 60,
-              headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
-              columns: const [
-                DataColumn(label: Text('Plate No.')),
-                DataColumn(label: Text('Model')),
-                DataColumn(label: Text('Seats')),
-                DataColumn(label: Text('Status')),
-                DataColumn(label: Text('')),
-              ],
-              rows: vans.map((van) {
-                final isActive = van.operationalStatus == 'active';
-                return DataRow(
-                  onSelectChanged: (_) => _showVanDetail(van),
-                  cells: [
-                    DataCell(Text(van.plateNumber,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                    DataCell(Text(
-                        [van.brand, van.model].where((s) => s != null && s.isNotEmpty).join(' '),
-                        style: const TextStyle(color: Colors.white70))),
-                    DataCell(Text(van.seatCapacity.toString(),
-                        style: const TextStyle(color: Colors.white70))),
-                    DataCell(_buildStatusChip(van.operationalStatus, isActive)),
-                    DataCell(_buildVanStatusMenu(van)),
-                  ],
-                );
-              }).toList(),
-            ),
+      emptyMessage: 'No vans registered yet. Add the first one with "Add van".',
+      scroll: _vansScroll,
+      columns: const [
+        ('Plate No.', 14, false),
+        ('Model', 26, false),
+        ('Seats', 8, true),
+        ('Status', 16, false),
+      ],
+      rows: [
+        for (final van in vans)
+          _RosterRow(
+            semanticLabel: '${van.plateNumber}, ${van.operationalStatus}. Opens van details.',
+            onTap: () => _showVanDetail(van),
+            cells: [
+              Text(van.plateNumber,
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              Text(
+                [van.brand, van.model].where((s) => s != null && s.isNotEmpty).join(' '),
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
+              Text('${van.seatCapacity}', style: _figures),
+              _buildStatusChip(van.operationalStatus),
+            ],
+            trailing: _buildVanStatusMenu(van),
+          ),
+      ],
     );
   }
 
   Widget _buildDriversTable() {
     final crew = _crew ?? [];
-    return _buildCardWrapper(
+    return _RosterCard(
       title: 'Registered Crew',
+      count: crew.length,
       icon: Icons.badge_outlined,
+      addLabel: 'Add crew',
       onAdd: _openAddCrewDialog,
-      child: crew.isEmpty
-          ? _buildEmpty('No crew provisioned yet.')
-          : DataTable(
-              headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
-              dataRowMinHeight: 50,
-              dataRowMaxHeight: 60,
-              headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
-              columns: const [
-                DataColumn(label: Text('Name')),
-                DataColumn(label: Text('Role')),
-                DataColumn(label: Text('License')),
-                DataColumn(label: Text('Status')),
-                DataColumn(label: Text('')),
-              ],
-              rows: crew.map((staff) {
-                final isActive = staff.employmentStatus == 'active';
-                return DataRow(
-                  onSelectChanged: (_) => _showCrewDetail(staff),
-                  cells: [
-                    DataCell(Text(staff.fullName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                    DataCell(Text(staff.role, style: const TextStyle(color: Colors.white70))),
-                    DataCell(Text(staff.licenseNumber ?? '—',
-                        style: const TextStyle(color: Colors.white70))),
-                    DataCell(_buildStatusChip(staff.employmentStatus, isActive)),
-                    DataCell(_buildCrewStatusMenu(staff)),
-                  ],
-                );
-              }).toList(),
-            ),
+      emptyMessage: 'No crew provisioned yet. Add the first with "Add crew".',
+      scroll: _crewScroll,
+      columns: const [
+        ('Name', 24, false),
+        ('Role', 14, false),
+        ('Licence', 18, false),
+        ('Status', 14, false),
+      ],
+      rows: [
+        for (final staff in crew)
+          _RosterRow(
+            semanticLabel: '${staff.fullName}, ${_roleLabel(staff.role)}, ${staff.employmentStatus}. '
+                'Opens crew details.',
+            onTap: () => _showCrewDetail(staff),
+            cells: [
+              Text(staff.fullName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              Text(_roleLabel(staff.role),
+                  overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textPrimary)),
+              Text(staff.licenseNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
+              _buildStatusChip(staff.employmentStatus),
+            ],
+            trailing: _buildCrewStatusMenu(staff),
+          ),
+      ],
     );
   }
 
+  static const _figures = TextStyle(
+    color: AppColors.textPrimary,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Role in words. `coop_admin` is office staff -- never "operator", which
+  /// under LTFRB usage is the franchise holder (see migration 010).
+  static String _roleLabel(String role) => switch (role) {
+        'driver' => 'Driver',
+        'conductor' => 'Conductor',
+        'coop_admin' => 'Office staff',
+        'admin' => 'Administrator',
+        _ => role,
+      };
+
   Widget _buildVanStatusMenu(Van van) {
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: Colors.white54, size: 20),
-      color: const Color(0xFF2C3244),
+      icon: const Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
+      color: AppColors.surfaceSunken,
       onSelected: (status) => _setVanStatus(van, status),
       itemBuilder: (_) => const [
-        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: Colors.white))),
+        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: AppColors.textPrimary))),
         PopupMenuItem(
-            value: 'maintenance', child: Text('Maintenance', style: TextStyle(color: Colors.white))),
-        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: Colors.white))),
+            value: 'maintenance', child: Text('Maintenance', style: TextStyle(color: AppColors.textPrimary))),
+        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: AppColors.textPrimary))),
       ],
     );
   }
 
   Widget _buildCrewStatusMenu(StaffMember staff) {
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: Colors.white54, size: 20),
-      color: const Color(0xFF2C3244),
+      icon: const Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
+      color: AppColors.surfaceSunken,
       onSelected: (status) => _setCrewStatus(staff, status),
       itemBuilder: (_) => const [
-        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: Colors.white))),
+        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: AppColors.textPrimary))),
         PopupMenuItem(
-            value: 'suspended', child: Text('Suspended', style: TextStyle(color: Colors.white))),
-        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: Colors.white))),
+            value: 'suspended', child: Text('Suspended', style: TextStyle(color: AppColors.textPrimary))),
+        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: AppColors.textPrimary))),
       ],
     );
   }
 
-  Widget _buildEmpty(String message) => Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Center(child: Text(message, style: const TextStyle(color: Colors.white54))),
-      );
+  /// Three states, three tones, each with its word on the chip: in service,
+  /// temporarily out (maintenance, suspended), and retired.
+  Widget _buildStatusChip(String status) {
+    final (fg, bg) = switch (status) {
+      'active' => (AppColors.success, AppColors.successContainer),
+      'maintenance' || 'suspended' => (AppColors.warning, AppColors.warningContainer),
+      _ => (AppColors.textMuted, AppColors.surfaceSunken),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppRadius.full),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
 
-  Widget _buildCardWrapper({
-    required String title,
-    required IconData icon,
-    required Widget child,
-    required VoidCallback onAdd,
-  }) {
-    return Card(
-      elevation: 4,
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Icon(icon, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(title,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                ),
-                TextButton.icon(
-                  onPressed: onAdd,
-                  icon: Icon(Icons.add, color: Theme.of(context).colorScheme.primary, size: 18),
-                  label: Text('Add', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                ),
-              ],
-            ),
-          ),
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: child,
-            ),
-          ),
-        ],
+/// One roster row: the cells, a click target for the details, and the
+/// status menu at the end (outside the click target, so opening the menu
+/// never also opens the details).
+class _RosterRow {
+  const _RosterRow({
+    required this.cells,
+    required this.onTap,
+    required this.trailing,
+    required this.semanticLabel,
+  });
+
+  final List<Widget> cells;
+  final VoidCallback onTap;
+  final Widget trailing;
+  final String semanticLabel;
+}
+
+/// A titled card holding one roster table.
+///
+/// Replaces two DataTables. Those were only as wide as their columns (the
+/// heading strip stopped short of the card's edge), had no height limit
+/// (the crew list ran off the bottom of the screen -- the yellow-and-black
+/// overflow stripe), and gave every row a checkbox that did nothing but
+/// open the details. Here the columns share the card's width, the heading
+/// stays put, the rows scroll inside the card with a visible scrollbar,
+/// and a click on the row opens the details.
+class _RosterCard extends StatelessWidget {
+  const _RosterCard({
+    required this.title,
+    required this.count,
+    required this.icon,
+    required this.addLabel,
+    required this.onAdd,
+    required this.emptyMessage,
+    required this.scroll,
+    required this.columns,
+    required this.rows,
+  });
+
+  final String title;
+  final int count;
+  final IconData icon;
+  final String addLabel;
+  final VoidCallback onAdd;
+  final String emptyMessage;
+  final ScrollController scroll;
+
+  /// Label, flex share, right-aligned.
+  final List<(String, int, bool)> columns;
+  final List<_RosterRow> rows;
+
+  static const double _minWidth = 520;
+  static const double _menuWidth = 48;
+
+  Widget _cell(int i, Widget child) {
+    final (_, flex, numeric) = columns[i];
+    return Expanded(
+      flex: flex,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        child: Align(
+          alignment: numeric ? Alignment.centerRight : Alignment.centerLeft,
+          child: child,
+        ),
       ),
     );
   }
 
-  Widget _buildStatusChip(String text, bool isPositive) {
+  Widget _heading() => Container(
+        height: 44,
+        color: AppColors.surfaceSunken,
+        padding: const EdgeInsets.only(left: AppSpacing.xs),
+        child: Row(children: [
+          for (var i = 0; i < columns.length; i++)
+            _cell(
+              i,
+              Text(columns[i].$1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+            ),
+          const SizedBox(width: _menuWidth),
+        ]),
+      );
+
+  Widget _row(_RosterRow r) => SizedBox(
+        height: 52,
+        child: Row(children: [
+          Expanded(
+            child: Semantics(
+              button: true,
+              label: r.semanticLabel,
+              onTap: r.onTap, // restated: excludeSemantics drops the InkWell's own tap
+              excludeSemantics: true,
+              child: InkWell(
+                onTap: r.onTap,
+                hoverColor: AppColors.surface,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.xs),
+                  child: Row(children: [
+                    for (var i = 0; i < r.cells.length; i++) _cell(i, r.cells[i]),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: _menuWidth, child: Center(child: r.trailing)),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final header = Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.md, AppSpacing.lg),
+      child: Row(children: [
+        Icon(icon, color: AppColors.textPrimary),
+        const SizedBox(width: AppSpacing.md),
+        Flexible(
+          child: Text(title,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        if (count > 0) Text('$count', style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
+        const Spacer(),
+        TextButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add, size: 18),
+          label: Text(addLabel),
+        ),
+      ]),
+    );
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: isPositive ? const Color(0xFFA3BE8C).withOpacity(0.2) : const Color(0xFFEBCB8B).withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isPositive ? const Color(0xFFA3BE8C) : const Color(0xFFEBCB8B),
-        ),
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.divider),
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: isPositive ? const Color(0xFFA3BE8C) : const Color(0xFFEBCB8B),
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+      child: LayoutBuilder(builder: (context, c) {
+        if (rows.isEmpty) {
+          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            header,
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                  child: Text(emptyMessage,
+                      textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted))),
+            ),
+          ]);
+        }
+
+        final width = c.maxWidth < _minWidth ? _minWidth : c.maxWidth;
+        // Side by side the card's height is bounded: it shrinks to its rows
+        // and scrolls once they outgrow the screen. Stacked on a narrow
+        // window it sits in the page's scroll view, so every row is laid
+        // out -- a flexible list there has no height to fill.
+        final body = c.hasBoundedHeight
+            ? Flexible(
+                child: Scrollbar(
+                  controller: scroll,
+                  thumbVisibility: true,
+                  child: ListView.separated(
+                    controller: scroll,
+                    shrinkWrap: true,
+                    itemCount: rows.length,
+                    separatorBuilder: (_, _) => const Divider(),
+                    itemBuilder: (_, i) => _row(rows[i]),
+                  ),
+                ),
+              )
+            : Column(children: [
+                for (var i = 0; i < rows.length; i++) ...[
+                  if (i > 0) const Divider(),
+                  _row(rows[i]),
+                ],
+              ]);
+
+        final table = SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: width, maxWidth: width),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [_heading(), const Divider(), body],
+            ),
+          ),
+        );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [header, if (c.hasBoundedHeight) Flexible(child: table) else table],
+        );
+      }),
     );
   }
 }
@@ -427,8 +597,8 @@ class _AddVanDialogState extends State<_AddVanDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF222736),
-      title: const Text('Add Van', style: TextStyle(color: Colors.white)),
+      backgroundColor: AppColors.surfaceRaised,
+      title: const Text('Add Van', style: TextStyle(color: AppColors.textPrimary)),
       content: SizedBox(
         width: 380,
         child: Form(
@@ -438,7 +608,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_error != null) ...[
-                  Text(_error!, style: const TextStyle(color: Color(0xFFBF616A))),
+                  Text(_error!, style: const TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
                 ],
                 _field(_plate, 'Plate Number', validator: (v) =>
@@ -457,8 +627,8 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   decoration: _decoration('Registered Route (optional)'),
-                  dropdownColor: const Color(0xFF2C3244),
-                  style: const TextStyle(color: Colors.white),
+                  dropdownColor: AppColors.surfaceSunken,
+                  style: const TextStyle(color: AppColors.textPrimary),
                   value: _routeId,
                   items: widget.routes
                       .map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName)))
@@ -469,9 +639,9 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                 CheckboxListTile(
                   value: _hasCamera,
                   onChanged: (v) => setState(() => _hasCamera = v ?? false),
-                  title: const Text('Has cabin camera', style: TextStyle(color: Colors.white70)),
+                  title: const Text('Has cabin camera', style: TextStyle(color: AppColors.textPrimary)),
                   controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: const Color(0xFF8FBCBB),
+                  activeColor: AppColors.primary,
                 ),
               ],
             ),
@@ -498,7 +668,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
       {TextInputType? keyboardType, String? Function(String?)? validator}) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: AppColors.textPrimary),
       keyboardType: keyboardType,
       decoration: _decoration(label),
       validator: validator,
@@ -507,10 +677,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
 
   InputDecoration _decoration(String label) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54),
-        filled: true,
-        fillColor: const Color(0xFF151923),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        labelStyle: const TextStyle(color: AppColors.textMuted),
       );
 }
 
@@ -579,8 +746,8 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF222736),
-      title: const Text('Provision Crew', style: TextStyle(color: Colors.white)),
+      backgroundColor: AppColors.surfaceRaised,
+      title: const Text('Provision Crew', style: TextStyle(color: AppColors.textPrimary)),
       content: SizedBox(
         width: 380,
         child: Form(
@@ -590,13 +757,13 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_error != null) ...[
-                  Text(_error!, style: const TextStyle(color: Color(0xFFBF616A))),
+                  Text(_error!, style: const TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
                 ],
                 DropdownButtonFormField<String>(
                   decoration: _decoration('Role'),
-                  dropdownColor: const Color(0xFF2C3244),
-                  style: const TextStyle(color: Colors.white),
+                  dropdownColor: AppColors.surfaceSunken,
+                  style: const TextStyle(color: AppColors.textPrimary),
                   value: _role,
                   items: const [
                     DropdownMenuItem(value: 'conductor', child: Text('Conductor')),
@@ -644,7 +811,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: AppColors.textPrimary),
       decoration: _decoration(label),
       validator: required
           ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
@@ -654,10 +821,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
 
   InputDecoration _decoration(String label) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54),
-        filled: true,
-        fillColor: const Color(0xFF151923),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        labelStyle: const TextStyle(color: AppColors.textMuted),
       );
 }
 
@@ -675,8 +839,8 @@ class _DetailDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF222736),
-      title: Text(title, style: const TextStyle(color: Colors.white)),
+      backgroundColor: AppColors.surfaceRaised,
+      title: Text(title, style: const TextStyle(color: AppColors.textPrimary)),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -690,11 +854,11 @@ class _DetailDialog extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: 140,
-                      child: Text(label, style: const TextStyle(color: Colors.white54)),
+                      child: Text(label, style: const TextStyle(color: AppColors.textMuted)),
                     ),
                     Expanded(
                       child: Text(value,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),

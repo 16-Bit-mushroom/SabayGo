@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
@@ -110,69 +111,97 @@ class _TripCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final first = trip.stops.isEmpty ? '' : trip.stops.first.terminalName;
     final last = trip.stops.isEmpty ? '' : trip.stops.last.terminalName;
-    final (label, colour) = switch (trip.status) {
-      'boarding' => ('BOARDING', AppColors.accent),
-      'departed' => ('DEPARTED', AppColors.textMuted),
-      'completed' => ('COMPLETED', AppColors.textMuted),
-      _ => ('SCHEDULED', AppColors.primary),
+    final (label, tone) = switch (trip.status) {
+      'boarding' => ('BOARDING', StatusTone.success),
+      'departed' => ('DEPARTED', StatusTone.muted),
+      'completed' => ('COMPLETED', StatusTone.muted),
+      _ => ('SCHEDULED', StatusTone.brand),
     };
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isActive ? AppColors.accent : const Color(0xFFE6E6EE),
-              width: isActive ? 2 : 1,
+    // Ordered by what a crew member checks first: *when* (the time, set
+    // large enough to read at arm's length in sun), then *where*, then
+    // *which van*. The time used to be a 14px line at the bottom of the
+    // card, below the route -- the question asked most was answered last.
+    return Semantics(
+      button: true,
+      label: '${trip.title}, ${DateFormat('EEEE h:mm a').format(trip.departure)}, '
+          '${label.toLowerCase()}${trip.plateNumber != null ? ', van ${trip.plateNumber}' : ''}',
+      // excludeSemantics drops the InkWell's own tap action along with its
+      // labels, so the tap must be restated here -- without it a screen
+      // reader announced the trip but could not open it.
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              // The trip in hand is outlined in ink at 2px -- a change of
+              // weight, not only of hue, so it reads on a washed-out screen.
+              border: Border.all(
+                color: isActive ? AppColors.primary : AppColors.divider,
+                width: isActive ? 2 : 1,
+              ),
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      trip.title,
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            DateFormat('h:mm a').format(trip.departure),
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              height: 1.1,
+                              letterSpacing: -0.5,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          Text(
+                            DateFormat('EEE, MMM d').format(trip.departure),
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: colour.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(label,
-                        style: TextStyle(color: colour, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text('$first → $last', style: const TextStyle(color: AppColors.textMuted)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.schedule, size: 16, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Text(DateFormat('EEE, MMM d • hh:mm a').format(trip.departure),
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  if (trip.plateNumber != null) ...[
-                    const Icon(Icons.directions_car, size: 16, color: AppColors.textMuted),
-                    const SizedBox(width: 6),
-                    Text(trip.plateNumber!, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    StatusChip(label, tone: tone),
                   ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  trip.title,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (first.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text('$first → $last',
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
                 ],
-              ),
-            ],
+                if (trip.plateNumber != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      const Icon(Icons.airport_shuttle_outlined, size: 18, color: AppColors.textMuted),
+                      const SizedBox(width: 6),
+                      Text(trip.plateNumber!,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),

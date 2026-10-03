@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/notification_repository.dart';
 import '../../viewmodels/notification_provider.dart';
+import '../../core/design/tokens.dart';
 
 /// Bell with an unread badge for the sidebar. Opens a panel listing the
 /// office's notifications; one that points at a module -- a variance, an
@@ -24,10 +25,10 @@ class NotificationBell extends StatelessWidget {
         icon: Badge(
           isLabelVisible: unread > 0,
           label: Text('$unread'),
-          backgroundColor: const Color(0xFFBF616A),
+          backgroundColor: AppColors.danger,
           child: Icon(
             unread > 0 ? Icons.notifications_active : Icons.notifications_none,
-            color: unread > 0 ? const Color(0xFFEBCB8B) : Colors.white54,
+            color: unread > 0 ? AppColors.warning : AppColors.textMuted,
           ),
         ),
       ),
@@ -60,7 +61,7 @@ class _NotificationPanel extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(left: 248, top: 16),
         child: Material(
-          color: const Color(0xFF222736),
+          color: AppColors.surfaceRaised,
           elevation: 12,
           borderRadius: BorderRadius.circular(12),
           child: SizedBox(
@@ -108,7 +109,7 @@ class _NotificationPanel extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text('Could not load notifications.\n${p.error}',
-              textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54)),
+              textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
         ),
       );
     }
@@ -118,7 +119,7 @@ class _NotificationPanel extends StatelessWidget {
     if (p.items.isEmpty) {
       return const Center(
         child: Text('Nothing yet. A flagged headcount or an SOS appears here.',
-            style: TextStyle(color: Colors.white54)),
+            style: TextStyle(color: AppColors.textMuted)),
       );
     }
     return ListView.separated(
@@ -148,10 +149,10 @@ class _NotificationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = n.isSosAlert
-        ? const Color(0xFFBF616A)
+        ? AppColors.danger
         : n.isVarianceAlert
-            ? const Color(0xFFEBCB8B)
-            : const Color(0xFF88C0D0);
+            ? AppColors.warning
+            : AppColors.primary;
     return ListTile(
       onTap: onTap,
       dense: true,
@@ -162,7 +163,7 @@ class _NotificationTile extends StatelessWidget {
             : n.isVarianceAlert
                 ? Icons.people_alt_outlined
                 : Icons.info_outline,
-        color: n.isRead ? Colors.white38 : accent,
+        color: n.isRead ? AppColors.textMuted : accent,
         size: 20,
       ),
       title: Text(
@@ -176,12 +177,12 @@ class _NotificationTile extends StatelessWidget {
         padding: const EdgeInsets.only(top: 2),
         child: Text(
           '${n.message}\n${_relative(n.createdAt)}',
-          style: const TextStyle(fontSize: 12, color: Colors.white60, height: 1.35),
+          style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35),
         ),
       ),
       isThreeLine: true,
       trailing: n.isActionable
-          ? const Icon(Icons.chevron_right, size: 18, color: Colors.white38)
+          ? const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted)
           : null,
     );
   }

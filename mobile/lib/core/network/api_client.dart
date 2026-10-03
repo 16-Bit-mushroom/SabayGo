@@ -69,10 +69,14 @@ class ApiClient {
     if (body != null) request.body = jsonEncode(body);
 
     try {
-      final streamed = await _http
+      // The timeout covers the whole exchange, body included. It used to
+      // wrap only send(), which completes when the *headers* arrive; a
+      // response that stalled mid-body (a server reloading under it, a
+      // weak link at a terminal) then hung its spinner with no limit.
+      final response = await _http
           .send(request)
+          .then(http.Response.fromStream)
           .timeout(AppConfig.requestTimeout);
-      final response = await http.Response.fromStream(streamed);
       return _handle(response);
     } on TimeoutException {
       throw const RequestTimeoutException();

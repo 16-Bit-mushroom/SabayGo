@@ -352,6 +352,11 @@ async def list_templates(session: SessionDep) -> list[dict]:
             "days_of_week": t.days_of_week,
             "trip_label": t.trip_label,
             "default_van_id": t.default_van_id,
+            # Returned so the console can show who a slot is crewed by.
+            # They were always stored and always copied onto generated
+            # trips; the list just never said so.
+            "default_driver_id": t.default_driver_id,
+            "default_conductor_id": t.default_conductor_id,
             "is_active": t.is_active,
             "valid_from": t.valid_from,
             "valid_until": t.valid_until,

@@ -312,6 +312,55 @@ async def trip_stops(trip_id: str, session: SessionDep) -> list[StopOut]:
     return [StopOut.from_row(rs, t) for rs, t in result.all()]
 
 
+class TripFareOut(BaseModel):
+    from_stop_sequence: int
+    to_stop_sequence: int
+    fare_amount: Decimal
+
+
+@router.get(
+    "/{trip_id}/fares",
+    response_model=list[TripFareOut],
+    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER))],
+)
+async def trip_fares(trip_id: str, session: SessionDep) -> list[TripFareOut]:
+    """The fare for every stop pair on this trip's route, for the crew.
+
+    So the walk-in screen can show the price *before* the conductor logs
+    the passenger, the way any till shows a total before taking money --
+    it used to appear only on the confirmation, after the booking existed.
+
+    Same rule as `ReserveSeatUseCase._resolve_fare`: per pair, the row with
+    the latest `effective_from`. If the two ever disagreed, the screen
+    would quote one price and the receipt would charge another, so keep
+    them in step. The server still computes the charged fare itself; this
+    is a preview, never an input.
+    """
+    trip = await session.get(Trip, trip_id)
+    if trip is None:
+        raise NotFoundError("Trip not found.")
+
+    result = await session.execute(
+        select(FareMatrix)
+        .where(FareMatrix.route_id == trip.route_id)
+        .order_by(
+            FareMatrix.from_stop_sequence,
+            FareMatrix.to_stop_sequence,
+            FareMatrix.effective_from.desc(),
+        )
+    )
+    latest: dict[tuple[int, int], TripFareOut] = {}
+    for f in result.scalars():
+        key = (f.from_stop_sequence, f.to_stop_sequence)
+        if key not in latest:  # first row per pair is the newest
+            latest[key] = TripFareOut(
+                from_stop_sequence=f.from_stop_sequence,
+                to_stop_sequence=f.to_stop_sequence,
+                fare_amount=f.fare_amount,
+            )
+    return list(latest.values())
+
+
 async def _stop_name_map(session: SessionDep) -> dict[tuple[str, int], str]:
     """(route_id, stop_sequence) -> terminal name. Keyed by route because
     the same sequence number is a different terminal on every route."""

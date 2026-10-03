@@ -5,6 +5,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/fleet_repository.dart';
 import '../../../data/repositories/schedule_repository.dart';
+import '../../../core/design/tokens.dart';
 
 /// Recurring departures.
 ///
@@ -14,6 +15,11 @@ import '../../../data/repositories/schedule_repository.dart';
 /// actual trip for a service date; that job runs nightly in production,
 /// but the office can also run it by hand from here (e.g. to backfill a
 /// day, or immediately after adding a new template).
+///
+/// Laid out like the Trip Dispatcher: the list on the left, the form that
+/// adds to it in a card on the right. The form used to be a dialog behind
+/// a "New Template" button, which hid the timetable while the office was
+/// deciding where a new slot fits in it.
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
@@ -35,10 +41,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   String? _error;
   bool _generating = false;
 
+  final _rowsScroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _rowsScroll.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -80,7 +94,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? const Color(0xFFBF616A) : const Color(0xFF8FBCBB),
+        backgroundColor: isError ? AppColors.danger : AppColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -89,28 +103,37 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _toggleTemplate(ScheduleTemplate template, bool active) async {
     try {
       await _schedule.setTemplateActive(template.templateId, active);
-      _showSnack('${template.tripLabel ?? template.templateId} marked ${active ? 'active' : 'inactive'}.');
+      _showSnack('${template.tripLabel ?? 'Template'} marked ${active ? 'active' : 'inactive'}.');
       await _load();
     } on ApiException catch (e) {
       _showSnack(e.message, isError: true);
     }
   }
 
-  Future<void> _openAddTemplateDialog() async {
-    final created = await showDialog<bool>(
+  Future<void> _onTemplateCreated() async {
+    _showSnack('Schedule template created.');
+    await _load();
+  }
+
+  void _showDetails(ScheduleTemplate t) {
+    T? find<T>(List<T> list, String? id, String Function(T) key) {
+      if (id == null) return null;
+      for (final e in list) {
+        if (key(e) == id) return e;
+      }
+      return null;
+    }
+
+    showDialog<void>(
       context: context,
-      builder: (_) => _AddTemplateDialog(
-        schedule: _schedule,
-        routes: _routes,
-        vans: _vans,
-        drivers: _drivers,
-        conductors: _conductors,
+      builder: (_) => _TemplateDetailsDialog(
+        template: t,
+        routeName: _routeName(t.routeId),
+        van: find<Van>(_vans, t.defaultVanId, (v) => v.vanId),
+        driver: find<StaffMember>(_drivers, t.defaultDriverId, (s) => s.userId),
+        conductor: find<StaffMember>(_conductors, t.defaultConductorId, (s) => s.userId),
       ),
     );
-    if (created == true) {
-      _showSnack('Schedule template created.');
-      await _load();
-    }
   }
 
   Future<void> _generateTrips() async {
@@ -129,23 +152,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
-          backgroundColor: const Color(0xFF222736),
-          title: const Text('Trips Generated', style: TextStyle(color: Colors.white)),
+          title: const Text('Trips Generated'),
           content: SizedBox(
             width: 360,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('$created trip(s) created, $skipped skipped (already existed).',
-                    style: const TextStyle(color: Colors.white70)),
+                Text('$created trip(s) created, $skipped skipped (already existed).'),
                 for (final r in reports)
                   if (r.warnings.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text('${r.serviceDate.toIso8601String().split('T').first}:',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                     for (final w in r.warnings)
-                      Text('• $w', style: const TextStyle(color: Color(0xFFEBCB8B), fontSize: 12)),
+                      Text('• $w', style: const TextStyle(color: AppColors.warning, fontSize: 12.5)),
                   ],
               ],
             ),
@@ -174,29 +195,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             children: [
               const Text(
                 'Schedule Templates',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
               ),
               const Spacer(),
               OutlinedButton.icon(
                 onPressed: _generating ? null : _generateTrips,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF8FBCBB),
-                  side: const BorderSide(color: Color(0xFF8FBCBB)),
-                ),
                 icon: _generating
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.play_arrow),
                 label: const Text('Generate Trips'),
               ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _openAddTemplateDialog,
-                icon: const Icon(Icons.add),
-                label: const Text('New Template'),
-              ),
+              const SizedBox(width: 8),
               IconButton(
                 onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh, color: Colors.white70),
+                icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
                 tooltip: 'Refresh',
               ),
             ],
@@ -204,7 +216,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           const SizedBox(height: 4),
           const Text(
             'Standing timetable slots. "Generate Trips" materialises them into actual, bookable departures.',
-            style: TextStyle(fontSize: 12, color: Colors.white54),
+            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -212,7 +224,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
                     ? _buildError(_error!)
-                    : _buildTable(),
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildTable()),
+                          const SizedBox(width: 24),
+                          SizedBox(
+                            width: 380,
+                            child: _NewTemplateCard(
+                              schedule: _schedule,
+                              routes: _routes,
+                              vans: _vans,
+                              drivers: _drivers,
+                              conductors: _conductors,
+                              onCreated: _onTemplateCreated,
+                            ),
+                          ),
+                        ],
+                      ),
           ),
         ],
       ),
@@ -226,7 +255,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         children: [
           Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
           const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: Colors.white70)),
+          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
           const SizedBox(height: 12),
           ElevatedButton(onPressed: _load, child: const Text('Retry')),
         ],
@@ -234,55 +263,324 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
+  /// Label, flex share. Same flex-table approach as Revenue: the table
+  /// fills its card (a DataTable is only as wide as its content and left a
+  /// blank band), and the heading row stays put while the rows scroll.
+  static const _columns = <(String, int)>[
+    ('Label', 16),
+    ('Route', 20),
+    ('Departs', 9),
+    ('Runs', 12),
+    ('Details', 11),
+    ('Active', 9),
+  ];
+
+  static const double _minTableWidth = 640;
+
+  Widget _cell(int column, Widget child) => Expanded(
+        flex: _columns[column].$2,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Align(alignment: Alignment.centerLeft, child: child),
+        ),
+      );
+
   Widget _buildTable() {
     final templates = _templates ?? [];
-    return Card(
-      elevation: 4,
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: templates.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(32.0),
-                child: Center(
-                    child: Text('No schedule templates yet.', style: TextStyle(color: Colors.white54))),
-              )
-            : SingleChildScrollView(
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: templates.isEmpty
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Text('No schedule templates yet. Add the first one with the form on the right.',
+                    textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
+              ),
+            )
+          : LayoutBuilder(builder: (context, c) {
+              final width = c.maxWidth < _minTableWidth ? _minTableWidth : c.maxWidth;
+              return SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
-                    dataRowMinHeight: 50,
-                    dataRowMaxHeight: 60,
-                    headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
-                    columns: const [
-                      DataColumn(label: Text('Label')),
-                      DataColumn(label: Text('Route')),
-                      DataColumn(label: Text('Departs')),
-                      DataColumn(label: Text('Runs')),
-                      DataColumn(label: Text('Active')),
+                child: SizedBox(
+                  width: width,
+                  height: c.maxHeight,
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 44,
+                        color: AppColors.surfaceSunken,
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                        child: Row(children: [
+                          for (var i = 0; i < _columns.length; i++)
+                            _cell(
+                              i,
+                              Text(_columns[i].$1,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+                            ),
+                        ]),
+                      ),
+                      const Divider(),
+                      Expanded(
+                        child: Scrollbar(
+                          controller: _rowsScroll,
+                          thumbVisibility: true,
+                          child: ListView.separated(
+                            controller: _rowsScroll,
+                            itemCount: templates.length,
+                            separatorBuilder: (_, _) => const Divider(),
+                            itemBuilder: (_, i) => _templateRow(templates[i]),
+                          ),
+                        ),
+                      ),
                     ],
-                    rows: templates.map((t) {
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(t.tripLabel ?? '—',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                          DataCell(Text(_routeName(t.routeId), style: const TextStyle(color: Colors.white70))),
-                          DataCell(Text(t.departureTime.substring(0, 5),
-                              style: const TextStyle(color: Colors.white))),
-                          DataCell(Text(t.daysSummary, style: const TextStyle(color: Colors.white70))),
-                          DataCell(Switch(
-                            value: t.isActive,
-                            activeTrackColor: const Color(0xFF8FBCBB),
-                            onChanged: (v) => _toggleTemplate(t, v),
-                          )),
-                        ],
-                      );
-                    }).toList(),
                   ),
                 ),
+              );
+            }),
+    );
+  }
+
+  Widget _templateRow(ScheduleTemplate t) {
+    // An inactive slot is still listed -- it can be switched back on -- but
+    // reads as dormant, so the live timetable is what the eye picks out.
+    final ink = t.isActive ? AppColors.textPrimary : AppColors.textMuted;
+    return SizedBox(
+      height: 56,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+        child: Row(children: [
+          _cell(0, Text(t.tripLabel ?? '—',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w700, color: ink))),
+          _cell(1, Text(_routeName(t.routeId), overflow: TextOverflow.ellipsis, style: TextStyle(color: ink))),
+          _cell(2, Text(t.departureTime.substring(0, 5),
+              style: TextStyle(color: ink, fontFeatures: const [FontFeature.tabularFigures()]))),
+          _cell(3, Text(t.daysSummary, overflow: TextOverflow.ellipsis, style: TextStyle(color: ink))),
+          _cell(
+            4,
+            OutlinedButton.icon(
+              onPressed: () => _showDetails(t),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 34),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               ),
+              icon: const Icon(Icons.badge_outlined, size: 16),
+              label: const Text('Details'),
+            ),
+          ),
+          _cell(
+            5,
+            Tooltip(
+              message: t.isActive ? 'Active: included when trips are generated' : 'Inactive: skipped',
+              child: Switch(
+                value: t.isActive,
+                onChanged: (v) => _toggleTemplate(t, v),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Who and what a slot runs with.
+///
+/// Read-only, and resolved from the roster the screen already loaded, so
+/// opening it costs no request. An unassigned role is said plainly along
+/// with its consequence, rather than shown as a blank: a generated trip
+/// with no van cannot board anyone until dispatch assigns one.
+class _TemplateDetailsDialog extends StatelessWidget {
+  const _TemplateDetailsDialog({
+    required this.template,
+    required this.routeName,
+    this.van,
+    this.driver,
+    this.conductor,
+  });
+
+  final ScheduleTemplate template;
+  final String routeName;
+  final Van? van;
+  final StaffMember? driver;
+  final StaffMember? conductor;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = template;
+    String date(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    return AlertDialog(
+      title: Text(t.tripLabel ?? 'Schedule template'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$routeName · departs ${t.departureTime.substring(0, 5)} · ${t.daysSummary}',
+                style: const TextStyle(color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Valid from ${date(t.validFrom)}'
+                '${t.validUntil != null ? ' until ${date(t.validUntil!)}' : ', no end date'}'
+                ' · ${t.isActive ? 'Active' : 'Inactive'}',
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              _AssignmentBlock(
+                icon: Icons.airport_shuttle_outlined,
+                role: 'Van',
+                assigned: t.defaultVanId != null,
+                title: van?.plateNumber,
+                lines: [
+                  if (van != null) ...[
+                    [van!.brand, van!.model].whereType<String>().join(' ').trim().isEmpty
+                        ? 'Make not recorded'
+                        : [van!.brand, van!.model].whereType<String>().join(' '),
+                    '${van!.seatCapacity} seats',
+                  ],
+                ],
+                status: van?.operationalStatus,
+                unassignedNote: 'Generated trips start without a van. Assign one in the Trip Dispatcher '
+                    'before boarding opens.',
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _AssignmentBlock(
+                icon: Icons.person_outline,
+                role: 'Driver',
+                assigned: t.defaultDriverId != null,
+                title: driver?.fullName,
+                lines: [
+                  if (driver?.phoneNumber != null) driver!.phoneNumber!,
+                  if (driver?.licenseNumber != null)
+                    'Licence ${driver!.licenseNumber}'
+                        '${driver!.licenseExpiryDate != null ? ' · expires ${date(driver!.licenseExpiryDate!)}' : ''}',
+                ],
+                status: driver?.employmentStatus,
+                unassignedNote: 'No default driver. Each generated trip needs one assigned by dispatch.',
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _AssignmentBlock(
+                icon: Icons.confirmation_number_outlined,
+                role: 'Conductor',
+                assigned: t.defaultConductorId != null,
+                title: conductor?.fullName,
+                lines: [
+                  if (conductor?.phoneNumber != null) conductor!.phoneNumber!,
+                ],
+                status: conductor?.employmentStatus,
+                unassignedNote: 'No default conductor. Each generated trip needs one assigned by dispatch.',
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+      ],
+    );
+  }
+}
+
+/// One role in the details dialog: assigned, unassigned, or assigned to
+/// someone no longer in the roster.
+class _AssignmentBlock extends StatelessWidget {
+  const _AssignmentBlock({
+    required this.icon,
+    required this.role,
+    required this.assigned,
+    required this.title,
+    required this.lines,
+    required this.status,
+    required this.unassignedNote,
+  });
+
+  final IconData icon;
+  final String role;
+  final bool assigned;
+  final String? title;
+  final List<String> lines;
+  final String? status;
+  final String unassignedNote;
+
+  @override
+  Widget build(BuildContext context) {
+    // Three states, never a blank: assigned, not assigned, or assigned to
+    // an id the roster no longer returns.
+    final missing = assigned && title == null;
+    final inactive = status != null && status != 'active';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: assigned ? AppColors.surfaceRaised : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 22, color: assigned ? AppColors.textPrimary : AppColors.textMuted),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(role.toUpperCase(),
+                    style: const TextStyle(
+                        fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.textMuted)),
+                const SizedBox(height: 2),
+                if (!assigned) ...[
+                  const Text('Not assigned',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
+                  const SizedBox(height: 2),
+                  Text(unassignedNote, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                ] else if (missing)
+                  const Text('Assigned record not found in the roster.',
+                      style: TextStyle(fontSize: 14, color: AppColors.warning))
+                else ...[
+                  Row(children: [
+                    Flexible(
+                      child: Text(title!,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    ),
+                    if (inactive) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.warningContainer,
+                          borderRadius: BorderRadius.circular(AppRadius.full),
+                        ),
+                        child: Text(status!.toUpperCase(),
+                            style: const TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning)),
+                      ),
+                    ],
+                  ]),
+                  for (final l in lines)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(l, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,8 +599,8 @@ class _GenerateTripsDialogState extends State<_GenerateTripsDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF222736),
-      title: const Text('Generate Trips', style: TextStyle(color: Colors.white)),
+      backgroundColor: AppColors.surfaceRaised,
+      title: const Text('Generate Trips', style: TextStyle(color: AppColors.textPrimary)),
       content: SizedBox(
         width: 320,
         child: Column(
@@ -310,20 +608,20 @@ class _GenerateTripsDialogState extends State<_GenerateTripsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Materialise trips from every active template, starting today.',
-                style: TextStyle(color: Colors.white70, fontSize: 13)),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text('Days ahead:', style: TextStyle(color: Colors.white)),
+                const Text('Days ahead:', style: TextStyle(color: AppColors.textPrimary)),
                 const Spacer(),
                 IconButton(
                   onPressed: _daysAhead > 1 ? () => setState(() => _daysAhead--) : null,
-                  icon: const Icon(Icons.remove_circle_outline, color: Colors.white54),
+                  icon: const Icon(Icons.remove_circle_outline, color: AppColors.textMuted),
                 ),
-                Text('$_daysAhead', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                Text('$_daysAhead', style: const TextStyle(color: AppColors.textPrimary, fontSize: 16)),
                 IconButton(
                   onPressed: _daysAhead < 30 ? () => setState(() => _daysAhead++) : null,
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.white54),
+                  icon: const Icon(Icons.add_circle_outline, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -341,13 +639,18 @@ class _GenerateTripsDialogState extends State<_GenerateTripsDialog> {
   }
 }
 
-class _AddTemplateDialog extends StatefulWidget {
-  const _AddTemplateDialog({
+/// The "new template" form, as a card beside the table rather than a
+/// dialog -- the same arrangement as "Dispatch Special Trip", so the two
+/// screens that create departures are laid out alike. After a successful
+/// create it clears itself for the next slot instead of closing.
+class _NewTemplateCard extends StatefulWidget {
+  const _NewTemplateCard({
     required this.schedule,
     required this.routes,
     required this.vans,
     required this.drivers,
     required this.conductors,
+    required this.onCreated,
   });
 
   final ScheduleRepository schedule;
@@ -355,14 +658,17 @@ class _AddTemplateDialog extends StatefulWidget {
   final List<Van> vans;
   final List<StaffMember> drivers;
   final List<StaffMember> conductors;
+  final Future<void> Function() onCreated;
 
   @override
-  State<_AddTemplateDialog> createState() => _AddTemplateDialogState();
+  State<_NewTemplateCard> createState() => _NewTemplateCardState();
 }
 
-class _AddTemplateDialogState extends State<_AddTemplateDialog> {
+class _NewTemplateCardState extends State<_NewTemplateCard> {
+  static const _defaultTime = TimeOfDay(hour: 5, minute: 30);
+
   String? _routeId;
-  TimeOfDay _time = const TimeOfDay(hour: 5, minute: 30);
+  TimeOfDay _time = _defaultTime;
   final _label = TextEditingController();
   String? _vanId;
   String? _driverId;
@@ -370,14 +676,28 @@ class _AddTemplateDialogState extends State<_AddTemplateDialog> {
   // Monday-first mask.
   final List<bool> _days = List.filled(7, true);
   bool _submitting = false;
+  int _epoch = 0;
   String? _error;
 
   static const _dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  static const _dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   @override
   void dispose() {
     _label.dispose();
     super.dispose();
+  }
+
+  void _reset() {
+    _routeId = null;
+    _time = _defaultTime;
+    _label.clear();
+    _vanId = null;
+    _driverId = null;
+    _conductorId = null;
+    _days.fillRange(0, 7, true);
+    _epoch++;
+    _error = null;
   }
 
   Future<void> _submit() async {
@@ -405,9 +725,11 @@ class _AddTemplateDialogState extends State<_AddTemplateDialog> {
         defaultConductorId: _conductorId,
         tripLabel: _label.text,
       );
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      setState(_reset);
+      await widget.onCreated();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -415,127 +737,137 @@ class _AddTemplateDialogState extends State<_AddTemplateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF222736),
-      title: const Text('New Schedule Template', style: TextStyle(color: Colors.white)),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_error != null) ...[
-                Text(_error!, style: const TextStyle(color: Color(0xFFBF616A))),
-                const SizedBox(height: 12),
-              ],
-              DropdownButtonFormField<String>(
-                decoration: _decoration('Route'),
-                dropdownColor: const Color(0xFF2C3244),
-                style: const TextStyle(color: Colors.white),
-                isExpanded: true,
-                value: _routeId,
-                items: widget.routes
-                    .map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName)))
-                    .toList(),
-                onChanged: (v) => setState(() => _routeId = v),
-              ),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: () async {
-                  final picked = await showTimePicker(context: context, initialTime: _time);
-                  if (picked != null) setState(() => _time = picked);
-                },
-                child: InputDecorator(
-                  decoration: _decoration('Departure Time'),
-                  child: Text(_time.format(context), style: const TextStyle(color: Colors.white)),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('New Schedule Template',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            const SizedBox(height: 4),
+            const Text('A standing slot on the timetable, with its default van and crew.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+            const SizedBox(height: AppSpacing.xl),
+            if (_error != null) ...[
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: AppColors.danger),
                 ),
+                child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
               ),
-              const SizedBox(height: 12),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Runs on', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Route'),
+              isExpanded: true,
+              initialValue: _routeId,
+              // Keyed by a reset counter, so clearing the form after a create
+              // really clears it: initialValue is read only when built.
+              key: ValueKey('route-$_epoch'),
+              items: widget.routes
+                  .map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName)))
+                  .toList(),
+              onChanged: (v) => setState(() => _routeId = v),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              onTap: () async {
+                final picked = await showTimePicker(context: context, initialTime: _time);
+                if (picked != null) setState(() => _time = picked);
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Departure Time',
+                  suffixIcon: Icon(Icons.schedule),
+                ),
+                child: Text(_time.format(context)),
               ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                children: List.generate(7, (i) {
-                  return FilterChip(
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const Text('Runs on', style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: List.generate(7, (i) {
+                return Tooltip(
+                  message: _dayNames[i],
+                  child: FilterChip(
                     label: Text(_dayLabels[i]),
                     selected: _days[i],
+                    showCheckmark: false,
                     onSelected: (v) => setState(() => _days[i] = v),
-                    selectedColor: const Color(0xFF8FBCBB),
-                    backgroundColor: const Color(0xFF151923),
-                    labelStyle: TextStyle(color: _days[i] ? const Color(0xFF151923) : Colors.white70),
-                  );
-                }),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _label,
-                style: const TextStyle(color: Colors.white),
-                decoration: _decoration('Trip Label (optional)'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                decoration: _decoration('Default Van (optional)'),
-                dropdownColor: const Color(0xFF2C3244),
-                style: const TextStyle(color: Colors.white),
-                isExpanded: true,
-                value: _vanId,
-                items: widget.vans
-                    .map((v) => DropdownMenuItem(value: v.vanId, child: Text(v.plateNumber)))
-                    .toList(),
-                onChanged: (v) => setState(() => _vanId = v),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                decoration: _decoration('Default Driver (optional)'),
-                dropdownColor: const Color(0xFF2C3244),
-                style: const TextStyle(color: Colors.white),
-                isExpanded: true,
-                value: _driverId,
-                items: widget.drivers
-                    .map((d) => DropdownMenuItem(value: d.userId, child: Text(d.fullName)))
-                    .toList(),
-                onChanged: (v) => setState(() => _driverId = v),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                decoration: _decoration('Default Conductor (optional)'),
-                dropdownColor: const Color(0xFF2C3244),
-                style: const TextStyle(color: Colors.white),
-                isExpanded: true,
-                value: _conductorId,
-                items: widget.conductors
-                    .map((c) => DropdownMenuItem(value: c.userId, child: Text(c.fullName)))
-                    .toList(),
-                onChanged: (v) => setState(() => _conductorId = v),
-              ),
-            ],
-          ),
+                    labelStyle: TextStyle(
+                      color: _days[i] ? Colors.white : AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _label,
+              decoration: const InputDecoration(labelText: 'Trip Label (optional)'),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Default Van (optional)'),
+              isExpanded: true,
+              initialValue: _vanId,
+              key: ValueKey('van-$_epoch'),
+              items: widget.vans
+                  .map((v) => DropdownMenuItem(value: v.vanId, child: Text(v.plateNumber)))
+                  .toList(),
+              onChanged: (v) => setState(() => _vanId = v),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Default Driver (optional)'),
+              isExpanded: true,
+              initialValue: _driverId,
+              key: ValueKey('driver-$_epoch'),
+              items: widget.drivers
+                  .map((d) => DropdownMenuItem(value: d.userId, child: Text(d.fullName)))
+                  .toList(),
+              onChanged: (v) => setState(() => _driverId = v),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Default Conductor (optional)'),
+              isExpanded: true,
+              initialValue: _conductorId,
+              key: ValueKey('conductor-$_epoch'),
+              items: widget.conductors
+                  .map((c) => DropdownMenuItem(value: c.userId, child: Text(c.fullName)))
+                  .toList(),
+              onChanged: (v) => setState(() => _conductorId = v),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            FilledButton.icon(
+              onPressed: _submitting ? null : _submit,
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              icon: _submitting
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.add),
+              label: const Text('Create Template'),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _submitting ? null : _submit,
-          child: _submitting
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Create'),
-        ),
-      ],
     );
   }
-
-  InputDecoration _decoration(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54),
-        filled: true,
-        fillColor: const Color(0xFF151923),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-      );
 }

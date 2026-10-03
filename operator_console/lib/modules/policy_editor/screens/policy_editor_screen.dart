@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/policy_repository.dart';
+import '../../../core/design/tokens.dart';
 
 /// Cooperative-wide settings, as data rather than a redeploy.
 ///
@@ -71,8 +72,8 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${policy.policyKey} updated.'),
-          backgroundColor: const Color(0xFF8FBCBB),
+          content: const Text('Saved. Trips generated from now on use the new value.'),
+          backgroundColor: AppColors.primary,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -102,12 +103,12 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
             children: [
               const Text(
                 'Cooperative Policies',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
               ),
               const Spacer(),
               IconButton(
                 onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh, color: Colors.white70),
+                icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
                 tooltip: 'Refresh',
               ),
             ],
@@ -115,7 +116,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
           const SizedBox(height: 4),
           const Text(
             'Changes here apply to trips generated from now on -- already-booked trips keep the terms they were sold under.',
-            style: TextStyle(fontSize: 12, color: Colors.white54),
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -137,7 +138,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
         children: [
           Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
           const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: Colors.white70)),
+          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
           const SizedBox(height: 12),
           ElevatedButton(onPressed: _load, child: const Text('Retry')),
         ],
@@ -169,9 +170,9 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(policy.policyKey,
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 14)),
                       const SizedBox(height: 4),
-                      Text(policy.description, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text(policy.description, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -180,15 +181,11 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
                   width: 140,
                   child: TextField(
                     controller: controller,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: AppColors.textPrimary),
                     onSubmitted: (_) => _save(policy),
                     decoration: InputDecoration(
                       isDense: true,
                       suffixText: policy.dataType == 'decimal' ? '₱' : null,
-                      filled: true,
-                      fillColor: const Color(0xFF151923),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                     ),
                   ),
                 ),
@@ -199,7 +196,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : IconButton(
                           onPressed: () => _save(policy),
-                          icon: const Icon(Icons.save_outlined, color: Color(0xFF8FBCBB)),
+                          icon: const Icon(Icons.save_outlined, color: AppColors.primary),
                           tooltip: 'Save',
                         ),
                 ),
