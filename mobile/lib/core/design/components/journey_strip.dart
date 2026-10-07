@@ -100,14 +100,14 @@ class JourneyMarker extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primary, width: 2.5),
+              border: Border.all(color: AppColors.brand, width: 2.5),
             ),
           ),
         JourneyEnd.alighting => Container(
             width: size,
             height: size,
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              color: AppColors.brand,
               borderRadius: BorderRadius.circular(3),
             ),
           ),

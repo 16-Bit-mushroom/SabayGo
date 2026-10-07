@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/design/components/brand_logo.dart';
 import 'core/design/tokens.dart';
 import 'core/design/theme.dart';
 import 'core/network/api_client.dart';
@@ -114,29 +115,20 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Same white surface and mark as the welcome screen that usually
+    // follows it, so the hand-off between the two does not flash.
     return const Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: AppColors.surfaceRaised,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              'SabayGo',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 34,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-              ),
-            ),
+            BrandLogo(),
             SizedBox(height: 24),
             SizedBox(
               width: 22,
               height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Colors.white70,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2.5),
             ),
           ],
         ),

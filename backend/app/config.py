@@ -85,7 +85,13 @@ class Settings(BaseSettings):
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
 
-    cors_origins: list[str] = ["http://localhost:8080", "http://localhost:3000"]
+    cors_origins: list[str] = [
+        "http://localhost:8080",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+    ]
 
     @field_validator("database_url")
     @classmethod

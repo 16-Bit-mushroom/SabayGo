@@ -207,7 +207,7 @@ class _SosSheetState extends State<_SosSheet> {
           Row(
             children: [
               Icon(r.duplicate ? Icons.info_outline : Icons.check_circle,
-                  color: AppColors.accent),
+                  color: AppColors.success),
               const SizedBox(width: 8),
               Text(r.duplicate ? 'Already reported' : 'Alert sent',
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),

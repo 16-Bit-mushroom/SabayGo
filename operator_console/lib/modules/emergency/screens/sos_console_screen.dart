@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/sos_repository.dart';
+import '../../../core/design/tokens.dart';
 
 /// The office's emergency desk (spec 2.3.5).
 ///
@@ -92,7 +93,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: error ? const Color(0xFFBF616A) : null,
+      backgroundColor: error ? AppColors.danger : null,
     ));
   }
 
@@ -102,7 +103,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
     final openCount = rows.where((a) => !a.isResolved).length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F8),
+      backgroundColor: AppColors.surface,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -110,7 +111,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
           if (_error != null)
             Container(
               width: double.infinity,
-              color: const Color(0xFFBF616A).withValues(alpha: 0.1),
+              color: AppColors.dangerContainer,
               padding: const EdgeInsets.all(12),
               child: Text('Could not load alerts: $_error'),
             ),
@@ -139,7 +140,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
         child: Row(
           children: [
             Icon(Icons.emergency_share,
-                color: openCount > 0 ? const Color(0xFFBF616A) : Colors.black38),
+                color: openCount > 0 ? AppColors.danger : AppColors.textMuted),
             const SizedBox(width: 10),
             Text(
               _showResolved ? 'Closed emergencies' : 'Open emergencies',
@@ -149,7 +150,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
               const SizedBox(width: 12),
               Chip(
                 label: Text('$openCount needing attention'),
-                backgroundColor: const Color(0xFFBF616A),
+                backgroundColor: AppColors.danger,
                 labelStyle: const TextStyle(color: Colors.white, fontSize: 12),
                 side: BorderSide.none,
               ),
@@ -181,7 +182,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
           _showResolved
               ? 'No emergency has been closed yet.'
               : 'No open emergencies. Crew and passengers can raise one from the app.',
-          style: const TextStyle(color: Colors.black54),
+          style: const TextStyle(color: AppColors.textMuted),
         ),
       );
 }
@@ -208,7 +209,7 @@ class _AlertCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(
-          color: urgent ? const Color(0xFFBF616A) : Colors.black12,
+          color: urgent ? AppColors.danger : AppColors.divider,
           width: urgent ? 1.5 : 1,
         ),
       ),
@@ -227,7 +228,7 @@ class _AlertCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(_time.format(alert.raisedAt),
-                    style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
             const SizedBox(height: 10),
@@ -235,12 +236,12 @@ class _AlertCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w700)),
             if (alert.raisedByPhone != null)
               Text(alert.raisedByPhone!,
-                  style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
             if (alert.tripLabel != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(alert.tripLabel!,
-                    style: const TextStyle(color: Colors.black87, fontSize: 13)),
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
               ),
             if (alert.note != null)
               Padding(
@@ -258,14 +259,14 @@ class _AlertCard extends StatelessWidget {
                 child: Text(
                   'Acknowledged by ${alert.acknowledgedBy}'
                   '${alert.acknowledgedAt == null ? '' : ' at ${_time.format(alert.acknowledgedAt!)}'}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ),
             if (alert.resolutionNotes != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text('Closed: ${alert.resolutionNotes}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
               ),
             if (!alert.isResolved) ...[
               const SizedBox(height: 12),
@@ -296,10 +297,10 @@ class _AlertCard extends StatelessWidget {
     if (!alert.hasLocation) {
       return const Row(
         children: [
-          Icon(Icons.location_off, size: 16, color: Colors.black38),
+          Icon(Icons.location_off, size: 16, color: AppColors.textMuted),
           SizedBox(width: 6),
           Text('No location — the handset could not provide a fix.',
-              style: TextStyle(fontSize: 12, color: Colors.black54)),
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
         ],
       );
     }
@@ -307,7 +308,7 @@ class _AlertCard extends StatelessWidget {
         alert.accuracyM == null ? '' : ' (±${alert.accuracyM!.round()} m)';
     return Row(
       children: [
-        const Icon(Icons.place, size: 16, color: Color(0xFF5E81AC)),
+        const Icon(Icons.place, size: 16, color: AppColors.info),
         const SizedBox(width: 6),
         Flexible(
           child: SelectableText(
@@ -325,12 +326,12 @@ class _AlertCard extends StatelessWidget {
     if (alert.smsAttempted == 0) {
       return const Row(
         children: [
-          Icon(Icons.sms_failed_outlined, size: 16, color: Color(0xFFD08770)),
+          Icon(Icons.sms_failed_outlined, size: 16, color: AppColors.warning),
           SizedBox(width: 6),
           Expanded(
             child: Text(
               'No SMS was attempted — set sos_contact_numbers in Policies.',
-              style: TextStyle(fontSize: 12, color: Color(0xFFBF616A)),
+              style: TextStyle(fontSize: 12, color: AppColors.danger),
             ),
           ),
         ],
@@ -353,7 +354,7 @@ class _AlertCard extends StatelessWidget {
               '${d.error == null ? '' : ' — ${d.error}'}',
               style: TextStyle(
                 fontSize: 11,
-                color: d.status == 'sent' ? Colors.black54 : const Color(0xFFBF616A),
+                color: d.status == 'sent' ? AppColors.textMuted : AppColors.danger,
               ),
             ),
           ),
@@ -369,9 +370,9 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, label) = switch (status) {
-      'open' => (const Color(0xFFBF616A), 'OPEN'),
-      'acknowledged' => (const Color(0xFFD08770), 'RESPONDING'),
-      _ => (const Color(0xFFA3BE8C), 'CLOSED'),
+      'open' => (AppColors.danger, 'OPEN'),
+      'acknowledged' => (AppColors.warning, 'RESPONDING'),
+      _ => (AppColors.success, 'CLOSED'),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

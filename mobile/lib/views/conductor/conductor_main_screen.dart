@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/brand_logo.dart';
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/auth_repository.dart';
@@ -152,48 +154,34 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
       value: _shift,
       child: Scaffold(
         appBar: AppBar(
-          // Crew chrome stays brand purple where the passenger's went light.
-          // Two reasons, one practical: this header carries white-on-purple
-          // content (the shift block, the SOS control), and a conductor
-          // glancing at a phone in daylight between passengers benefits from
-          // the app announcing which side of the system they are in. The
-          // passenger app has one role and needs no such signal.
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          titleSpacing: 16,
-          centerTitle: false,
+          // Light, like every other screen (3 Oct). The crew bar used to be
+          // a solid brand block to say "this is the crew side"; after the
+          // rebrand that block was black, the heaviest thing on a screen
+          // read in direct sun, and it forced every icon in it to white.
+          // The role is now said in words, on a chip, which survives glare
+          // better than a background colour does.
+          titleSpacing: AppSpacing.gutter,
           title: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  isDriver ? Icons.airline_seat_recline_normal : Icons.storefront,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    profile?.displayName ?? 'SabayGo',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: Colors.white,
+              const BrandLogo(height: 30),
+              const SizedBox(width: AppSpacing.md),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      profile?.displayName ?? 'SabayGo',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                     ),
-                  ),
-                  Text(
-                    isDriver ? 'Driver' : 'Conductor',
-                    style: const TextStyle(fontSize: 12, color: Colors.white70),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    StatusChip(
+                      isDriver ? 'DRIVER' : 'CONDUCTOR',
+                      tone: StatusTone.brand,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -210,7 +198,6 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
                     label: Text('$unread'),
                     child: Icon(
                       unread > 0 ? Icons.chat_bubble : Icons.chat_bubble_outline,
-                      color: Colors.white,
                     ),
                   ),
                 );
@@ -228,7 +215,6 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
                     label: Text('$unread'),
                     child: Icon(
                       unread > 0 ? Icons.notifications_active : Icons.notifications_none,
-                      color: Colors.white,
                     ),
                   ),
                 );
@@ -236,7 +222,7 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
             ),
             IconButton(
               tooltip: 'End shift',
-              icon: const Icon(Icons.logout, color: Colors.white),
+              icon: const Icon(Icons.logout),
               onPressed: _confirmSignOut,
             ),
             const SizedBox(width: 4),
@@ -247,7 +233,7 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
         // stays reachable from the list, not only from inside a manifest.
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _openScanner,
-          backgroundColor: AppColors.accent,
+          backgroundColor: AppColors.success,
           foregroundColor: Colors.white,
           icon: const Icon(Icons.qr_code_scanner),
           label: const Text('Scan', style: TextStyle(fontWeight: FontWeight.w700)),

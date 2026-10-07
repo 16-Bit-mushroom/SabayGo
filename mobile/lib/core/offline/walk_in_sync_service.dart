@@ -54,6 +54,7 @@ class WalkInSyncService extends ChangeNotifier {
   int pendingCountFor(String tripId) => pendingFor(tripId).length;
 
   Future<void> loadPendingCounts() async {
+    if (!WalkInQueue.isSupported) return;
     final items = await _queue.all();
     _pendingByTrip.clear();
     for (final item in items) {

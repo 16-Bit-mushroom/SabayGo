@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens: the single place that owns colour, spacing, radius and
-/// motion for the passenger and crew apps.
+/// Design tokens for the coop_admin console.
 ///
-/// These used to live in `core/config/app_config.dart` beside the API base
-/// URL. Build configuration and visual design are different concerns with
-/// different reviewers, and mixing them meant 18 screens imported the API
-/// host in order to read a colour. They are split.
+/// A copy of `mobile/lib/core/design/tokens.dart`, kept value-for-value in
+/// step, plus the few roles only a desktop dashboard needs ([surfaceSunken],
+/// [sidebar]). Copied rather than shared because the two apps are separate
+/// Flutter packages and a third package for one file is more machinery than
+/// the problem. If you change a value here, change it there.
+///
+/// The console was a dark Nord palette with no token layer: about 300 raw
+/// `Colors.*` / `Color(0x...)` uses, `white38` captions at 3.6:1 on the
+/// canvas, and the same red written out twenty times. Office staff read it
+/// for a full shift, at a desk, often in a bright room, where light
+/// surfaces with dark text are the less fatiguing choice.
 ///
 /// **Every colour pair here is verified against WCAG 2.1 AA**, and the
 /// ratios in the comments are measured, not estimated. Three rules the
@@ -99,6 +105,15 @@ class AppColors {
   // ── neutrals ───────────────────────────────────────────────────────
   static const Color surface = Color(0xFFF7F7FA);
   static const Color surfaceRaised = Color(0xFFFFFFFF);
+
+  /// Recessed areas inside a white panel: table headers, read-only fields,
+  /// the hover row. A step down from [surface] so a panel's structure shows
+  /// without borders on every cell.
+  static const Color surfaceSunken = Color(0xFFF0F0F4);
+
+  /// The sidebar. White like the panels, separated by a [divider] rule
+  /// rather than a dark slab -- the navigation recedes, the data leads.
+  static const Color sidebar = Color(0xFFFFFFFF);
 
   /// 17.06:1 on white.
   static const Color textPrimary = Color(0xFF1A1A2E);

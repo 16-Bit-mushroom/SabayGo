@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/tracking_repository.dart';
+import '../../../core/design/tokens.dart';
 
 /// The cooperative's view of NAHGM: every van currently reporting, on one
 /// map, with the route of whichever one is selected.
@@ -128,7 +129,7 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
               Text(
                 '${_vans.length} reporting · refreshes every '
                 '${_refreshInterval.inSeconds}s',
-                style: const TextStyle(color: Colors.black54),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const Spacer(),
               TextButton.icon(
@@ -141,7 +142,7 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+              child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
             ),
           const SizedBox(height: 16),
           Expanded(
@@ -211,7 +212,7 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
             selected: selected,
             leading: Icon(
               Icons.local_shipping,
-              color: van.isStale ? Colors.orange.shade700 : Colors.green.shade700,
+              color: van.isStale ? AppColors.warning : AppColors.success,
             ),
             title: Text(van.label,
                 style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -229,9 +230,9 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
                     message: 'No recent position report',
                     child: Chip(
                       label: const Text('SILENT'),
-                      backgroundColor: Colors.orange.shade50,
+                      backgroundColor: AppColors.warningContainer,
                       labelStyle: TextStyle(
-                          fontSize: 11, color: Colors.orange.shade900),
+                          fontSize: 11, color: AppColors.warning),
                     ),
                   )
                 : null,
@@ -290,7 +291,7 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
             points: [
               for (final n in _selectedRoute) LatLng(n.latitude, n.longitude),
             ],
-            color: const Color(0xFF2D2059),
+            color: AppColors.primary,
             strokeWidth: 4,
           ),
       ];
@@ -305,7 +306,7 @@ class _NodePin extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFF2D2059),
+          color: AppColors.primary,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 2),
           boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
@@ -330,10 +331,10 @@ class _VanPin extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
         decoration: BoxDecoration(
           color: isStale
-              ? Colors.orange.shade700
+              ? AppColors.warning
               : isSelected
-                  ? const Color(0xFF88C0D0)
-                  : Colors.green.shade700,
+                  ? AppColors.primary
+                  : AppColors.success,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 3),
           boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 5)],
@@ -358,7 +359,7 @@ class _Notice extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 44, color: Colors.black38),
+              Icon(icon, size: 44, color: AppColors.textMuted),
               const SizedBox(height: 12),
               Text(title,
                   textAlign: TextAlign.center,
@@ -367,7 +368,7 @@ class _Notice extends StatelessWidget {
               const SizedBox(height: 6),
               Text(detail,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.black54)),
+                  style: const TextStyle(color: AppColors.textMuted)),
             ],
           ),
         ),

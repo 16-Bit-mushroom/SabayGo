@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 
@@ -32,6 +33,10 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   late final OperationsRepository _ops;
   bool _busy = false;
   int _accepted = 0;
+
+  /// Long enough to read "Boarded" and the ticket number, short enough
+  /// that the next passenger is not kept waiting.
+  static const _autoCloseAfter = Duration(milliseconds: 1400);
 
   @override
   void initState() {
@@ -75,7 +80,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   }
 
   Future<void> _showVerdict(ScanVerdict v) {
-    final colour = v.accepted ? AppColors.accent : AppColors.danger;
+    final colour = v.accepted ? AppColors.success : AppColors.danger;
     final title = switch (v.result) {
       _ when v.accepted => 'Boarded',
       'already_boarded' => 'Already aboard',
@@ -87,16 +92,61 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       _ => 'Refused',
     };
 
+    // Felt, not only seen: the conductor's eyes are on the passenger and
+    // the door, and the yard is too loud for a beep. One light tap for a
+    // good ticket; two heavy ones for anything that needs attention, so
+    // the two can be told apart without looking.
+    if (v.accepted) {
+      HapticFeedback.lightImpact();
+    } else {
+      HapticFeedback.heavyImpact();
+      Future<void>.delayed(const Duration(milliseconds: 140), HapticFeedback.heavyImpact);
+    }
+
+    // An accepted ticket clears itself after a beat, so a queue of good
+    // tickets is scan, scan, scan -- the old sheet needed a tap for every
+    // passenger. A refusal stays until dismissed: that one has to be read
+    // and acted on. Screen-reader users keep the manual close, since a
+    // sheet that vanishes mid-announcement takes its message with it.
+    final autoClose = v.accepted && !MediaQuery.of(context).accessibleNavigation;
+    var open = true;
+    void close(BuildContext ctx) {
+      if (!open) return;
+      open = false;
+      Navigator.pop(ctx);
+    }
+
     return showModalBottomSheet<void>(
       context: context,
       isDismissible: false,
       enableDrag: false,
-      builder: (ctx) => Padding(
+      builder: (ctx) {
+        if (autoClose) {
+          Future<void>.delayed(_autoCloseAfter, () {
+            if (ctx.mounted) close(ctx);
+          });
+        }
+        return Padding(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Shows the sheet is about to go by itself, so its closing is
+            // expected rather than a surprise.
+            if (autoClose) ...[
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 1, end: 0),
+                duration: _autoCloseAfter,
+                builder: (_, value, _) => LinearProgressIndicator(
+                  value: value,
+                  minHeight: 3,
+                  color: colour,
+                  backgroundColor: AppColors.divider,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             Row(
               children: [
                 Icon(v.accepted ? Icons.check_circle : Icons.cancel, color: colour, size: 36),
@@ -116,13 +166,14 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             ],
             const SizedBox(height: 24),
             FilledButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () => close(ctx),
               style: FilledButton.styleFrom(backgroundColor: colour),
               child: const Text('Next passenger', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             ),
           ],
         ),
-      ),
+      );
+      },
     );
   }
 

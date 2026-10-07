@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/design/components/brand_logo.dart';
 import '../../core/design/tokens.dart';
 import '../../viewmodels/auth_provider.dart';
 import 'signup_screen.dart';
@@ -63,6 +64,13 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // The mark, once, so a passenger who arrives here from a
+                // deep link still knows whose sign-in this is.
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: BrandLogo(height: BrandLogoSize.header),
+                ),
+                const SizedBox(height: AppSpacing.xl),
                 Text('Welcome back',
                     style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: AppSpacing.xs + 2),

@@ -39,7 +39,13 @@ class AuthProvider extends ChangeNotifier {
   /// verified against /auth/me rather than trusted. Trusting it would
   /// mean the first real request fails instead, mid-task.
   Future<void> restore() async {
-    if (!await _tokens.hasSession()) {
+    bool hasSession;
+    try {
+      hasSession = await _tokens.hasSession();
+    } catch (_) {
+      hasSession = false; // unreadable storage is no session
+    }
+    if (!hasSession) {
       _set(AuthStatus.signedOut);
       return;
     }
@@ -49,6 +55,16 @@ class AuthProvider extends ChangeNotifier {
       _set(AuthStatus.signedIn);
     } on ApiException {
       await _tokens.clear();
+      _set(AuthStatus.signedOut);
+    } catch (_) {
+      // Anything else -- secure storage that cannot decrypt on web after
+      // site data was partly cleared, a response that does not parse --
+      // used to escape this method and leave the status `unknown`, which
+      // is the splash spinner, forever. A launch must always land on a
+      // screen; falling back to sign-in is the honest one.
+      try {
+        await _tokens.clear();
+      } catch (_) {}
       _set(AuthStatus.signedOut);
     }
   }
@@ -71,6 +87,12 @@ class AuthProvider extends ChangeNotifier {
       // phone number is already registered" -- so they are shown as-is
       // rather than replaced with a generic string.
       _fail(e.message);
+      return false;
+    } catch (_) {
+      // Not an API error (storage, parsing). Without this the button
+      // stopped spinning and nothing else happened -- no screen, no
+      // message -- which reads exactly like being stuck.
+      _fail('Could not finish signing in on this device. Please try again.');
       return false;
     } finally {
       _busy = false;

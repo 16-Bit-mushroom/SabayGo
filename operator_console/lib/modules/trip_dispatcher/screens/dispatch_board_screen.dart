@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/fleet_repository.dart';
+import '../../../core/design/tokens.dart';
 
 /// Trip dispatch, as the backend actually models it.
 ///
@@ -39,6 +40,13 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
   String? _conductorId;
   TimeOfDay _departureTime = TimeOfDay.now();
   bool _dispatching = false;
+  final _rowsScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _rowsScroll.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -141,12 +149,12 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
                 children: [
                   const Text(
                     'Trip Dispatch Command',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: _loading ? null : _load,
-                    icon: const Icon(Icons.refresh, color: Colors.white70),
+                    icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
                     tooltip: 'Refresh',
                   ),
                 ],
@@ -190,7 +198,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
         children: [
           Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
           const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: Colors.white70)),
+          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
           const SizedBox(height: 12),
           ElevatedButton(onPressed: _load, child: const Text('Retry')),
         ],
@@ -198,87 +206,170 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
     );
   }
 
+  /// Today's departures: full width, headings pinned.
+  ///
+  /// Same flex table as Revenue, Schedules and Audits, for the same reason:
+  /// a [DataTable] is only as wide as its columns, so its heading strip
+  /// stopped at "Status" while the card ran on to the right. The card also
+  /// shrinks to its rows now instead of standing full height with a blank
+  /// band at the bottom.
   Widget _buildTripsGrid() {
     final trips = _trips ?? [];
-    return Card(
-      elevation: 4,
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text("Today's Departures",
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+    const columns = <(String, int, bool)>[
+      ('Route', 26, false),
+      ('Van', 13, false),
+      ('Departs', 13, true),
+      ('Bookings', 12, true),
+      ('Status', 15, false),
+    ];
+    const minWidth = 560.0;
+
+    Widget cell(int i, Widget child) {
+      final (_, flex, numeric) = columns[i];
+      return Expanded(
+        flex: flex,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Align(
+            alignment: numeric ? Alignment.centerRight : Alignment.centerLeft,
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    const figures = TextStyle(
+      color: AppColors.textPrimary,
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+
+    Widget heading() => Container(
+          height: 44,
+          color: AppColors.surfaceSunken,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: Row(children: [
+            for (var i = 0; i < columns.length; i++)
+              cell(
+                i,
+                Text(columns[i].$1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+              ),
+          ]),
+        );
+
+    Widget row(TripBoardRow trip) {
+      final departed = trip.hasDeparted;
+      return SizedBox(
+        height: 52,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: Row(children: [
+            cell(
+              0,
+              Text(trip.routeName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
             ),
-            if (trips.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32.0),
-                child: Center(
-                    child: Text('No departures today.', style: TextStyle(color: Colors.white54))),
-              )
-            else
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(const Color(0xFF2C3244)),
-                    dataRowMinHeight: 50,
-                    dataRowMaxHeight: 60,
-                    headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
-                    columns: const [
-                      DataColumn(label: Text('Route')),
-                      DataColumn(label: Text('Van')),
-                      DataColumn(label: Text('Departs')),
-                      DataColumn(label: Text('Bookings')),
-                      DataColumn(label: Text('Status')),
-                    ],
-                    rows: trips.map((trip) {
-                      final departed = trip.hasDeparted;
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(trip.routeName,
-                              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white))),
-                          DataCell(Text(trip.plateNumber ?? '—',
-                              style: const TextStyle(color: Colors.white70))),
-                          DataCell(Text(DateFormat.jm().format(trip.departureDatetime),
-                              style: const TextStyle(color: Colors.white))),
-                          DataCell(Text('${trip.totalBookings}/${trip.seatCapacity}',
-                              style: const TextStyle(color: Colors.white70))),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: (departed ? const Color(0xFF88C0D0) : const Color(0xFFEBCB8B))
-                                    .withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: departed ? const Color(0xFF88C0D0) : const Color(0xFFEBCB8B)),
-                              ),
-                              child: Text(
-                                departed ? 'Departed' : 'Scheduled',
-                                style: TextStyle(
-                                  color: departed ? const Color(0xFF88C0D0) : const Color(0xFFEBCB8B),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+            cell(1, Text(trip.plateNumber ?? '—', style: figures)),
+            cell(2, Text(DateFormat.jm().format(trip.departureDatetime), style: figures)),
+            cell(3, Text('${trip.totalBookings}/${trip.seatCapacity}', style: figures)),
+            cell(
+              4,
+              // Token container/on pairs. "Scheduled" is not a warning --
+              // nothing is wrong with it -- so it is info-blue.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: departed ? AppColors.primaryContainer : AppColors.infoContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                ),
+                child: Text(
+                  departed ? 'Departed' : 'Scheduled',
+                  style: TextStyle(
+                    color: departed ? AppColors.primary : AppColors.info,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-          ],
+            ),
+          ]),
         ),
+      );
+    }
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.divider),
       ),
+      child: LayoutBuilder(builder: (context, c) {
+        final title = Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(children: [
+            const Text("Today's Departures",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            const SizedBox(width: AppSpacing.sm),
+            if (trips.isNotEmpty)
+              Text(trips.length == 1 ? '1 trip' : '${trips.length} trips',
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          ]),
+        );
+        if (trips.isEmpty) {
+          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            title,
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(
+                  child: Text('No departures today. Generate trips from Schedules, or dispatch one here.',
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted))),
+            ),
+          ]);
+        }
+
+        final width = c.maxWidth < minWidth ? minWidth : c.maxWidth;
+        // Beside the form the height is bounded: shrink to the rows, scroll
+        // past them. Stacked on a narrow screen it sits inside the page's
+        // own scroll view, where a flexible list has no height to fill.
+        final body = c.hasBoundedHeight
+            ? Flexible(
+                child: Scrollbar(
+                  controller: _rowsScroll,
+                  thumbVisibility: true,
+                  child: ListView.separated(
+                    controller: _rowsScroll,
+                    shrinkWrap: true,
+                    itemCount: trips.length,
+                    separatorBuilder: (_, _) => const Divider(),
+                    itemBuilder: (_, i) => row(trips[i]),
+                  ),
+                ),
+              )
+            : Column(children: [
+                for (var i = 0; i < trips.length; i++) ...[
+                  if (i > 0) const Divider(),
+                  row(trips[i]),
+                ],
+              ]);
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: width, maxWidth: width, maxHeight: c.maxHeight),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [title, heading(), const Divider(), body],
+            ),
+          ),
+        );
+      }),
     );
   }
+
 
   Widget _buildDispatchForm() {
     return Card(
@@ -292,11 +383,11 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('Dispatch Special Trip',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 4),
             const Text(
               'An ad-hoc departure outside the regular schedule.',
-              style: TextStyle(fontSize: 12, color: Colors.white54),
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             _buildDropdown<String>(
@@ -313,7 +404,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
               },
               child: InputDecorator(
                 decoration: _fieldDecoration('Departure Time'),
-                child: Text(_departureTime.format(context), style: const TextStyle(color: Colors.white)),
+                child: Text(_departureTime.format(context), style: const TextStyle(color: AppColors.textPrimary)),
               ),
             ),
             const SizedBox(height: 16),
@@ -347,9 +438,9 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
                 onPressed: _canDispatch() ? _dispatchTrip : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: const Color(0xFF151923),
-                  disabledBackgroundColor: const Color(0xFF2C3244),
-                  disabledForegroundColor: Colors.white54,
+                  foregroundColor: AppColors.surface,
+                  disabledBackgroundColor: AppColors.surfaceSunken,
+                  disabledForegroundColor: AppColors.textMuted,
                   padding: const EdgeInsets.symmetric(vertical: 20),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -370,8 +461,8 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
       String label, List<DropdownMenuItem<T>> items, T? currentValue, void Function(T?) onChanged) {
     return DropdownButtonFormField<T>(
       decoration: _fieldDecoration(label),
-      dropdownColor: const Color(0xFF2C3244),
-      style: const TextStyle(color: Colors.white),
+      dropdownColor: AppColors.surfaceSunken,
+      style: const TextStyle(color: AppColors.textPrimary),
       value: currentValue,
       items: items,
       onChanged: onChanged,
@@ -381,9 +472,6 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
 
   InputDecoration _fieldDecoration(String label) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54),
-        filled: true,
-        fillColor: const Color(0xFF151923),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        labelStyle: const TextStyle(color: AppColors.textMuted),
       );
 }

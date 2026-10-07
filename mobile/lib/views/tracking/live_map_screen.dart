@@ -184,10 +184,12 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
           height: 28,
           child: _NodePin(
             sequence: stop.stopSequence,
+            // The destination is the logo's red pin, not `danger`: getting
+            // off at your stop is not an alarm.
             colour: stop.stopSequence == widget.boardingStop
-                ? AppColors.accent
+                ? AppColors.success
                 : stop.stopSequence == widget.alightingStop
-                    ? AppColors.danger
+                    ? AppColors.brand
                     : AppColors.primary,
           ),
         ),
@@ -222,7 +224,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
         if (_vm.trail.length >= 2)
           Polyline(
             points: [for (final p in _vm.trail) LatLng(p.latitude, p.longitude)],
-            color: AppColors.accent,
+            color: AppColors.success,
             strokeWidth: 5,
           ),
       ];

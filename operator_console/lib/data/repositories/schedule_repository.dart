@@ -8,6 +8,8 @@ class ScheduleTemplate {
     required this.daysOfWeek,
     this.tripLabel,
     this.defaultVanId,
+    this.defaultDriverId,
+    this.defaultConductorId,
     required this.isActive,
     required this.validFrom,
     this.validUntil,
@@ -19,6 +21,8 @@ class ScheduleTemplate {
   final String daysOfWeek; // Monday-first 7-char mask, e.g. "1111100"
   final String? tripLabel;
   final String? defaultVanId;
+  final String? defaultDriverId;
+  final String? defaultConductorId;
   final bool isActive;
   final DateTime validFrom;
   final DateTime? validUntil;
@@ -43,6 +47,8 @@ class ScheduleTemplate {
         daysOfWeek: json['days_of_week'] as String,
         tripLabel: json['trip_label'] as String?,
         defaultVanId: json['default_van_id'] as String?,
+        defaultDriverId: json['default_driver_id'] as String?,
+        defaultConductorId: json['default_conductor_id'] as String?,
         isActive: json['is_active'] as bool,
         validFrom: DateTime.parse(json['valid_from'] as String),
         validUntil: json['valid_until'] != null
