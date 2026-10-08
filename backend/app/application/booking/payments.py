@@ -32,9 +32,11 @@ class CheckoutResult:
 
 
 class StartCheckoutUseCase:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, checkout: Any | None = None):
+        """`checkout` is anything with PayMongoClient.create_checkout's
+        signature -- in development, the sandbox in sandbox_checkout.py."""
         self.session = session
-        self.paymongo = PayMongoClient()
+        self.paymongo = checkout or PayMongoClient()
 
     async def execute(self, *, booking_id: str, passenger_user_id: str) -> CheckoutResult:
         booking = await self.session.get(BookingRow, booking_id)

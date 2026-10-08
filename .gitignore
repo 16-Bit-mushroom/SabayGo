@@ -32,3 +32,6 @@ docs/*.pdf
 
 # Handover archives built by the zip command in docs/SETUP.md
 *.zip
+
+# Launcher logs (run.sh)
+logs/

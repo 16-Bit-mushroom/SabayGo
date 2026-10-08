@@ -140,6 +140,11 @@ fi
 
 set_env_if_blank backend/.env PHONE_CAPTURE_API_KEY "$(gen_hex 16)"
 
+# The development payment sandbox signs its webhooks with this, exactly as
+# PayMongo would. Real PayMongo issues its own secret; paste that over this
+# one when real keys are configured.
+set_env_if_blank backend/.env PAYMONGO_WEBHOOK_SECRET "$(gen_hex 32)"
+
 # ─────────────────────────────────────────────── 3. python venvs
 # A venv is tied to its absolute path: console scripts carry it in their
 # shebang. One that travelled in a zip from another machine is unusable,
@@ -229,17 +234,23 @@ cat <<'EOF'
 
 ==> Setup finished. To run the system:
 
-  # 1. backend  (bind 0.0.0.0, not localhost, or a phone cannot reach it)
+  ./run.sh
+
+That starts the database, the backend on 0.0.0.0:8000, the AI node and the
+cooperative console (built once, then served on localhost:3001), and
+prints the address handsets should dial. Add
+--mobile --capture to also build the two handset apps onto an attached
+device. Ctrl-C stops everything.
+
+To run one piece at a time instead:
+
   cd backend && source venv/bin/activate && \
     uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # 2. passenger / conductor app in a browser
-  #    port 3000 because cors_origins allows only 3000 and 8080
   cd mobile && flutter run -d chrome --web-port=3000 \
     --dart-define=API_BASE_URL=http://localhost:8000/api/v1
 
-  # 3. cooperative console
-  cd operator_console && flutter run -d chrome \
+  cd operator_console && flutter run -d chrome --web-port=3001 \
     --dart-define=API_BASE_URL=http://localhost:8000/api/v1
 
 Sign in as passenger@ / conductor@ / driver@ / coopadmin@sabaygo.dev,

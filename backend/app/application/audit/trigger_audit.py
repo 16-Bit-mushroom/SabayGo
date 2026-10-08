@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.notifications.service import NotificationService
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
+from app.domain.audit_reading import read_audit
 from app.domain.enums import AuditResolution
 from app.infrastructure.clients.ai_node_client import AiNodeClient, CaptureResult
 from app.infrastructure.models import Trip, User, Yolov8AuditLog
@@ -56,6 +57,11 @@ class AuditResult:
     confidence_avg: float | None
     alert_raised: bool
     message: str
+    # What the result MEANS -- see domain/audit_reading.py.
+    verdict: str
+    explanation: str
+    next_step: str
+    caution: str | None
 
 
 class TriggerAuditUseCase:
@@ -113,9 +119,13 @@ class TriggerAuditUseCase:
             capture=capture,
         )
 
-    async def _load_trip_and_manifest(self, trip_id: str, leg_sequence: int):
-        from app.application.operations.boarding import ManifestUseCase
+    async def ensure_auditable(self, trip_id: str) -> Trip:
+        """The trip exists and is under way -- the precondition for any audit.
 
+        Public so a request that will be fulfilled LATER (the phone capture)
+        can be refused when it is made, not after someone has walked to the
+        van and taken the photo.
+        """
         trip = await self.session.get(Trip, trip_id)
         if trip is None:
             raise NotFoundError("Trip not found.")
@@ -123,6 +133,12 @@ class TriggerAuditUseCase:
             raise ConflictError(
                 f"Audits apply to a trip in progress; this one is {trip.status}."
             )
+        return trip
+
+    async def _load_trip_and_manifest(self, trip_id: str, leg_sequence: int):
+        from app.application.operations.boarding import ManifestUseCase
+
+        trip = await self.ensure_auditable(trip_id)
 
         # Manifest baseline BEFORE the capture, so the two counts describe
         # the same moment as closely as possible.
@@ -188,18 +204,12 @@ class TriggerAuditUseCase:
             )
         await self.session.commit()
 
-        if variance > 0:
-            message = (
-                f"{variance} more passenger(s) aboard than the manifest shows. "
-                "Possible undocumented boarding."
-            )
-        elif variance < 0:
-            message = (
-                f"{abs(variance)} fewer passenger(s) than expected. "
-                "Check for early alighting or an unrecorded no-show."
-            )
-        else:
-            message = "Headcount matches the manifest."
+        reading = read_audit(
+            visual_count=capture.visual_count,
+            booked_count=booked_count,
+            leg_sequence=leg_sequence,
+            confidence_avg=capture.confidence_avg,
+        )
 
         log.info(
             "Audit %s trip=%s leg=%s visual=%d booked=%d variance=%+d",
@@ -222,7 +232,11 @@ class TriggerAuditUseCase:
             inference_ms=capture.inference_ms,
             confidence_avg=capture.confidence_avg,
             alert_raised=alert,
-            message=message,
+            message=reading.headline,
+            verdict=reading.verdict,
+            explanation=reading.explanation,
+            next_step=reading.next_step,
+            caution=reading.caution,
         )
 
     @staticmethod
@@ -321,6 +335,11 @@ class AuditQueueUseCase:
             where = where & (Yolov8AuditLog.trip_id == trip_id)
         return await self._list(where, limit=limit)
 
+    async def for_trip(self, trip_id: str, *, limit: int = 50) -> list[dict]:
+        """Every audit of one trip, open or closed, newest first -- what the
+        Trips screen shows beside the manifest it was checked against."""
+        return await self._list(Yolov8AuditLog.trip_id == trip_id, limit=limit)
+
     async def _list(self, where, *, limit: int) -> list[dict]:
         result = await self.session.execute(
             select(Yolov8AuditLog, Trip, User.email)
@@ -350,6 +369,26 @@ class AuditQueueUseCase:
                 "resolved_by": resolver_email,
                 "resolved_at": a.resolved_at,
                 "resolution_notes": a.resolution_notes,
+                **_reading_fields(a),
             }
             for a, t, resolver_email in result.all()
         ]
+
+
+def _reading_fields(a: Yolov8AuditLog) -> dict:
+    """The interpretation is derived from the stored counts each time it is
+    read, not stored: the wording can improve without rewriting history,
+    and the numbers it is derived from are the audit trail."""
+    r = read_audit(
+        visual_count=a.visual_count,
+        booked_count=a.booked_count,
+        leg_sequence=a.leg_sequence,
+        confidence_avg=float(a.confidence_avg) if a.confidence_avg is not None else None,
+    )
+    return {
+        "verdict": r.verdict,
+        "headline": r.headline,
+        "explanation": r.explanation,
+        "next_step": r.next_step,
+        "caution": r.caution,
+    }

@@ -15,7 +15,7 @@ from sqlalchemy import text
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.core import timezone as app_tz
-from app.core.exceptions import AuthenticationError, ConflictError
+from app.core.exceptions import AuthenticationError, ConflictError, DomainError
 from app.application.audit import phone_capture_queue
 from app.application.audit.trigger_audit import (
     AuditQueueUseCase,
@@ -68,6 +68,10 @@ class AuditResponse(BaseModel):
     confidence_avg: float | None
     alert_raised: bool
     message: str
+    verdict: str
+    explanation: str
+    next_step: str
+    caution: str | None
 
 
 @router.post("/audits/trigger", response_model=AuditResponse,
@@ -136,12 +140,26 @@ class AuditQueueOut(BaseModel):
     resolved_by: str | None
     resolved_at: dt.datetime | None
     resolution_notes: str | None
+    # What the counts mean (domain/audit_reading.py), so the console does
+    # not have to work out what a +2 or a -4 implies.
+    verdict: str
+    headline: str
+    explanation: str
+    next_step: str
+    caution: str | None
 
 
 @router.get("/audits/pending", response_model=list[AuditQueueOut], dependencies=[Depends(COOP_ADMIN)])
 async def pending_audits(session: SessionDep, limit: int = Query(50, le=200)) -> list:
     """Unresolved variances -- the cooperative administrator console's audit queue."""
     return await AuditQueueUseCase(session).pending(limit=limit)
+
+
+@router.get("/audits/trips/{trip_id}", response_model=list[AuditQueueOut],
+            dependencies=[Depends(COOP_ADMIN)])
+async def trip_audits(trip_id: str, session: SessionDep) -> list:
+    """Every audit of one trip, open or closed -- for the Trips screen."""
+    return await AuditQueueUseCase(session).for_trip(trip_id)
 
 
 @router.get("/audits/history", response_model=list[AuditQueueOut], dependencies=[Depends(COOP_ADMIN)])
@@ -175,9 +193,17 @@ class TriggerPhoneRequest(BaseModel):
 
 
 @router.post("/audits/trigger-phone", dependencies=[Depends(CREW)])
-async def trigger_phone_capture(payload: TriggerPhoneRequest, user: CurrentUser) -> dict:
+async def trigger_phone_capture(
+    payload: TriggerPhoneRequest, user: CurrentUser, session: SessionDep
+) -> dict:
     """Ask the demo phone to capture next time it polls. A later trigger
-    overwrites one the phone hasn't fulfilled yet -- one phone, one slot."""
+    overwrites one the phone hasn't fulfilled yet -- one phone, one slot.
+
+    The trip is checked now, not when the photo arrives: a request for a
+    trip that is still `scheduled` used to be accepted, photographed, and
+    only then refused -- on the phone, where the person who pressed the
+    trigger could not see why."""
+    await TriggerAuditUseCase(session).ensure_auditable(payload.trip_id)
     req = await phone_capture_queue.set_pending(
         trip_id=payload.trip_id,
         leg_sequence=payload.leg_sequence,
@@ -214,15 +240,44 @@ async def phone_fulfill(session: SessionDep, image: UploadFile = File(...)) -> A
     reconciled against the manifest exactly like a direct AI-node capture."""
     req = await phone_capture_queue.consume_pending()
     if req is None:
-        raise ConflictError("No pending capture request for this device.")
+        raise ConflictError(
+            "No capture is waiting -- it was already sent, or dispatch has not "
+            "triggered one. Ask dispatch to trigger again."
+        )
 
-    result = await TriggerAuditUseCase(session).execute_from_upload(
-        trip_id=req.trip_id,
-        leg_sequence=req.leg_sequence,
-        triggered_by_user_id=req.requested_by_user_id,
-        image_bytes=await image.read(),
+    # Whatever happens, the console that triggered this gets told -- see
+    # PhoneCaptureOutcome for why the audit queue alone cannot say it.
+    try:
+        result = await TriggerAuditUseCase(session).execute_from_upload(
+            trip_id=req.trip_id,
+            leg_sequence=req.leg_sequence,
+            triggered_by_user_id=req.requested_by_user_id,
+            image_bytes=await image.read(),
+        )
+    except DomainError as e:
+        await phone_capture_queue.record_outcome(
+            phone_capture_queue.PhoneCaptureOutcome(request=req, error=e.message)
+        )
+        raise
+    except Exception:
+        await phone_capture_queue.record_outcome(
+            phone_capture_queue.PhoneCaptureOutcome(
+                request=req, error="The server failed while processing the photo."
+            )
+        )
+        raise
+    await phone_capture_queue.record_outcome(
+        phone_capture_queue.PhoneCaptureOutcome(request=req, result=dict(result.__dict__))
     )
     return AuditResponse(**result.__dict__)
+
+
+@router.get("/audits/phone/status", dependencies=[Depends(CREW)])
+async def phone_status() -> dict:
+    """What became of the latest phone capture request: pending, fulfilled
+    (with the audit result) or failed (with the reason). Polled by the
+    console after it triggers one."""
+    return await phone_capture_queue.status()
 
 
 # ===================================================================

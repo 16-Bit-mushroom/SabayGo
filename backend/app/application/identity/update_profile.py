@@ -43,6 +43,9 @@ class UpdateProfileUseCase:
         if user is None:
             raise ConflictError("Account no longer exists.")
         profile = user.passenger_profile
+        # Office staff and crew edit their name too; the passenger-only
+        # fields below have no columns on a staff profile.
+        named = profile or user.staff_profile
 
         if cmd.new_password:
             if not cmd.current_password or not verify_password(
@@ -68,13 +71,15 @@ class UpdateProfileUseCase:
                     raise ConflictError("That phone number is already registered.")
                 user.phone_number = stored_phone
 
-        if profile is not None:
+        if named is not None:
             if cmd.first_name and cmd.first_name.strip():
-                profile.first_name = cmd.first_name.strip()
+                named.first_name = cmd.first_name.strip()
             if cmd.last_name and cmd.last_name.strip():
-                profile.last_name = cmd.last_name.strip()
+                named.last_name = cmd.last_name.strip()
             if cmd.middle_name is not None:
-                profile.middle_name = cmd.middle_name.strip() or None
+                named.middle_name = cmd.middle_name.strip() or None
+
+        if profile is not None:
             if cmd.home_address is not None:
                 profile.home_address = cmd.home_address.strip() or None
             if cmd.gender is not None:

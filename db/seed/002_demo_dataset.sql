@@ -405,6 +405,62 @@ UPDATE cooperative_policies
    SET policy_value = '+639000000001,+639000000002'
  WHERE policy_key = 'sos_contact_numbers';
 
+-- ================================================================ live trips
+-- Trips dated relative to NOW() at seed time, one in each state a demo
+-- needs to SHOW rather than set up. Without these every trip is either
+-- scheduled or completed, and a phone capture is refused -- audits apply
+-- only to a trip that is boarding or departed. reset-dev.sh reseeds, so
+-- they are always "live" right after a reset.
+--
+--   LIVE-BOARD   boarding now, departs in 15 min, the DEV crew
+--                (conductor@ / driver@). Leg 1 manifest = 4 aboard:
+--                photograph 4 people for a clean match, 5+ for a flag.
+--                passenger@ holds a confirmed ticket on it.
+--   LIVE-DEPART  departed 30 min ago, on the road, leg 1 = 5 aboard.
+--   LIVE-SOON    scheduled, departs in 2 h, mostly empty -- bookable.
+--
+-- Special trips (no template): uq_trip_instance is (template, date), and
+-- today's templated trips above already hold those slots.
+SET @now_min = TIMESTAMP(DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:00'));
+
+CALL seed_trip('TRIP-A2Z-LIVE-BOARD', NULL, @r_tag, @now_min + INTERVAL 15 MINUTE,
+               'VAN-0003', 'USER-DRIVER-0001', 'USER-CONDUCTOR-0001', 'Live - Boarding', 'boarding');
+SET @t = 'TRIP-A2Z-LIVE-BOARD';
+CALL seed_booking('BKG-A2Z-L101', @t, 'USER-PASSENGER-0001', NULL, 'app', 1, 4, 1, 100.00, 'confirmed',  'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 5 HOUR);
+CALL seed_booking('BKG-A2Z-L102', @t, 'USER-PAX-DEMO-0001',  NULL, 'app', 1, 4, 2, 100.00, 'checked_in', 'paymongo', 'maya',  FALSE, NULL, NOW() - INTERVAL 9 HOUR);
+CALL seed_booking('BKG-A2Z-L103', @t, 'USER-PAX-DEMO-0002',  NULL, 'app', 1, 2, 3,  60.00, 'boarded',    'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 20 HOUR);
+-- Same space as L103, the leg after L103 alights: the segment-booking point.
+CALL seed_booking('BKG-A2Z-L104', @t, 'USER-PAX-DEMO-0003',  NULL, 'app', 2, 4, 3,  45.00, 'confirmed',  'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 2 HOUR);
+CALL seed_booking('BKG-A2Z-L105', @t, NULL, 'Nestor Abad', 'walk_in', 1, 4, 4, 100.00, 'boarded', 'cash', 'cash', FALSE, NULL, NOW() - INTERVAL 6 MINUTE);
+-- L102 arrived at the terminal: the conductor's manifest shows AT TERMINAL.
+INSERT INTO check_ins
+  (check_in_id, booking_id, terminal_id, latitude, longitude, gps_accuracy_m,
+   distance_m, geofence_radius_m, is_within_geofence, is_within_window, checked_in_at)
+VALUES
+  (UUID(), 'BKG-A2Z-L102', 'TERM-ECOLAND-000001', 7.052600, 125.593300, 8.00,
+   31.40, 200, TRUE, TRUE, NOW() - INTERVAL 12 MINUTE);
+
+CALL seed_trip('TRIP-A2Z-LIVE-DEPART', NULL, @r_dig, @now_min - INTERVAL 30 MINUTE,
+               'VAN-0005', 'USER-DRIVER-0004', 'USER-CONDUCTOR-0004', 'Live - On the road', 'departed');
+SET @t = 'TRIP-A2Z-LIVE-DEPART';
+CALL seed_booking('BKG-A2Z-L201', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 1, 110.00, 'boarded',   'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 15 HOUR);
+CALL seed_booking('BKG-A2Z-L202', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 3, 2, 110.00, 'boarded',   'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 3 HOUR);
+CALL seed_booking('BKG-A2Z-L203', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 2, 3,  70.00, 'boarded',   'paymongo', 'maya',  FALSE, NULL, NOW() - INTERVAL 8 HOUR);
+CALL seed_booking('BKG-A2Z-L204', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 2, 3, 3,  45.00, 'confirmed', 'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 4 HOUR);
+CALL seed_booking('BKG-A2Z-L205', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 3, 4, 110.00, 'no_show',   'paymongo', 'card',  FALSE, NULL, NOW() - INTERVAL 30 HOUR);
+CALL seed_booking('BKG-A2Z-L206', @t, NULL, 'Lito Pacheco', 'walk_in', 1, 3, 5, 110.00, 'boarded', 'cash', 'cash', FALSE, NULL, @now_min - INTERVAL 34 MINUTE);
+-- Roadside pickup after departure, anchored to the PREVIOUS terminal passed.
+CALL seed_booking('BKG-A2Z-L207', @t, NULL, 'Roadside - Toril crossing', 'walk_in', 1, 3, 6, 80.00, 'boarded', 'cash', 'cash', TRUE, 'Toril crossing, near the gas station', NOW() - INTERVAL 10 MINUTE);
+-- Departure released the no-show's space, as DepartTripUseCase does.
+UPDATE seat_inventory SET status = 'available', booking_id = NULL
+ WHERE booking_id = 'BKG-A2Z-L205';
+
+CALL seed_trip('TRIP-A2Z-LIVE-SOON', NULL, @r_tag, @now_min + INTERVAL 2 HOUR,
+               'VAN-0004', 'USER-DRIVER-0005', 'USER-CONDUCTOR-0005', 'Live - Later today', 'scheduled');
+SET @t = 'TRIP-A2Z-LIVE-SOON';
+CALL seed_booking('BKG-A2Z-L301', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', 'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 1 HOUR);
+CALL seed_booking('BKG-A2Z-L302', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 2, 2,  60.00, 'confirmed', 'paymongo', 'maya',  FALSE, NULL, NOW() - INTERVAL 40 MINUTE);
+
 DROP PROCEDURE seed_trip;
 DROP PROCEDURE seed_booking;
 

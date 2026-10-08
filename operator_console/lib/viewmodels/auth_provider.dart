@@ -71,6 +71,26 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Saves the signed-in user's own profile. Errors propagate as
+  /// [ApiException] so the dialog can show the server's sentence beside
+  /// the field it is about.
+  Future<void> updateProfile({
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? currentPassword,
+    String? newPassword,
+  }) async {
+    _profile = await _repo.updateMe(
+      firstName: firstName,
+      lastName: lastName,
+      phoneNumber: phoneNumber,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+    notifyListeners();
+  }
+
   Future<void> signOut() async {
     await _tokens.clear();
     _profile = null;

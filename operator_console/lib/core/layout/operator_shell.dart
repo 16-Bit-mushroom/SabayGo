@@ -9,6 +9,7 @@ import '../../modules/revenue/screens/revenue_screen.dart';
 import '../../modules/messaging/screens/messages_screen.dart';
 import '../../modules/live_map/screens/fleet_map_screen.dart';
 import '../../modules/emergency/screens/sos_console_screen.dart';
+import '../../modules/trip_monitor/screens/trip_monitor_screen.dart';
 import '../../viewmodels/auth_provider.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/notification_repository.dart';
@@ -16,6 +17,7 @@ import '../../viewmodels/notification_provider.dart';
 import '../design/components/brand_logo.dart';
 import '../design/tokens.dart';
 import 'notification_bell.dart';
+import 'profile_dialog.dart';
 
 class OperatorShell extends StatefulWidget {
   const OperatorShell({super.key});
@@ -56,6 +58,8 @@ class _OperatorShellState extends State<OperatorShell> {
   static const _modules = <_Module>[
     _Module('Live Fleet', Icons.my_location_outlined, Icons.my_location,
         FleetMapScreen(), group: 'Operations'),
+    _Module('Trips', Icons.departure_board_outlined, Icons.departure_board,
+        TripMonitorScreen()),
     _Module('Trip Dispatcher', Icons.route_outlined, Icons.route,
         DispatchBoardScreen()),
     _Module('Emergency (SOS)', Icons.emergency_outlined, Icons.emergency,
@@ -184,22 +188,43 @@ class _Sidebar extends StatelessWidget {
                     AppSpacing.lg, AppSpacing.md, AppSpacing.sm, AppSpacing.md),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppColors.primaryContainer,
-                      child: Text(
-                        name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-                        style: const TextStyle(
-                            color: AppColors.primary, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
+                    // Avatar and name together are the way into "My
+                    // profile" -- where people look for their own account.
                     Expanded(
-                      child: Text(
-                        name,
-                        overflow: TextOverflow.ellipsis,
-                        style: text.bodySmall!
-                            .copyWith(color: AppColors.textPrimary),
+                      child: Tooltip(
+                        message: 'My profile',
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          onTap: () => showDialog<void>(
+                            context: context,
+                            builder: (_) => const ProfileDialog(),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppColors.primaryContainer,
+                                  child: Text(
+                                    name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                                    style: const TextStyle(
+                                        color: AppColors.primary, fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.sm),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: text.bodySmall!
+                                        .copyWith(color: AppColors.textPrimary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                     IconButton(

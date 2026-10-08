@@ -31,6 +31,8 @@ contribution.
 | `docs/MANUSCRIPT_CORRECTIONS.md` | Where the paper and the code disagree, with replacement wording |
 | `docs/FLUTTER_PHASE1_ISSUES.md` | 20 documented setup failures and fixes |
 | `backend/app/infrastructure/repositories/seat_repository.py` | The thesis. Read its docstring before touching it |
+| `docs/MODEL_EVALUATION_EXPLAINED.md` | The model metrics in plain language, with the talk track for the adviser |
+| `ai_service/eval/README.md` | How the YOLOv8 model is evaluated, and why those metrics and not others |
 
 ---
 
@@ -96,6 +98,53 @@ Package name is still `mobile_v2_uv_express` though the folder is
 On a machine that is not set up yet, `./setup.sh` does the whole thing and
 `docs/SETUP.md` explains it. Everything below assumes it has been run.
 
+**`./run.sh` starts the whole system in one command** and is what the demo
+uses. It resolves this machine's LAN address once and hands the same
+address to every process — backend CORS, console, handset, capture app —
+because four hand-maintained copies of an IP address is what broke the
+last demo.
+
+```fish
+./run.sh                      # db + backend + AI node + console
+./run.sh --mobile --capture   # also the two handset apps, on an attached device
+./run.sh --host 10.0.52.117   # force the address, when detection picks the wrong NIC
+./run.sh --soon               # rebuild demo data, trip departs in 20 min
+./run.sh --reset-db           # rebuild demo data; live trips dated from now
+```
+
+`002_demo_dataset.sql` seeds three **live trips dated from the moment of
+the reset**, so reset shortly before a demo: `TRIP-A2Z-LIVE-BOARD`
+(boarding, the dev conductor@/driver@, passenger@ holds a ticket; leg 1
+manifest = 4, so photograph 4 people for a match and 5+ for a flag),
+`TRIP-A2Z-LIVE-DEPART` (departed, roadside pickup, a no-show) and
+`TRIP-A2Z-LIVE-SOON` (scheduled in 2 h, bookable). They are special trips
+(template `NULL`) because `uq_trip_instance` is (template, date).
+
+Ctrl-C stops everything it started; MySQL is left up. Each process logs to
+`logs/`, so grep the log, never stream it.
+
+The console is **built** (`flutter build web --release --pwa-strategy=none`)
+and served from `operator_console/build/web` with `python3 -m http.server`
+on port 3001, not started with `flutter run`. On this machine `flutter run
+-d chrome` finds no Chrome (only `/usr/bin/chromium`) and `-d web-server`
+opens the port but never accepts a connection. The build takes ~3.5 min
+and is skipped on later runs unless `lib/`, `pubspec.yaml` or the baked-in
+API address changed (stamp: `build/web/.sabaygo-api-base`). Run `./run.sh`
+once before a demo so the build is not on stage.
+
+Handset apps (`--mobile`, `--capture`) are built with `flutter build apk
+--debug`, installed with `adb install -r` (keeps app data, so the conductor
+stays signed in) and launched, one after the other, before the launcher
+reports "up". They are not left under `flutter run`: two of those at one
+phone queued on Flutter's startup lock, and stopping the launcher killed
+both mid-Gradle with nothing installed. An installed app outlives the
+launcher. When the venue's network
+changes, re-run `./run.sh` — or, on a handset whose app is already
+installed, press **Find server** in the capture app, which sweeps its own
+/24 for the backend's `/health` and re-points itself with no rebuild.
+
+Piece by piece, when one component is being worked on:
+
 ```fish
 # database
 docker compose up -d
@@ -146,6 +195,16 @@ the whole candidate window rather than using a single
 `GROUP BY ... FOR UPDATE`, because MySQL's locking semantics with GROUP BY
 and LIMIT depend on the query plan — poor ground for a correctness claim.
 Read the module docstring before "optimising" it.
+
+**Sandbox payments in development.** With `ENVIRONMENT=development` and no
+`PAYMONGO_SECRET_KEY`, checkout returns a backend-served page
+(`/payments/sandbox/{cs_id}`) instead of PayMongo. Pay builds a
+PayMongo-shaped event, signs it with `PAYMONGO_WEBHOOK_SECRET`, and sends
+it through the same `_receive_webhook` verify-then-settle path as the real
+webhook, so the rule below still holds. References are prefixed
+`cs_sandbox_` / `evt_sandbox_`; no payment method is recorded. Production,
+or a real key, turns the sandbox off (404). See
+`infrastructure/clients/sandbox_checkout.py`.
 
 **Only a verified webhook confirms a booking.** Never the client redirect.
 Signature is HMAC-SHA256 over `{timestamp}.{raw_body}` — the *raw* bytes,
@@ -298,6 +357,29 @@ the system that flows toward the passenger rather than away. The
 notification bell now hands the whole notification to the shell, which
 maps kind to tab, so the SOS and variance destinations cannot drift apart.
 
+Console (9 Oct): a **Trips** tab under Operations -- the day's trips from
+`GET /config/trips?date=` with live status, crew and counts, and the
+selected trip's manifest from the conductor's own `GET /trips/{id}/manifest`
+with the conductor app's status words. **My profile** opens from the user
+row at the foot of the sidebar: name, phone, password via `PATCH
+/auth/me`, which now edits staff names too. **Phone capture** lives on the
+Trips screen, in the selected trip's header (`ai_audit_queue/phone_capture.dart`;
+moved off the Audits tab): enabled only while the trip is boarding or
+departed, legs offered by stop name, and the result is reported through
+the app-wide messenger by polling `GET /audits/phone/status` -- a matching
+capture is filed `reconciled` (History, not the Queue), so the queue alone
+could not say it worked.
+
+**Audit readings** (`domain/audit_reading.py`). Every audit response and
+list row carries `verdict` / `headline` / `explanation` / `next_step` /
+`caution`, derived from the stored counts on read (never stored, so the
+wording can change without rewriting the trail). More people than the
+manifest reads as possible undocumented boarding; fewer reads as a
+camera-view question and explicitly *not* lost revenue. The console's
+`AuditReadingCard` shows it on the Audits panel and in the Trips screen's
+**AI headcount checks** section (`GET /audits/trips/{id}`, open and closed).
+`tests/test_audit_reading.py` pins the direction of each reading.
+
 Console (15 Sep): the Audits tab has a Queue / History switch — a closed
 audit shows outcome, resolver, time and notes instead of the buttons. The
 Revenue tab has an Export menu (`.xlsx` / `.csv`) for the date range shown;
@@ -330,6 +412,51 @@ pickers. Verified by CDP click-through: 0 exceptions, 0 network errors.
   and stops at the first failure; `docs/DEMO_SCRIPT.md` is the talk track.
 - `datetime.now(timezone.utc)` removed from `payments.py`,
   `register_passenger.py`, `auth.py`, `trips.py` (see Known issues).
+
+### Model evaluation — harness built 8 Oct, numbers not yet generated
+
+The adviser asked for metrics on the YOLOv8 model. `ai_service/eval/`
+produces them; read its README before touching any of it, because the
+framing matters more than the code does.
+
+The model is **pretrained and unmodified**, so there are no training
+curves to report and claiming any would describe work nobody did. What is
+measured instead: counting accuracy (MAE, RMSE, signed bias, exact and ±1
+rates, stratified by occupancy), **leakage-detection performance** — the
+false-alarm rate against an honest crew and the detection rate for 1, 2 and
+3 hidden passengers — a confidence-threshold sweep that justifies the
+`0.45` default instead of leaving it taste, and latency.
+
+The leakage table is the one to lead with: it is the only number that
+speaks to the contribution, and it is pure arithmetic over the same count
+errors, verified against hand-computed cases in `eval/test_metrics.py`.
+
+**`inference.py` was extracted from `app.py`** so the harness counts
+through `count_people()` — the function the service itself calls on every
+audit. A harness with its own YOLO handle and its own thresholds would
+publish numbers the running system does not produce. Only the confidence
+threshold is overridable, for the sweep. `app.py` keeps the camera, the
+HTTP layer and the never-fabricate-a-count error handling; the model load
+is now lazy and called explicitly after logging is configured.
+
+Dataset: COCO val2017 (held out — the weights trained on train2017), with
+ground-truth counts free from `instances_val2017.json` and **no box
+labelling anywhere**. Filtered to 1–14 people, no `iscrowd` blobs, every
+person ≥1% of frame, plus 50 empty frames as the false-positive measure.
+`degrade.py` adds resolution/brightness/motion-blur/JPEG copies standing
+in for cabin conditions.
+
+These are street photographs, not a van cabin — stated in the report's own
+closing section and in `MANUSCRIPT_CORRECTIONS.md` §10. A half-day staged
+shoot in a parked van at known occupancy closes it; append the rows with
+`source=staged` and Table 1b reports them beside the COCO figures with no
+code change.
+
+The harness also surfaced a **contradiction in the manuscript**: §2.3.2.1
+says `Δ ≠ 0` flags a discrepancy, §2.3.4 says alert when the physical count
+*exceeds* the manifest. Those are different rules with very different
+false-alarm costs. The code follows §2.3.2.1; see
+`MANUSCRIPT_CORRECTIONS.md` §9.
 
 ### Non-code milestones — clear
 
@@ -465,6 +592,15 @@ was inserted.
   `security.py`, where UTC is correct because JWT `exp` is epoch time.
 - The conductor sets "Van is at" manually on the manifest screen — see
   Next, item 3.
+- **The model-evaluation numbers do not exist yet.** `ai_service/eval/` is
+  built and tested end to end on sample images, but the full run needs COCO
+  val2017 (~800 MB) downloaded via `eval/fetch_coco.sh`. On CPU, budget
+  ~100 ms per inference: the whole manifest with all six degradation
+  conditions and the five-point threshold sweep is a few hours, so start it
+  and leave it. A single-threshold run over original frames only is
+  minutes, and is enough to sanity-check the tables before committing to
+  the long one. Nothing may be quoted to the adviser until a report file
+  exists in `docs/benchmarks/`.
 - **There is no physical door sensor.** §2.3.5's "door closures" is
   implemented as the conductor closing boarding and departing, which is
   the closest event the system genuinely observes. Say it that way in the

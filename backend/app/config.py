@@ -8,7 +8,7 @@ during AI node testing.
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -93,6 +93,16 @@ class Settings(BaseSettings):
         "http://localhost:3003",
     ]
 
+    # Matched against the whole Origin header, in addition to the list
+    # above. In development this is filled in by the validator below with
+    # a private-LAN pattern, because an explicit list cannot survive a
+    # demo: `flutter run -d chrome` picks a random web port unless one is
+    # pinned, and the machine's LAN address changes with the network. A
+    # console whose port was 3004 that day got a CORS failure that looked
+    # like a backend outage. Production leaves this unset and the list is
+    # the only rule.
+    cors_origin_regex: str | None = None
+
     @field_validator("database_url")
     @classmethod
     def _must_be_async_driver(cls, v: str) -> str:
@@ -113,6 +123,26 @@ class Settings(BaseSettings):
                 "A typo here would silently stop every SOS text message."
             )
         return v
+
+    @model_validator(mode="after")
+    def _dev_allows_the_local_network(self) -> "Settings":
+        """Let any loopback or private-LAN origin through in development.
+
+        Deliberately not `allow_origins=["*"]`: credentials are allowed on
+        this middleware, and a browser refuses the wildcard together with
+        credentials. A regex keeps the demo working on whatever address
+        DHCP hands out while still refusing the public internet.
+        """
+        if self.environment == "development" and self.cors_origin_regex is None:
+            self.cors_origin_regex = (
+                r"http://("
+                r"localhost|127\.0\.0\.1|\[::1\]"
+                r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+                r"|192\.168\.\d{1,3}\.\d{1,3}"
+                r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+                r")(:\d{1,5})?"
+            )
+        return self
 
 
 @lru_cache

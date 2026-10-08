@@ -161,9 +161,9 @@ def _to_me_response(user: User) -> MeResponse:
         account_status=user.account_status,
         display_name=name,
         phone_number=user.phone_number,
-        first_name=passenger.first_name if passenger else None,
-        last_name=passenger.last_name if passenger else None,
-        middle_name=passenger.middle_name if passenger else None,
+        first_name=profile.first_name if profile else None,
+        last_name=profile.last_name if profile else None,
+        middle_name=profile.middle_name if profile else None,
         home_address=passenger.home_address if passenger else None,
         gender=passenger.gender if passenger else None,
         emergency_contact_name=passenger.emergency_contact_name if passenger else None,
@@ -187,7 +187,8 @@ async def me(user: CurrentUser) -> MeResponse:
 async def update_me(
     payload: UpdateMeRequest, session: SessionDep, user: CurrentUser
 ) -> MeResponse:
-    """Passenger self-service profile edit: name, phone, password (G.4)."""
+    """Self-service profile edit: name, phone, password (G.4). Every role;
+    the passenger-only fields are ignored for staff."""
     updated = await UpdateProfileUseCase(session).execute(
         UpdateProfileCommand(
             user_id=user.user_id,

@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/audit_repository.dart';
-import '../../../data/repositories/dispatch_repository.dart';
+import '../audit_reading_card.dart';
 import '../../../core/design/tokens.dart';
 
 class AuditDashboardScreen extends StatefulWidget {
@@ -18,7 +18,6 @@ class AuditDashboardScreen extends StatefulWidget {
 
 class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
   late final AuditRepository _audits = context.read<AuditRepository>();
-  late final DispatchRepository _dispatch = context.read<DispatchRepository>();
 
   List<PendingAudit>? _logs;
   int _selectedIndex = 0;
@@ -101,52 +100,6 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
     }
   }
 
-  bool _triggering = false;
-
-  Future<void> _openTriggerPhoneDialog() async {
-    setState(() => _triggering = true);
-    List<TripBoardRow> trips;
-    try {
-      trips = await _dispatch.todaysTrips();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _triggering = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error),
-      );
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _triggering = false);
-
-    final request = await showDialog<({String tripId, int legSequence})>(
-      context: context,
-      builder: (_) => _TriggerPhoneDialog(trips: trips),
-    );
-    if (request == null) return;
-
-    try {
-      await _audits.triggerPhone(tripId: request.tripId, legSequence: request.legSequence);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Capture requested. Waiting for the phone to take the photo.'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      // The result lands here once the phone captures and uploads -- give
-      // that a moment, then refresh so it doesn't take a manual reload.
-      await Future.delayed(const Duration(seconds: 8));
-      if (mounted) await _load();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -185,21 +138,6 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                           },
                   ),
                   const Spacer(),
-                  OutlinedButton.icon(
-                    onPressed: _triggering ? null : _openTriggerPhoneDialog,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.border),
-                    ),
-                    icon: _triggering
-                        ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.phone_android),
-                    label: const Text('Trigger phone capture'),
-                  ),
-                  const SizedBox(width: 12),
                   IconButton(
                     onPressed: _loading ? null : _load,
                     icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
@@ -491,6 +429,10 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                         ),
                       ),
               ),
+              const SizedBox(height: 16),
+              // Numbers alone do not say whether a +2 is a problem or a -4
+              // is harmless; the reading does.
+              AuditReadingCard(audit: log),
               const SizedBox(height: 24),
               const Text('AI Reconciliation Details',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted, letterSpacing: 1.2)),
@@ -499,7 +441,16 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
               _buildDetailRow('Trigger', log.triggerLabel),
               _buildDetailRow('Digital Manifest', log.bookedCount.toString()),
               _buildDetailRow('Physical Reality', log.visualCount.toString(), isAlert: isAlert),
-              _buildDetailRow('Detected Leakage', '+${log.variance} Passengers', isAlert: isAlert),
+              // Signed, and not called "leakage": a shortfall is a camera-view
+              // question, never missing money. It used to print "+-4".
+              _buildDetailRow(
+                'Difference (camera − manifest)',
+                log.variance == 0
+                    ? 'None'
+                    : '${log.variance > 0 ? '+' : '−'}${log.variance.abs()} '
+                        '${log.variance.abs() == 1 ? 'person' : 'people'}',
+                isAlert: log.variance > 0,
+              ),
               if (log.confidenceAvg != null)
                 _buildDetailRow('Model Confidence', '${(log.confidenceAvg! * 100).toStringAsFixed(0)}%'),
               const SizedBox(height: 32),
@@ -661,98 +612,6 @@ class _ResolveNotesDialogState extends State<_ResolveNotesDialog> {
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
           child: const Text('Confirm'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Which trip/leg to ask the demo phone to capture for. A phone stands in
-/// for the Orange Pi (no attached camera of its own to trigger), so this
-/// asks for a target instead of just firing.
-class _TriggerPhoneDialog extends StatefulWidget {
-  const _TriggerPhoneDialog({required this.trips});
-  final List<TripBoardRow> trips;
-
-  @override
-  State<_TriggerPhoneDialog> createState() => _TriggerPhoneDialogState();
-}
-
-class _TriggerPhoneDialogState extends State<_TriggerPhoneDialog> {
-  String? _tripId;
-  final _legController = TextEditingController(text: '1');
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.trips.isNotEmpty) _tripId = widget.trips.first.tripId;
-  }
-
-  @override
-  void dispose() {
-    _legController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.surfaceRaised,
-      title: const Text('Trigger phone capture', style: TextStyle(color: AppColors.textPrimary)),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.trips.isEmpty)
-              const Text(
-                'No trips today. A trip must be boarding or departed before '
-                'it can be audited.',
-                style: TextStyle(color: AppColors.textPrimary),
-              )
-            else ...[
-              const Text('Trip', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              const SizedBox(height: 4),
-              DropdownButtonFormField<String>(
-                initialValue: _tripId,
-                dropdownColor: AppColors.surfaceRaised,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                ),
-                items: widget.trips
-                    .map((t) => DropdownMenuItem(
-                          value: t.tripId,
-                          child: Text('${t.routeName} — ${DateFormat.jm().format(t.departureDatetime)}'),
-                        ))
-                    .toList(),
-                onChanged: (v) => setState(() => _tripId = v),
-              ),
-              const SizedBox(height: 16),
-              const Text('Leg sequence', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              const SizedBox(height: 4),
-              TextField(
-                controller: _legController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: _tripId == null
-              ? null
-              : () {
-                  final leg = int.tryParse(_legController.text.trim());
-                  if (leg == null || leg < 1) return;
-                  Navigator.of(context).pop((tripId: _tripId!, legSequence: leg));
-                },
-          child: const Text('Request capture'),
         ),
       ],
     );

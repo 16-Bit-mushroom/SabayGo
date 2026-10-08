@@ -19,6 +19,11 @@ class PendingAudit {
     this.resolvedBy,
     this.resolvedAt,
     this.resolutionNotes,
+    required this.verdict,
+    required this.headline,
+    required this.explanation,
+    required this.nextStep,
+    this.caution,
   });
 
   final String auditId;
@@ -46,6 +51,15 @@ class PendingAudit {
   final String? resolvedBy;
   final DateTime? resolvedAt;
   final String? resolutionNotes;
+
+  /// What the counts mean, written by the backend (domain/audit_reading.py)
+  /// so every screen says the same thing about the same result.
+  /// `verdict` is match / more_than_manifest / fewer_than_manifest.
+  final String verdict;
+  final String headline;
+  final String explanation;
+  final String nextStep;
+  final String? caution;
 
   bool get isPending => resolutionStatus == 'pending';
 
@@ -90,6 +104,11 @@ class PendingAudit {
             ? null
             : DateTime.parse(json['resolved_at'] as String),
         resolutionNotes: json['resolution_notes'] as String?,
+        verdict: json['verdict'] as String,
+        headline: json['headline'] as String,
+        explanation: json['explanation'] as String,
+        nextStep: json['next_step'] as String,
+        caution: json['caution'] as String?,
       );
 }
 
@@ -99,6 +118,15 @@ class AuditRepository {
 
   Future<List<PendingAudit>> pending() async {
     final json = await _api.get('/audits/pending');
+    return (json as List)
+        .map((e) => PendingAudit.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Every audit of one trip, open or closed, newest first -- for the
+  /// Trips screen.
+  Future<List<PendingAudit>> forTrip(String tripId) async {
+    final json = await _api.get('/audits/trips/$tripId');
     return (json as List)
         .map((e) => PendingAudit.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -131,16 +159,25 @@ class AuditRepository {
 
   /// Asks the phone-as-camera PoC (ai_capture_app) to capture next time it
   /// polls -- the same role the Orange Pi will fill once that hardware is
-  /// in hand. Returns immediately; the reconciled result lands in
-  /// pending()/history() once the phone captures and uploads, same as any
-  /// other trigger.
-  Future<void> triggerPhone({
+  /// in hand. Returns immediately with the request's `requested_at`, which
+  /// identifies it in [phoneStatus]. The backend refuses here, not later,
+  /// when the trip is not boarding or departed.
+  Future<String> triggerPhone({
     required String tripId,
     required int legSequence,
   }) async {
-    await _api.post('/audits/trigger-phone', body: {
+    final json = await _api.post('/audits/trigger-phone', body: {
       'trip_id': tripId,
       'leg_sequence': legSequence,
-    });
+    }) as Map<String, dynamic>;
+    return json['requested_at'] as String;
+  }
+
+  /// What became of the latest phone request: `state` is idle, pending,
+  /// fulfilled (with `result`) or failed (with `error`). Needed because a
+  /// capture that matches the manifest is filed as reconciled -- history,
+  /// not the queue -- and a failed one writes no audit at all.
+  Future<Map<String, dynamic>> phoneStatus() async {
+    return await _api.get('/audits/phone/status') as Map<String, dynamic>;
   }
 }

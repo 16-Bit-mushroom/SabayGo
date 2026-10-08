@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 
 from app.api.v1.deps import SessionDep, require_roles
 from app.application.scheduling.generate_trips import (
@@ -24,12 +24,15 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ
 from app.domain.enums import Role
 from app.infrastructure.models import (
+    Booking,
     CooperativePolicy,
     FareMatrix,
     Route,
     RouteStop,
     ScheduleTemplate,
+    StaffProfile,
     Terminal,
+    Trip,
 )
 
 router = APIRouter(prefix="/config", tags=["configuration"])
@@ -460,3 +463,86 @@ async def create_special_trip(
         trip_label=payload.trip_label,
         advance_booking_seat_cap=payload.advance_booking_seat_cap,
     )
+
+
+# ------------------------------------------------------------- trip board
+class TripBoardOut(BaseModel):
+    trip_id: str
+    trip_label: str | None
+    route_name: str
+    departure_datetime: dt.datetime
+    status: str
+    departed_at: dt.datetime | None
+    plate_number: str | None
+    driver_name: str | None
+    conductor_name: str | None
+    seat_capacity: int
+    booked: int
+    checked_in: int
+    boarded: int
+    no_show: int
+
+
+@router.get("/trips", response_model=list[TripBoardOut], dependencies=[Depends(COOP_ADMIN)])
+async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[TripBoardOut]:
+    """Every trip on one service date with its live status and crew -- the
+    office's view of what the conductor sees on each van. Per-trip detail
+    is the conductor's own manifest, GET /trips/{id}/manifest.
+
+    A separate endpoint, not a column on the revenue view, because status
+    is operational and the view is a reconciliation: adding it there would
+    put a moving value into a figure the office signs off."""
+    day = date or dt.datetime.now(APP_TZ).date()
+    trips = (
+        await session.execute(
+            select(Trip).where(Trip.service_date == day).order_by(Trip.departure_datetime)
+        )
+    ).scalars().all()
+    if not trips:
+        return []
+
+    ids = [t.trip_id for t in trips]
+    counts = {
+        row.trip_id: row
+        for row in (
+            await session.execute(
+                select(
+                    Booking.trip_id,
+                    func.sum(case((Booking.status.in_(("confirmed", "checked_in", "boarded")), 1), else_=0)).label("booked"),
+                    func.sum(case((Booking.status == "checked_in", 1), else_=0)).label("checked_in"),
+                    func.sum(case((Booking.status == "boarded", 1), else_=0)).label("boarded"),
+                    func.sum(case((Booking.status == "no_show", 1), else_=0)).label("no_show"),
+                )
+                .where(Booking.trip_id.in_(ids))
+                .group_by(Booking.trip_id)
+            )
+        ).all()
+    }
+    crew_ids = {u for t in trips for u in (t.driver_id, t.conductor_id) if u}
+    names = {
+        p.user_id: f"{p.first_name} {p.last_name}"
+        for p in (
+            await session.execute(select(StaffProfile).where(StaffProfile.user_id.in_(crew_ids)))
+        ).scalars()
+    } if crew_ids else {}
+
+    out = []
+    for t in trips:
+        c = counts.get(t.trip_id)
+        out.append(TripBoardOut(
+            trip_id=t.trip_id,
+            trip_label=t.trip_label,
+            route_name=t.route.route_name,
+            departure_datetime=t.departure_datetime,
+            status=t.status,
+            departed_at=t.departed_at,
+            plate_number=t.van.plate_number if t.van else None,
+            driver_name=names.get(t.driver_id),
+            conductor_name=names.get(t.conductor_id),
+            seat_capacity=t.seat_capacity,
+            booked=int(c.booked or 0) if c else 0,
+            checked_in=int(c.checked_in or 0) if c else 0,
+            boarded=int(c.boarded or 0) if c else 0,
+            no_show=int(c.no_show or 0) if c else 0,
+        ))
+    return out

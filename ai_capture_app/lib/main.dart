@@ -249,12 +249,10 @@ class BackendApi {
     if (res.statusCode == 401) {
       throw BackendException('Backend rejected the device key.');
     }
-    if (res.statusCode == 409) {
-      throw BackendException(
-        'The pending request was already fulfilled or expired. '
-        'Ask dispatch to trigger again.',
-      );
-    }
+    // No special case for 409. It used to be reported as "already
+    // fulfilled", but the backend also answers 409 when the trip is not
+    // under way, and that wording sent people looking for a photo that had
+    // never been audited. The backend's own sentence says which it was.
     if (res.statusCode >= 400) {
       String detail = res.body;
       try {
@@ -267,6 +265,108 @@ class BackendApi {
     }
 
     return PhoneAuditResult.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+}
+
+/// Finds the server PC on whatever network the phone is currently on.
+///
+/// The one thing that changes at every venue is the server's address, and
+/// it is the one thing hardest to fix on a phone: a build-time
+/// `--dart-define` needs a rebuild, and a touchscreen is a poor place to
+/// retype an IP address while a panel watches. So the phone looks for it.
+///
+/// It reads its OWN address, which it always knows, and sweeps that /24
+/// for a host answering the backend's unauthenticated `GET /health`. That
+/// endpoint touches the database, so an answer means the whole stack is
+/// up -- not merely that something is listening on port 8000.
+///
+/// A found address is reported, never silently applied to a capture: same
+/// rule as everywhere else in this app, the operator sees what it found.
+class ServerFinder {
+  static const int backendPort = 8000;
+  static const int aiNodePort = 5000;
+
+  /// How many addresses are probed at once. 254 at once is more sockets
+  /// than a handset will grant; 32 sweeps a /24 in a few seconds.
+  static const int _batchSize = 32;
+  static const Duration _probeTimeout = Duration(milliseconds: 1200);
+
+  /// This phone's own private IPv4 address, or null if it is on no
+  /// network at all (aeroplane mode, or Wi-Fi associated but no DHCP yet).
+  static Future<String?> ownAddress() async {
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLoopback: false,
+    );
+    for (final i in interfaces) {
+      for (final addr in i.addresses) {
+        if (_isPrivate(addr.address)) return addr.address;
+      }
+    }
+    return null;
+  }
+
+  static bool _isPrivate(String ip) {
+    final p = ip.split('.').map(int.tryParse).toList();
+    if (p.length != 4 || p.contains(null)) return false;
+    final a = p[0]!, b = p[1]!;
+    return a == 10 || (a == 192 && b == 168) || (a == 172 && b >= 16 && b <= 31);
+  }
+
+  /// Sweeps the phone's own /24 and returns the first host answering
+  /// /health. Throws [BackendException] with the reason when there is
+  /// nothing to find -- never a guessed address.
+  static Future<String> find({void Function(int probed, int total)? onProgress}) async {
+    final own = await ownAddress();
+    if (own == null) {
+      throw BackendException(
+        'This phone is not on a private network. Join the same Wi-Fi as '
+        'the server PC and try again.',
+      );
+    }
+    final prefix = own.substring(0, own.lastIndexOf('.'));
+    // Ascending, and the sweep stops at the first hit, so a server low in
+    // the range is found in the first batch. The phone's own address is
+    // skipped: nothing is listening on it.
+    final candidates = <String>[
+      for (var i = 1; i <= 254; i++) '$prefix.$i',
+    ]..removeWhere((ip) => ip == own);
+
+    final client = http.Client();
+    try {
+      var probed = 0;
+      for (var start = 0; start < candidates.length; start += _batchSize) {
+        final batch = candidates.sublist(
+          start,
+          (start + _batchSize).clamp(0, candidates.length),
+        );
+        final hits = await Future.wait(batch.map((ip) => _probe(client, ip)));
+        probed += batch.length;
+        onProgress?.call(probed, candidates.length);
+        final found = hits.firstWhere((h) => h != null, orElse: () => null);
+        if (found != null) return found;
+      }
+    } finally {
+      client.close();
+    }
+    throw BackendException(
+      'No SabayGo backend answered on $prefix.0/24. Check that run.sh is '
+      'up on the server PC and that both are on the same Wi-Fi.',
+    );
+  }
+
+  static Future<String?> _probe(http.Client client, String ip) async {
+    try {
+      final res = await client
+          .get(Uri.parse('http://$ip:$backendPort/health'))
+          .timeout(_probeTimeout);
+      if (res.statusCode == 200 && res.body.contains('"status"')) return ip;
+    } on Exception {
+      // A closed port, a host that is not there, a timeout -- all the
+      // normal outcome of probing 254 addresses, none of them worth
+      // reporting.
+    }
+    return null;
   }
 }
 
@@ -324,6 +424,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
   // whenever a *different* request shows up.
   String? _autoOpenedFor;
 
+  // Non-null while a subnet sweep is running or just after one; carries
+  // its progress or result line.
+  String? _findingStatus;
+  String? _findError;
+
   BackendApi get _backendApi => BackendApi(
         baseUrl: _backendUrlController.text.trim(),
         deviceKey: _deviceKeyController.text.trim(),
@@ -369,6 +474,38 @@ class _CaptureScreenState extends State<CaptureScreen> {
     } on BackendException catch (e) {
       if (!mounted) return;
       setState(() => _dispatchError = e.message);
+    }
+  }
+
+  /// Re-points both URL fields at a server found on the current network.
+  /// Only the host changes -- ports and paths are the system's, not
+  /// something an operator should be asked to remember.
+  Future<void> _findServer() async {
+    _setListening(false); // a sweep while polling a dead host is just noise
+    setState(() {
+      _findingStatus = 'Looking for the server...';
+      _findError = null;
+    });
+    try {
+      final host = await ServerFinder.find(
+        onProgress: (probed, total) {
+          if (!mounted) return;
+          setState(() => _findingStatus = 'Looking for the server... $probed/$total');
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _backendUrlController.text =
+            'http://$host:${ServerFinder.backendPort}/api/v1';
+        _baseUrlController.text = 'http://$host:${ServerFinder.aiNodePort}';
+        _findingStatus = 'Found the server at $host.';
+      });
+    } on BackendException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _findingStatus = null;
+        _findError = e.message;
+      });
     }
   }
 
@@ -448,6 +585,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            _buildFindServer(),
+            const Divider(height: 32),
             TextField(
               controller: _baseUrlController,
               decoration: const InputDecoration(
@@ -511,6 +650,43 @@ class _CaptureScreenState extends State<CaptureScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// One button that replaces typing an IP address on a touchscreen.
+  Widget _buildFindServer() {
+    final searching = _findingStatus?.startsWith('Looking') ?? false;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        OutlinedButton.icon(
+          onPressed: searching ? null : _findServer,
+          icon: searching
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.wifi_find),
+          label: const Text('Find server on this network'),
+        ),
+        if (_findingStatus != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _findingStatus!,
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ),
+        if (_findError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _findError!,
+              style: TextStyle(color: Colors.red.shade900),
+            ),
+          ),
+      ],
     );
   }
 
