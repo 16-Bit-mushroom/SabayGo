@@ -45,23 +45,27 @@ from dataclasses import dataclass, asdict
 import cv2
 import numpy as np
 from flask import Flask, jsonify, request
-from ultralytics import YOLO
+
+from inference import (
+    CONF_THRESHOLD,
+    JPEG_QUALITY,
+    MODEL_PATH,
+    MODEL_VERSION,
+    blur_faces,
+    count_people,
+    draw_boxes,
+    load_model,
+)
 
 # --------------------------------------------------------------------------
 # Configuration -- environment driven, never hardcoded IPs or paths.
+#
+# Model path, thresholds and JPEG quality live in inference.py, because the
+# evaluation harness shares them. What stays here is the camera and the API
+# key: service concerns the harness has no use for.
 # --------------------------------------------------------------------------
-MODEL_PATH        = os.getenv("AI_NODE_MODEL", "yolov8n.pt")
-MODEL_VERSION     = os.getenv("AI_NODE_MODEL_VERSION", "yolov8n-1.0")
 CAMERA_INDEX      = int(os.getenv("AI_NODE_CAMERA_INDEX", "0"))
-# 0.45 rather than the 0.25 default. A dim van cabin produces spurious
-# low-confidence detections, and a false positive here means an innocent
-# driver gets flagged for revenue leakage. Tune this on real cabin footage
-# and report the chosen value in your Results chapter.
-CONF_THRESHOLD    = float(os.getenv("AI_NODE_CONF", "0.45"))
-IOU_THRESHOLD     = float(os.getenv("AI_NODE_IOU", "0.50"))
-JPEG_QUALITY      = int(os.getenv("AI_NODE_JPEG_QUALITY", "70"))
 API_KEY           = os.getenv("AI_NODE_API_KEY")  # required in production
-PERSON_CLASS_ID   = 0  # COCO class 0 == person
 WARMUP_FRAMES     = 5
 
 logging.basicConfig(
@@ -72,9 +76,10 @@ log = logging.getLogger("sabaygo-ai-node")
 
 app = Flask(__name__)
 
-log.info("Loading YOLOv8 model: %s", MODEL_PATH)
-model = YOLO(MODEL_PATH)
-log.info("Model ready.")
+# Loaded here rather than on the first request: a cold model load inside an
+# audit would add seconds to it, and logging is configured by this point so
+# the load's own log lines are visible.
+load_model()
 
 
 # --------------------------------------------------------------------------
@@ -122,46 +127,6 @@ class Camera:
 camera = Camera(CAMERA_INDEX)
 
 
-# --------------------------------------------------------------------------
-# Privacy
-#
-# Your manuscript promises a "privacy-compliant blurred snapshot". This is
-# where that promise is kept, and it matters under RA 10173: the image is
-# retained as evidence against a driver, so faces must not be legible.
-#
-# Heuristic: YOLOv8 gives a whole-person box; the head occupies roughly the
-# top quarter. Blur that region. This is intentionally cheap -- running a
-# second face-detection model on an Orange Pi would roughly double
-# inference time. Document the heuristic and its limitation (profile and
-# occluded heads may be partially missed) rather than overclaiming.
-# --------------------------------------------------------------------------
-def blur_faces(frame: np.ndarray, boxes: np.ndarray) -> np.ndarray:
-    out = frame.copy()
-    h, w = out.shape[:2]
-    for x1, y1, x2, y2 in boxes.astype(int):
-        box_h = y2 - y1
-        head_y2 = y1 + max(int(box_h * 0.28), 12)
-        x1c, y1c = max(x1, 0), max(y1, 0)
-        x2c, y2c = min(x2, w), min(head_y2, h)
-        if x2c <= x1c or y2c <= y1c:
-            continue
-        region = out[y1c:y2c, x1c:x2c]
-        # Kernel scaled to region size so blur strength is resolution
-        # independent; forced odd because GaussianBlur requires it.
-        k = max(int(min(region.shape[:2]) / 3) | 1, 15)
-        out[y1c:y2c, x1c:x2c] = cv2.GaussianBlur(region, (k, k), 0)
-    return out
-
-
-def draw_boxes(frame: np.ndarray, boxes: np.ndarray, confs: np.ndarray) -> np.ndarray:
-    out = frame.copy()
-    for (x1, y1, x2, y2), conf in zip(boxes.astype(int), confs):
-        cv2.rectangle(out, (x1, y1), (x2, y2), (0, 200, 0), 2)
-        cv2.putText(out, f"{conf:.2f}", (x1, max(y1 - 6, 12)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 0), 1, cv2.LINE_AA)
-    return out
-
-
 @dataclass
 class AuditResult:
     visual_count: int
@@ -189,49 +154,32 @@ def require_api_key() -> bool:
 # --------------------------------------------------------------------------
 def _infer_and_package(frame: np.ndarray, capture_ms: int, started: float):
     try:
-        t0 = time.perf_counter()
-        results = model(
-            frame,
-            classes=[PERSON_CLASS_ID],
-            conf=CONF_THRESHOLD,
-            iou=IOU_THRESHOLD,
-            verbose=False,
-        )
-        inference_ms = int((time.perf_counter() - t0) * 1000)
+        det = count_people(frame)
     except Exception as exc:
+        # Fail loudly, never with a number. A fabricated count looks
+        # authoritative and would flag an innocent driver.
         log.exception("Inference failed")
         return jsonify({"error": "inference_failed", "detail": str(exc)}), 500
 
-    det = results[0].boxes
-    if det is not None and len(det) > 0:
-        xyxy = det.xyxy.cpu().numpy()
-        confs = det.conf.cpu().numpy()
-    else:
-        xyxy = np.empty((0, 4))
-        confs = np.empty((0,))
-
-    person_count = int(len(xyxy))
-    confidence_avg = round(float(confs.mean()), 3) if person_count else None
-
-    annotated = draw_boxes(blur_faces(frame, xyxy), xyxy, confs)
+    annotated = draw_boxes(blur_faces(frame, det.xyxy), det.xyxy, det.confs)
     ok, buf = cv2.imencode(".jpg", annotated,
                            [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
     if not ok:
         return jsonify({"error": "encode_failed"}), 500
 
     result = AuditResult(
-        visual_count=person_count,
-        confidence_avg=confidence_avg,
+        visual_count=det.count,
+        confidence_avg=det.confidence_avg,
         model_version=MODEL_VERSION,
         conf_threshold=CONF_THRESHOLD,
         capture_ms=capture_ms,
-        inference_ms=inference_ms,
+        inference_ms=det.inference_ms,
         total_ms=int((time.perf_counter() - started) * 1000),
         snapshot_b64=base64.b64encode(buf).decode("utf-8"),
     )
 
     log.info("Visual count=%s conf_avg=%s inference=%sms",
-             person_count, confidence_avg, inference_ms)
+             det.count, det.confidence_avg, det.inference_ms)
     return jsonify(asdict(result))
 
 

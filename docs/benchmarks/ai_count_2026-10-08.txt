@@ -1,0 +1,133 @@
+======================================================================
+YOLOv8 PASSENGER-COUNT EVALUATION
+======================================================================
+
+Date                 : 2026-10-08
+Model                : yolov8n.pt (yolov8n-1.0)
+Deployed conf / iou  : 0.45 / 0.5
+Thresholds evaluated : 0.25, 0.35, 0.45, 0.55, 0.65
+Host                 : x86_64, cpu
+Manifest             : ai_service/eval/manifest.csv
+Sources              : coco
+Conditions           : original
+Frames / inferences  : 1643 / 8215
+Cabin framing        : smallest person observed = 1.00% of frame area (1593 of 1643 rows recorded)
+
+Counts come from inference.count_people(), the same function the
+Flask service calls on every audit -- not a second copy of it.
+
+TABLE 1  Counting accuracy by condition (conf = 0.45)
+======================================================================
+
+condition          n     MAE    RMSE    bias   exact  within1
+original        1643   0.339   0.793  -0.278   74.7%    94.3%
+
+bias is signed: negative means the detector counts fewer people
+than are present, which is the direction that hides a passenger.
+
+TABLE 2  Counting accuracy by occupancy (original, conf = 0.45)
+======================================================================
+
+occupancy          n     MAE    RMSE    bias   exact  within1
+0 (empty)         50   0.000   0.000  +0.000  100.0%   100.0%
+1-3             1424   0.249   0.565  -0.189   78.3%    97.1%
+4-7              139   0.914   1.360  -0.856   43.2%    75.5%
+8-11              28   2.607   3.375  -2.464   10.7%    35.7%
+12-14              2   1.000   1.000  +0.000    0.0%   100.0%
+
+The empty-cabin row is the false-positive measurement: any count
+above zero there is the detector inventing a passenger.
+
+TABLE 3  Leakage detection (original, conf = 0.45)
+======================================================================
+
+Two alert rules, both of which the manuscript states somewhere:
+  strict   delta != 0   (section 2.3.2.1 reconciliation formula)
+  leakage  delta >  0   (section 2.3.4 functional requirement)
+
+                                      strict   leakage
+false alarm, honest crew (k=0)         25.3%      2.7%
+detection, 1 hidden passenger(s)       82.9%     77.5%
+detection, 2 hidden passenger(s)       96.2%     94.6%
+detection, 3 hidden passenger(s)       98.8%     98.4%
+
+false alarms that over-count            2.7%
+false alarms that under-count          22.5%
+
+Blind spot -- the strict rule misses leakage of exactly k only
+when the detector undercounts by exactly k, so the two errors
+cancel and delta reads zero:
+  err == -1 (hides 1) :  17.1%
+  err == -2 (hides 2) :   3.8%
+  err == -3 (hides 3) :   1.2%
+
+TABLE 3b  Leakage detection by occupancy (conf = 0.45)
+======================================================================
+
+The decision-relevant table. Read it before Table 3.
+
+                     ---- strict (delta != 0) ----   -- leakage (delta > 0) --
+occupancy        n  false alarm   det k=1  det k=2   false alarm   det k=1  det k=2
+0 (empty)       50         0.0%    100.0%   100.0%          0.0%    100.0%   100.0%
+1-3           1424        21.7%     83.7%    97.6%          2.7%     81.0%    97.3%
+4-7            139        56.8%     69.1%    84.9%          2.2%     45.3%    76.3%
+8-11            28        89.3%     82.1%    75.0%          7.1%     17.9%    35.7%
+12-14            2       100.0%     50.0%   100.0%         50.0%     50.0%   100.0%
+
+Both rules degrade as the van fills, in opposite ways. The
+strict rule accuses more and more honest crews; the leakage
+rule stays quiet but stops catching anything. The cause is the
+same in both: the detector undercounts when passengers occlude
+each other (see the bias column of Table 2), and on a full van
+an undercount of one or two is indistinguishable from a fare
+that was never logged.
+
+Any claim about catching revenue leakage has to be made at the
+occupancy the claim is about. A figure from a two-passenger
+frame does not transfer to a fourteen-seat cabin.
+
+TABLE 4  Threshold sweep (original frames)
+======================================================================
+
+  conf     MAE   exact  false alarm  detect k=1  detect k=2
+  0.25   0.282   78.1%        21.9%       90.3%       98.1%
+  0.35   0.283   78.2%        21.8%       86.7%       97.2%
+  0.45   0.339   74.7%        25.3%       82.9%       96.2%  <- deployed
+  0.55   0.427   70.7%        29.3%       79.5%       95.6%
+  0.65   0.554   64.9%        35.1%       76.4%       93.8%
+
+The trade-off to read here: a lower threshold detects more
+hidden passengers and accuses more honest crews. Pick the point
+the cooperative can live with, and say in the paper that it was
+picked here rather than by taste.
+
+TABLE 5  Inference latency (conf = 0.45, ms)
+======================================================================
+
+condition          n     mean   median      p95      max
+original        1643    100.6     91.0    140.0    896.0
+
+Measured on the host named above. The Orange Pi 5 figure in
+section 2.3.4's hardware table is NOT measured here and must not
+be reported as if it were -- the van kit is not yet installed.
+Resolution conditions do not change latency much because
+Ultralytics letterboxes every frame to imgsz=640 regardless, so
+res_half measures lost information, not a smaller workload.
+
+WHAT THIS DOES NOT MEASURE
+======================================================================
+
+The COCO frames are held-out val2017 photographs filtered to
+van-like occupancy and framing. They are street photography, not
+footage from a camera mounted in a UV Express cabin.
+
+So these figures characterise the detector and the alert rules built
+on it at the system's operating point.
+In-cabin accuracy under real seat geometry, occlusion between
+rows and Davao afternoon glare remains to be established once
+the van kit is installed.
+
+Adding a staged set closes this: shoot a parked van at known
+occupancy, append the rows to the manifest with source=staged,
+and re-run. Table 1b then reports it beside these figures
+instead of averaging the two together.

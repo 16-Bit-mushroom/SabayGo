@@ -7,7 +7,9 @@ replacement wording ready to paste.
 the manuscript. Editing it changes nothing. Make these edits in the `.docx`
 itself; the line numbers below are the export's, for locating the sentence.
 
-Verified against the tree at `d5d22e9`, 28 September 2026.
+Sections 1-8 verified against the tree at `d5d22e9`, 28 September 2026.
+Sections 9-10 added 8 October 2026, when the evaluation harness
+(`ai_service/eval/`) was built and surfaced them.
 
 ---
 
@@ -146,3 +148,77 @@ role table, so it is a decision for the group rather than a find-and-replace:
 either rename to "cooperative administrator" everywhere, or add one
 sentence at first use defining "Operator" as office staff and
 distinguishing it from the franchise holder.
+
+---
+
+## 9. Two different alert rules  (§2.3.2.1 export line 228, §2.3.4 line 154)
+
+Not a claim the code fails to meet — a place where **the manuscript
+contradicts itself**, found while building the evaluation harness.
+
+**§2.3.2.1 states the reconciliation formula as:**
+
+> Δ = C_visual − C_booked
+> Δ = 0 → Reconciled
+> Δ ≠ 0 → Discrepancy Detected (Audit Required)
+
+**§2.3.4's functional requirement states:**
+
+> "…instantly trigger a revenue leakage alert for the operator if the
+> physical count **exceeds** the manifested count."
+
+These are not the same rule. `Δ ≠ 0` fires in both directions; "exceeds"
+is `Δ > 0` only. The difference is operationally large and the evaluation
+measures both separately, because:
+
+- `Δ ≠ 0` also fires when there are *fewer* bodies than tickets, which is
+  not leakage at all — it is a no-show the system already released, or a
+  passenger the detector failed to see. It therefore carries a much higher
+  false-alarm rate against an honest crew.
+- `Δ > 0` is blind to undercounting, which is the direction that hides a
+  passenger.
+
+**What the code does:** `yolov8_audit_logs.variance` is a signed
+`SMALLINT`, stored signed on purpose, and the console's audit queue shows
+any non-zero variance for a human to close. So the implementation follows
+§2.3.2.1 — flag both directions, let the office decide — and §2.3.4's
+"exceeds" is the sentence that needs fixing.
+
+**Replace §2.3.4's wording with:** "…instantly flag the trip for operator
+review if the physical count differs from the manifested count, recording
+the signed variance so that an excess of physical passengers (the revenue
+leakage case) is distinguishable from a shortfall."
+
+**Why it matters for the defence:** Table 3 of
+`docs/benchmarks/ai_count_<date>.txt` reports the false-alarm and detection
+rates under *both* rules. If the paper states one rule and the Results
+table reports the other, that is the first question the panel asks.
+
+## 10. New Limitation sentence — how the model was evaluated
+
+Paste after the sentence ending "…rather than dedicated vehicle-mounted
+hardware."
+
+> The headcount model's performance was characterised on held-out public
+> person-detection data filtered to van-like occupancy and framing, and on
+> the same frames under controlled degradation of resolution, illumination
+> and motion standing in for cabin conditions, rather than on footage from
+> a vehicle-mounted camera, which was unavailable during development. The
+> reported counting error, and the false-alarm and detection rates that
+> follow from it, therefore characterise the detector and the
+> reconciliation rule at the system's configured operating threshold;
+> accuracy inside an occupied cabin, under real seat geometry, inter-row
+> occlusion and daylight glare, remains to be established once the in-van
+> camera unit is installed.
+
+**Why:** the model is pretrained and unmodified, so there is nothing to
+report as training performance, and saying so plainly is stronger than
+implying a training contribution that was never made. What *is* reported
+is the counting error and what it implies for the reconciliation claim —
+which is the actual contribution. The harness and its reasoning are in
+`ai_service/eval/README.md`.
+
+**If a staged set is shot** (a parked van at known occupancy — see that
+README), delete the clause beginning "rather than on footage from" and
+report the staged figures from Table 1b instead. That is a half-day of
+work and it is the single cheapest upgrade available to this chapter.

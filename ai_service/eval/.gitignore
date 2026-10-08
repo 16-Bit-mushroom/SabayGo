@@ -1,0 +1,8 @@
+# Evaluation inputs are downloaded or generated, never committed.
+#
+# COCO val2017 is ~1 GB (eval/fetch_coco.sh fetches it), the degraded
+# frames are derived from it, and the manifest names absolute paths on
+# whichever machine built it. The committed artefacts are the scripts here
+# and the reports they write into docs/benchmarks/ -- those are the record.
+data/
+manifest.csv
