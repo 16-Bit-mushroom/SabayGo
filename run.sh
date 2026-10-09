@@ -95,6 +95,18 @@ case "$HOST" in
     warn "$HOST is loopback -- no handset can reach it. Pass --host with the real LAN address." ;;
 esac
 
+# A host firewall drops a handset's connection silently: the phone can
+# even ping this machine while every request to 8000 dies, and the
+# backend log stays empty because nothing arrived. ufw did exactly this
+# on a phone hotspot. Rules need root, so the script only checks and
+# prints the one command that fixes it; ufw keeps the rule across reboots.
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ufw 2>/dev/null; then
+  warn "ufw is active. If a phone cannot reach this machine, allow the two"
+  warn "  ports from private networks (once, it persists):"
+  warn "    for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; sudo ufw allow proto tcp from \$net to any port $PORT_BACKEND,$PORT_AI; end"
+  warn "  (bash: for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do sudo ufw allow proto tcp from \$net to any port $PORT_BACKEND,$PORT_AI; done)"
+fi
+
 # The console runs in a browser on THIS machine, so it dials 127.0.0.1 and
 # is immune to the address changing. Only the handsets need $HOST.
 API_LAN="http://$HOST:$PORT_BACKEND/api/v1"
