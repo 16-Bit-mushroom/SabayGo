@@ -14,7 +14,7 @@ passenger and crew apps (`mobile/`) and the capture app are unchanged.
 
 | | Before | After |
 |---|---|---|
-| Look | Light, white panels | Dark canvas, grey rounded panels, light buttons |
+| Look | Light, white panels | Dark canvas, grey rounded panels, light buttons — or light mode, one click away |
 | Navigation | 10 items in one sidebar | Same pages in 3 named groups, sidebar folds to icons |
 | Top of the screen | Nothing | Today's figures, notifications, account menu |
 | Page titles | Did not match the menu ("Trip Dispatch Command" under "Trip Dispatcher") | Match the menu word for word |
@@ -23,6 +23,19 @@ passenger and crew apps (`mobile/`) and the capture app are unchanged.
 | Empty / error screens | Different on every page | One style everywhere, saying what to do next |
 
 ---
+
+## Dark and light mode
+
+The **sun/moon button** in the top bar, left of the bell, switches the
+whole console between dark (the default) and light.
+
+- The choice is remembered by that browser, so each office PC keeps its
+  own.
+- You stay on the same page with the same trip selected; nothing
+  reloads.
+- Light mode is the console's earlier white palette, for a bright office
+  or a washed-out projector. Both palettes pass WCAG AA.
+- The map darkens its streets only in dark mode.
 
 ## Navigation
 
@@ -169,13 +182,25 @@ passenger list". `tests/test_audit_reading.py` passes.
 
 ## Under the hood
 
-- **Theme.** `core/design/tokens.dart` is now the console's own dark
-  palette. Every colour pairing is measured against WCAG AA:
-  - body text 15.9:1
-  - muted text 7.3:1
-  - input borders 3.75:1
+- **Theme.** `core/design/tokens.dart` holds two palettes,
+  `AppPalette.dark` and `AppPalette.light`. Every colour pairing in both
+  is measured against WCAG AA; the lowest are:
 
-  The console no longer copies the mobile app's light colours.
+  | | Dark | Light |
+  |---|---|---|
+  | Body text | 15.9:1 | 17.1:1 |
+  | Muted text | 7.3:1 | 6.7:1 |
+  | Input borders | 3.75:1 | 3.64:1 |
+
+  `AppColors.x` reads whichever palette is in use, so colours can no
+  longer sit inside `const` widgets; about 150 `const` keywords were
+  removed for that.
+
+  `core/design/appearance.dart` switches the palette, saves the choice in
+  the browser, and redraws every widget with Flutter's hot-reload
+  mechanism (`reassembleApplication`), which keeps each page's state.
+
+  The console no longer copies the mobile app's colours.
 - **Shared building blocks** in `core/design/components/`:
   - `PageHeader`
   - `Panel`

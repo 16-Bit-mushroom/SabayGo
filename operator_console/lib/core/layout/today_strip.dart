@@ -153,7 +153,7 @@ class _Chip extends StatelessWidget {
         color: AppColors.surfaceRaised,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.full),
-          side: const BorderSide(color: AppColors.divider),
+          side: BorderSide(color: AppColors.divider),
         ),
         child: InkWell(
           customBorder: const StadiumBorder(),
@@ -166,7 +166,7 @@ class _Chip extends StatelessWidget {
                 Icon(icon, size: 16, color: AppColors.textMuted),
                 const SizedBox(width: AppSpacing.sm),
                 Text(label,
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                 const SizedBox(width: AppSpacing.sm),
                 Text(value,
                     style: TextStyle(color: fg == AppColors.textMuted ? AppColors.textPrimary : fg,

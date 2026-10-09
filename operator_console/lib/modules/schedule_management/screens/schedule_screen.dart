@@ -167,7 +167,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     Text('${r.serviceDate.toIso8601String().split('T').first}:',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     for (final w in r.warnings)
-                      Text('• $w', style: const TextStyle(color: AppColors.warning, fontSize: 12.5)),
+                      Text('• $w', style: TextStyle(color: AppColors.warning, fontSize: 12.5)),
                   ],
               ],
             ),
@@ -200,7 +200,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               FilledButton.icon(
                 onPressed: _generating ? null : _generateTrips,
                 icon: _generating
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
@@ -294,7 +294,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             _cell(
                               i,
                               Text(_columns[i].$1,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
                             ),
                         ]),
@@ -404,14 +404,14 @@ class _TemplateDetailsDialog extends StatelessWidget {
             children: [
               Text(
                 '$routeName · departs ${t.departureTime.substring(0, 5)} · ${t.daysSummary}',
-                style: const TextStyle(color: AppColors.textMuted),
+                style: TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 4),
               Text(
                 'Valid from ${date(t.validFrom)}'
                 '${t.validUntil != null ? ' until ${date(t.validUntil!)}' : ', no end date'}'
                 ' · ${t.isActive ? 'In use' : 'Paused'}',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
               ),
               const SizedBox(height: AppSpacing.xl),
               _AssignmentBlock(
@@ -514,22 +514,22 @@ class _AssignmentBlock extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(role.toUpperCase(),
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.textMuted)),
                 const SizedBox(height: 2),
                 if (!assigned) ...[
-                  const Text('Not assigned',
+                  Text('Not assigned',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
                   const SizedBox(height: 2),
-                  Text(unassignedNote, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                  Text(unassignedNote, style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
                 ] else if (missing)
-                  const Text('Assigned record not found in the roster.',
+                  Text('Assigned record not found in the roster.',
                       style: TextStyle(fontSize: 14, color: AppColors.warning))
                 else ...[
                   Row(children: [
                     Flexible(
                       child: Text(title!,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                     ),
                     if (inactive) ...[
@@ -541,7 +541,7 @@ class _AssignmentBlock extends StatelessWidget {
                           borderRadius: BorderRadius.circular(AppRadius.full),
                         ),
                         child: Text(status!.toUpperCase(),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning)),
                       ),
                     ],
@@ -549,7 +549,7 @@ class _AssignmentBlock extends StatelessWidget {
                   for (final l in lines)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
-                      child: Text(l, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                      child: Text(l, style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
                     ),
                 ],
               ],
@@ -582,22 +582,22 @@ class _GenerateTripsDialogState extends State<_GenerateTripsDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Creates bookable trips from every regular departure that is in use, '
+            Text('Creates bookable trips from every regular departure that is in use, '
                 'starting today. Trips that already exist are left alone.',
                 style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text('How many days ahead:', style: TextStyle(color: AppColors.textPrimary)),
+                Text('How many days ahead:', style: TextStyle(color: AppColors.textPrimary)),
                 const Spacer(),
                 IconButton(
                   onPressed: _daysAhead > 1 ? () => setState(() => _daysAhead--) : null,
-                  icon: const Icon(Icons.remove_circle_outline, color: AppColors.textMuted),
+                  icon: Icon(Icons.remove_circle_outline, color: AppColors.textMuted),
                 ),
-                Text('$_daysAhead', style: const TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+                Text('$_daysAhead', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
                 IconButton(
                   onPressed: _daysAhead < 30 ? () => setState(() => _daysAhead++) : null,
-                  icon: const Icon(Icons.add_circle_outline, color: AppColors.textMuted),
+                  icon: Icon(Icons.add_circle_outline, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -738,7 +738,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                   border: Border.all(color: AppColors.danger),
                 ),
-                child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                child: Text(_error!, style: TextStyle(color: AppColors.danger)),
               ),
               const SizedBox(height: AppSpacing.md),
             ],
@@ -770,7 +770,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            const Text('Runs on', style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+            Text('Runs on', style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
@@ -835,7 +835,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
               onPressed: _submitting ? null : _submit,
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               icon: _submitting
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18, height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
                   : const Icon(Icons.add),

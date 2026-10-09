@@ -73,7 +73,7 @@ class AuditReadingCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline, size: 16, color: AppColors.textMuted),
+                Icon(Icons.info_outline, size: 16, color: AppColors.textMuted),
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(audit.caution!,

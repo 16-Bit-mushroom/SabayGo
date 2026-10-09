@@ -86,7 +86,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
 
     return AlertDialog(
       backgroundColor: AppColors.surfaceRaised,
-      title: const Text('My profile', style: TextStyle(color: AppColors.textPrimary)),
+      title: Text('My profile', style: TextStyle(color: AppColors.textPrimary)),
       content: SizedBox(
         width: 420,
         child: Form(
@@ -139,7 +139,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
                 }),
                 if (_error != null) ...[
                   const SizedBox(height: AppSpacing.lg),
-                  Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                  Text(_error!, style: TextStyle(color: AppColors.danger)),
                 ],
               ],
             ),
@@ -173,7 +173,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
     return TextFormField(
       controller: c,
       obscureText: obscure,
-      style: const TextStyle(color: AppColors.textPrimary),
+      style: TextStyle(color: AppColors.textPrimary),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

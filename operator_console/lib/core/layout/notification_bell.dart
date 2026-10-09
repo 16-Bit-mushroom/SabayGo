@@ -110,7 +110,7 @@ class _NotificationPanel extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text('Could not load notifications.\n${p.error}',
-              textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
+              textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
         ),
       );
     }
@@ -118,7 +118,7 @@ class _NotificationPanel extends StatelessWidget {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (p.items.isEmpty) {
-      return const Center(
+      return Center(
         child: Text('Nothing yet. A camera check that needs review, or an SOS, shows up here.',
             style: TextStyle(color: AppColors.textMuted)),
       );
@@ -178,12 +178,12 @@ class _NotificationTile extends StatelessWidget {
         padding: const EdgeInsets.only(top: 2),
         child: Text(
           '${n.message}\n${_relative(n.createdAt)}',
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35),
+          style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35),
         ),
       ),
       isThreeLine: true,
       trailing: n.isActionable
-          ? const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted)
+          ? Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted)
           : null,
     );
   }

@@ -14,6 +14,7 @@ import '../../viewmodels/auth_provider.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../viewmodels/notification_provider.dart';
+import '../design/appearance.dart';
 import '../design/components/brand_logo.dart';
 import '../design/tokens.dart';
 import 'notification_bell.dart';
@@ -143,7 +144,7 @@ class _TopBar extends StatelessWidget {
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.sidebar,
         border: Border(bottom: BorderSide(color: AppColors.divider)),
       ),
@@ -151,11 +152,30 @@ class _TopBar extends StatelessWidget {
         children: [
           Expanded(child: strip),
           const SizedBox(width: AppSpacing.md),
+          const _AppearanceButton(),
           bell,
           const SizedBox(width: AppSpacing.sm),
           const _ProfileMenu(),
         ],
       ),
+    );
+  }
+}
+
+/// Sun or moon: the palette the console is *not* in, so the icon says
+/// what a click will do.
+class _AppearanceButton extends StatelessWidget {
+  const _AppearanceButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = context.watch<Appearance>();
+    final dark = appearance.isDark;
+    return IconButton(
+      tooltip: dark ? 'Switch to light mode' : 'Switch to dark mode',
+      onPressed: appearance.toggle,
+      icon: Icon(dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+          color: AppColors.textMuted),
     );
   }
 }
@@ -210,7 +230,7 @@ class _ProfileMenu extends StatelessWidget {
               backgroundColor: AppColors.primary,
               child: Text(
                 name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-                style: const TextStyle(color: AppColors.onFill, fontWeight: FontWeight.w800),
+                style: TextStyle(color: AppColors.onFill, fontWeight: FontWeight.w800),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -225,7 +245,7 @@ class _ProfileMenu extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.expand_more, size: 18, color: AppColors.textMuted),
+            Icon(Icons.expand_more, size: 18, color: AppColors.textMuted),
           ],
         ),
       ),
@@ -256,7 +276,7 @@ class _Sidebar extends StatelessWidget {
       duration: MediaQuery.of(context).disableAnimations ? Duration.zero : AppDuration.normal,
       curve: Curves.easeOut,
       width: collapsed ? 76 : 256,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.sidebar,
         border: Border(right: BorderSide(color: AppColors.divider)),
       ),
@@ -422,7 +442,7 @@ class _SidebarButton extends StatelessWidget {
               Icon(icon, size: 20, color: AppColors.textMuted),
               if (!collapsed) ...[
                 const SizedBox(width: AppSpacing.md),
-                Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                Text(label, style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
               ],
             ],
           ),

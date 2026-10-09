@@ -96,7 +96,7 @@ class _ConversationList extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text('Could not load messages.\n${p.listError}',
-              textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
+              textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
         ),
       );
     }
@@ -135,7 +135,7 @@ class _ConversationList extends StatelessWidget {
                   decoration:
                       BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
                   child: Text('${c.unreadCount}',
-                      style: const TextStyle(fontSize: 11, color: AppColors.onFill)),
+                      style: TextStyle(fontSize: 11, color: AppColors.onFill)),
                 )
               : null,
           onTap: () => p.openConversation(c.conversationId),
@@ -167,7 +167,7 @@ class _Thread extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.watch<MessagingProvider>();
     if (p.openConversationId == null) {
-      return const Center(
+      return Center(
         child: Text('Select a conversation.', style: TextStyle(color: AppColors.textMuted)),
       );
     }
@@ -215,14 +215,14 @@ class _Thread extends StatelessWidget {
     if (p.threadError != null && p.messages.isEmpty) {
       return Center(
         child: Text('Could not load this conversation.\n${p.threadError}',
-            textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
+            textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
       );
     }
     if (p.isLoadingThread && p.messages.isEmpty) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (p.messages.isEmpty) {
-      return const Center(child: Text('No messages yet.', style: TextStyle(color: AppColors.textMuted)));
+      return Center(child: Text('No messages yet.', style: TextStyle(color: AppColors.textMuted)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -248,7 +248,7 @@ class _Thread extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
             child: Text(DateFormat('MMM dd, hh:mm a').format(m.createdAt),
-                style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
           ),
         ],
       ),

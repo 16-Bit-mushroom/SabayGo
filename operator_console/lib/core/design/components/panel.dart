@@ -20,7 +20,7 @@ class Panel extends StatelessWidget {
     this.trailing,
     this.padding = const EdgeInsets.all(AppSpacing.lg),
     this.fill = false,
-    this.color = AppColors.surfaceRaised,
+    this.color,
   });
 
   final Widget child;
@@ -29,7 +29,9 @@ class Panel extends StatelessWidget {
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
   final bool fill;
-  final Color color;
+
+  /// Defaults to [AppColors.surfaceRaised].
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +53,7 @@ class Panel extends StatelessWidget {
           );
     return Container(
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? AppColors.surfaceRaised,
         border: Border.all(color: AppColors.divider),
         borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
@@ -76,7 +78,7 @@ class StatTile extends StatelessWidget {
     required this.label,
     required this.value,
     this.icon,
-    this.color = AppColors.textPrimary,
+    this.color,
     this.caption,
   });
 
@@ -85,8 +87,9 @@ class StatTile extends StatelessWidget {
   final IconData? icon;
 
   /// Colour of the figure. Pick the status colour that matches the label's
-  /// meaning; the label always says it in words too.
-  final Color color;
+  /// meaning; the label always says it in words too. Defaults to
+  /// [AppColors.textPrimary].
+  final Color? color;
   final String? caption;
 
   @override
@@ -116,7 +119,7 @@ class StatTile extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(value,
               style: TextStyle(
-                  color: color, fontSize: 22, fontWeight: FontWeight.w800, height: 1.2)),
+                  color: color ?? AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800, height: 1.2)),
           if (caption != null) ...[
             const SizedBox(height: 2),
             Text(caption!, style: text.bodySmall),

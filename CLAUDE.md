@@ -395,8 +395,15 @@ list, leg → section, variance → difference. Shared pieces are in
 `StatusBadge` with the one trip/passenger word mapping, `LoadError`,
 `EmptyState`, `PersonRow`, `BrandPlate`); `auditOutcomeBadge()` in
 `audit_reading_card.dart` is the one mapping for a check's review state.
-The palette is the console's own now (dark), no longer a copy of
-`mobile/`'s light tokens. Full list: `docs/CONSOLE_REDESIGN.md`.
+The palettes are the console's own now, no longer a copy of `mobile/`'s:
+`AppPalette.dark` (default) and `AppPalette.light`, switched by the
+sun/moon button in the top bar (`core/design/appearance.dart`, saved in
+`localStorage`). `AppColors.x` are getters over the palette in use, so
+**a colour cannot appear inside a `const` expression** -- the compiler
+says so. A switch redraws every widget with `reassembleApplication()`
+(the hot-reload path, active in release), because many widgets that read
+colours are `const` instances an ordinary rebuild would skip; state is
+kept. Full list: `docs/CONSOLE_REDESIGN.md`.
 
 Console (15 Sep): the Audits tab has a Queue / History switch — a closed
 audit shows outcome, resolver, time and notes instead of the buttons. The

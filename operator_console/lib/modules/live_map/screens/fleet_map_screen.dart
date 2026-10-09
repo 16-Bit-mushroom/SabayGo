@@ -23,10 +23,10 @@ import '../../../core/design/tokens.dart';
 /// a path none of those numbers came from.
 ///
 /// Tiles are OpenStreetMap, which needs no API key, darkened on the client
-/// by flutter_map's own colour filter -- the same tiles, not a second
-/// vendor. Everything that makes this screen useful -- the position, the
-/// matched node, the ETAs -- comes from the backend; the tile layer only
-/// draws the streets beneath it.
+/// by flutter_map's own colour filter when the console is dark -- the
+/// same tiles, not a second vendor. Everything that makes this screen
+/// useful -- the position, the matched node, the ETAs -- comes from the
+/// backend; the tile layer only draws the streets beneath it.
 ///
 /// The van card shows only what the backend reports: plate, route
 /// progress by stop, next arrival, speed, passengers aboard, crew. It has
@@ -168,7 +168,7 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
+              child: Text(_error!, style: TextStyle(color: AppColors.danger)),
             ),
           Expanded(
             child: ClipRRect(
@@ -214,7 +214,7 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
 
   Widget _mapView() => FlutterMap(
         mapController: _map,
-        options: const MapOptions(
+        options: MapOptions(
           // Davao City, the cooperative's base. The camera moves to a van
           // as soon as one is selected.
           initialCenter: LatLng(7.0731, 125.6128),
@@ -227,8 +227,9 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
             // OSM's tile policy asks for an identifying agent; a client that
             // sends none can be blocked without warning.
             userAgentPackageName: 'ph.edu.umindanao.sabaygo',
-            // flutter_map's own inversion matrix: OSM's tiles, darkened.
-            tileBuilder: darkModeTileBuilder,
+            // flutter_map's own inversion matrix: OSM's tiles, darkened --
+            // in the dark palette only.
+            tileBuilder: AppColors.isDark ? darkModeTileBuilder : null,
           ),
           PolylineLayer(polylines: _polylines()),
           MarkerLayer(markers: _markers()),
@@ -423,7 +424,7 @@ class _VanList extends StatelessWidget {
                       // signal" is the actionable word, not "offline".
                       const StatusBadge('No signal', tone: Tone.warning)
                     else
-                      const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                      Icon(Icons.chevron_right, color: AppColors.textMuted),
                   ],
                 ),
               ),
@@ -496,7 +497,7 @@ class _VanCard extends StatelessWidget {
                   IconButton(
                     tooltip: 'Close',
                     onPressed: onClose,
-                    icon: const Icon(Icons.close, color: AppColors.textMuted),
+                    icon: Icon(Icons.close, color: AppColors.textMuted),
                   ),
                 ],
               ),
@@ -535,7 +536,7 @@ class _VanCard extends StatelessWidget {
                       const SizedBox(height: AppSpacing.xs),
                       Row(
                         children: [
-                          const Icon(Icons.schedule, size: 16, color: AppColors.textMuted),
+                          Icon(Icons.schedule, size: 16, color: AppColors.textMuted),
                           const SizedBox(width: AppSpacing.xs),
                           Text('Next stop at ${DateFormat('h:mm a').format(van.nextEta!)}',
                               style: text.bodyMedium),
@@ -583,7 +584,7 @@ class _VanCard extends StatelessWidget {
                     color: AppColors.warningContainer,
                     borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
                       Icon(Icons.signal_wifi_off, size: 18, color: AppColors.warning),
                       SizedBox(width: AppSpacing.sm),
@@ -634,7 +635,7 @@ class _SpeedTile extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(kph == null ? '—' : '${kph!.round()}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
                   Text('km/h', style: text.bodySmall),
                 ],
@@ -679,7 +680,7 @@ class _AboardTile extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(known ? '$aboard' : '—',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
                   Text(known ? 'of $seats seats' : 'no data', style: text.bodySmall),
                 ],
@@ -780,7 +781,7 @@ class _NodePin extends StatelessWidget {
         child: Center(
           child: Text(
             '$sequence',
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppColors.onFill, fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ),
@@ -813,7 +814,7 @@ class _VanPin extends StatelessWidget {
       ),
       // No rotation: /tracking/fleet carries no heading, and an arrow
       // pointing an arbitrary way would invent a direction of travel.
-      child: const Icon(Icons.airport_shuttle, color: AppColors.onFill, size: 18),
+      child: Icon(Icons.airport_shuttle, color: AppColors.onFill, size: 18),
     );
     if (!isSelected) return Center(child: pin);
     return Container(

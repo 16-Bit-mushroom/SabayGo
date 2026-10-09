@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'tokens.dart';
 
-/// The console's single [ThemeData]: dark, dense enough for a desk, and
-/// built on the console's own tokens (see `tokens.dart` for why it parted
-/// from the passenger app's light palette).
+/// The console's [ThemeData], dense enough for a desk, built from whichever
+/// palette is in use (dark by default, light on request -- see
+/// `tokens.dart` and `appearance.dart`). Called again on every switch.
 ///
 /// What differs from `mobile/lib/core/design/theme.dart` is what a desktop
 /// dashboard needs and a phone does not:
@@ -25,7 +25,7 @@ const _font = 'Roboto';
 ThemeData buildConsoleTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: AppColors.primary,
-    brightness: Brightness.dark,
+    brightness: AppColors.palette.brightness,
     primary: AppColors.primary,
     onPrimary: AppColors.onFill,
     primaryContainer: AppColors.primaryContainer,
@@ -76,12 +76,12 @@ ThemeData buildConsoleTheme() {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        side: const BorderSide(color: AppColors.divider),
+        side: BorderSide(color: AppColors.divider),
       ),
     ),
 
     // ── type ──────────────────────────────────────────────────────────
-    textTheme: const TextTheme(
+    textTheme: TextTheme(
       headlineLarge: TextStyle(
         fontFamily: _font, fontSize: 28, height: 1.25, fontWeight: FontWeight.w700,
         letterSpacing: -0.5, color: AppColors.textPrimary,
@@ -131,7 +131,7 @@ ThemeData buildConsoleTheme() {
     ),
 
     // ── chrome ────────────────────────────────────────────────────────
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: AppColors.surfaceRaised,
       foregroundColor: AppColors.textPrimary,
       surfaceTintColor: Colors.transparent,
@@ -144,7 +144,7 @@ ThemeData buildConsoleTheme() {
       ),
       shape: Border(bottom: BorderSide(color: AppColors.divider)),
     ),
-    tabBarTheme: const TabBarThemeData(
+    tabBarTheme: TabBarThemeData(
       labelColor: AppColors.primary,
       unselectedLabelColor: AppColors.textMuted,
       indicatorColor: AppColors.primary,
@@ -182,7 +182,7 @@ ThemeData buildConsoleTheme() {
         foregroundColor: AppColors.primary,
         minimumSize: buttonMin,
         padding: buttonPadding,
-        side: const BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.border),
         shape: buttonShape,
         textStyle: buttonLabel,
       ),
@@ -198,7 +198,7 @@ ThemeData buildConsoleTheme() {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         textStyle: const WidgetStatePropertyAll(buttonLabel),
-        side: const WidgetStatePropertyAll(BorderSide(color: AppColors.border)),
+        side: WidgetStatePropertyAll(BorderSide(color: AppColors.border)),
         backgroundColor: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.selected) ? AppColors.primary : AppColors.surfaceRaised),
         foregroundColor: WidgetStateProperty.resolveWith((s) =>
@@ -222,13 +222,13 @@ ThemeData buildConsoleTheme() {
       errorBorder: _fieldBorder(AppColors.danger),
       focusedErrorBorder: _fieldBorder(AppColors.danger, width: AppSizing.focusOutline),
       disabledBorder: _fieldBorder(AppColors.divider),
-      labelStyle: const TextStyle(fontFamily: _font, color: AppColors.textMuted),
-      floatingLabelStyle: const TextStyle(fontFamily: _font, color: AppColors.textPrimary),
-      hintStyle: const TextStyle(fontFamily: _font, color: AppColors.textMuted),
-      helperStyle: const TextStyle(fontFamily: _font, color: AppColors.textMuted, fontSize: 12),
+      labelStyle: TextStyle(fontFamily: _font, color: AppColors.textMuted),
+      floatingLabelStyle: TextStyle(fontFamily: _font, color: AppColors.textPrimary),
+      hintStyle: TextStyle(fontFamily: _font, color: AppColors.textMuted),
+      helperStyle: TextStyle(fontFamily: _font, color: AppColors.textMuted, fontSize: 12),
       prefixIconColor: AppColors.textMuted,
       suffixIconColor: AppColors.textMuted,
-      errorStyle: const TextStyle(
+      errorStyle: TextStyle(
         fontFamily: _font, color: AppColors.danger, fontSize: 12.5,
         fontWeight: FontWeight.w500,
       ),
@@ -236,12 +236,12 @@ ThemeData buildConsoleTheme() {
 
     // ── data ──────────────────────────────────────────────────────────
     dataTableTheme: DataTableThemeData(
-      headingRowColor: const WidgetStatePropertyAll(AppColors.surfaceSunken),
-      headingTextStyle: const TextStyle(
+      headingRowColor: WidgetStatePropertyAll(AppColors.surfaceSunken),
+      headingTextStyle: TextStyle(
         fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w700,
         letterSpacing: 0.4, color: AppColors.textMuted,
       ),
-      dataTextStyle: const TextStyle(
+      dataTextStyle: TextStyle(
         fontFamily: _font, fontSize: 14, color: AppColors.textPrimary,
       ),
       dataRowColor: WidgetStateProperty.resolveWith((s) =>
@@ -258,27 +258,27 @@ ThemeData buildConsoleTheme() {
       selectedColor: AppColors.primary,
       secondarySelectedColor: AppColors.primary,
       checkmarkColor: AppColors.onFill,
-      labelStyle: const TextStyle(
+      labelStyle: TextStyle(
         fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-      secondaryLabelStyle: const TextStyle(
+      secondaryLabelStyle: TextStyle(
         fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w600,
         color: AppColors.onFill,
       ),
-      side: const BorderSide(color: AppColors.divider),
+      side: BorderSide(color: AppColors.divider),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.full)),
     ),
-    dividerTheme: const DividerThemeData(color: AppColors.divider, thickness: 1, space: 1),
+    dividerTheme: DividerThemeData(color: AppColors.divider, thickness: 1, space: 1),
     dialogTheme: DialogThemeData(
       backgroundColor: AppColors.surfaceRaised,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
-      titleTextStyle: const TextStyle(
+      titleTextStyle: TextStyle(
         fontFamily: _font, fontSize: 18, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
-      contentTextStyle: const TextStyle(
+      contentTextStyle: TextStyle(
         fontFamily: _font, fontSize: 14, height: 1.45, color: AppColors.textPrimary,
       ),
     ),
@@ -287,11 +287,11 @@ ThemeData buildConsoleTheme() {
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        side: const BorderSide(color: AppColors.divider),
+        side: BorderSide(color: AppColors.divider),
       ),
-      textStyle: const TextStyle(fontFamily: _font, fontSize: 14, color: AppColors.textPrimary),
+      textStyle: TextStyle(fontFamily: _font, fontSize: 14, color: AppColors.textPrimary),
     ),
-    dropdownMenuTheme: const DropdownMenuThemeData(
+    dropdownMenuTheme: DropdownMenuThemeData(
       menuStyle: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(AppColors.surfaceRaised),
         surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
@@ -302,31 +302,31 @@ ThemeData buildConsoleTheme() {
         color: AppColors.textPrimary,
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
-      textStyle: const TextStyle(fontFamily: _font, fontSize: 12, color: AppColors.onFill),
+      textStyle: TextStyle(fontFamily: _font, fontSize: 12, color: AppColors.onFill),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: AppColors.textPrimary,
-      contentTextStyle: const TextStyle(fontFamily: _font, color: AppColors.onFill, fontSize: 14),
+      contentTextStyle: TextStyle(fontFamily: _font, color: AppColors.onFill, fontSize: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       width: 480,
     ),
-    listTileTheme: const ListTileThemeData(
+    listTileTheme: ListTileThemeData(
       iconColor: AppColors.textMuted,
       textColor: AppColors.textPrimary,
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: AppColors.primary),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith((s) =>
           s.contains(WidgetState.selected) ? AppColors.primary : Colors.transparent),
-      side: const BorderSide(color: AppColors.border, width: 1.5),
+      side: BorderSide(color: AppColors.border, width: 1.5),
     ),
     switchTheme: SwitchThemeData(
       trackColor: WidgetStateProperty.resolveWith((s) =>
           s.contains(WidgetState.selected) ? AppColors.primary : AppColors.surfaceSunken),
       thumbColor: WidgetStateProperty.resolveWith((s) =>
           s.contains(WidgetState.selected) ? AppColors.onFill : AppColors.border),
-      trackOutlineColor: const WidgetStatePropertyAll(AppColors.border),
+      trackOutlineColor: WidgetStatePropertyAll(AppColors.border),
     ),
   );
 }

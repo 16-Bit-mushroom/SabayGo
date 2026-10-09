@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/design/appearance.dart';
 import 'core/design/components/brand_logo.dart';
 import 'core/design/theme.dart';
 import 'core/network/api_client.dart';
@@ -35,6 +36,9 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
   late final ApiClient _api;
   late final AuthProvider _auth;
 
+  /// Before anything is built: it picks the saved palette.
+  final Appearance _appearance = Appearance();
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +54,7 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
 
   @override
   void dispose() {
+    _appearance.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -68,12 +73,17 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         Provider<TrackingRepository>(create: (_) => TrackingRepository(_api)),
         Provider<SosRepository>(create: (_) => SosRepository(_api)),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
+        ChangeNotifierProvider<Appearance>.value(value: _appearance),
       ],
-      child: MaterialApp(
-        title: 'SabayGo Cooperative Office',
-        debugShowCheckedModeBanner: false,
-        theme: buildConsoleTheme(),
-        home: const _RootRouter(),
+      // The theme is rebuilt from the palette whenever it is switched.
+      child: ListenableBuilder(
+        listenable: _appearance,
+        builder: (_, _) => MaterialApp(
+          title: 'SabayGo Cooperative Office',
+          debugShowCheckedModeBanner: false,
+          theme: buildConsoleTheme(),
+          home: const _RootRouter(),
+        ),
       ),
     );
   }

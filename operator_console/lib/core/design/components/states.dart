@@ -19,7 +19,7 @@ class LoadError extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_outlined, color: AppColors.danger, size: 40),
+            Icon(Icons.cloud_off_outlined, color: AppColors.danger, size: 40),
             const SizedBox(height: AppSpacing.md),
             Text('Could not load this page', style: text.titleMedium),
             const SizedBox(height: AppSpacing.xs),

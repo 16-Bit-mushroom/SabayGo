@@ -152,7 +152,7 @@ class _PhoneCaptureButtonState extends State<PhoneCaptureButton> {
     final button = FilledButton.icon(
       onPressed: _underWay && !_busy ? _run : null,
       icon: _busy
-          ? const SizedBox(
+          ? SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
@@ -204,7 +204,7 @@ class _LegDialogState extends State<_LegDialog> {
                       'with the passenger list for that stretch.'
                   : 'The van is still boarding, so this is the first stretch. The photo '
                       'is compared with the passenger list for it.',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
             ),
             const SizedBox(height: AppSpacing.lg),
             RadioGroup<int>(
@@ -217,9 +217,9 @@ class _LegDialogState extends State<_LegDialog> {
                       value: seq,
                       contentPadding: EdgeInsets.zero,
                       title: Text('Section $seq',
-                          style: const TextStyle(color: AppColors.textPrimary)),
+                          style: TextStyle(color: AppColors.textPrimary)),
                       subtitle:
-                          Text(label, style: const TextStyle(color: AppColors.textMuted)),
+                          Text(label, style: TextStyle(color: AppColors.textMuted)),
                     ),
                 ],
               ),

@@ -177,7 +177,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                child: Text(_error!, style: TextStyle(color: AppColors.danger)),
               ),
             Expanded(
               child: wide
@@ -692,8 +692,8 @@ class _SectionPicker extends StatelessWidget {
           isDense: true,
           borderRadius: BorderRadius.circular(AppRadius.md),
           dropdownColor: AppColors.surfaceSunken,
-          icon: const Icon(Icons.filter_list, size: 18, color: AppColors.textMuted),
-          style: const TextStyle(color: AppColors.textPrimary),
+          icon: Icon(Icons.filter_list, size: 18, color: AppColors.textMuted),
+          style: TextStyle(color: AppColors.textPrimary),
           onChanged: onChanged,
           items: [
             DropdownMenuItem<int?>(value: null, child: label('All sections ($total)')),

@@ -22,7 +22,7 @@ class PersonRow extends StatelessWidget {
           backgroundColor: AppColors.primaryContainer,
           child: Text(
             (name ?? '?').characters.first.toUpperCase(),
-            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700),
+            style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700),
           ),
         ),
         const SizedBox(width: AppSpacing.md),

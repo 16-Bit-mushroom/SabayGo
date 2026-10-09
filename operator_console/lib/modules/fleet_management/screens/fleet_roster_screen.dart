@@ -203,11 +203,11 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
             onTap: () => _showVanDetail(van),
             cells: [
               Text(van.plateNumber,
-                  style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               Text(
                 [van.brand, van.model].where((s) => s != null && s.isNotEmpty).join(' '),
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.textPrimary),
+                style: TextStyle(color: AppColors.textPrimary),
               ),
               Text('${van.seatCapacity}', style: _figures),
               _statusBadge(van.operationalStatus, _vanStatus(van.operationalStatus)),
@@ -243,9 +243,9 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
             cells: [
               Text(staff.fullName,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               Text(_roleLabel(staff.role),
-                  overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textPrimary)),
+                  overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.textPrimary)),
               Text(staff.licenseNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
               _statusBadge(staff.employmentStatus, _crewStatus(staff.employmentStatus)),
             ],
@@ -255,7 +255,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     );
   }
 
-  static const _figures = TextStyle(
+  static TextStyle get _figures => TextStyle(
     color: AppColors.textPrimary,
     fontFeatures: [FontFeature.tabularFigures()],
   );
@@ -289,7 +289,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
   Widget _buildVanStatusMenu(Van van) {
     return PopupMenuButton<String>(
       tooltip: 'Change status',
-      icon: const Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
+      icon: Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
       onSelected: (status) => _setVanStatus(van, status),
       itemBuilder: (_) => [
         for (final s in const ['active', 'maintenance', 'inactive'])
@@ -301,7 +301,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
   Widget _buildCrewStatusMenu(StaffMember staff) {
     return PopupMenuButton<String>(
       tooltip: 'Change status',
-      icon: const Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
+      icon: Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
       onSelected: (status) => _setCrewStatus(staff, status),
       itemBuilder: (_) => [
         for (final s in const ['active', 'suspended', 'inactive'])
@@ -400,7 +400,7 @@ class _RosterCard extends StatelessWidget {
               i,
               Text(columns[i].$1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
             ),
           const SizedBox(width: _menuWidth),
         ]),
@@ -443,7 +443,7 @@ class _RosterCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium),
         ),
         const SizedBox(width: AppSpacing.sm),
-        if (count > 0) Text('$count', style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
+        if (count > 0) Text('$count', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
         const Spacer(),
         TextButton.icon(
           onPressed: onAdd,
@@ -468,7 +468,7 @@ class _RosterCard extends StatelessWidget {
               padding: const EdgeInsets.all(32),
               child: Center(
                   child: Text(emptyMessage,
-                      textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted))),
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted))),
             ),
           ]);
         }
@@ -585,7 +585,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_error != null) ...[
-                  Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                  Text(_error!, style: TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
                 ],
                 _field(_plate, 'Plate number', validator: (v) =>
@@ -605,7 +605,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                 DropdownButtonFormField<String>(
                   decoration: _decoration('Registered route (optional)'),
                   dropdownColor: AppColors.surfaceSunken,
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: AppColors.textPrimary),
                   value: _routeId,
                   items: widget.routes
                       .map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName)))
@@ -616,7 +616,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                 CheckboxListTile(
                   value: _hasCamera,
                   onChanged: (v) => setState(() => _hasCamera = v ?? false),
-                  title: const Text('Has cabin camera', style: TextStyle(color: AppColors.textPrimary)),
+                  title: Text('Has cabin camera', style: TextStyle(color: AppColors.textPrimary)),
                   controlAffinity: ListTileControlAffinity.leading,
                   activeColor: AppColors.primary,
                 ),
@@ -645,7 +645,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
       {TextInputType? keyboardType, String? Function(String?)? validator}) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: AppColors.textPrimary),
+      style: TextStyle(color: AppColors.textPrimary),
       keyboardType: keyboardType,
       decoration: _decoration(label),
       validator: validator,
@@ -654,7 +654,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
 
   InputDecoration _decoration(String label) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textMuted),
+        labelStyle: TextStyle(color: AppColors.textMuted),
       );
 }
 
@@ -733,13 +733,13 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_error != null) ...[
-                  Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                  Text(_error!, style: TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
                 ],
                 DropdownButtonFormField<String>(
                   decoration: _decoration('Role'),
                   dropdownColor: AppColors.surfaceSunken,
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: AppColors.textPrimary),
                   value: _role,
                   items: const [
                     DropdownMenuItem(value: 'conductor', child: Text('Conductor')),
@@ -787,7 +787,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
-      style: const TextStyle(color: AppColors.textPrimary),
+      style: TextStyle(color: AppColors.textPrimary),
       decoration: _decoration(label),
       validator: required
           ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
@@ -797,7 +797,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
 
   InputDecoration _decoration(String label) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textMuted),
+        labelStyle: TextStyle(color: AppColors.textMuted),
       );
 }
 
@@ -816,7 +816,7 @@ class _DetailDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.surfaceRaised,
-      title: Text(title, style: const TextStyle(color: AppColors.textPrimary)),
+      title: Text(title, style: TextStyle(color: AppColors.textPrimary)),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -830,11 +830,11 @@ class _DetailDialog extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: 140,
-                      child: Text(label, style: const TextStyle(color: AppColors.textMuted)),
+                      child: Text(label, style: TextStyle(color: AppColors.textMuted)),
                     ),
                     Expanded(
                       child: Text(value,
-                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+                          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),

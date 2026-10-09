@@ -215,7 +215,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
       );
     }
 
-    const figures = TextStyle(
+    final figures = TextStyle(
       color: AppColors.textPrimary,
       fontFeatures: [FontFeature.tabularFigures()],
     );
@@ -230,7 +230,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
                 i,
                 Text(columns[i].$1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
               ),
           ]),
@@ -247,7 +247,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
               0,
               Text(trip.routeName,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                  style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
             ),
             cell(1, Text(trip.plateNumber ?? '—', style: figures)),
             cell(2, Text(DateFormat.jm().format(trip.departureDatetime), style: figures)),
@@ -277,7 +277,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
             const SizedBox(width: AppSpacing.sm),
             if (trips.isNotEmpty)
               Text(trips.length == 1 ? '1 trip' : '${trips.length} trips',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
           ]),
         );
         if (trips.isEmpty) {
@@ -363,7 +363,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
                   // The form books the next occurrence of this time.
                   helperText: 'If this time has already passed, the trip is set for tomorrow.',
                 ),
-                child: Text(_departureTime.format(context), style: const TextStyle(color: AppColors.textPrimary)),
+                child: Text(_departureTime.format(context), style: TextStyle(color: AppColors.textPrimary)),
               ),
             ),
             const SizedBox(height: 16),
@@ -397,7 +397,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
                 onPressed: _canDispatch() ? _dispatchTrip : null,
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 20)),
                 icon: _dispatching
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
@@ -416,7 +416,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
     return DropdownButtonFormField<T>(
       decoration: _fieldDecoration(label),
       dropdownColor: AppColors.surfaceSunken,
-      style: const TextStyle(color: AppColors.textPrimary),
+      style: TextStyle(color: AppColors.textPrimary),
       value: currentValue,
       items: items,
       onChanged: onChanged,
@@ -426,6 +426,6 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
 
   InputDecoration _fieldDecoration(String label) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textMuted),
+        labelStyle: TextStyle(color: AppColors.textMuted),
       );
 }

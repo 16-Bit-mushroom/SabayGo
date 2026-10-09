@@ -217,7 +217,7 @@ class _AlertCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(_time.format(alert.raisedAt),
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
             const SizedBox(height: 10),
@@ -225,12 +225,12 @@ class _AlertCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w700)),
             if (alert.raisedByPhone != null)
               Text(alert.raisedByPhone!,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
             if (alert.tripLabel != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(alert.tripLabel!,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
               ),
             if (alert.note != null)
               Padding(
@@ -248,14 +248,14 @@ class _AlertCard extends StatelessWidget {
                 child: Text(
                   'Responding: ${alert.acknowledgedBy}'
                   '${alert.acknowledgedAt == null ? '' : ' at ${_time.format(alert.acknowledgedAt!)}'}',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ),
             if (alert.resolutionNotes != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text('Closed: ${alert.resolutionNotes}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
               ),
             if (!alert.isResolved) ...[
               const SizedBox(height: 12),
@@ -287,7 +287,7 @@ class _AlertCard extends StatelessWidget {
 
   Widget _location() {
     if (!alert.hasLocation) {
-      return const Row(
+      return Row(
         children: [
           Icon(Icons.location_off, size: 16, color: AppColors.textMuted),
           SizedBox(width: 6),
@@ -300,7 +300,7 @@ class _AlertCard extends StatelessWidget {
         alert.accuracyM == null ? '' : ' (±${alert.accuracyM!.round()} m)';
     return Row(
       children: [
-        const Icon(Icons.place, size: 16, color: AppColors.info),
+        Icon(Icons.place, size: 16, color: AppColors.info),
         const SizedBox(width: 6),
         Flexible(
           child: SelectableText(
@@ -316,7 +316,7 @@ class _AlertCard extends StatelessWidget {
 
   Widget _smsBlock() {
     if (alert.smsAttempted == 0) {
-      return const Row(
+      return Row(
         children: [
           Icon(Icons.sms_failed_outlined, size: 16, color: AppColors.warning),
           SizedBox(width: 6),

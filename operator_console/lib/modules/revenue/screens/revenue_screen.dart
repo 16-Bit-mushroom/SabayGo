@@ -131,7 +131,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 onPressed: _pickRange,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide(color: AppColors.border),
                 ),
                 icon: const Icon(Icons.date_range, size: 18),
                 label: Text(
@@ -149,7 +149,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
                   onPressed: null,
                   style: OutlinedButton.styleFrom(
                     disabledForegroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.border),
+                    side: BorderSide(color: AppColors.border),
                   ),
                   icon: _exporting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
@@ -276,7 +276,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 const SizedBox(width: AppSpacing.sm),
                 if (trips.isNotEmpty)
                   Text(trips.length == 1 ? '1 trip' : '${trips.length} trips',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
               ],
             ),
           ),
@@ -361,13 +361,13 @@ class _RevenueScreenState extends State<RevenueScreen> {
               i,
               Text(_columns[i].$1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
             ),
         ]),
       );
 
-  static const _figures = TextStyle(
+  static TextStyle get _figures => TextStyle(
     color: AppColors.textPrimary,
     fontFeatures: [FontFeature.tabularFigures()],
   );
@@ -381,8 +381,8 @@ class _RevenueScreenState extends State<RevenueScreen> {
         child: Row(children: [
           _cell(0, Text(DateFormat.MMMd().add_jm().format(t.departureDatetime), style: _figures)),
           _cell(1, Text(t.routeName, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textPrimary))),
-          _cell(2, Text(t.plateNumber ?? '—', style: const TextStyle(color: AppColors.textPrimary))),
+              style: TextStyle(color: AppColors.textPrimary))),
+          _cell(2, Text(t.plateNumber ?? '—', style: TextStyle(color: AppColors.textPrimary))),
           _cell(3, Text('${t.totalBookings}/${t.seatCapacity}', style: _figures)),
           _cell(4, Text(_currency.format(t.collectedFare), style: _figures)),
           // Ochre only when there is cash out with the crew. On a ₱0.00 row
@@ -400,8 +400,8 @@ class _RevenueScreenState extends State<RevenueScreen> {
             t.pendingAudits > 0
                 ? Tooltip(
                     message: '${t.pendingAudits} camera check${t.pendingAudits == 1 ? '' : 's'} to review',
-                    child: const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 18))
-                : const Tooltip(
+                    child: Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 18))
+                : Tooltip(
                     message: 'No camera checks to review',
                     child: Icon(Icons.check_circle_outline, color: AppColors.success, size: 18)),
           ),
@@ -445,7 +445,7 @@ class _StatCard extends StatelessWidget {
                 child: Text(label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -456,7 +456,7 @@ class _StatCard extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(value,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -468,7 +468,7 @@ class _StatCard extends StatelessWidget {
             Text(sub!,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35)),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35)),
           ],
         ],
       ),

@@ -61,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         // who signs in here is office staff.
                         const Center(child: BrandPlate(height: 80)),
                         const SizedBox(height: AppSpacing.md),
-                        const Text(
+                        Text(
                           'Cooperative office console. Sign in with your office account.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: AppColors.textMuted, fontSize: 13),
@@ -77,14 +77,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             child: Text(
                               auth.error!,
-                              style: const TextStyle(color: AppColors.danger),
+                              style: TextStyle(color: AppColors.danger),
                             ),
                           ),
                           const SizedBox(height: 20),
                         ],
                         TextFormField(
                           controller: _emailController,
-                          style: const TextStyle(color: AppColors.textPrimary),
+                          style: TextStyle(color: AppColors.textPrimary),
                           keyboardType: TextInputType.emailAddress,
                           decoration: _inputDecoration('Email', Icons.email_outlined),
                           validator: (v) =>
@@ -94,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _passwordController,
-                          style: const TextStyle(color: AppColors.textPrimary),
+                          style: TextStyle(color: AppColors.textPrimary),
                           obscureText: _obscure,
                           decoration: _inputDecoration('Password', Icons.lock_outline).copyWith(
                             suffixIcon: IconButton(
@@ -119,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               foregroundColor: AppColors.onFill,
                             ),
                             child: auth.isBusy
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 22,
                                     height: 22,
                                     child: CircularProgressIndicator(

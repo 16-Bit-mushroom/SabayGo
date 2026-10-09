@@ -33,6 +33,10 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body style="background-color: #0E0F12">
+  <script>
+    // Paint the saved palette's canvas before Flutter loads (appearance.dart).
+    try { if (localStorage.getItem('sabaygo.console.appearance') === 'light') document.body.style.backgroundColor = '#F7F7FA'; } catch (e) {}
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

@@ -227,7 +227,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
       );
     }
 
-    const figures = TextStyle(
+    final figures = TextStyle(
       color: AppColors.textPrimary,
       fontFeatures: [FontFeature.tabularFigures()],
     );
@@ -242,7 +242,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                 i,
                 Text(columns[i].$1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
               ),
           ]),
@@ -391,14 +391,14 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: imageUrl == null
-                    ? const Center(
+                    ? Center(
                         child: Icon(Icons.image_not_supported_outlined, color: AppColors.border, size: 40))
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(AppRadius.md),
                         child: Image.network(
                           imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Center(
+                          errorBuilder: (_, __, ___) => Center(
                               child: Icon(Icons.broken_image_outlined, color: AppColors.border, size: 40)),
                           loadingBuilder: (context, child, progress) => progress == null
                               ? child
@@ -440,9 +440,9 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                 ),
                 if ((log.resolutionNotes ?? '').isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  const Text('Notes', style: TextStyle(color: AppColors.textMuted)),
+                  Text('Notes', style: TextStyle(color: AppColors.textMuted)),
                   const SizedBox(height: 4),
-                  Text(log.resolutionNotes!, style: const TextStyle(color: AppColors.textPrimary, height: 1.4)),
+                  Text(log.resolutionNotes!, style: TextStyle(color: AppColors.textPrimary, height: 1.4)),
                 ],
               ] else if (isAlert)
                 Row(
@@ -465,7 +465,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                         onPressed: () => _resolve(log, resolution: 'ignored'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.border),
+                          side: BorderSide(color: AppColors.border),
                           padding: const EdgeInsets.symmetric(vertical: 20),
                         ),
                         icon: const Icon(Icons.close),
@@ -501,7 +501,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textMuted)),
+          Text(label, style: TextStyle(color: AppColors.textMuted)),
           Flexible(
             child: Text(
               value,

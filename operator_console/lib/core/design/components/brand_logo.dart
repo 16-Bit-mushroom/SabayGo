@@ -4,7 +4,7 @@ import '../tokens.dart';
 
 /// The official SABAY GO mark. Same asset and contract as the mobile app's
 /// `BrandLogo`: announced as "SabayGo", drawn only on light surfaces. The
-/// console is dark, so it shows the mark inside a [BrandPlate].
+/// console can be dark, so it shows the mark inside a [BrandPlate].
 class BrandLogo extends StatelessWidget {
   const BrandLogo({this.height = 64, super.key});
 
@@ -26,7 +26,8 @@ class BrandLogo extends StatelessWidget {
 }
 
 /// The mark on its own light tile -- the ink owl would vanish on the dark
-/// console, and recolouring a logo is not ours to do.
+/// palette, and recolouring a logo is not ours to do. In the light palette
+/// the tile is the page's own white.
 class BrandPlate extends StatelessWidget {
   const BrandPlate({this.height = 44, super.key});
 
@@ -37,7 +38,7 @@ class BrandPlate extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: EdgeInsets.symmetric(horizontal: height * 0.25, vertical: height * 0.14),
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          color: AppColors.logoPlate,
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: BrandLogo(height: height),
