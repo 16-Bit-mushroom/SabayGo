@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_client.dart';
 import '../../../data/repositories/messaging_repository.dart';
 import '../../../viewmodels/messaging_provider.dart';
+import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
 /// The cooperative office's shared inbox: every passenger, conductor and
@@ -40,12 +41,31 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<MessagingProvider>.value(
       value: _provider,
-      child: Row(
-        children: [
-          SizedBox(width: 340, child: _ConversationList()),
-          const VerticalDivider(width: 1),
-          Expanded(child: _Thread(textController: _textController)),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PageHeader(
+              title: 'Messages',
+              description: 'Chat with crew and passengers. Your replies are sent as the '
+                  'cooperative office.',
+              actions: [RefreshButton(onPressed: _provider.refreshConversations)],
+            ),
+            Expanded(
+              child: Panel(
+                padding: EdgeInsets.zero,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 340, child: _ConversationList()),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: _Thread(textController: _textController)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -61,18 +81,8 @@ class _ConversationList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              const Text('Messages', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Refresh',
-                onPressed: p.isLoadingList ? null : p.refreshConversations,
-                icon: const Icon(Icons.refresh, size: 18),
-              ),
-            ],
-          ),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Text('Conversations', style: Theme.of(context).textTheme.titleSmall),
         ),
         const Divider(height: 1),
         Expanded(child: _body(p)),
@@ -94,8 +104,10 @@ class _ConversationList extends StatelessWidget {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (p.conversations.isEmpty) {
-      return const Center(
-        child: Text('No conversations yet.', style: TextStyle(color: AppColors.textMuted)),
+      return const EmptyState(
+        icon: Icons.chat_bubble_outline,
+        title: 'No conversations yet',
+        hint: 'A conversation appears here when crew or a passenger sends a message.',
       );
     }
     return ListView.separated(
@@ -123,7 +135,7 @@ class _ConversationList extends StatelessWidget {
                   decoration:
                       BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
                   child: Text('${c.unreadCount}',
-                      style: const TextStyle(fontSize: 11, color: Colors.white)),
+                      style: const TextStyle(fontSize: 11, color: AppColors.onFill)),
                 )
               : null,
           onTap: () => p.openConversation(c.conversationId),
@@ -231,7 +243,7 @@ class _Thread extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 420),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-            child: Text(m.body, style: TextStyle(color: m.isMine ? Colors.white : AppColors.textPrimary, fontSize: 14)),
+            child: Text(m.body, style: TextStyle(color: m.isMine ? AppColors.onFill : AppColors.textPrimary, fontSize: 14)),
           ),
           Padding(
             padding: const EdgeInsets.only(top: 2, left: 4, right: 4),

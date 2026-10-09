@@ -5,7 +5,7 @@ import '../../data/repositories/notification_repository.dart';
 import '../../viewmodels/notification_provider.dart';
 import '../../core/design/tokens.dart';
 
-/// Bell with an unread badge for the sidebar. Opens a panel listing the
+/// Bell with an unread badge for the top bar. Opens a panel listing the
 /// office's notifications; one that points at a module -- a variance, an
 /// SOS -- hands that notification back to the shell, which owns the
 /// mapping from kind to tab. The bell deliberately knows nothing about
@@ -57,13 +57,14 @@ class _NotificationPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.watch<NotificationProvider>();
     return Align(
-      alignment: Alignment.topLeft,
+      // Drops from the top bar, under the bell.
+      alignment: Alignment.topRight,
       child: Padding(
-        padding: const EdgeInsets.only(left: 248, top: 16),
+        padding: const EdgeInsets.only(right: AppSpacing.lg, top: 64),
         child: Material(
           color: AppColors.surfaceRaised,
           elevation: 12,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           child: SizedBox(
             width: 420,
             height: 560,
@@ -118,7 +119,7 @@ class _NotificationPanel extends StatelessWidget {
     }
     if (p.items.isEmpty) {
       return const Center(
-        child: Text('Nothing yet. A flagged headcount or an SOS appears here.',
+        child: Text('Nothing yet. A camera check that needs review, or an SOS, shows up here.',
             style: TextStyle(color: AppColors.textMuted)),
       );
     }

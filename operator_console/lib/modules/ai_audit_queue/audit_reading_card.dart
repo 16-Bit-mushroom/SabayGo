@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/design/components/status_badge.dart';
 import '../../core/design/tokens.dart';
 import '../../data/repositories/audit_repository.dart';
 
 /// What an audit result means, in words -- the backend's reading
 /// (domain/audit_reading.py), not a re-derivation here.
 ///
-/// Shared by the YOLOv8 Audits panel and the Trips screen so the office
+/// Shared by the Passenger Count Checks screen and the Trips screen so the office
 /// reads the same sentence about the same result in both places. The
 /// colour follows the meaning, not the sign: more people than the manifest
 /// is the leakage case (danger), fewer is a camera-view question (warning),
@@ -85,4 +86,19 @@ class AuditReadingCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// An audit's review state in the office's words -- one mapping for every
+/// screen, so a check is never "Matched" on one page and "no action
+/// needed" on another.
+StatusBadge auditOutcomeBadge(String status) {
+  final (label, tone) = switch (status) {
+    'pending' => ('Needs review', Tone.warning),
+    'resolved' => ('Problem confirmed', Tone.danger),
+    'ignored' => ('Dismissed', Tone.neutral),
+    'reconciled' => ('Matched', Tone.success),
+    'failed' => ('Camera failed', Tone.warning),
+    _ => (status, Tone.neutral),
+  };
+  return StatusBadge(label, tone: tone);
 }

@@ -39,7 +39,7 @@ dataset from `db/seed/002_demo_dataset.sql`.
 | 9 | Conductor | Walk-in | Log a cash passenger 1 → 4 | Cash is *in hand*, not missing — the office sees the difference |
 | 10 | Driver / Conductor | Headcount | Enter 2 | Cross-check by a human before the camera |
 | 11 | Conductor | Audit | Trigger the camera | Visual vs manifest. Variance > 0 flags the trip and notifies the office |
-| 12 | Laptop | Console → bell | Variance alert → audit queue | Same row, same transaction as the audit log |
+| 12 | Laptop | Console → bell | Variance alert → Passenger Count Checks | Same row, same transaction as the audit log |
 | 13 | Laptop | Audits → **History** | Yesterday's resolved / ignored / failed | The failed one: the node returned 502 rather than invent a count |
 | 14 | Laptop | Revenue | Last 3 days; cash in hand ₱790 vs unreconciled ₱0 | One conductor has not remitted yet — that is a pocket, not a leak |
 | 15 | Laptop | Revenue → **Export** | Download the .xlsx, open it | Totals row; the office keeps its books in Excel |

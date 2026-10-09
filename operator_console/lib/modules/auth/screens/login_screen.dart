@@ -47,8 +47,8 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Card(
-                // Flat, edged by the theme's divider: on a light page a
-                // shadow is a second way of drawing the same boundary.
+                // Flat, edged by the theme's divider: a shadow would be a
+                // second way of drawing the same boundary.
                 child: Padding(
                   padding: const EdgeInsets.all(32.0),
                   child: Form(
@@ -59,10 +59,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         // The mark, then what this door is for: everyone
                         // who signs in here is office staff.
-                        const Center(child: BrandLogo(height: 96)),
+                        const Center(child: BrandPlate(height: 80)),
                         const SizedBox(height: AppSpacing.md),
                         const Text(
-                          'Cooperative office console',
+                          'Cooperative office console. Sign in with your office account.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                         ),
@@ -72,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: AppColors.dangerContainer,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
                               border: Border.all(color: AppColors.danger),
                             ),
                             child: Text(
@@ -116,18 +116,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: auth.isBusy ? null : _submit,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
+                              foregroundColor: AppColors.onFill,
                             ),
                             child: auth.isBusy
                                 ? const SizedBox(
                                     width: 22,
                                     height: 22,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2.5, color: Colors.white),
+                                        strokeWidth: 2.5, color: AppColors.onFill),
                                   )
-                                : const Text('Sign In',
+                                : const Text('Sign in',
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           ),
                         ),

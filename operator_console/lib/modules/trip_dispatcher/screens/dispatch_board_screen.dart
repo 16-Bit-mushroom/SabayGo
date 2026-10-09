@@ -5,9 +5,10 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/fleet_repository.dart';
+import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
-/// Trip dispatch, as the backend actually models it.
+/// Special Trips: trip dispatch, as the backend actually models it.
 ///
 /// Regular departures are materialised from schedule templates
 /// (`/config/trips/generate`, run on a schedule) -- there is no "pick an
@@ -108,7 +109,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Special trip dispatched to the ground crew.'),
+          content: const Text('Special trip added. It is on the Trips page now.'),
           backgroundColor: Theme.of(context).colorScheme.primary,
           behavior: SnackBarBehavior.floating,
         ),
@@ -145,26 +146,17 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Text(
-                    'Trip Dispatch Command',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _loading ? null : _load,
-                    icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-                    tooltip: 'Refresh',
-                  ),
-                ],
+              PageHeader(
+                title: 'Special Trips',
+                description: 'Add an extra trip that is not on the Timetable -- for a rush hour '
+                    'or a replacement van. Today\'s departures are listed for reference.',
+                actions: [RefreshButton(onPressed: _load, busy: _loading)],
               ),
-              const SizedBox(height: 24),
               Expanded(
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
-                        ? _buildError(_error!)
+                        ? LoadError(message: _error!, onRetry: _load)
                         : isDesktop
                             ? Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,21 +183,6 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
     );
   }
 
-  Widget _buildError(String message) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: _load, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-
   /// Today's departures: full width, headings pinned.
   ///
   /// Same flex table as Revenue, Schedules and Audits, for the same reason:
@@ -218,8 +195,8 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
     const columns = <(String, int, bool)>[
       ('Route', 26, false),
       ('Van', 13, false),
-      ('Departs', 13, true),
-      ('Bookings', 12, true),
+      ('Leaves at', 13, true),
+      ('Seats booked', 14, true),
       ('Status', 15, false),
     ];
     const minWidth = 560.0;
@@ -277,23 +254,8 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
             cell(3, Text('${trip.totalBookings}/${trip.seatCapacity}', style: figures)),
             cell(
               4,
-              // Token container/on pairs. "Scheduled" is not a warning --
-              // nothing is wrong with it -- so it is info-blue.
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: departed ? AppColors.primaryContainer : AppColors.infoContainer,
-                  borderRadius: BorderRadius.circular(AppRadius.full),
-                ),
-                child: Text(
-                  departed ? 'Departed' : 'Scheduled',
-                  style: TextStyle(
-                    color: departed ? AppColors.primary : AppColors.info,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              // The same words and colours as the Trips page.
+              StatusBadge.trip(departed ? 'departed' : 'scheduled'),
             ),
           ]),
         ),
@@ -304,15 +266,14 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: AppColors.divider),
       ),
       child: LayoutBuilder(builder: (context, c) {
         final title = Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(children: [
-            const Text("Today's Departures",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            Text("Today's departures", style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(width: AppSpacing.sm),
             if (trips.isNotEmpty)
               Text(trips.length == 1 ? '1 trip' : '${trips.length} trips',
@@ -322,11 +283,10 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
         if (trips.isEmpty) {
           return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             title,
-            const Padding(
-              padding: EdgeInsets.all(32.0),
-              child: Center(
-                  child: Text('No departures today. Generate trips from Schedules, or dispatch one here.',
-                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted))),
+            const EmptyState(
+              icon: Icons.event_busy_outlined,
+              title: 'No trips today',
+              hint: 'Create them from the Timetable, or add a special trip with the form.',
             ),
           ]);
         }
@@ -372,24 +332,20 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
 
 
   Widget _buildDispatchForm() {
-    return Card(
-      elevation: 4,
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
+    return Panel(
+      padding: const EdgeInsets.all(AppSpacing.xxl),
+      child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Dispatch Special Trip',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-            const SizedBox(height: 4),
-            const Text(
-              'An ad-hoc departure outside the regular schedule.',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            Text('Add a special trip', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Only the route is needed. Van and crew can be added later.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xxl),
             _buildDropdown<String>(
               'Route',
               _routes.map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName))).toList(),
@@ -403,13 +359,16 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
                 if (picked != null) setState(() => _departureTime = picked);
               },
               child: InputDecorator(
-                decoration: _fieldDecoration('Departure Time'),
+                decoration: _fieldDecoration('Leaves at').copyWith(
+                  // The form books the next occurrence of this time.
+                  helperText: 'If this time has already passed, the trip is set for tomorrow.',
+                ),
                 child: Text(_departureTime.format(context), style: const TextStyle(color: AppColors.textPrimary)),
               ),
             ),
             const SizedBox(height: 16),
             _buildDropdown<String>(
-              'Assign Van (optional)',
+              'Van (optional)',
               _vans
                   .map((v) => DropdownMenuItem(
                       value: v.vanId, child: Text('${v.plateNumber} (${v.seatCapacity} seats)')))
@@ -419,14 +378,14 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
             ),
             const SizedBox(height: 16),
             _buildDropdown<String>(
-              'Assign Driver (optional)',
+              'Driver (optional)',
               _drivers.map((d) => DropdownMenuItem(value: d.userId, child: Text(d.fullName))).toList(),
               _driverId,
               (val) => setState(() => _driverId = val),
             ),
             const SizedBox(height: 16),
             _buildDropdown<String>(
-              'Assign Conductor (optional)',
+              'Conductor (optional)',
               _conductors.map((c) => DropdownMenuItem(value: c.userId, child: Text(c.fullName))).toList(),
               _conductorId,
               (val) => setState(() => _conductorId = val),
@@ -434,21 +393,16 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
+              child: FilledButton.icon(
                 onPressed: _canDispatch() ? _dispatchTrip : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: AppColors.surface,
-                  disabledBackgroundColor: AppColors.surfaceSunken,
-                  disabledForegroundColor: AppColors.textMuted,
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 20)),
                 icon: _dispatching
                     ? const SizedBox(
-                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.send_rounded),
-                label: const Text('Confirm Dispatch', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
+                    : const Icon(Icons.add),
+                label: const Text('Add special trip'),
               ),
             ),
           ],

@@ -40,16 +40,16 @@ class NotificationService:
         Returns the number of recipients.
         """
         if variance > 0:
-            headline = f"{variance} more aboard than the manifest"
-            detail = "Possible undocumented boarding."
+            headline = f"{variance} more aboard than the passenger list"
+            detail = "Possible unrecorded passengers."
         else:
-            headline = f"{abs(variance)} fewer aboard than the manifest"
-            detail = "Check for early alighting or an unrecorded no-show."
+            headline = f"{abs(variance)} fewer aboard than the passenger list"
+            detail = "Someone may have got off early or not been marked a no-show."
         plate = trip.van.plate_number if trip.van is not None else "unassigned van"
         route = trip.route.route_name if trip.route is not None else trip.route_id
         message = (
-            f"{route} · {plate} · leg {leg_sequence}: camera counted "
-            f"{visual_count}, manifest shows {booked_count}. {detail}"
+            f"{route} · {plate} · section {leg_sequence}: camera counted "
+            f"{visual_count}, passenger list shows {booked_count}. {detail}"
         )
 
         recipients: list[tuple[str, str]] = []

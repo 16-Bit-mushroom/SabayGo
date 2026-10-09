@@ -67,10 +67,12 @@ class PendingAudit {
 
   /// The office's words, not the enum's.
   String get triggerLabel => switch (triggerType) {
-        'door_close' => 'Automatic — doors closed',
-        'gps_node' => 'Automatic — left terminal',
+        // door_close fires when the conductor closes boarding and departs;
+        // there is no door sensor, so the label says what really happened.
+        'door_close' => 'Automatic — van departed',
+        'gps_node' => 'Automatic — van left a stop',
         'scheduled' => 'Automatic — scheduled',
-        'manual' => 'Manual — requested',
+        'manual' => 'Requested by the office',
         _ => triggerType,
       };
 

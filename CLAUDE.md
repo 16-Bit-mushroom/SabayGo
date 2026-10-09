@@ -232,7 +232,7 @@ node: an unreachable device is an error state, not a fabricated success.
 cooperative's own SIM -- FOSS, no per-message charge) or `twilio` (the
 vendor §2.3.5 names; paid, trial reaches verified numbers only). Who gets
 texted is the `sos_contact_numbers` cooperative policy, edited in the
-console's Policy Editor, not an env var.
+console's Rules & Settings page, not an env var.
 
 **MySQL stores naive local time (Asia/Manila).** Use `app.core.timezone`.
 Treating those timestamps as UTC shifts everything eight hours and breaks
@@ -360,11 +360,11 @@ maps kind to tab, so the SOS and variance destinations cannot drift apart.
 Console (9 Oct): a **Trips** tab under Operations -- the day's trips from
 `GET /config/trips?date=` with live status, crew and counts, and the
 selected trip's manifest from the conductor's own `GET /trips/{id}/manifest`
-with the conductor app's status words. **My profile** opens from the user
-row at the foot of the sidebar: name, phone, password via `PATCH
-/auth/me`, which now edits staff names too. **Phone capture** lives on the
-Trips screen, in the selected trip's header (`ai_audit_queue/phone_capture.dart`;
-moved off the Audits tab): enabled only while the trip is boarding or
+with the conductor app's status words. **My profile** opens from the
+account menu at the right of the top bar: name, phone, password via `PATCH
+/auth/me`, which now edits staff names too. **Check with phone camera**
+(phone capture) lives on the Trips screen, in the selected trip's panel
+(`ai_audit_queue/phone_capture.dart`; moved off the Audits tab): enabled only while the trip is boarding or
 departed, legs offered by stop name, and the result is reported through
 the app-wide messenger by polling `GET /audits/phone/status` -- a matching
 capture is filed `reconciled` (History, not the Queue), so the queue alone
@@ -376,9 +376,27 @@ list row carries `verdict` / `headline` / `explanation` / `next_step` /
 wording can change without rewriting the trail). More people than the
 manifest reads as possible undocumented boarding; fewer reads as a
 camera-view question and explicitly *not* lost revenue. The console's
-`AuditReadingCard` shows it on the Audits panel and in the Trips screen's
-**AI headcount checks** section (`GET /audits/trips/{id}`, open and closed).
-`tests/test_audit_reading.py` pins the direction of each reading.
+`AuditReadingCard` shows it on Passenger Count Checks and in the Trips
+screen's **Camera passenger checks** panel (`GET /audits/trips/{id}`, open
+and closed). `tests/test_audit_reading.py` pins the direction of each
+reading.
+
+**Console redesign (9 Oct, branch `console-redesign`).** Dark operations-
+dashboard theme, a labelled sidebar in three groups (Today / Money &
+checks / Setup, foldable to icons) and a top bar with today's figures
+(`core/layout/today_strip.dart`), the bell and the account menu. Pages
+were renamed in the office's words, with the technical term kept as a
+small note on the page: Live Fleet → **Overview**, Trip Dispatcher →
+**Special Trips**, YOLOv8 Audits → **Passenger Count Checks**, Revenue →
+**Fares & Cash**, Schedules → **Timetable**, Fleet & Crew → **Vans &
+Crew**, Policies → **Rules & Settings**. On screen, manifest → passenger
+list, leg → section, variance → difference. Shared pieces are in
+`core/design/components/` (`PageHeader`, `Panel`, `StatTile`,
+`StatusBadge` with the one trip/passenger word mapping, `LoadError`,
+`EmptyState`, `PersonRow`, `BrandPlate`); `auditOutcomeBadge()` in
+`audit_reading_card.dart` is the one mapping for a check's review state.
+The palette is the console's own now (dark), no longer a copy of
+`mobile/`'s light tokens. Full list: `docs/CONSOLE_REDESIGN.md`.
 
 Console (15 Sep): the Audits tab has a Queue / History switch — a closed
 audit shows outcome, resolver, time and notes instead of the buttons. The

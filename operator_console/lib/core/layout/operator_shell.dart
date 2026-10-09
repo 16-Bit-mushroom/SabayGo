@@ -18,7 +18,15 @@ import '../design/components/brand_logo.dart';
 import '../design/tokens.dart';
 import 'notification_bell.dart';
 import 'profile_dialog.dart';
+import 'today_strip.dart';
 
+/// Sidebar on the left, a top bar with today's figures, the bell and the
+/// signed-in user, and the selected screen beneath.
+///
+/// Laid out after an operations dashboard: the frame is a shade off the
+/// canvas and the screens sit in it as panels. The sidebar keeps its
+/// labels -- office staff should never have to learn an icon to find a
+/// page -- and folds to icons only on request.
 class OperatorShell extends StatefulWidget {
   const OperatorShell({super.key});
 
@@ -28,6 +36,7 @@ class OperatorShell extends StatefulWidget {
 
 class _OperatorShellState extends State<OperatorShell> {
   int _selectedIndex = 0;
+  bool _collapsed = false;
   late final NotificationProvider _notifications;
 
   @override
@@ -45,67 +54,76 @@ class _OperatorShellState extends State<OperatorShell> {
     super.dispose();
   }
 
-  // Screen and rail entry declared together. They used to be two lists
-  // indexed by the same integer, with the audit tab's position written out
-  // as a constant -- inserting a module in the middle silently pointed the
-  // variance alert at the wrong tab.
+  // Screen and sidebar entry declared together, so inserting a module can
+  // never point a notification at the wrong page.
   //
-  // Grouped by the office's job rather than listed flat: nine peers in one
-  // column is a list to read, three labelled groups is a place to look
-  // (chunking; Law of Common Region). Live operations first, because that
-  // is what changes minute to minute. Order is free to change --
-  // notifications find their tab by screen type, not by index.
+  // Grouped by the office's job: what is happening today, money and the
+  // camera checks that protect it, and the setup that changes rarely.
+  // Labels are the screens' titles word for word, in the office's words;
+  // the technical term (YOLOv8) is on the screen, not in the menu.
   static const _modules = <_Module>[
-    _Module('Live Fleet', Icons.my_location_outlined, Icons.my_location,
-        FleetMapScreen(), group: 'Operations'),
+    _Module('Overview', Icons.map_outlined, Icons.map, FleetMapScreen(), group: 'Today'),
     _Module('Trips', Icons.departure_board_outlined, Icons.departure_board,
         TripMonitorScreen()),
-    _Module('Trip Dispatcher', Icons.route_outlined, Icons.route,
+    _Module('Special Trips', Icons.alt_route_outlined, Icons.alt_route,
         DispatchBoardScreen()),
-    _Module('Emergency (SOS)', Icons.emergency_outlined, Icons.emergency,
+    _Module('Emergencies (SOS)', Icons.emergency_outlined, Icons.emergency,
         SosConsoleScreen(), urgent: true),
-    _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble,
-        MessagesScreen()),
-    _Module('Revenue', Icons.payments_outlined, Icons.payments,
-        RevenueScreen(), group: 'Oversight'),
-    _Module('YOLOv8 Audits', Icons.policy_outlined, Icons.policy,
+    _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, MessagesScreen()),
+    _Module('Fares & Cash', Icons.payments_outlined, Icons.payments, RevenueScreen(),
+        group: 'Money & checks'),
+    _Module('Passenger Count Checks', Icons.fact_check_outlined, Icons.fact_check,
         AuditDashboardScreen()),
-    _Module('Schedules', Icons.calendar_month_outlined, Icons.calendar_month,
+    _Module('Timetable', Icons.calendar_month_outlined, Icons.calendar_month,
         ScheduleScreen(), group: 'Setup'),
-    _Module('Fleet & Crew', Icons.directions_car_outlined, Icons.directions_car,
+    _Module('Vans & Crew', Icons.airport_shuttle_outlined, Icons.airport_shuttle,
         FleetRosterScreen()),
-    _Module('Policies', Icons.tune_outlined, Icons.tune, PolicyEditorScreen()),
+    _Module('Rules & Settings', Icons.tune_outlined, Icons.tune, PolicyEditorScreen()),
   ];
 
-  /// Where a notification lands when the office clicks it. Looked up by
-  /// screen type rather than written out as a constant -- the two
-  /// parallel lists this replaced sent a variance alert to whichever
-  /// module happened to sit at index 5.
-  int _indexOfScreen(bool Function(Widget) test) =>
-      _modules.indexWhere((m) => test(m.screen));
-
-  void _openFor(AppNotification n) {
-    final index = n.isSosAlert
-        ? _indexOfScreen((w) => w is SosConsoleScreen)
-        : _indexOfScreen((w) => w is AuditDashboardScreen);
+  /// Looked up by screen type rather than written out as an index.
+  void _show(bool Function(Widget) test) {
+    final index = _modules.indexWhere((m) => test(m.screen));
     if (index >= 0) setState(() => _selectedIndex = index);
   }
+
+  void _openFor(AppNotification n) => n.isSosAlert
+      ? _show((w) => w is SosConsoleScreen)
+      : _show((w) => w is AuditDashboardScreen);
+
+  void _openToday(TodayTarget target) => switch (target) {
+        TodayTarget.fleet => _show((w) => w is FleetMapScreen),
+        TodayTarget.trips => _show((w) => w is TripMonitorScreen),
+        TodayTarget.checks => _show((w) => w is AuditDashboardScreen),
+        TodayTarget.emergencies => _show((w) => w is SosConsoleScreen),
+      };
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<NotificationProvider>.value(
       value: _notifications,
       child: Scaffold(
+        backgroundColor: AppColors.surface,
         body: Row(
           children: [
             _Sidebar(
               modules: _modules,
               selectedIndex: _selectedIndex,
+              collapsed: _collapsed,
               onSelect: (i) => setState(() => _selectedIndex = i),
-              bell: NotificationBell(onOpen: _openFor),
+              onToggle: () => setState(() => _collapsed = !_collapsed),
             ),
-            const VerticalDivider(width: 1),
-            Expanded(child: _modules[_selectedIndex].screen),
+            Expanded(
+              child: Column(
+                children: [
+                  _TopBar(
+                    strip: TodayStrip(onOpen: _openToday),
+                    bell: NotificationBell(onOpen: _openFor),
+                  ),
+                  Expanded(child: _modules[_selectedIndex].screen),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -113,49 +131,150 @@ class _OperatorShellState extends State<OperatorShell> {
   }
 }
 
-/// The console's navigation: logo, bell, grouped modules, signed-in user.
-///
-/// A custom column rather than [NavigationRail], which has no notion of
-/// group headings. Light like the content it frames -- the old Nord rail
-/// was the darkest thing on screen, which made navigation the loudest
-/// element on a page whose job is the data beside it.
-class _Sidebar extends StatelessWidget {
-  const _Sidebar({
-    required this.modules,
-    required this.selectedIndex,
-    required this.onSelect,
-    required this.bell,
-  });
+// ------------------------------------------------------------------ top bar
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.strip, required this.bell});
 
-  final List<_Module> modules;
-  final int selectedIndex;
-  final ValueChanged<int> onSelect;
+  final Widget strip;
   final Widget bell;
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     return Container(
-      width: 248,
-      color: AppColors.sidebar,
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+      decoration: const BoxDecoration(
+        color: AppColors.sidebar,
+        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: strip),
+          const SizedBox(width: AppSpacing.md),
+          bell,
+          const SizedBox(width: AppSpacing.sm),
+          const _ProfileMenu(),
+        ],
+      ),
+    );
+  }
+}
+
+/// The signed-in person, and the two things people look for under their
+/// own name: their profile and signing out.
+class _ProfileMenu extends StatelessWidget {
+  const _ProfileMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final name = auth.profile?.displayName ?? auth.profile?.email ?? '';
+    final text = Theme.of(context).textTheme;
+    return PopupMenuButton<String>(
+      tooltip: 'My account',
+      offset: const Offset(0, 52),
+      onSelected: (v) {
+        if (v == 'profile') {
+          showDialog<void>(context: context, builder: (_) => const ProfileDialog());
+        } else {
+          auth.signOut();
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: 'profile',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.person_outline),
+            title: Text('My profile'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'signout',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.logout),
+            title: Text('Sign out'),
+          ),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: AppSpacing.xs),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: AppColors.primary,
+              child: Text(
+                name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                style: const TextStyle(color: AppColors.onFill, fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, overflow: TextOverflow.ellipsis, style: text.labelLarge),
+                  Text('Cooperative office', style: text.bodySmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.expand_more, size: 18, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ sidebar
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({
+    required this.modules,
+    required this.selectedIndex,
+    required this.collapsed,
+    required this.onSelect,
+    required this.onToggle,
+  });
+
+  final List<_Module> modules;
+  final int selectedIndex;
+  final bool collapsed;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return AnimatedContainer(
+      duration: MediaQuery.of(context).disableAnimations ? Duration.zero : AppDuration.normal,
+      curve: Curves.easeOut,
+      width: collapsed ? 76 : 256,
+      decoration: const BoxDecoration(
+        color: AppColors.sidebar,
+        border: Border(right: BorderSide(color: AppColors.divider)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // The mark is black ink on transparent and is drawn only on a
+          // light surface, so it sits on a light plate -- the reference
+          // dashboard's logo tile.
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.xl, AppSpacing.sm, AppSpacing.xs),
-            child: Row(
-              children: [
-                const BrandLogo(height: 52),
-                const Spacer(),
-                bell,
-              ],
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.lg, AppSpacing.md, 0),
+            child: BrandPlate(height: collapsed ? 24 : 44),
+          ),
+          if (!collapsed)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+              child: Text('Cooperative office console', style: text.bodySmall),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Text('Cooperative office', style: text.bodySmall),
-          ),
           const SizedBox(height: AppSpacing.sm),
           Expanded(
             child: ListView(
@@ -163,15 +282,21 @@ class _Sidebar extends StatelessWidget {
               children: [
                 for (var i = 0; i < modules.length; i++) ...[
                   if (modules[i].group != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(AppSpacing.md,
-                          AppSpacing.lg, AppSpacing.md, AppSpacing.xs),
-                      child: Text(modules[i].group!.toUpperCase(),
-                          style: text.labelSmall),
-                    ),
+                    collapsed
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(
+                                vertical: AppSpacing.md, horizontal: AppSpacing.md),
+                            child: Divider(),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                                AppSpacing.md, AppSpacing.lg, AppSpacing.md, AppSpacing.xs),
+                            child: Text(modules[i].group!.toUpperCase(), style: text.labelSmall),
+                          ),
                   _SidebarItem(
                     module: modules[i],
                     selected: i == selectedIndex,
+                    collapsed: collapsed,
                     onTap: () => onSelect(i),
                   ),
                 ],
@@ -179,64 +304,14 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
           const Divider(),
-          Consumer<AuthProvider>(
-            builder: (context, auth, _) {
-              final name =
-                  auth.profile?.displayName ?? auth.profile?.email ?? '';
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg, AppSpacing.md, AppSpacing.sm, AppSpacing.md),
-                child: Row(
-                  children: [
-                    // Avatar and name together are the way into "My
-                    // profile" -- where people look for their own account.
-                    Expanded(
-                      child: Tooltip(
-                        message: 'My profile',
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                          onTap: () => showDialog<void>(
-                            context: context,
-                            builder: (_) => const ProfileDialog(),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppColors.primaryContainer,
-                                  child: Text(
-                                    name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-                                    style: const TextStyle(
-                                        color: AppColors.primary, fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Text(
-                                    name,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: text.bodySmall!
-                                        .copyWith(color: AppColors.textPrimary),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Sign out',
-                      onPressed: auth.signOut,
-                      icon: const Icon(Icons.logout,
-                          size: 18, color: AppColors.textMuted),
-                    ),
-                  ],
-                ),
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: _SidebarButton(
+              icon: collapsed ? Icons.keyboard_double_arrow_right : Icons.keyboard_double_arrow_left,
+              label: collapsed ? 'Show menu names' : 'Hide menu names',
+              collapsed: collapsed,
+              onTap: onToggle,
+            ),
           ),
         ],
       ),
@@ -244,61 +319,112 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-/// One row. Selection is carried three ways -- ink fill, white bold label,
-/// filled icon -- so it never rests on hue alone (WCAG 1.4.1). The SOS
-/// entry keeps a red icon in every state and a red fill when open: it is
-/// the one module that is an alarm, and should look like one.
+/// One entry. Selection is carried three ways -- light fill, dark bold
+/// label, filled icon -- so it never rests on hue alone (WCAG 1.4.1). The
+/// SOS entry keeps a red icon in every state and a red fill when open: it
+/// is the one page that is an alarm, and should look like one.
 class _SidebarItem extends StatelessWidget {
   const _SidebarItem({
     required this.module,
     required this.selected,
+    required this.collapsed,
     required this.onTap,
   });
 
   final _Module module;
   final bool selected;
+  final bool collapsed;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final fill = module.urgent ? AppColors.danger : AppColors.primary;
     final iconColour = selected
-        ? Colors.white
+        ? AppColors.onFill
         : (module.urgent ? AppColors.danger : AppColors.textMuted);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
+    final row = Row(
+      mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+      children: [
+        Icon(selected ? module.selectedIcon : module.icon, size: 20, color: iconColour),
+        if (!collapsed) ...[
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              module.label,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: selected ? AppColors.onFill : AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+    final item = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Semantics(
         selected: selected,
         button: true,
+        label: collapsed ? module.label : null,
         child: Material(
           color: selected ? fill : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             hoverColor: AppColors.surfaceSunken,
             onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(selected ? module.selectedIcon : module.icon,
-                      size: 20, color: iconColour),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Text(
-                      module.label,
-                      style: TextStyle(
-                        color: selected ? Colors.white : AppColors.textPrimary,
-                        fontSize: 14,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
+            child: SizedBox(
+              height: AppSizing.minTouchTarget - 4,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: row,
               ),
             ),
+          ),
+        ),
+      ),
+    );
+    // Folded to icons, the name is still one hover away.
+    return collapsed
+        ? Tooltip(message: module.label, preferBelow: false, child: item)
+        : item;
+  }
+}
+
+class _SidebarButton extends StatelessWidget {
+  const _SidebarButton({
+    required this.icon,
+    required this.label,
+    required this.collapsed,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool collapsed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: onTap,
+        child: SizedBox(
+          height: AppSizing.minTouchTarget - 4,
+          child: Row(
+            mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+            children: [
+              if (!collapsed) const SizedBox(width: AppSpacing.md),
+              Icon(icon, size: 20, color: AppColors.textMuted),
+              if (!collapsed) ...[
+                const SizedBox(width: AppSpacing.md),
+                Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+              ],
+            ],
           ),
         ),
       ),
@@ -311,6 +437,7 @@ class _Module {
   const _Module(this.label, this.icon, this.selectedIcon, this.screen,
       {this.group, this.urgent = false});
 
+  /// The sidebar label -- and, word for word, the screen's own title.
   final String label;
   final IconData icon;
   final IconData selectedIcon;

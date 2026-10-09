@@ -5,9 +5,10 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/util/download.dart';
 import '../../../data/repositories/revenue_repository.dart';
+import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
-/// Per-trip revenue reconciliation.
+/// Fares & Cash: per-trip revenue reconciliation.
 ///
 /// `cashInHand` (fare a conductor is holding but hasn't remitted yet) is
 /// shown separately from `unreconciledAmount` (fare nobody can account
@@ -121,13 +122,11 @@ class _RevenueScreenState extends State<RevenueScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Text(
-                'Revenue Reconciliation',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const Spacer(),
+          PageHeader(
+            title: 'Fares & Cash',
+            description: 'Fares received for each trip, and cash the crew have collected but '
+                'not yet turned in. Pick the dates, then export for the books.',
+            actions: [
               OutlinedButton.icon(
                 onPressed: _pickRange,
                 style: OutlinedButton.styleFrom(
@@ -138,14 +137,13 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 label: Text(
                     '${DateFormat.MMMd().format(_dateFrom)} – ${DateFormat.MMMd().format(_dateTo)}'),
               ),
-              const SizedBox(width: 12),
               PopupMenuButton<String>(
                 enabled: !_loading && !_exporting,
                 tooltip: 'Export',
                 onSelected: _export,
                 itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'xlsx', child: Text('Excel workbook (.xlsx)')),
-                  PopupMenuItem(value: 'csv', child: Text('CSV (.csv)')),
+                  PopupMenuItem(value: 'xlsx', child: Text('Excel file (.xlsx)')),
+                  PopupMenuItem(value: 'csv', child: Text('Plain table (.csv)')),
                 ],
                 child: OutlinedButton.icon(
                   onPressed: null,
@@ -159,15 +157,9 @@ class _RevenueScreenState extends State<RevenueScreen> {
                   label: Text(_exporting ? 'Exporting…' : 'Export'),
                 ),
               ),
-              const SizedBox(width: 12),
-              IconButton(
-                onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-                tooltip: 'Refresh',
-              ),
+              RefreshButton(onPressed: _load, busy: _loading),
             ],
           ),
-          const SizedBox(height: 24),
           // The totals stay pinned and only the trip rows scroll. They used
           // to share one scroll view, so the figures a reconciliation is
           // checked against left the screen as soon as the office scrolled
@@ -175,27 +167,12 @@ class _RevenueScreenState extends State<RevenueScreen> {
           if (_loading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
-            Expanded(child: _buildError(_error!))
+            Expanded(child: LoadError(message: _error!, onRetry: _load))
           else ...[
             _buildSummaryCards(),
             const SizedBox(height: 16),
             Expanded(child: _buildTripsTable()),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildError(String message) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: _load, child: const Text('Retry')),
         ],
       ),
     );
@@ -207,32 +184,32 @@ class _RevenueScreenState extends State<RevenueScreen> {
     final cards = [
       _StatCard(label: 'Trips', value: '${s.trips}', icon: Icons.route_outlined, color: AppColors.primary),
       _StatCard(
-          label: 'Total Bookings',
+          label: 'Passengers',
           value: '${s.totalBookings}',
-          sub: '${s.appBookings} app · ${s.walkinBookings} walk-in',
+          sub: '${s.appBookings} booked in app · ${s.walkinBookings} walk-in',
           icon: Icons.confirmation_number_outlined,
           color: AppColors.primary),
       _StatCard(
-          label: 'Collected Fare',
+          label: 'Fares received',
           value: _currency.format(s.collectedFare),
           icon: Icons.payments_outlined,
           color: AppColors.success),
       _StatCard(
-          label: 'Cash In Hand',
+          label: 'Cash with crew',
           value: _currency.format(s.cashInHand),
-          sub: 'Held by crew, not yet remitted',
+          sub: 'Collected, not yet turned in',
           icon: Icons.account_balance_wallet_outlined,
           color: AppColors.warning),
       _StatCard(
-          label: 'Unreconciled',
+          label: 'Not accounted for',
           value: _currency.format(s.unreconciledAmount),
-          sub: s.unreconciledAmount > 0 ? 'Fare unaccounted for' : 'Fully accounted',
+          sub: s.unreconciledAmount > 0 ? 'Fare nobody can account for' : 'Everything accounted for',
           icon: Icons.warning_amber_outlined,
           color: s.unreconciledAmount > 0 ? AppColors.danger : AppColors.success),
       _StatCard(
-          label: 'Pending Audits',
+          label: 'Camera checks to review',
           value: '${s.pendingAudits}',
-          icon: Icons.policy_outlined,
+          icon: Icons.fact_check_outlined,
           color: s.pendingAudits > 0 ? AppColors.danger : AppColors.success),
     ];
 
@@ -285,7 +262,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: AppColors.divider),
       ),
       child: Column(
@@ -295,8 +272,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Row(
               children: [
-                const Text('Per-Trip Reconciliation',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Text('Each trip', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(width: AppSpacing.sm),
                 if (trips.isNotEmpty)
                   Text(trips.length == 1 ? '1 trip' : '${trips.length} trips',
@@ -306,9 +282,11 @@ class _RevenueScreenState extends State<RevenueScreen> {
           ),
           Expanded(
             child: trips.isEmpty
-                ? const Center(
-                    child: Text('No trips in this range. Pick another date range above.',
-                        style: TextStyle(color: AppColors.textMuted)))
+                ? const EmptyState(
+                    icon: Icons.date_range_outlined,
+                    title: 'No trips in these dates',
+                    hint: 'Pick other dates with the date button above.',
+                  )
                 : LayoutBuilder(builder: (context, c) {
                     final width = c.maxWidth < _minTableWidth ? _minTableWidth : c.maxWidth;
                     return SingleChildScrollView(
@@ -352,11 +330,11 @@ class _RevenueScreenState extends State<RevenueScreen> {
     ('Departed', 14, false),
     ('Route', 20, false),
     ('Van', 10, false),
-    ('Bookings', 9, true),
-    ('Collected', 11, true),
-    ('Cash in hand', 11, true),
-    ('Unreconciled', 11, true),
-    ('Audits', 8, false),
+    ('Seats booked', 10, true),
+    ('Fares received', 12, true),
+    ('Cash with crew', 12, true),
+    ('Not accounted for', 13, true),
+    ('Checks', 7, false),
   ];
 
   Widget _cell(int column, Widget child) {
@@ -421,10 +399,10 @@ class _RevenueScreenState extends State<RevenueScreen> {
             7,
             t.pendingAudits > 0
                 ? Tooltip(
-                    message: '${t.pendingAudits} pending audit${t.pendingAudits == 1 ? '' : 's'}',
+                    message: '${t.pendingAudits} camera check${t.pendingAudits == 1 ? '' : 's'} to review',
                     child: const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 18))
                 : const Tooltip(
-                    message: 'No pending audits',
+                    message: 'No camera checks to review',
                     child: Icon(Icons.check_circle_outline, color: AppColors.success, size: 18)),
           ),
         ]),
@@ -452,8 +430,8 @@ class _StatCard extends StatelessWidget {
       // so they still line up whether or not they have a caption.
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: AppColors.divider),
       ),
       child: Column(

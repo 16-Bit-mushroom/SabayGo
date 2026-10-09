@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/audit_repository.dart';
@@ -14,10 +15,15 @@ import '../../ai_audit_queue/phone_capture.dart';
 /// The office's view of every trip on a day, as each conductor sees it.
 ///
 /// Left: the day's trips with live status and counts. Right: the selected
-/// trip's manifest -- the SAME endpoint the conductor's app reads, so the
-/// office and the van door can never show two different passenger lists.
-/// Status words match the conductor app exactly (AT TERMINAL, NOT YET...)
-/// so a dispatcher on the phone with a conductor is using their words.
+/// trip as a set of panels -- the trip, its crew and seats, its camera
+/// checks, its passenger list. The passenger list is the SAME endpoint the
+/// conductor's app reads, so the office and the van door can never show
+/// two different lists. Status words match the conductor app (Boarded, At
+/// terminal, Not yet boarded) so a dispatcher on the phone with a
+/// conductor is using their words.
+///
+/// Stops are named, not numbered: "Toril → Bangkal" rather than "Stop 1 →
+/// 3", from the trip's own stop list (`GET /trips/{id}/stops`).
 class TripMonitorScreen extends StatefulWidget {
   const TripMonitorScreen({super.key});
 
@@ -38,6 +44,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
   String? _selectedId;
   TripManifest? _manifest;
   List<PendingAudit>? _tripAudits;
+  Map<int, String> _stopNames = const {};
   String? _error;
   Timer? _timer;
 
@@ -69,23 +76,34 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
                 ?.tripId ??
             trips.firstOrNull?.tripId;
       }
+      final changed = selected != _selectedId;
       setState(() {
         _trips = trips;
         _selectedId = selected;
         _error = null;
       });
-      await _loadManifest();
+      await _loadManifest(withStops: changed);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message);
     }
   }
 
-  Future<void> _loadManifest() async {
+  Future<void> _loadManifest({bool withStops = false}) async {
     final id = _selectedId;
     if (id == null) {
       setState(() => _manifest = null);
       return;
+    }
+    if (withStops) {
+      // Names only: a failure leaves "Stop 2" wording, never a blank.
+      try {
+        final stops = await _dispatch.tripStops(id);
+        if (!mounted || _selectedId != id) return;
+        setState(() => _stopNames = {for (final s in stops) s.sequence: s.name});
+      } on ApiException {
+        if (mounted) setState(() => _stopNames = const {});
+      }
     }
     try {
       final m = await _dispatch.manifest(id);
@@ -95,8 +113,8 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       if (!mounted) return;
       setState(() => _error = e.message);
     }
-    // Separately, so an audit list that fails to load never hides the
-    // manifest the conductor is working from.
+    // Separately, so a check list that fails to load never hides the
+    // passenger list the conductor is working from.
     try {
       final audits = await _auditRepo.forTrip(id);
       if (!mounted || _selectedId != id) return;
@@ -112,8 +130,9 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       _selectedId = id;
       _manifest = null;
       _tripAudits = null;
+      _stopNames = const {};
     });
-    _loadManifest();
+    _loadManifest(withStops: true);
   }
 
   void _shiftDay(int days) {
@@ -123,82 +142,49 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       _selectedId = null;
       _manifest = null;
       _tripAudits = null;
+      _stopNames = const {};
     });
     _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     return LayoutBuilder(builder: (context, constraints) {
-      final wide = constraints.maxWidth > 900;
-      final pad = wide ? AppSpacing.xxl : AppSpacing.lg;
-      final list = _TripList(
-        trips: _trips,
-        selectedId: _selectedId,
-        onSelect: _select,
-      );
-      final detail = _ManifestPanel(
+      final wide = constraints.maxWidth > 1000;
+      final list = _TripList(trips: _trips, selectedId: _selectedId, onSelect: _select);
+      final detail = _TripDetail(
         trip: _trips?.where((t) => t.tripId == _selectedId).firstOrNull,
         manifest: _manifest,
         audits: _tripAudits,
+        stopNames: _stopNames,
         onCaptureFinished: _loadManifest,
       );
 
       return Padding(
-        padding: EdgeInsets.all(pad),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Trips',
-                          style: text.headlineSmall!.copyWith(color: AppColors.textPrimary)),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text('Every trip on the day, as its conductor sees it. Refreshes every '
-                          '${_refreshEvery.inSeconds} s.',
-                          style: text.bodySmall!.copyWith(color: AppColors.textMuted)),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Previous day',
-                  onPressed: () => _shiftDay(-1),
-                  icon: const Icon(Icons.chevron_left),
-                ),
-                Text(
-                  DateUtils.isSameDay(_day, DateTime.now())
-                      ? 'Today, ${DateFormat.MMMd().format(_day)}'
-                      : DateFormat.yMMMEd().format(_day),
-                  style: text.titleSmall!.copyWith(color: AppColors.textPrimary),
-                ),
-                IconButton(
-                  tooltip: 'Next day',
-                  onPressed: () => _shiftDay(1),
-                  icon: const Icon(Icons.chevron_right),
-                ),
-                IconButton(
-                  tooltip: 'Refresh now',
-                  onPressed: _load,
-                  icon: const Icon(Icons.refresh),
-                ),
+            PageHeader(
+              title: 'Trips',
+              description: 'Every trip on the chosen day, as its conductor sees it. Pick a '
+                  'trip to see who is aboard. Updates every ${_refreshEvery.inSeconds} seconds.',
+              actions: [
+                _DayPicker(day: _day, onShift: _shiftDay),
+                RefreshButton(onPressed: _load),
               ],
             ),
-            if (_error != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(_error!, style: const TextStyle(color: AppColors.danger)),
-            ],
-            const SizedBox(height: AppSpacing.lg),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
+              ),
             Expanded(
               child: wide
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(width: 420, child: list),
+                        SizedBox(width: 400, child: list),
                         const SizedBox(width: AppSpacing.lg),
                         Expanded(child: detail),
                       ],
@@ -207,7 +193,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
                       children: [
                         Expanded(child: list),
                         const SizedBox(height: AppSpacing.lg),
-                        Expanded(child: detail),
+                        Expanded(flex: 2, child: detail),
                       ],
                     ),
             ),
@@ -215,6 +201,42 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
         ),
       );
     });
+  }
+}
+
+class _DayPicker extends StatelessWidget {
+  const _DayPicker({required this.day, required this.onShift});
+  final DateTime day;
+  final ValueChanged<int> onShift;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateUtils.isSameDay(day, DateTime.now());
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Previous day',
+            onPressed: () => onShift(-1),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Text(
+            today ? 'Today, ${DateFormat.MMMd().format(day)}' : DateFormat.yMMMEd().format(day),
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          IconButton(
+            tooltip: 'Next day',
+            onPressed: () => onShift(1),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -228,85 +250,103 @@ class _TripList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = trips;
-    if (t == null) return const Center(child: CircularProgressIndicator());
-    if (t.isEmpty) {
-      return const _Panel(
-        child: Center(
-          child: Text('No trips on this day.', style: TextStyle(color: AppColors.textMuted)),
-        ),
-      );
-    }
     final text = Theme.of(context).textTheme;
-    return _Panel(
-      child: ListView.separated(
-        itemCount: t.length,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          final trip = t[i];
-          final selected = trip.tripId == selectedId;
-          return Material(
-            color: selected ? AppColors.primaryContainer : Colors.transparent,
-            child: InkWell(
-              onTap: () => onSelect(trip.tripId),
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 56,
-                      child: Text(DateFormat.jm().format(trip.departureDatetime),
-                          style: text.titleSmall!.copyWith(color: AppColors.textPrimary)),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(trip.routeName,
-                              overflow: TextOverflow.ellipsis,
-                              style: text.bodyMedium!.copyWith(
-                                  color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
-                          Text(
-                            [
-                              trip.plateNumber ?? 'no van',
-                              'Cond. ${trip.conductorName ?? 'unassigned'}',
-                            ].join(' · '),
-                            overflow: TextOverflow.ellipsis,
-                            style: text.bodySmall!.copyWith(color: AppColors.textMuted),
-                          ),
-                          Text(
-                            '${trip.booked}/${trip.seatCapacity} booked · '
-                            '${trip.boarded} boarded'
-                            '${trip.checkedIn > 0 ? ' · ${trip.checkedIn} at terminal' : ''}',
-                            style: text.bodySmall!.copyWith(color: AppColors.textMuted),
-                          ),
-                        ],
+    return Panel(
+      title: t == null ? 'Trips on this day' : 'Trips on this day (${t.length})',
+      icon: Icons.departure_board_outlined,
+      fill: true,
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 0),
+      child: t == null
+          ? const Center(child: CircularProgressIndicator())
+          : t.isEmpty
+              ? const EmptyState(
+                  icon: Icons.event_busy_outlined,
+                  title: 'No trips on this day',
+                  hint: 'Trips come from the Timetable ("Create upcoming trips") or from '
+                      'Special Trips.',
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                  itemCount: t.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.xs),
+                  itemBuilder: (context, i) {
+                    final trip = t[i];
+                    final selected = trip.tripId == selectedId;
+                    return Material(
+                      color: selected ? AppColors.surfaceSunken : Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        side: BorderSide(
+                            color: selected ? AppColors.textMuted : Colors.transparent),
                       ),
-                    ),
-                    _TripStatusPill(status: trip.status),
-                  ],
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        onTap: () => onSelect(trip.tripId),
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 64,
+                                child: Text(DateFormat.jm().format(trip.departureDatetime),
+                                    style: text.titleSmall),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(trip.routeName,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: text.bodyMedium!
+                                            .copyWith(fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      [
+                                        trip.plateNumber ?? 'No van yet',
+                                        'Conductor: ${trip.conductorName ?? 'not assigned'}',
+                                      ].join(' · '),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: text.bodySmall,
+                                    ),
+                                    Text(
+                                      '${trip.booked} of ${trip.seatCapacity} seats booked · '
+                                      '${trip.boarded} aboard'
+                                      '${trip.checkedIn > 0 ? ' · ${trip.checkedIn} at terminal' : ''}',
+                                      style: text.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              StatusBadge.trip(trip.status),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 }
 
-// --------------------------------------------------------- manifest panel
-class _ManifestPanel extends StatelessWidget {
-  const _ManifestPanel({
+// ----------------------------------------------------------- trip detail
+class _TripDetail extends StatelessWidget {
+  const _TripDetail({
     required this.trip,
     required this.manifest,
     required this.audits,
+    required this.stopNames,
     required this.onCaptureFinished,
   });
   final TripBoardEntry? trip;
   final TripManifest? manifest;
   final List<PendingAudit>? audits;
+  final Map<int, String> stopNames;
   final VoidCallback onCaptureFinished;
+
+  String _stop(int seq) => stopNames[seq] ?? 'Stop $seq';
 
   @override
   Widget build(BuildContext context) {
@@ -314,181 +354,284 @@ class _ManifestPanel extends StatelessWidget {
     final m = manifest;
     final text = Theme.of(context).textTheme;
     if (t == null) {
-      return const _Panel(
-        child: Center(
-          child: Text('Select a trip.', style: TextStyle(color: AppColors.textMuted)),
+      return const Panel(
+        child: EmptyState(
+          icon: Icons.touch_app_outlined,
+          title: 'Pick a trip',
+          hint: 'Choose a trip on the left to see its passengers, crew and camera checks.',
         ),
       );
     }
-    return _Panel(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${t.routeName} · ${DateFormat.jm().format(t.departureDatetime)}',
-                    style: text.titleMedium!.copyWith(color: AppColors.textPrimary),
+    return ListView(
+      children: [
+        // The trip: what, when, which van -- and the one action on it.
+        Panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.xs,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(t.routeName, style: text.titleLarge),
+                            StatusBadge.trip(t.status),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          [
+                            'Leaves ${DateFormat.jm().format(t.departureDatetime)}',
+                            if (t.departedAt != null)
+                              'left at ${DateFormat.jm().format(t.departedAt!)}',
+                            t.plateNumber ?? 'no van assigned',
+                            if (t.tripLabel != null) t.tripLabel!,
+                          ].join(' · '),
+                          style: text.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                // Keyed by trip: selecting another trip gets a fresh button,
-                // while a capture already in flight still reports its result.
-                PhoneCaptureButton(
+                  const SizedBox(width: AppSpacing.md),
+                  // Keyed by trip: selecting another trip gets a fresh button,
+                  // while a capture already in flight still reports its result.
+                  PhoneCaptureButton(
                     key: ValueKey(t.tripId),
                     tripId: t.tripId,
                     tripStatus: t.status,
-                    onFinished: onCaptureFinished),
-                const SizedBox(width: AppSpacing.md),
-                _TripStatusPill(status: t.status),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              [
-                if (t.tripLabel != null) t.tripLabel!,
-                t.plateNumber ?? 'no van',
-                'Driver ${t.driverName ?? 'unassigned'}',
-                'Conductor ${t.conductorName ?? 'unassigned'}',
-                if (t.departedAt != null) 'left ${DateFormat.jm().format(t.departedAt!)}',
-              ].join(' · '),
-              style: text.bodySmall!.copyWith(color: AppColors.textMuted),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            if (m == null)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else ...[
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: [
-                  _Count('Boarded', m.boarded, AppColors.success),
-                  _Count('At terminal', m.checkedIn, AppColors.info),
-                  _Count('Not yet', m.awaiting, AppColors.warning),
-                  _Count('Unpaid', m.unpaid, AppColors.textMuted),
+                    onFinished: onCaptureFinished,
+                  ),
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              // One scrolling body: the AI checks first, because they are
-              // what changes when someone presses Phone capture, then the
-              // passengers they were checked against.
-              Expanded(
-                child: ListView(
+              if (m == null)
+                const LinearProgressIndicator()
+              else
+                Row(
                   children: [
-                    _AuditsSection(audits: audits),
-                    const SizedBox(height: AppSpacing.lg),
-                    Text('Passengers',
-                        style: text.titleSmall!.copyWith(color: AppColors.textPrimary)),
-                    const SizedBox(height: AppSpacing.xs),
-                    if (m.passengers.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                        child: Text('No passengers on this trip yet.',
-                            style: TextStyle(color: AppColors.textMuted)),
-                      )
-                    else
-                      for (final (i, p) in m.passengers.indexed) ...[
-                        if (i > 0) const Divider(height: 1),
-                        _PassengerRow(p: p),
-                      ],
+                    Expanded(
+                      child: StatTile(
+                          label: 'Aboard', value: '${m.boarded}', color: AppColors.success),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: StatTile(
+                          label: 'At terminal', value: '${m.checkedIn}', color: AppColors.info),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: StatTile(
+                          label: 'Not yet boarded',
+                          value: '${m.awaiting}',
+                          color: AppColors.warning),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: StatTile(label: 'Unpaid', value: '${m.unpaid}')),
                   ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        // Crew and seats side by side, as the reference pairs driver and load.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Panel(
+                  title: 'Crew',
+                  icon: Icons.badge_outlined,
+                  child: Column(
+                    children: [
+                      PersonRow(role: 'Driver', name: t.driverName),
+                      const SizedBox(height: AppSpacing.sm),
+                      PersonRow(role: 'Conductor', name: t.conductorName),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(child: _SeatsPanel(trip: t)),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        _ChecksPanel(audits: audits, stop: _stop),
+        const SizedBox(height: AppSpacing.lg),
+        Panel(
+          title: m == null ? 'Passenger list' : 'Passenger list (${m.passengers.length})',
+          icon: Icons.people_alt_outlined,
+          child: m == null
+              ? const Padding(
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  child: LinearProgressIndicator(),
+                )
+              : m.passengers.isEmpty
+                  ? Text('No passengers on this trip yet.', style: text.bodySmall)
+                  : Column(
+                      children: [
+                        for (final (i, p) in m.passengers.indexed) ...[
+                          if (i > 0) const Divider(),
+                          _PassengerRow(p: p, stop: _stop),
+                        ],
+                      ],
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SeatsPanel extends StatelessWidget {
+  const _SeatsPanel({required this.trip});
+  final TripBoardEntry trip;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final cap = trip.seatCapacity;
+    double share(int n) => cap <= 0 ? 0 : (n / cap).clamp(0, 1).toDouble();
+    Widget bar(String label, int n, Color colour) => Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(label, style: text.bodySmall)),
+                  Text('$n of $cap', style: text.labelLarge),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.full),
+                child: LinearProgressIndicator(
+                  value: share(n),
+                  minHeight: 6,
+                  color: colour,
+                  backgroundColor: AppColors.divider,
                 ),
               ),
             ],
-          ],
-        ),
+          ),
+        );
+    return Panel(
+      title: 'Seats',
+      icon: Icons.event_seat_outlined,
+      child: Column(
+        children: [
+          bar('Booked', trip.booked, AppColors.info),
+          bar('Aboard now', trip.boarded, AppColors.success),
+          if (trip.noShow > 0)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('${trip.noShow} no-show', style: text.bodySmall),
+            ),
+        ],
       ),
     );
   }
 }
 
-/// The trip's AI headcount checks, newest first, each with what it means
-/// -- so the office reads a phone capture's result here instead of leaving
-/// for the YOLOv8 Audits tab.
-class _AuditsSection extends StatelessWidget {
-  const _AuditsSection({required this.audits});
+/// The trip's camera headcount checks, newest first, each with what it
+/// means -- so the office reads a phone capture's result here instead of
+/// leaving for Passenger Count Checks.
+class _ChecksPanel extends StatelessWidget {
+  const _ChecksPanel({required this.audits, required this.stop});
   final List<PendingAudit>? audits;
+  final String Function(int) stop;
 
-  /// The newest few. The audits tab keeps the full trail.
+  /// The newest few. Passenger Count Checks keeps the full trail.
   static const _shown = 3;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final a = audits;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('AI headcount checks',
-            style: text.titleSmall!.copyWith(color: AppColors.textPrimary)),
-        const SizedBox(height: AppSpacing.xs),
-        if (a == null)
-          const Padding(
-            padding: EdgeInsets.all(AppSpacing.md),
-            child: LinearProgressIndicator(),
-          )
-        else if (a.isEmpty)
-          Text(
-            'No headcount check on this trip yet. Phone capture, a door close or '
-            'the van leaving a terminal creates one.',
-            style: text.bodySmall!.copyWith(color: AppColors.textMuted),
-          )
-        else ...[
-          for (final audit in a.take(_shown)) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.xs),
-              child: Text(
-                [
-                  'Leg ${audit.legSequence}',
-                  DateFormat.jm().format(audit.capturedAt),
-                  audit.triggerLabel,
-                  'camera ${audit.visualCount} · manifest ${audit.bookedCount}',
-                  _statusWords(audit.resolutionStatus),
-                ].join(' · '),
-                style: text.bodySmall!.copyWith(color: AppColors.textMuted),
-              ),
-            ),
-            AuditReadingCard(audit: audit),
-          ],
-          if (a.length > _shown)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.sm),
-              child: Text(
-                '${a.length - _shown} earlier check(s) on this trip -- see YOLOv8 Audits.',
-                style: text.bodySmall!.copyWith(color: AppColors.textMuted),
-              ),
-            ),
-        ],
-      ],
+    return Panel(
+      title: 'Camera passenger checks',
+      icon: Icons.fact_check_outlined,
+      trailing: Text('YOLOv8', style: text.labelMedium),
+      child: a == null
+          ? const Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: LinearProgressIndicator(),
+            )
+          : a.isEmpty
+              ? Text(
+                  'No camera check on this trip yet. One is made when the van departs, '
+                  'when it leaves a stop, or when you press "Check with phone camera".',
+                  style: text.bodySmall,
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final (i, audit) in a.take(_shown).indexed) ...[
+                      if (i > 0) const SizedBox(height: AppSpacing.lg),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              [
+                                'Section ${audit.legSequence}: ${stop(audit.legSequence)} → '
+                                    '${stop(audit.legSequence + 1)}',
+                                DateFormat.jm().format(audit.capturedAt),
+                                audit.triggerLabel,
+                              ].join(' · '),
+                              style: text.bodySmall,
+                            ),
+                          ),
+                          auditOutcomeBadge(audit.resolutionStatus),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Camera counted ${audit.visualCount} · passenger list has '
+                        '${audit.bookedCount}',
+                        style: text.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      AuditReadingCard(audit: audit),
+                    ],
+                    if (a.length > _shown)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.md),
+                        child: Text(
+                          '${a.length - _shown} earlier check(s) on this trip are in '
+                          'Passenger Count Checks.',
+                          style: text.bodySmall,
+                        ),
+                      ),
+                  ],
+                ),
     );
   }
-
-  static String _statusWords(String status) => switch (status) {
-        'pending' => 'awaiting review',
-        'reconciled' => 'no action needed',
-        'resolved' => 'resolved',
-        'ignored' => 'dismissed',
-        _ => status,
-      };
 }
 
 class _PassengerRow extends StatelessWidget {
-  const _PassengerRow({required this.p});
+  const _PassengerRow({required this.p, required this.stop});
   final ManifestPassenger p;
+  final String Function(int) stop;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     // App passengers are identified by ticket, as on the conductor's
     // screen; walk-ins carry the name the conductor typed.
-    final who = p.name ?? p.ticketNumber;
+    final who = p.name ?? 'Ticket ${p.ticketNumber}';
     final detail = [
-      'Stop ${p.boardingStop} → ${p.alightingStop}',
-      p.bookingType == 'walk_in' ? 'walk-in, cash' : 'app',
+      '${stop(p.boardingStop)} → ${stop(p.alightingStop)}',
+      p.bookingType == 'walk_in' ? 'walk-in, paid cash' : 'booked in app',
       '₱${p.fareAmount}',
-      if (p.isRoadsidePickup) 'roadside: ${p.pickupLandmark ?? 'pickup'}',
+      if (p.isRoadsidePickup) 'picked up on the road: ${p.pickupLandmark ?? 'no landmark'}',
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
@@ -498,109 +641,14 @@ class _PassengerRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(who, style: text.bodyMedium!.copyWith(color: AppColors.textPrimary)),
-                Text(detail, style: text.bodySmall!.copyWith(color: AppColors.textMuted)),
+                Text(who, style: text.bodyMedium),
+                Text(detail, style: text.bodySmall),
               ],
             ),
           ),
-          _PassengerStatusPill(status: p.status),
+          StatusBadge.passenger(p.status),
         ],
       ),
     );
   }
-}
-
-// ----------------------------------------------------------------- pieces
-class _Panel extends StatelessWidget {
-  const _Panel({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: AppColors.surfaceRaised,
-          border: Border.all(color: AppColors.divider),
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: child,
-      );
-}
-
-class _Count extends StatelessWidget {
-  const _Count(this.label, this.value, this.color);
-  final String label;
-  final int value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceSunken,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('$value',
-                style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(width: AppSpacing.sm),
-            Text(label, style: const TextStyle(color: AppColors.textMuted)),
-          ],
-        ),
-      );
-}
-
-/// Trip status in the conductor app's words.
-class _TripStatusPill extends StatelessWidget {
-  const _TripStatusPill({required this.status});
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final (bg, label) = switch (status) {
-      'boarding' => (AppColors.success, 'BOARDING'),
-      'departed' => (AppColors.info, 'DEPARTED'),
-      'completed' => (AppColors.textMuted, 'COMPLETED'),
-      'cancelled' => (AppColors.danger, 'CANCELLED'),
-      _ => (AppColors.brand, 'SCHEDULED'),
-    };
-    return _Pill(bg: bg, label: label);
-  }
-}
-
-/// Passenger status in the conductor app's words (trip_manifest_screen.dart).
-class _PassengerStatusPill extends StatelessWidget {
-  const _PassengerStatusPill({required this.status});
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final (bg, label) = switch (status) {
-      'boarded' => (AppColors.success, 'BOARDED'),
-      'checked_in' => (AppColors.info, 'AT TERMINAL'),
-      'confirmed' => (AppColors.warning, 'NOT YET'),
-      'pending' => (AppColors.textMuted, 'UNPAID'),
-      'no_show' => (AppColors.danger, 'NO-SHOW'),
-      'completed' => (AppColors.textMuted, 'COMPLETED'),
-      _ => (AppColors.textMuted, status.toUpperCase()),
-    };
-    return _Pill(bg: bg, label: label);
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.bg, required this.label});
-  final Color bg;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
-        child: Text(label,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-      );
 }

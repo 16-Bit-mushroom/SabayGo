@@ -70,7 +70,7 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
       ],
       child: MaterialApp(
-        title: 'SabayGo Operator Console',
+        title: 'SabayGo Cooperative Office',
         debugShowCheckedModeBanner: false,
         theme: buildConsoleTheme(),
         home: const _RootRouter(),
@@ -107,7 +107,7 @@ class _SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            BrandLogo(height: 96),
+            BrandPlate(height: 96),
             SizedBox(height: 24),
             SizedBox(
               width: 22,

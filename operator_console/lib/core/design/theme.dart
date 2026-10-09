@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'tokens.dart';
 
-/// The console's single [ThemeData]: light, dense enough for a desk, and
-/// built from the same tokens and typeface as the passenger app.
+/// The console's single [ThemeData]: dark, dense enough for a desk, and
+/// built on the console's own tokens (see `tokens.dart` for why it parted
+/// from the passenger app's light palette).
 ///
 /// What differs from `mobile/lib/core/design/theme.dart` is what a desktop
 /// dashboard needs and a phone does not:
@@ -13,7 +14,8 @@ import 'tokens.dart';
 ///   phone and throws inside a dialog's action row or a toolbar here.
 /// * **Data tables** get a sunken header row and a divider between rows, so
 ///   a column of fares can be scanned without a grid of borders.
-/// * **The rail** is white with an ink pill for the current module.
+/// * **The sidebar** is a shade off the canvas with a light pill for the
+///   current screen.
 ///
 /// Typeface is Roboto, bundled from `assets/fonts` like the mobile app. On
 /// Flutter Web nothing declared a family before, so the console rendered in
@@ -23,16 +25,17 @@ const _font = 'Roboto';
 ThemeData buildConsoleTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: AppColors.primary,
+    brightness: Brightness.dark,
     primary: AppColors.primary,
-    onPrimary: Colors.white,
+    onPrimary: AppColors.onFill,
     primaryContainer: AppColors.primaryContainer,
     onPrimaryContainer: AppColors.primary,
     secondary: AppColors.info,
-    onSecondary: Colors.white,
+    onSecondary: AppColors.onFill,
     secondaryContainer: AppColors.infoContainer,
     onSecondaryContainer: AppColors.info,
     error: AppColors.danger,
-    onError: Colors.white,
+    onError: AppColors.onFill,
     errorContainer: AppColors.dangerContainer,
     onErrorContainer: AppColors.danger,
     surface: AppColors.surfaceRaised,
@@ -72,7 +75,7 @@ ThemeData buildConsoleTheme() {
       surfaceTintColor: Colors.transparent,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         side: const BorderSide(color: AppColors.divider),
       ),
     ),
@@ -156,7 +159,7 @@ ThemeData buildConsoleTheme() {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onFill,
         minimumSize: buttonMin,
         padding: buttonPadding,
         shape: buttonShape,
@@ -166,7 +169,7 @@ ThemeData buildConsoleTheme() {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onFill,
         elevation: 0,
         minimumSize: buttonMin,
         padding: buttonPadding,
@@ -199,9 +202,9 @@ ThemeData buildConsoleTheme() {
         backgroundColor: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.selected) ? AppColors.primary : AppColors.surfaceRaised),
         foregroundColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? Colors.white : AppColors.textPrimary),
+            s.contains(WidgetState.selected) ? AppColors.onFill : AppColors.textPrimary),
         iconColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? Colors.white : AppColors.textPrimary),
+            s.contains(WidgetState.selected) ? AppColors.onFill : AppColors.textPrimary),
       ),
     ),
 
@@ -242,7 +245,7 @@ ThemeData buildConsoleTheme() {
         fontFamily: _font, fontSize: 14, color: AppColors.textPrimary,
       ),
       dataRowColor: WidgetStateProperty.resolveWith((s) =>
-          s.contains(WidgetState.hovered) ? AppColors.surface : AppColors.surfaceRaised),
+          s.contains(WidgetState.hovered) ? AppColors.surfaceSunken : AppColors.surfaceRaised),
       dividerThickness: 1,
       horizontalMargin: AppSpacing.lg,
       columnSpacing: AppSpacing.xxl,
@@ -254,14 +257,14 @@ ThemeData buildConsoleTheme() {
       backgroundColor: AppColors.surfaceSunken,
       selectedColor: AppColors.primary,
       secondarySelectedColor: AppColors.primary,
-      checkmarkColor: Colors.white,
+      checkmarkColor: AppColors.onFill,
       labelStyle: const TextStyle(
         fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
       secondaryLabelStyle: const TextStyle(
         fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w600,
-        color: Colors.white,
+        color: AppColors.onFill,
       ),
       side: const BorderSide(color: AppColors.divider),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.full)),
@@ -299,12 +302,12 @@ ThemeData buildConsoleTheme() {
         color: AppColors.textPrimary,
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
-      textStyle: const TextStyle(fontFamily: _font, fontSize: 12, color: Colors.white),
+      textStyle: const TextStyle(fontFamily: _font, fontSize: 12, color: AppColors.onFill),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: AppColors.textPrimary,
-      contentTextStyle: const TextStyle(fontFamily: _font, color: Colors.white, fontSize: 14),
+      contentTextStyle: const TextStyle(fontFamily: _font, color: AppColors.onFill, fontSize: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       width: 480,
     ),
@@ -322,7 +325,7 @@ ThemeData buildConsoleTheme() {
       trackColor: WidgetStateProperty.resolveWith((s) =>
           s.contains(WidgetState.selected) ? AppColors.primary : AppColors.surfaceSunken),
       thumbColor: WidgetStateProperty.resolveWith((s) =>
-          s.contains(WidgetState.selected) ? Colors.white : AppColors.border),
+          s.contains(WidgetState.selected) ? AppColors.onFill : AppColors.border),
       trackOutlineColor: const WidgetStatePropertyAll(AppColors.border),
     ),
   );

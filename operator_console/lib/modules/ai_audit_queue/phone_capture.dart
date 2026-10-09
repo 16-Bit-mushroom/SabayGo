@@ -6,7 +6,7 @@ import '../../core/network/api_exception.dart';
 import '../../data/repositories/audit_repository.dart';
 import '../../data/repositories/dispatch_repository.dart';
 
-/// "Phone capture" for one trip: ask the demo phone (ai_capture_app) to
+/// "Check with phone camera" for one trip: ask the demo phone (ai_capture_app) to
 /// photograph a leg, wait for it, and say what came of it.
 ///
 /// Lives beside the trip it is about -- the Trips screen -- because that
@@ -87,7 +87,7 @@ class _PhoneCaptureButtonState extends State<PhoneCaptureButton> {
       say(e.message, error: true);
       return;
     }
-    say('Capture requested for leg $leg. Waiting for the phone to take the photo.');
+    say('Sent to the phone for section $leg. Waiting for the photo…');
 
     // Wait for THIS request's outcome. A matching count is filed as
     // reconciled -- history, not the audit queue -- and a failure writes
@@ -101,15 +101,15 @@ class _PhoneCaptureButtonState extends State<PhoneCaptureButton> {
       case 'fulfilled':
         final r = outcome['result'] as Map<String, dynamic>;
         final where = r['resolution_status'] == 'pending'
-            ? 'Flagged -- it is in the YOLOv8 Audits queue.'
-            : 'Filed as ${r['resolution_status']} under YOLOv8 Audits > History.';
+            ? 'It needs review in Passenger Count Checks.'
+            : 'Saved in Passenger Count Checks > History.';
         say(
-          'Phone capture, leg ${r['leg_sequence']}: ${r['visual_count']} seen, '
-          '${r['booked_count']} on the manifest. ${r['message']} $where',
+          'Phone check, section ${r['leg_sequence']}: camera counted ${r['visual_count']}, '
+          'passenger list has ${r['booked_count']}. ${r['message']}. $where',
           seconds: 12,
         );
       case 'failed':
-        say('Phone capture failed: ${outcome['error']}', error: true, seconds: 12);
+        say('The phone check failed: ${outcome['error']}', error: true, seconds: 12);
       default:
         say(
           'No photo from the phone after ${_waitAtMost.inMinutes} minutes. Is the '
@@ -149,21 +149,21 @@ class _PhoneCaptureButtonState extends State<PhoneCaptureButton> {
 
   @override
   Widget build(BuildContext context) {
-    final button = OutlinedButton.icon(
+    final button = FilledButton.icon(
       onPressed: _underWay && !_busy ? _run : null,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.textPrimary,
-        side: const BorderSide(color: AppColors.border),
-      ),
       icon: _busy
-          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-          : const Icon(Icons.phone_android),
-      label: Text(_busy ? _busyLabel : 'Phone capture'),
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
+          : const Icon(Icons.photo_camera_outlined, size: 18),
+      label: Text(_busy ? _busyLabel : 'Check with phone camera'),
     );
-    if (_underWay) return button;
     return Tooltip(
-      message: 'Available once the conductor opens boarding -- '
-          'audits apply only to a trip that is boarding or departed.',
+      message: _underWay
+          ? 'Ask the phone in the van to photograph the passengers and count them.'
+          : 'Available once the conductor starts boarding. Checks only apply to a trip '
+              'that is boarding or on the road.',
       child: button,
     );
   }
@@ -191,7 +191,7 @@ class _LegDialogState extends State<_LegDialog> {
     ].take(widget.departed ? widget.stops.length : 1).toList();
     return AlertDialog(
       backgroundColor: AppColors.surfaceRaised,
-      title: const Text('Phone capture', style: TextStyle(color: AppColors.textPrimary)),
+      title: const Text('Check passengers with the phone camera'),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -200,10 +200,10 @@ class _LegDialogState extends State<_LegDialog> {
           children: [
             Text(
               widget.departed
-                  ? 'Pick the leg the van is on now. The photo is compared with '
-                      'everyone on the manifest for that leg.'
-                  : 'The van is boarding, so this is leg 1. The photo is compared '
-                      'with everyone on the manifest for that leg.',
+                  ? 'Pick the stretch of road the van is on now. The photo is compared '
+                      'with the passenger list for that stretch.'
+                  : 'The van is still boarding, so this is the first stretch. The photo '
+                      'is compared with the passenger list for it.',
               style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -216,7 +216,7 @@ class _LegDialogState extends State<_LegDialog> {
                     RadioListTile<int>(
                       value: seq,
                       contentPadding: EdgeInsets.zero,
-                      title: Text('Leg $seq',
+                      title: Text('Section $seq',
                           style: const TextStyle(color: AppColors.textPrimary)),
                       subtitle:
                           Text(label, style: const TextStyle(color: AppColors.textMuted)),
@@ -231,7 +231,7 @@ class _LegDialogState extends State<_LegDialog> {
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
         ElevatedButton(
           onPressed: legs.isEmpty ? null : () => Navigator.of(context).pop(_leg),
-          child: const Text('Request capture'),
+          child: const Text('Send to phone'),
         ),
       ],
     );

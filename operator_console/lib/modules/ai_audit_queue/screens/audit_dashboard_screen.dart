@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/design/components/components.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/audit_repository.dart';
 import '../audit_reading_card.dart';
@@ -72,7 +73,10 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
     final notes = await showDialog<String>(
       context: context,
       builder: (_) => _ResolveNotesDialog(
-        title: resolution == 'resolved' ? 'Flag Driver & Resolve' : 'Clear Without Action',
+        title: resolution == 'resolved' ? 'Confirm a problem' : 'Close this check',
+        prompt: resolution == 'resolved'
+            ? 'What did you find? For example: two walk-ins the conductor did not log.'
+            : 'Why is no action needed? For example: one passenger was out of the photo.',
       ),
     );
     if (notes == null || notes.trim().isEmpty) return;
@@ -82,7 +86,9 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(resolution == 'resolved' ? 'Audit resolved.' : 'Audit cleared.'),
+          content: Text(resolution == 'resolved'
+              ? 'Saved as a confirmed problem.'
+              : 'Check closed -- no action needed.'),
           backgroundColor: Theme.of(context).colorScheme.primary,
           behavior: SnackBarBehavior.floating,
         ),
@@ -113,16 +119,16 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    _showHistory ? 'YOLOv8 Audit History' : 'Live YOLOv8 Audit Queue',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                  ),
-                  const SizedBox(width: 24),
+              PageHeader(
+                title: 'Passenger Count Checks',
+                technicalNote: 'YOLOv8 camera',
+                description: 'The camera counts the people in a van and compares the number '
+                    'with the passenger list. Review the checks that do not match.',
+                actions: [
                   SegmentedButton<bool>(
                     segments: const [
-                      ButtonSegment(value: false, label: Text('Queue'), icon: Icon(Icons.pending_actions)),
+                      ButtonSegment(
+                          value: false, label: Text('Needs review'), icon: Icon(Icons.pending_actions)),
                       ButtonSegment(value: true, label: Text('History'), icon: Icon(Icons.history)),
                     ],
                     selected: {_showHistory},
@@ -137,20 +143,14 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                             _load();
                           },
                   ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _loading ? null : _load,
-                    icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-                    tooltip: 'Refresh',
-                  ),
+                  RefreshButton(onPressed: _load, busy: _loading),
                 ],
               ),
-              const SizedBox(height: 24),
               Expanded(
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
-                        ? _buildError(_error!)
+                        ? LoadError(message: _error!, onRetry: _load)
                         : logs.isEmpty
                             ? _buildEmpty()
                             : isDesktop
@@ -179,38 +179,17 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
     );
   }
 
-  Widget _buildError(String message) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: _load, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.check_circle_outline, color: AppColors.success, size: 40),
-          const SizedBox(height: 12),
-          Text(
-            _showHistory
-                ? 'No audits have been closed yet.'
-                : 'No pending variances. The cabin matches the manifest.',
-            style: const TextStyle(color: AppColors.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildEmpty() => _showHistory
+      ? const EmptyState(
+          icon: Icons.history,
+          title: 'No checks closed yet',
+          hint: 'Checks you close, and checks that matched, are listed here.',
+        )
+      : const EmptyState(
+          icon: Icons.check_circle_outline,
+          title: 'Nothing to review',
+          hint: 'Every camera count so far matches its passenger list.',
+        );
 
   /// The audit list: full width, headings pinned, one row selected.
   ///
@@ -225,11 +204,11 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
   Widget _buildDataGrid(List<PendingAudit> logs) {
     final columns = <(String, int, bool)>[
       ('Trip', 22, false),
-      ('Leg', 7, true),
-      ('Manifest', 11, true),
-      ('YOLO count', 12, true),
-      ('Variance', 11, true),
-      if (_showHistory) ('Outcome', 14, false),
+      ('Section', 9, true),
+      ('Passenger list', 14, true),
+      ('Camera count', 14, true),
+      ('Difference', 12, true),
+      if (_showHistory) ('Outcome', 18, false),
       if (_showHistory) ('Closed', 16, false),
     ];
     final minWidth = _showHistory ? 720.0 : 520.0;
@@ -287,7 +266,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
           color: selected ? AppColors.primaryContainer : AppColors.surfaceRaised,
           child: InkWell(
             onTap: () => setState(() => _selectedIndex = index),
-            hoverColor: AppColors.surface,
+            hoverColor: AppColors.surfaceSunken,
             child: Container(
               height: 52,
               decoration: BoxDecoration(
@@ -312,7 +291,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                 cell(2, Text('${log.bookedCount}', style: figures)),
                 cell(3, Text('${log.visualCount}', style: alertStyle)),
                 cell(4, Text(variance, style: alertStyle)),
-                if (_showHistory) cell(5, _buildOutcomeChip(log.resolutionStatus)),
+                if (_showHistory) cell(5, auditOutcomeBadge(log.resolutionStatus)),
                 if (_showHistory)
                   cell(
                     6,
@@ -333,7 +312,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: AppColors.divider),
       ),
       child: LayoutBuilder(builder: (context, c) {
@@ -384,12 +363,10 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
   Widget _buildProofPanel(PendingAudit log) {
     final isAlert = log.variance > 0;
     final imageUrl = log.snapshotAbsoluteUrl;
-    return Card(
-      elevation: 4,
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Panel(
+      padding: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,10 +376,10 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Text('Audit: ${log.tripLabel ?? log.tripId.substring(0, 8)}',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    child: Text('Check on ${log.tripLabel ?? log.tripId.substring(0, 8)}',
+                        style: Theme.of(context).textTheme.titleLarge),
                   ),
-                  if (isAlert) Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error),
+                  auditOutcomeBadge(log.resolutionStatus),
                 ],
               ),
               const SizedBox(height: 16),
@@ -411,13 +388,13 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                 width: double.infinity,
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: imageUrl == null
                     ? const Center(
                         child: Icon(Icons.image_not_supported_outlined, color: AppColors.border, size: 40))
                     : ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
                         child: Image.network(
                           imageUrl,
                           fit: BoxFit.cover,
@@ -434,17 +411,17 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
               // is harmless; the reading does.
               AuditReadingCard(audit: log),
               const SizedBox(height: 24),
-              const Text('AI Reconciliation Details',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMuted, letterSpacing: 1.2)),
-              const Divider(color: AppColors.divider),
-              _buildDetailRow('Captured', DateFormat.jm().add_yMMMd().format(log.capturedAt)),
-              _buildDetailRow('Trigger', log.triggerLabel),
-              _buildDetailRow('Digital Manifest', log.bookedCount.toString()),
-              _buildDetailRow('Physical Reality', log.visualCount.toString(), isAlert: isAlert),
+              Text('DETAILS', style: Theme.of(context).textTheme.labelSmall),
+              const Divider(),
+              _buildDetailRow('Photo taken', DateFormat.jm().add_yMMMd().format(log.capturedAt)),
+              _buildDetailRow('How it started', log.triggerLabel),
+              _buildDetailRow('Section of the route', '${log.legSequence}'),
+              _buildDetailRow('On the passenger list', log.bookedCount.toString()),
+              _buildDetailRow('Camera counted', log.visualCount.toString(), isAlert: isAlert),
               // Signed, and not called "leakage": a shortfall is a camera-view
               // question, never missing money. It used to print "+-4".
               _buildDetailRow(
-                'Difference (camera − manifest)',
+                'Difference (camera − list)',
                 log.variance == 0
                     ? 'None'
                     : '${log.variance > 0 ? '+' : '−'}${log.variance.abs()} '
@@ -452,18 +429,10 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                 isAlert: log.variance > 0,
               ),
               if (log.confidenceAvg != null)
-                _buildDetailRow('Model Confidence', '${(log.confidenceAvg! * 100).toStringAsFixed(0)}%'),
+                _buildDetailRow('Camera confidence', '${(log.confidenceAvg! * 100).toStringAsFixed(0)}%'),
               const SizedBox(height: 32),
               if (!log.isPending) ...[
                 // G.2: a closed audit shows its disposition instead of the buttons.
-                Row(
-                  children: [
-                    const Text('Outcome', style: TextStyle(color: AppColors.textMuted)),
-                    const Spacer(),
-                    _buildOutcomeChip(log.resolutionStatus),
-                  ],
-                ),
-                const SizedBox(height: 12),
                 _buildDetailRow('Closed by', log.resolvedBy ?? '—'),
                 _buildDetailRow(
                   'Closed at',
@@ -482,13 +451,12 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                       child: ElevatedButton.icon(
                         onPressed: () => _resolve(log, resolution: 'resolved'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.error,
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppColors.danger,
+                          foregroundColor: AppColors.onFill,
                           padding: const EdgeInsets.symmetric(vertical: 20),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
-                        icon: const Icon(Icons.gavel),
-                        label: const Text('Flag & Resolve', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.report_outlined),
+                        label: const Text('Confirm problem'),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -499,10 +467,9 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                           foregroundColor: AppColors.textPrimary,
                           side: const BorderSide(color: AppColors.border),
                           padding: const EdgeInsets.symmetric(vertical: 20),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         icon: const Icon(Icons.close),
-                        label: const Text('Ignore', style: TextStyle(fontSize: 14)),
+                        label: const Text('Dismiss'),
                       ),
                     ),
                   ],
@@ -516,10 +483,9 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
                       backgroundColor: AppColors.surfaceSunken,
                       foregroundColor: AppColors.textPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 20),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Clear / No Action Needed', style: TextStyle(fontSize: 15)),
+                    label: const Text('Looks fine — close it'),
                   ),
                 ),
             ],
@@ -529,32 +495,13 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
     );
   }
 
-  Widget _buildOutcomeChip(String status) {
-    final (label, color) = switch (status) {
-      'resolved' => ('Flagged', Theme.of(context).colorScheme.error),
-      'ignored' => ('Ignored', AppColors.textMuted),
-      'reconciled' => ('Matched', AppColors.success),
-      'failed' => ('Camera failed', AppColors.warning),
-      _ => (status, AppColors.textPrimary),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.6)),
-      ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-    );
-  }
-
   Widget _buildDetailRow(String label, String value, {bool isAlert = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w400, color: AppColors.textPrimary)),
+          Text(label, style: const TextStyle(color: AppColors.textMuted)),
           Flexible(
             child: Text(
               value,
@@ -573,8 +520,9 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
 }
 
 class _ResolveNotesDialog extends StatefulWidget {
-  const _ResolveNotesDialog({required this.title});
+  const _ResolveNotesDialog({required this.title, required this.prompt});
   final String title;
+  final String prompt;
 
   @override
   State<_ResolveNotesDialog> createState() => _ResolveNotesDialogState();
@@ -592,26 +540,30 @@ class _ResolveNotesDialogState extends State<_ResolveNotesDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.surfaceRaised,
-      title: Text(widget.title, style: const TextStyle(color: AppColors.textPrimary)),
+      title: Text(widget.title),
       content: SizedBox(
-        width: 360,
+        width: 400,
         child: TextField(
           controller: _controller,
           autofocus: true,
           maxLines: 3,
-          style: const TextStyle(color: AppColors.textPrimary),
           decoration: InputDecoration(
-            hintText: 'Notes for the audit trail (required)',
-            hintStyle: const TextStyle(color: AppColors.textMuted),
+            labelText: 'Note (required, kept on record)',
+            hintText: widget.prompt,
+            alignLabelWithHint: true,
           ),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: const Text('Confirm'),
+        // Disabled until there is a note: the record needs one, and a Save
+        // that silently does nothing on an empty note looked broken.
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _controller,
+          builder: (_, v, _) => FilledButton(
+            onPressed: v.text.trim().isEmpty ? null : () => Navigator.of(context).pop(v.text),
+            child: const Text('Save'),
+          ),
         ),
       ],
     );

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/sos_repository.dart';
+import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
 /// The office's emergency desk (spec 2.3.5).
@@ -104,87 +105,75 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surface,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _header(openCount),
-          if (_error != null)
-            Container(
-              width: double.infinity,
-              color: AppColors.dangerContainer,
-              padding: const EdgeInsets.all(12),
-              child: Text('Could not load alerts: $_error'),
-            ),
-          Expanded(
-            child: _loading && _alerts == null
-                ? const Center(child: CircularProgressIndicator())
-                : rows.isEmpty
-                    ? _empty()
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                        itemCount: rows.length,
-                        itemBuilder: (_, i) => _AlertCard(
-                          alert: rows[i],
-                          onAcknowledge: () => _acknowledge(rows[i]),
-                          onResolve: () => _resolve(rows[i]),
+      body: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _header(openCount),
+            if (_error != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Text('Could not load alerts: $_error'),
+              ),
+            Expanded(
+              child: _loading && _alerts == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : rows.isEmpty
+                      ? _empty()
+                      : ListView.builder(
+                          itemCount: rows.length,
+                          itemBuilder: (_, i) => _AlertCard(
+                            alert: rows[i],
+                            onAcknowledge: () => _acknowledge(rows[i]),
+                            onResolve: () => _resolve(rows[i]),
+                          ),
                         ),
-                      ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _header(int openCount) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-        child: Row(
-          children: [
-            Icon(Icons.emergency_share,
-                color: openCount > 0 ? AppColors.danger : AppColors.textMuted),
-            const SizedBox(width: 10),
-            Text(
-              _showResolved ? 'Closed emergencies' : 'Open emergencies',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            if (!_showResolved && openCount > 0) ...[
-              const SizedBox(width: 12),
-              Chip(
-                label: Text('$openCount needing attention'),
-                backgroundColor: AppColors.danger,
-                labelStyle: const TextStyle(color: Colors.white, fontSize: 12),
-                side: BorderSide.none,
-              ),
+  Widget _header(int openCount) => PageHeader(
+        title: 'Emergencies (SOS)',
+        description: 'Alerts raised by crew or passengers from the app. Press "Mark as '
+            'responding" so they know the office has seen it, then close it with a note.',
+        actions: [
+          if (!_showResolved && openCount > 0)
+            StatusBadge('$openCount need attention', tone: Tone.danger),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('Open')),
+              ButtonSegment(value: true, label: Text('History')),
             ],
-            const Spacer(),
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Open')),
-                ButtonSegment(value: true, label: Text('History')),
-              ],
-              selected: {_showResolved},
-              onSelectionChanged: (s) {
-                setState(() => _showResolved = s.first);
-                _load();
-              },
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: _loading ? null : _load,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
+            selected: {_showResolved},
+            onSelectionChanged: (s) {
+              setState(() => _showResolved = s.first);
+              _load();
+            },
+          ),
+          RefreshButton(onPressed: _load, busy: _loading),
+        ],
       );
 
-  Widget _empty() => Center(
-        child: Text(
-          _showResolved
-              ? 'No emergency has been closed yet.'
-              : 'No open emergencies. Crew and passengers can raise one from the app.',
-          style: const TextStyle(color: AppColors.textMuted),
-        ),
-      );
+  Widget _empty() => _showResolved
+      ? const EmptyState(
+          icon: Icons.history,
+          title: 'No emergency has been closed yet',
+        )
+      : const EmptyState(
+          icon: Icons.verified_user_outlined,
+          title: 'No open emergencies',
+          hint: 'Crew and passengers raise one with the red SOS button in their app.',
+        );
 }
 
 class _AlertCard extends StatelessWidget {
@@ -207,7 +196,7 @@ class _AlertCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: urgent ? 3 : 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         side: BorderSide(
           color: urgent ? AppColors.danger : AppColors.divider,
           width: urgent ? 1.5 : 1,
@@ -257,7 +246,7 @@ class _AlertCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(
-                  'Acknowledged by ${alert.acknowledgedBy}'
+                  'Responding: ${alert.acknowledgedBy}'
                   '${alert.acknowledgedAt == null ? '' : ' at ${_time.format(alert.acknowledgedAt!)}'}',
                   style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
@@ -273,10 +262,13 @@ class _AlertCard extends StatelessWidget {
               Row(
                 children: [
                   if (alert.isOpen)
-                    FilledButton.icon(
-                      onPressed: onAcknowledge,
-                      icon: const Icon(Icons.visibility, size: 18),
-                      label: const Text('Acknowledge'),
+                    Tooltip(
+                      message: 'Tells the person who raised it that the office has seen it.',
+                      child: FilledButton.icon(
+                        onPressed: onAcknowledge,
+                        icon: const Icon(Icons.support_agent, size: 18),
+                        label: const Text('Mark as responding'),
+                      ),
                     ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
@@ -369,18 +361,12 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, label) = switch (status) {
-      'open' => (AppColors.danger, 'OPEN'),
-      'acknowledged' => (AppColors.warning, 'RESPONDING'),
-      _ => (AppColors.success, 'CLOSED'),
+    final (label, tone) = switch (status) {
+      'open' => ('Open', Tone.danger),
+      'acknowledged' => ('Responding', Tone.warning),
+      _ => ('Closed', Tone.success),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
-      child: Text(label,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-    );
+    return StatusBadge(label, tone: tone);
   }
 }
 

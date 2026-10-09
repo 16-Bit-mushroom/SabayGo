@@ -64,7 +64,7 @@ def read_audit(
         n = variance
         return AuditReading(
             verdict="more_than_manifest",
-            headline=f"{n} more {'person' if n == 1 else 'people'} than the manifest",
+            headline=f"{n} more {'person' if n == 1 else 'people'} than the passenger list",
             explanation="Possible unrecorded passengers.",
             next_step="Ask the conductor about unlogged walk-ins; check the snapshot.",
             caution=caution,
@@ -74,7 +74,7 @@ def read_audit(
         n = -variance
         return AuditReading(
             verdict="fewer_than_manifest",
-            headline=f"{n} fewer {'person' if n == 1 else 'people'} than the manifest",
+            headline=f"{n} fewer {'person' if n == 1 else 'people'} than the passenger list",
             explanation="Not lost revenue -- likely out of camera view.",
             next_step="Check the snapshot; mark no-shows or ignore.",
             caution=caution,
@@ -82,7 +82,7 @@ def read_audit(
 
     return AuditReading(
         verdict="match",
-        headline="Matches the manifest",
+        headline="Matches the passenger list",
         explanation="All passengers accounted for.",
         next_step="No action needed.",
         caution=caution,

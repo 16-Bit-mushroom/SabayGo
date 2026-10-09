@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/policy_repository.dart';
+import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
 /// Cooperative-wide settings, as data rather than a redeploy.
@@ -72,7 +73,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Saved. Trips generated from now on use the new value.'),
+          content: const Text('Saved. New trips use this value; trips already booked keep their terms.'),
           backgroundColor: AppColors.primary,
           behavior: SnackBarBehavior.floating,
         ),
@@ -99,31 +100,18 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Text(
-                'Cooperative Policies',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-                tooltip: 'Refresh',
-              ),
-            ],
+          PageHeader(
+            title: 'Rules & Settings',
+            technicalNote: 'Cooperative policies',
+            description: 'The cooperative\'s rules for booking, check-in and tracking. A change '
+                'applies to new trips; trips already booked keep the terms they were sold under.',
+            actions: [RefreshButton(onPressed: _load, busy: _loading)],
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Changes here apply to trips generated from now on -- already-booked trips keep the terms they were sold under.',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 24),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? _buildError(_error!)
+                    ? LoadError(message: _error!, onRetry: _load)
                     : _buildList(),
           ),
         ],
@@ -131,80 +119,127 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     );
   }
 
-  Widget _buildError(String message) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildList() {
+    final policies = _list ?? [];
+    // Grouped by what the office is deciding, in the order it comes up.
+    final groups = <String, List<Policy>>{};
+    for (final p in policies) {
+      groups.putIfAbsent(_plain[p.policyKey]?.$2 ?? 'Other', () => []).add(p);
+    }
+    final order = [..._groupOrder.where(groups.containsKey), ...groups.keys.where((g) => !_groupOrder.contains(g))];
+    return ListView.separated(
+      itemCount: order.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
+      itemBuilder: (context, i) => Panel(
+        title: order[i],
+        child: Column(
+          children: [
+            for (final (j, policy) in groups[order[i]]!.indexed) ...[
+              if (j > 0) const Divider(),
+              _policyRow(policy),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _policyRow(Policy policy) {
+    final text = Theme.of(context).textTheme;
+    final controller = _controllers[policy.policyKey]!;
+    final saving = _saving.contains(policy.policyKey);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Row(
         children: [
-          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: _load, child: const Text('Retry')),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_plain[policy.policyKey]?.$1 ?? _humanise(policy.policyKey),
+                    style: text.titleSmall),
+                const SizedBox(height: 2),
+                Text(policy.description, style: text.bodySmall),
+                const SizedBox(height: 2),
+                // The stored name, for whoever maintains the system.
+                Text(policy.policyKey,
+                    style: text.bodySmall!.copyWith(fontSize: 11, color: AppColors.border)),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          SizedBox(
+            width: 180,
+            child: TextField(
+              controller: controller,
+              onSubmitted: (_) => _save(policy),
+              decoration: InputDecoration(
+                prefixText: policy.dataType == 'decimal' ? '₱ ' : null,
+                suffixText: _unit(policy.policyKey),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          SizedBox(
+            width: 88,
+            child: saving
+                ? const Center(
+                    child: SizedBox(
+                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                : OutlinedButton(onPressed: () => _save(policy), child: const Text('Save')),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildList() {
-    final policies = _list ?? [];
-    return ListView.separated(
-      itemCount: policies.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final policy = policies[index];
-        final controller = _controllers[policy.policyKey]!;
-        final saving = _saving.contains(policy.policyKey);
-        return Card(
-          elevation: 2,
-          color: Theme.of(context).colorScheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(policy.policyKey,
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 14)),
-                      const SizedBox(height: 4),
-                      Text(policy.description, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 140,
-                  child: TextField(
-                    controller: controller,
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    onSubmitted: (_) => _save(policy),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      suffixText: policy.dataType == 'decimal' ? '₱' : null,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 40,
-                  child: saving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : IconButton(
-                          onPressed: () => _save(policy),
-                          icon: const Icon(Icons.save_outlined, color: AppColors.primary),
-                          tooltip: 'Save',
-                        ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  static const _groupOrder = [
+    'Booking and changes',
+    'At the terminal',
+    'Vans and tracking',
+    'Safety and camera checks',
+    'Other',
+  ];
+
+  /// Plain title and group per stored key. A key not listed here still
+  /// shows, under "Other", with its name made readable.
+  static const _plain = <String, (String, String)>{
+    'advance_booking_open_days': ('How far ahead passengers can book', 'Booking and changes'),
+    'advance_booking_seat_cap': ('Seats that can be booked in advance', 'Booking and changes'),
+    'seat_hold_ttl_seconds': ('How long an unpaid seat is held', 'Booking and changes'),
+    'hold_sweep_interval_seconds': ('How often unpaid holds are released', 'Booking and changes'),
+    'cancel_cutoff_hours': ('Cancellation deadline before departure', 'Booking and changes'),
+    'reschedule_cutoff_hours': ('Trip-change deadline before departure', 'Booking and changes'),
+    'max_reschedules_per_booking': ('Times a passenger may change trips', 'Booking and changes'),
+    'refund_enabled': ('Refunds allowed', 'Booking and changes'),
+    'checkin_window_minutes': ('When check-in opens', 'At the terminal'),
+    'default_geofence_radius_m': ('Size of a terminal area (radius)', 'At the terminal'),
+    'walkin_info_required': ('Walk-in passengers must give details', 'At the terminal'),
+    'default_seat_capacity': ('Seats in a new van', 'Vans and tracking'),
+    'tracking_ping_interval_seconds': ('How often a van sends its location', 'Vans and tracking'),
+    'tracking_stale_after_seconds': ('Show "No signal" after', 'Vans and tracking'),
+    'licence_expiry_warning_days': ('Warn before a driver\'s licence expires', 'Vans and tracking'),
+    'variance_alert_threshold': ('Alert when the camera count is off by', 'Safety and camera checks'),
+    'sos_contact_numbers': ('Numbers texted on an emergency (SOS)', 'Safety and camera checks'),
+  };
+
+  /// The unit is part of the stored name (`_hours`, `_days`...), so it is
+  /// read from there rather than guessed per key.
+  static String? _unit(String key) {
+    for (final (suffix, unit) in const [
+      ('_days', 'days'),
+      ('_hours', 'hours'),
+      ('_minutes', 'minutes'),
+      ('_seconds', 'seconds'),
+      ('_m', 'metres'),
+    ]) {
+      if (key.endsWith(suffix)) return unit;
+    }
+    return null;
+  }
+
+  static String _humanise(String key) {
+    final words = key.replaceAll('_', ' ');
+    return words.isEmpty ? key : words[0].toUpperCase() + words.substring(1);
   }
 }

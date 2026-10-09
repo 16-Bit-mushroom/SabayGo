@@ -2,145 +2,110 @@ import 'package:flutter/material.dart';
 
 /// Design tokens for the coop_admin console.
 ///
-/// A copy of `mobile/lib/core/design/tokens.dart`, kept value-for-value in
-/// step, plus the few roles only a desktop dashboard needs ([surfaceSunken],
-/// [sidebar]). Copied rather than shared because the two apps are separate
-/// Flutter packages and a third package for one file is more machinery than
-/// the problem. If you change a value here, change it there.
+/// **Dark, and deliberately apart from `mobile/`.** The console began as a
+/// copy of the handset tokens (light: ink on white, the SABAY GO owl's
+/// colours). It was redesigned in October 2026 as an operations dashboard
+/// -- near-black canvas, grey panels, a light action colour -- because the
+/// office watches a live map and a trip board for a whole shift, and a
+/// dark surface lets the map, the status colours and the numbers carry the
+/// page instead of the white space around them. The handset stays light:
+/// a conductor reads it at a van door in direct sunlight, which is the one
+/// place a dark UI is genuinely worse. Changing a value here no longer
+/// means changing it there.
 ///
-/// The console was a dark Nord palette with no token layer: about 300 raw
-/// `Colors.*` / `Color(0x...)` uses, `white38` captions at 3.6:1 on the
-/// canvas, and the same red written out twenty times. Office staff read it
-/// for a full shift, at a desk, often in a bright room, where light
-/// surfaces with dark text are the less fatiguing choice.
+/// **Every pairing below is measured against WCAG 2.1 AA** (ratios in the
+/// comments are computed, not estimated). Three rules the palette keeps:
 ///
-/// **Every colour pair here is verified against WCAG 2.1 AA**, and the
-/// ratios in the comments are measured, not estimated. Three rules the
-/// palette exists to keep:
-///
-/// 1. A base colour serves both as *text on a light background* and as *a
-///    fill behind white text*, because both reduce to the same constraint:
-///    contrast against white of at least 4.5:1. One token, two jobs, no
-///    chance of the pair drifting apart.
+/// 1. A status colour is bright enough to be *text on any panel*, and
+///    anything drawn *on* a filled colour -- a button, a badge, a chip --
+///    uses [onFill]. On a dark UI those are two different constraints, so
+///    they are two tokens; on the old light palette one colour did both.
 /// 2. Status is never carried by hue alone (WCAG 1.4.1). Every semantic
-///    role ships a `container`/`on` pair so a chip can state its meaning in
-///    words on a legible tint, and callers are expected to include the
-///    label or an icon, not just the colour.
-/// 3. Anything a finger lands on is at least [minTouchTarget].
-///
-/// The previous palette failed AA in two places that mattered most: the
-/// green `accent` (3.11:1) and the amber `warning` (1.97:1) were used for
-/// boarding status and unpaid-fare warnings — information a conductor reads
-/// at a van door in direct sunlight. Both are corrected below.
+///    role ships a `container` tint so a chip can state its meaning in
+///    words, and callers include the label or an icon, not just the colour.
+/// 3. Anything a pointer lands on is at least [AppSizing.minTouchTarget].
 class AppColors {
-  // ── brand ──────────────────────────────────────────────────────────
-  // The SABAY GO mark is an ink-black owl with a red eye and a red route
-  // pin. Those two colours split into two jobs, deliberately unequal.
-  //
-  // *Ink* is the action colour: every filled button, focus ring, selected
-  // tab. Black on white is the highest contrast a light UI can offer, and
-  // it is the colour a passenger already reads as "the text you act on".
-  //
-  // *Red* is the accent, spent sparingly on route geometry — the passenger's
-  // own boarding and alighting stops, the way the logo's pin marks a
-  // destination. It is never a button fill. A red "Book" sitting beside a
-  // red "Cancel booking" and a red SOS would make all three look equally
-  // alarming, and a colour used everywhere stops drawing the eye anywhere
-  // (Von Restorff). Red keeps one meaning on an action: stop, or danger.
+  // ── action ─────────────────────────────────────────────────────────
+  // The owl's *ink* became the light action colour: on a dark canvas the
+  // highest-contrast thing a page can offer is near-white, which is what
+  // "ink" meant on paper. Selected navigation, filled buttons, focus rings.
+  // The logo's *red* keeps its one job -- route geometry and alarms -- and
+  // is never a button fill, so a red SOS never sits beside a red "Save".
 
-  /// Ink, from the owl. 18.0:1 on white. Was the old purple #2D2059.
-  static const Color primary = Color(0xFF16161D);
+  /// Light action fill. 15.1:1 on [surfaceRaised]; [onFill] on it 15.9:1.
+  static const Color primary = Color(0xFFECECF0);
 
-  /// 11.2:1 on white. Secondary surfaces and pressed states.
-  static const Color primaryLight = Color(0xFF3A3A44);
+  /// Pressed / secondary action shade.
+  static const Color primaryLight = Color(0xFFC9CAD2);
 
-  /// Neutral tint behind [primary] text (selected pill, brand chip): 15.3:1.
-  static const Color primaryContainer = Color(0xFFECECF0);
+  /// Neutral tint behind [primary] text (selected chip, avatar): 12.0:1.
+  static const Color primaryContainer = Color(0xFF2A2B31);
 
-  /// The logo's red. 5.86:1 on white, so it may carry text, but it is meant
-  /// for markers and accents — see the note above.
-  static const Color brand = Color(0xFFC8151D);
+  /// Text and icons drawn on any *filled* colour token -- [primary] and
+  /// every status colour. Lowest pairing is on [danger], 6.8:1.
+  static const Color onFill = Color(0xFF111216);
 
-  /// A light tint of [brand]. Pair with [brand] as text: 4.9:1.
-  static const Color brandContainer = Color(0xFFFBE7E8);
+  /// The logo's red, lifted for a dark canvas. 4.85:1 on [surfaceRaised].
+  /// For markers, route geometry and the SOS entry -- not body text.
+  static const Color brand = Color(0xFFF0484F);
+  static const Color brandContainer = Color(0xFF3A1719);
+
+  /// The selected thing on the map: the chosen van's halo, its route line,
+  /// trip progress. One hue so the eye finds "what I clicked" at once.
+  /// 13.6:1 on [surfaceRaised].
+  static const Color highlight = Color(0xFFC8F051);
 
   // ── semantic roles ─────────────────────────────────────────────────
-  /// Confirmed, paid, boarded. 6.13:1 on white, 5.12:1 on
+  /// Confirmed, paid, boarded, live. 10.2:1 on [surfaceRaised], 8.2:1 on
   /// [successContainer].
-  ///
-  /// Was `accent` at #00A859 — 3.11:1, which failed even the 3:1 floor for
-  /// large text. Darkened along its own hue so the brand's green reads the
-  /// same, and now carries text.
-  static const Color success = Color(0xFF00713C);
-  static const Color successContainer = Color(0xFFE0EEE8);
+  static const Color success = Color(0xFF4ADE80);
+  static const Color successContainer = Color(0xFF12301F);
 
-  /// Awaiting payment, variance, needs attention. 5.93:1 on white, 5.00:1
-  /// on [warningContainer].
-  ///
-  /// Was #F9A825 at 1.97:1 — the worst failure in the app. Amber cannot be
-  /// legible on white at full brightness; it has to become a dark ochre, or
-  /// move to a tinted chip. Both options are provided.
-  static const Color warning = Color(0xFF8A5A00);
-  static const Color warningContainer = Color(0xFFF1EBE0);
+  /// Awaiting payment, a difference to look at. 10.0:1 on
+  /// [surfaceRaised], 8.2:1 on [warningContainer].
+  static const Color warning = Color(0xFFF5B841);
+  static const Color warningContainer = Color(0xFF33270E);
 
-  /// Cancelled, failed, emergency. 6.54:1 on white, 5.37:1 on
+  /// Cancelled, failed, emergency. 6.4:1 on [surfaceRaised], 5.8:1 on
   /// [dangerContainer].
-  ///
-  /// Nudged from #D32F2F (4.98:1 — compliant but thin) for headroom, since
-  /// this is the SOS colour and the one that must survive a cheap screen in
-  /// daylight.
-  static const Color danger = Color(0xFFB3261E);
-  static const Color dangerContainer = Color(0xFFF6E5E4);
+  static const Color danger = Color(0xFFF87171);
+  static const Color dangerContainer = Color(0xFF3A1719);
 
-  /// Informational, not good or bad: "AT TERMINAL", "PENDING SYNC".
-  /// 5.75:1 on white, 4.74:1 on [infoContainer].
-  ///
-  /// Exists because the screens reached for `Colors.blue` (3.12:1),
-  /// `Colors.teal` (3.67:1) and `Colors.deepOrange` (3.16:1) when no token
-  /// fitted. All three fail AA as text. A missing token is not a neutral
-  /// omission — it gets filled in by whatever the framework offers.
-  static const Color info = Color(0xFF1565C0);
-  static const Color infoContainer = Color(0xFFE3EAF2);
+  /// Informational, neither good nor bad: "At terminal", "Scheduled".
+  /// 7.3:1 on [surfaceRaised], 6.0:1 on [infoContainer].
+  static const Color info = Color(0xFF6AA9FA);
+  static const Color infoContainer = Color(0xFF14294A);
 
   // ── neutrals ───────────────────────────────────────────────────────
-  static const Color surface = Color(0xFFF7F7FA);
-  static const Color surfaceRaised = Color(0xFFFFFFFF);
+  /// The page canvas, behind every panel.
+  static const Color surface = Color(0xFF0E0F12);
 
-  /// Recessed areas inside a white panel: table headers, read-only fields,
-  /// the hover row. A step down from [surface] so a panel's structure shows
-  /// without borders on every cell.
-  static const Color surfaceSunken = Color(0xFFF0F0F4);
+  /// Panels and cards -- where the data sits.
+  static const Color surfaceRaised = Color(0xFF17181C);
 
-  /// The sidebar. White like the panels, separated by a [divider] rule
-  /// rather than a dark slab -- the navigation recedes, the data leads.
-  static const Color sidebar = Color(0xFFFFFFFF);
+  /// A step inside a panel: table headers, read-only fields, hover rows,
+  /// the inner tiles of a card.
+  static const Color surfaceSunken = Color(0xFF1F2025);
 
-  /// 17.06:1 on white.
-  static const Color textPrimary = Color(0xFF1A1A2E);
+  /// The sidebar and the top bar: a shade off the canvas so the frame is
+  /// visible without competing with the panels it holds.
+  static const Color sidebar = Color(0xFF131418);
 
-  /// 6.73:1 on white. Darkened from #6B6B80; secondary text is still text,
-  /// and "muted" is not licence to drop below AA.
-  static const Color textMuted = Color(0xFF5A5A6E);
+  /// 15.9:1 on [surfaceRaised].
+  static const Color textPrimary = Color(0xFFF2F2F5);
 
-  /// Boundary of an interactive control — an input outline, a chip edge.
-  /// 3.64:1 on white, 3.41:1 on [surface], clearing WCAG 1.4.11's 3:1 for
-  /// non-text contrast.
-  ///
-  /// The old #DDDDE5 was 1.35:1. That is invisible as a boundary, and a
-  /// white filled field on a #F7F7FA scaffold is only 1.07:1, so the fill
-  /// could not delimit the control either — the field had no perceivable
-  /// edge at all. Use [divider] for decoration; use this for anything a
-  /// user must locate in order to operate.
-  static const Color border = Color(0xFF84849C);
+  /// 7.3:1 on [surfaceRaised], 6.7:1 on [surfaceSunken]. Secondary text is
+  /// still text; "muted" is not licence to drop below AA.
+  static const Color textMuted = Color(0xFFA3A6B0);
 
-  /// Decorative separation only, where 1.4.11 does not apply because
-  /// nothing needs to be identified by it.
-  static const Color divider = Color(0xFFDDDDE5);
+  /// Boundary of an interactive control -- an input outline, a chip edge.
+  /// 3.75:1 on [surfaceRaised], 3.44:1 on [surfaceSunken]: clears WCAG
+  /// 1.4.11's 3:1 so a field has a perceivable edge. Use [divider] for
+  /// decoration.
+  static const Color border = Color(0xFF70737E);
 
-  /// Retained so the screen sweep can land file by file instead of in one
-  /// 22-site commit. Points at [success]; remove once no call sites remain.
-  @Deprecated('Use AppColors.success (or successContainer for a chip fill).')
-  static const Color accent = success;
+  /// Decorative separation only, where nothing must be located by it.
+  static const Color divider = Color(0xFF2B2D33);
 }
 
 /// A 4-point spacing scale. Ad-hoc padding is the main reason interfaces

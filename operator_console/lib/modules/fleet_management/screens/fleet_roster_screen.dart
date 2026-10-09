@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/fleet_repository.dart';
+import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
 class FleetRosterScreen extends StatefulWidget {
@@ -77,7 +78,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
   Future<void> _setVanStatus(Van van, String status) async {
     try {
       await _fleet.setVanStatus(van.vanId, status);
-      _showSnack('${van.plateNumber} marked $status.');
+      _showSnack('${van.plateNumber} is now marked "${_vanStatus(status)}".');
       await _load();
     } on ApiException catch (e) {
       _showSnack(e.message, isError: true);
@@ -87,7 +88,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
   Future<void> _setCrewStatus(StaffMember staff, String status) async {
     try {
       await _fleet.setCrewStatus(staff.userId, status);
-      _showSnack('${staff.fullName} marked $status.');
+      _showSnack('${staff.fullName} is now marked "${_crewStatus(status)}".');
       await _load();
     } on ApiException catch (e) {
       _showSnack(e.message, isError: true);
@@ -126,7 +127,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
       builder: (_) => _AddCrewDialog(fleet: _fleet),
     );
     if (created == true) {
-      _showSnack('Crew member provisioned.');
+      _showSnack('Crew member added. They can sign in with the temporary password.');
       await _load();
     }
   }
@@ -142,26 +143,17 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Text(
-                    'Fleet & Crew Roster',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _loading ? null : _load,
-                    icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-                    tooltip: 'Refresh',
-                  ),
-                ],
+              PageHeader(
+                title: 'Vans & Crew',
+                description: 'The cooperative\'s vans, and the drivers and conductors who work '
+                    'them. Click a row for details; use the ⋮ button to change a status.',
+                actions: [RefreshButton(onPressed: _load, busy: _loading)],
               ),
-              const SizedBox(height: 24),
               Expanded(
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
-                        ? _buildError(_error!)
+                        ? LoadError(message: _error!, onRetry: _load)
                         : isDesktop
                             ? Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,34 +180,19 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     );
   }
 
-  Widget _buildError(String message) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 40),
-          const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: _load, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-
   Widget _buildVansTable() {
     final vans = _vans ?? [];
     return _RosterCard(
-      title: 'Fleet (Vans)',
+      title: 'Vans',
       count: vans.length,
       icon: Icons.airport_shuttle_outlined,
       addLabel: 'Add van',
       onAdd: _openAddVanDialog,
-      emptyMessage: 'No vans registered yet. Add the first one with "Add van".',
+      emptyMessage: 'No vans yet. Add the first one with "Add van".',
       scroll: _vansScroll,
       columns: const [
-        ('Plate No.', 14, false),
-        ('Model', 26, false),
+        ('Plate number', 16, false),
+        ('Make and model', 24, false),
         ('Seats', 8, true),
         ('Status', 16, false),
       ],
@@ -233,7 +210,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
                 style: const TextStyle(color: AppColors.textPrimary),
               ),
               Text('${van.seatCapacity}', style: _figures),
-              _buildStatusChip(van.operationalStatus),
+              _statusBadge(van.operationalStatus, _vanStatus(van.operationalStatus)),
             ],
             trailing: _buildVanStatusMenu(van),
           ),
@@ -244,12 +221,12 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
   Widget _buildDriversTable() {
     final crew = _crew ?? [];
     return _RosterCard(
-      title: 'Registered Crew',
+      title: 'Drivers and conductors',
       count: crew.length,
       icon: Icons.badge_outlined,
-      addLabel: 'Add crew',
+      addLabel: 'Add crew member',
       onAdd: _openAddCrewDialog,
-      emptyMessage: 'No crew provisioned yet. Add the first with "Add crew".',
+      emptyMessage: 'No drivers or conductors yet. Add the first with "Add crew member".',
       scroll: _crewScroll,
       columns: const [
         ('Name', 24, false),
@@ -270,7 +247,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
               Text(_roleLabel(staff.role),
                   overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textPrimary)),
               Text(staff.licenseNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
-              _buildStatusChip(staff.employmentStatus),
+              _statusBadge(staff.employmentStatus, _crewStatus(staff.employmentStatus)),
             ],
             trailing: _buildCrewStatusMenu(staff),
           ),
@@ -293,54 +270,56 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
         _ => role,
       };
 
+  /// Van and crew states in the office's words. The stored values
+  /// (`maintenance`, `inactive`) are the system's.
+  static String _vanStatus(String s) => switch (s) {
+        'active' => 'In service',
+        'maintenance' => 'Under repair',
+        'inactive' => 'Not in use',
+        _ => s,
+      };
+
+  static String _crewStatus(String s) => switch (s) {
+        'active' => 'Working',
+        'suspended' => 'Suspended',
+        'inactive' => 'No longer working',
+        _ => s,
+      };
+
   Widget _buildVanStatusMenu(Van van) {
     return PopupMenuButton<String>(
+      tooltip: 'Change status',
       icon: const Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
-      color: AppColors.surfaceSunken,
       onSelected: (status) => _setVanStatus(van, status),
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: AppColors.textPrimary))),
-        PopupMenuItem(
-            value: 'maintenance', child: Text('Maintenance', style: TextStyle(color: AppColors.textPrimary))),
-        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: AppColors.textPrimary))),
+      itemBuilder: (_) => [
+        for (final s in const ['active', 'maintenance', 'inactive'])
+          PopupMenuItem(value: s, child: Text(_vanStatus(s))),
       ],
     );
   }
 
   Widget _buildCrewStatusMenu(StaffMember staff) {
     return PopupMenuButton<String>(
+      tooltip: 'Change status',
       icon: const Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
-      color: AppColors.surfaceSunken,
       onSelected: (status) => _setCrewStatus(staff, status),
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'active', child: Text('Active', style: TextStyle(color: AppColors.textPrimary))),
-        PopupMenuItem(
-            value: 'suspended', child: Text('Suspended', style: TextStyle(color: AppColors.textPrimary))),
-        PopupMenuItem(value: 'inactive', child: Text('Inactive', style: TextStyle(color: AppColors.textPrimary))),
+      itemBuilder: (_) => [
+        for (final s in const ['active', 'suspended', 'inactive'])
+          PopupMenuItem(value: s, child: Text(_crewStatus(s))),
       ],
     );
   }
 
   /// Three states, three tones, each with its word on the chip: in service,
   /// temporarily out (maintenance, suspended), and retired.
-  Widget _buildStatusChip(String status) {
-    final (fg, bg) = switch (status) {
-      'active' => (AppColors.success, AppColors.successContainer),
-      'maintenance' || 'suspended' => (AppColors.warning, AppColors.warningContainer),
-      _ => (AppColors.textMuted, AppColors.surfaceSunken),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
+  Widget _statusBadge(String status, String label) => StatusBadge(
+        label,
+        tone: switch (status) {
+          'active' => Tone.success,
+          'maintenance' || 'suspended' => Tone.warning,
+          _ => Tone.neutral,
+        },
+      );
 }
 
 /// One roster row: the cells, a click target for the details, and the
@@ -438,7 +417,7 @@ class _RosterCard extends StatelessWidget {
               excludeSemantics: true,
               child: InkWell(
                 onTap: r.onTap,
-                hoverColor: AppColors.surface,
+                hoverColor: AppColors.surfaceSunken,
                 child: Padding(
                   padding: const EdgeInsets.only(left: AppSpacing.xs),
                   child: Row(children: [
@@ -457,12 +436,11 @@ class _RosterCard extends StatelessWidget {
     final header = Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.md, AppSpacing.lg),
       child: Row(children: [
-        Icon(icon, color: AppColors.textPrimary),
+        Icon(icon, color: AppColors.textMuted, size: 20),
         const SizedBox(width: AppSpacing.md),
         Flexible(
           child: Text(title,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium),
         ),
         const SizedBox(width: AppSpacing.sm),
         if (count > 0) Text('$count', style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
@@ -479,7 +457,7 @@ class _RosterCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: AppColors.divider),
       ),
       child: LayoutBuilder(builder: (context, c) {
@@ -597,8 +575,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.surfaceRaised,
-      title: const Text('Add Van', style: TextStyle(color: AppColors.textPrimary)),
+      title: const Text('Add a van'),
       content: SizedBox(
         width: 380,
         child: Form(
@@ -611,14 +588,14 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                   Text(_error!, style: const TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
                 ],
-                _field(_plate, 'Plate Number', validator: (v) =>
+                _field(_plate, 'Plate number', validator: (v) =>
                     (v == null || v.trim().length < 3) ? 'Required' : null),
                 const SizedBox(height: 12),
                 _field(_brand, 'Brand (optional)'),
                 const SizedBox(height: 12),
                 _field(_model, 'Model (optional)'),
                 const SizedBox(height: 12),
-                _field(_seats, 'Seat Capacity', keyboardType: TextInputType.number,
+                _field(_seats, 'Number of seats', keyboardType: TextInputType.number,
                     validator: (v) {
                   final n = int.tryParse(v ?? '');
                   if (n == null || n < 1 || n > 14) return '1-14 seats';
@@ -626,7 +603,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                 }),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  decoration: _decoration('Registered Route (optional)'),
+                  decoration: _decoration('Registered route (optional)'),
                   dropdownColor: AppColors.surfaceSunken,
                   style: const TextStyle(color: AppColors.textPrimary),
                   value: _routeId,
@@ -658,7 +635,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
           child: _submitting
               ? const SizedBox(
                   width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Add Van'),
+              : const Text('Add van'),
         ),
       ],
     );
@@ -746,8 +723,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.surfaceRaised,
-      title: const Text('Provision Crew', style: TextStyle(color: AppColors.textPrimary)),
+      title: const Text('Add a crew member'),
       content: SizedBox(
         width: 380,
         child: Form(
@@ -772,18 +748,18 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
                   onChanged: (v) => setState(() => _role = v ?? 'conductor'),
                 ),
                 const SizedBox(height: 12),
-                _field(_firstName, 'First Name', required: true),
+                _field(_firstName, 'First name', required: true),
                 const SizedBox(height: 12),
-                _field(_lastName, 'Last Name', required: true),
+                _field(_lastName, 'Last name', required: true),
                 const SizedBox(height: 12),
-                _field(_email, 'Email (must end .dev in dev seed data)', required: true),
+                _field(_email, 'Email (they sign in with it)', required: true),
                 const SizedBox(height: 12),
-                _field(_phone, 'Phone Number', required: true),
+                _field(_phone, 'Phone number', required: true),
                 const SizedBox(height: 12),
-                _field(_password, 'Temporary Password', required: true, obscure: true),
+                _field(_password, 'Temporary password', required: true, obscure: true),
                 if (_role == 'driver') ...[
                   const SizedBox(height: 12),
-                  _field(_license, 'License Number', required: true),
+                  _field(_license, 'Driver\'s licence number', required: true),
                 ],
               ],
             ),
@@ -800,7 +776,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
           child: _submitting
               ? const SizedBox(
                   width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Add Crew'),
+              : const Text('Add crew member'),
         ),
       ],
     );
@@ -887,7 +863,7 @@ class _VanDetailDialog extends StatelessWidget {
         ('Brand / Model', brandModel.isEmpty ? '—' : brandModel),
         ('Color', van.color ?? '—'),
         ('Seat capacity', van.seatCapacity.toString()),
-        ('Status', van.operationalStatus),
+        ('Status', _FleetRosterScreenState._vanStatus(van.operationalStatus)),
         ('Registered route', routeName ?? '—'),
         ('CPC case no.', van.cpcCaseNo ?? '—'),
         ('CPC number', van.cpcNumber ?? '—'),
@@ -914,8 +890,8 @@ class _CrewDetailDialog extends StatelessWidget {
     return _DetailDialog(
       title: staff.fullName,
       rows: [
-        ('Role', staff.role),
-        ('Status', staff.employmentStatus),
+        ('Role', _FleetRosterScreenState._roleLabel(staff.role)),
+        ('Status', _FleetRosterScreenState._crewStatus(staff.employmentStatus)),
         ('Email', staff.email),
         ('Phone', staff.phoneNumber ?? '—'),
         ('Cooperative', staff.cooperativeName ?? '—'),

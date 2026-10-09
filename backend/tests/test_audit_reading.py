@@ -33,7 +33,7 @@ def reading(visual: int, booked: int, conf: float | None = 0.8):
 
 over = reading(7, 5)
 check(over.verdict == "more_than_manifest", "+2 reads as more than the manifest")
-check(over.headline == "2 more people than the manifest", "+2 headline names the two extra people")
+check(over.headline == "2 more people than the passenger list", "+2 headline names the two extra people")
 check("unrecorded passengers" in over.explanation, "+2 explains it as possible leakage")
 
 under = reading(1, 5)
@@ -42,7 +42,7 @@ check("not lost revenue" in under.explanation.lower(), "-4 says plainly it is no
 check(under.caution is None, "-4 at good confidence carries no caution")
 
 check(reading(5, 5).verdict == "match", "equal counts read as a match")
-check(reading(1, 0).headline == "1 more person than the manifest",
+check(reading(1, 0).headline == "1 more person than the passenger list",
       "singular: 1 person, not 1 people")
 
 check(reading(0, 5).caution is not None and "saw no one" in reading(0, 5).caution,

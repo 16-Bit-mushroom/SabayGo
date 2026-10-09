@@ -97,7 +97,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _ReadOnlyRow(label: 'Email', value: p?.email ?? ''),
-                _ReadOnlyRow(label: 'Role', value: 'Cooperative office (${p?.role.wire ?? ''})'),
+                _ReadOnlyRow(label: 'Role', value: 'Cooperative office staff'),
                 const SizedBox(height: AppSpacing.lg),
                 Row(
                   children: [
