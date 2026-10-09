@@ -464,7 +464,8 @@ class _TripDetail extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
-        _ChecksPanel(audits: audits, stop: _stop),
+        // Keyed by trip: a section picked on one trip does not carry over.
+        _ChecksPanel(key: ValueKey(t.tripId), audits: audits, stop: _stop),
         const SizedBox(height: AppSpacing.lg),
         Panel(
           title: m == null ? 'Passenger list' : 'Passenger list (${m.passengers.length})',
@@ -544,22 +545,63 @@ class _SeatsPanel extends StatelessWidget {
 /// The trip's camera headcount checks, newest first, each with what it
 /// means -- so the office reads a phone capture's result here instead of
 /// leaving for Passenger Count Checks.
-class _ChecksPanel extends StatelessWidget {
-  const _ChecksPanel({required this.audits, required this.stop});
+///
+/// A trip is checked once per section and again on request, so the list
+/// interleaves sections; the dropdown narrows it to one. It offers only
+/// the sections that have a check, with how many each has.
+class _ChecksPanel extends StatefulWidget {
+  const _ChecksPanel({super.key, required this.audits, required this.stop});
   final List<PendingAudit>? audits;
   final String Function(int) stop;
 
+  @override
+  State<_ChecksPanel> createState() => _ChecksPanelState();
+}
+
+class _ChecksPanelState extends State<_ChecksPanel> {
   /// The newest few. Passenger Count Checks keeps the full trail.
   static const _shown = 3;
+
+  /// Null: every section.
+  int? _section;
+
+  String _sectionName(int leg) =>
+      'Section $leg: ${widget.stop(leg)} → ${widget.stop(leg + 1)}';
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final a = audits;
+    final all = widget.audits;
+
+    // Sections that have a check, in route order, with their counts.
+    final counts = <int, int>{};
+    for (final a in all ?? const <PendingAudit>[]) {
+      counts[a.legSequence] = (counts[a.legSequence] ?? 0) + 1;
+    }
+    final sections = counts.keys.toList()..sort();
+    // A refresh can drop the picked section's last check; fall back to all.
+    final section = counts.containsKey(_section) ? _section : null;
+    final a = section == null ? all : all?.where((x) => x.legSequence == section).toList();
+
     return Panel(
       title: 'Camera passenger checks',
       icon: Icons.fact_check_outlined,
-      trailing: Text('YOLOv8', style: text.labelMedium),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // One section has nothing to separate.
+          if (sections.length > 1) ...[
+            _SectionPicker(
+              value: section,
+              total: all!.length,
+              options: [for (final leg in sections) (leg, _sectionName(leg), counts[leg]!)],
+              onChanged: (v) => setState(() => _section = v),
+            ),
+            const SizedBox(width: AppSpacing.md),
+          ],
+          Text('YOLOv8', style: text.labelMedium),
+        ],
+      ),
       child: a == null
           ? const Padding(
               padding: EdgeInsets.all(AppSpacing.md),
@@ -581,8 +623,7 @@ class _ChecksPanel extends StatelessWidget {
                           Expanded(
                             child: Text(
                               [
-                                'Section ${audit.legSequence}: ${stop(audit.legSequence)} → '
-                                    '${stop(audit.legSequence + 1)}',
+                                _sectionName(audit.legSequence),
                                 DateFormat.jm().format(audit.capturedAt),
                                 audit.triggerLabel,
                               ].join(' · '),
@@ -605,13 +646,62 @@ class _ChecksPanel extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.md),
                         child: Text(
-                          '${a.length - _shown} earlier check(s) on this trip are in '
+                          '${a.length - _shown} earlier check(s) '
+                          '${section == null ? 'on this trip' : 'for this section'} are in '
                           'Passenger Count Checks.',
                           style: text.bodySmall,
                         ),
                       ),
                   ],
                 ),
+    );
+  }
+}
+
+/// "All sections" or one section, each with its number of checks.
+class _SectionPicker extends StatelessWidget {
+  const _SectionPicker({
+    required this.value,
+    required this.total,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final int? value;
+  final int total;
+
+  /// Section number, its name, and how many checks it has.
+  final List<(int, String, int)> options;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget label(String s) => ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: Text(s, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+        );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int?>(
+          value: value,
+          isDense: true,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          dropdownColor: AppColors.surfaceSunken,
+          icon: const Icon(Icons.filter_list, size: 18, color: AppColors.textMuted),
+          style: const TextStyle(color: AppColors.textPrimary),
+          onChanged: onChanged,
+          items: [
+            DropdownMenuItem<int?>(value: null, child: label('All sections ($total)')),
+            for (final (leg, name, n) in options)
+              DropdownMenuItem<int?>(value: leg, child: label('$name ($n)')),
+          ],
+        ),
+      ),
     );
   }
 }

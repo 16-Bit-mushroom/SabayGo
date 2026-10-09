@@ -79,6 +79,9 @@ check.
   - camera checks
   - passenger list
 - Stops are named, not numbered: "Toril → Bangkal", not "Stop 1 → 3".
+- The camera checks panel has a section dropdown, **All sections** or
+  one section with its number of checks, so section 1 and section 2 can
+  be read apart.
 - The phone capture button is now **Check with phone camera**.
 
 **Special Trips** (was Trip Dispatcher)
