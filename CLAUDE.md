@@ -87,6 +87,14 @@ trips from them until assignment at the van's turn, step 4) and
 `vans.operator_id` NOT NULL (`POST /fleet/vans` makes a van with no
 operator until the roster step, step 3).
 
+**Next: brief step 3, settings and roster.** `cooperative_policies` +
+`effective_from` with the new keys (start window, grace, heartbeat gap,
+retention, rate); operator / van / Dispatcher roster with validation;
+import with row preview and export, logged in `data_transfers`; phone
+pool check-out and return (`edge_devices`, `device_checkouts`). Van
+creation starts requiring an operator here, so `vans.operator_id` NOT NULL
+can follow.
+
 ---
 
 ## What the system does
