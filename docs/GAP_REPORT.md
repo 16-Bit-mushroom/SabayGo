@@ -205,6 +205,44 @@ errors or warnings. `test_remittance.sh` has 2 failures that are the same
 at `39db1aa` (its second section re-opens boarding on a trip whose cash
 was already received), so not caused by this change.
 
+**Done — step 2b, new tables (migration 018).** Tables 28–39 of the brief,
+reconciled with the repo (paper → repo names in the migration header):
+
+| Brief | Repo |
+|---|---|
+| 28 Route_Stretches | `route_stretches`. Stretch *k* = stop *k* → *k*+1, like `trip_legs`; From/ToTerminalID are the terminals at those stops, both enforced by foreign keys to `route_stops` instead of copied |
+| 29 Passenger_Events | `passenger_events`. `event_id` generated on the phone (idempotent re-send). MatchedBookingID and MatchedLogEntryID are one `matched_booking_id`: a cash log is a walk-in booking. Stops are stop sequences, as in `bookings` |
+| 30 Driving_Events | `driving_events` |
+| 31 Nahgm_tracking_logs | `trip_location_pings` (011) + `distance_from_start_m`, `stretch_no` |
+| 32 Remittances | `remittances`, `rate_pct` = 15.00. Supersedes `cash_remittances` once the money step lands |
+| 34–36 | `special_trip_requests`, `remittance_lines`, `data_transfers` (+ `operators.import_batch_id`) |
+| 37–38 | `edge_devices`, `device_checkouts`, one open check-out per phone and per van by functional unique index (MySQL 8.0.46 on the container) |
+| 39 Disputes | `disputes`; `raised_by` has a foreign key, since all staff are `users` |
+
+The brief's rules that a row can break on its own are CHECK constraints:
+exactly one disputed item matching the subject, no withheld share on a
+driving flag, a resolved dispute has an outcome and a noted decision, an
+adjusted share within the disputed one; a matched event names its booking
+and only an unrecorded one is priced or decided; a stored snapshot has its
+hash and a deleted one has no URL; gross = fare × count on a line; an
+approved special trip has its fee, trip and reviewer; at most 14 on a
+request.
+
+Not in 018: **27 Fare_Matrix** stays keyed per route by stop sequence (the
+brief keys it by terminal pair; booking reads it, so it changes with the
+code). **33 TerminalSettings** is `cooperative_policies` + `effective_from`
+in the settings step (key and every read change). The **7.3 edits** (trip
+start/review/audit columns, booking and van columns, notification
+recipients) are the next migration. No ORM models yet: nothing writes
+these tables.
+
+Verified: applied to the 017 dev database, rolled back to an identical
+schema and data fingerprint, re-applied; a constraint smoke test (19
+refused cases, each by the constraint it targets, 11 accepted) inside a
+rolled-back transaction; clean rebuild via `reset-dev.sh`; office journey
+47 passed, dispatcher 23 passed, `test_auto_audit.py` all passed (writes
+GPS pings).
+
 Consequence for the paper's sample trip (brief 12.1), which the group
 must redraw: E15's cash log can no longer exist, so E15 is an unrecorded
 boarding (Sta. Cruz → Digos, ₱30, matched FIFO to Digos with E13 and

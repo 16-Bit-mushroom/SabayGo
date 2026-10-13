@@ -51,6 +51,17 @@ the role ENUMs only for that history. Contraction (drop `driver`,
 `driver_credentials`, `trips.driver_id`, timetable "usual" van/Dispatcher,
 `driver_headcounts`) is a later migration, approved separately.
 
+Done: migration 018 — the brief's new tables (28–39, less 26, 27, 33):
+`route_stretches`, `edge_devices`, `device_checkouts` (one open
+check-out per phone and per van, functional unique indexes),
+`passenger_events`, `driving_events`, `special_trip_requests`,
+`remittances` (daily, per van), `remittance_lines`, `data_transfers`,
+`disputes`; plus `operators.import_batch_id` and Table 31's two columns
+on `trip_location_pings`. The paper→repo name map is the migration's
+header. Schema only, no ORM models or code yet. Still to come in the
+schema step: Fare_Matrix by terminal pair (27), `cooperative_policies`
+with `effective_from` (33), and the 7.3 column edits.
+
 ---
 
 ## What the system does
