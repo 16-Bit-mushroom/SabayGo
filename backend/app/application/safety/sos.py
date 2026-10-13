@@ -34,12 +34,12 @@ from app.domain.enums import BookingStatus, Role, SosStatus
 from app.infrastructure.clients.sms_client import SmsClient
 from app.infrastructure.models import (
     Booking,
-    CooperativePolicy,
     SosAlert,
     SosDispatch,
     Trip,
     User,
 )
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
 
@@ -188,7 +188,7 @@ class RaiseSosUseCase:
         return trip
 
     async def _contact_numbers(self) -> list[str]:
-        policy = await self.session.get(CooperativePolicy, SOS_CONTACTS_POLICY)
+        policy = await PolicyRepository(self.session).current(SOS_CONTACTS_POLICY)
         raw = policy.policy_value if policy else ""
         return [n.strip() for n in raw.split(",") if n.strip()]
 

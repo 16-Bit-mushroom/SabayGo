@@ -35,10 +35,15 @@ for v in json.load(sys.stdin):
     print(f\"  {v['plate_number']:<10} {v['seat_capacity']:>2} seats  {v['operational_status']:<12} {cam}\")"
 
 echo
-echo "== add a van ==========================================="
+echo "== add an operator, then the van =========================="
+# One van per operator, and the van is created with its operator (rev 468).
+OP=$(curl -s -X POST "$API/fleet/operators" -H "$AUTH" -H "$JSON" -d "{
+  \"full_name\":\"Tier Two Owner\",\"contact_number\":\"0927${STAMP: -7}\",
+  \"license_number\":\"Y${STAMP: -10}\",\"license_expiry\":\"2029-01-31\"}" \
+  | python3 -c "import json,sys;print(json.load(sys.stdin)['operator_id'])")
 curl -s -X POST "$API/fleet/vans" -H "$AUTH" -H "$JSON" -d "{
-  \"plate_number\":\"TST-${STAMP: -4}\",\"brand\":\"Toyota\",\"model\":\"HiAce\",
-  \"seat_capacity\":14,\"has_cabin_camera\":true}" | python3 -m json.tool
+  \"plate_number\":\"TST-${STAMP: -4}\",\"operator_id\":\"$OP\",\"brand\":\"Toyota\",
+  \"model\":\"HiAce\",\"seat_capacity\":14,\"has_cabin_camera\":true}" | python3 -m json.tool
 
 echo
 echo "== reject over-capacity van (LTFRB limit is 14) ========="

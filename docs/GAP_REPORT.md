@@ -314,3 +314,37 @@ if all confirmed ₱216.00 (unchanged); the capacity alert still fires. The
 dispute example (T27) becomes: E13 and E14 confirmed, owed ₱211.50; E14
 contested, due now ₱200.25. An honest Dispatcher's roadside cash now shows
 as an estimate until the Terminal Manager confirms it.
+
+**Done — step 3, settings and roster (migration 021, 14 Oct).**
+
+| Brief | Repo |
+|---|---|
+| 33 TerminalSettings (SettingKey, EffectiveFrom, SettingValue, UpdatedBy, UpdatedAt) | `cooperative_policies` keyed (`policy_key`, `effective_from`) + `updated_by`; a change is a new row, the value in force is the latest that has taken effect. `GET /config/policies/{key}/history` lists them |
+| RemittanceRate 0.15, StartOpensMin, StartGraceMin, HeartbeatGapS | `remittance_rate_pct` 15.00, `start_opens_minutes` 30, `start_grace_minutes` 10, `heartbeat_gap_seconds` 120 |
+| RetentionMode, RetentionDays | `retention_mode`, `retention_days`, shipped **unset**: the paper names no default (4.5). The retention job (step 7) must delete nothing while unset |
+| Vans.OperatorID NOT NULL UNIQUE | NOT NULL now; UNIQUE since 017 |
+| Roster, validation (8) | Operators added and edited by the Terminal Manager; validation of operators, vans and Dispatchers by the Terminal Manager only; a van needs its four photos to validate; an edit or a new photo returns a validated record to Pending |
+| Import with preview (8) | Operators and vans, CSV or XLSX template; every row checked (required fields, plate / licence / CPC format, duplicates on file and in the file, one van per operator); preview saves nothing; confirm re-checks and saves passing rows Pending under one batch; rejected rows with a reason column download and re-upload as-is |
+| Separation of duties (3) | Whoever imported a record cannot validate it; the Cashier may import, only the Terminal Manager validates |
+| Export (8), 36 Data_Transfers | Any list as CSV or PDF; backup columns re-import unchanged; LTFRB cross-check (plate, CPC, operator, validation and date) is vans only; every import and export logged |
+| 37–38, phone custody (5.5) | Terminal Manager adds and retires phones; Cashier or Terminal Manager checks one out to a Dispatcher and van and records the return and condition; one open check-out per phone and per van; the last status report comes back as warnings (never sent, silent, camera, GPS), never a refusal |
+
+Decided here, not in the brief: a phone check-out does not require the
+van or Dispatcher to be validated (the brief requires validation for trip
+assignment, step 4, not for custody). Formats: plate `ABC-1234` (three
+letters, three or four digits), licence as printed `N01-23-456789`; the
+CPC rule (letters, digits, `-`, `/`, `.`) is a placeholder until A2Z's
+binder shows the real layout (brief 14). `van_photos` (003) is unused:
+the four photos are the 019 columns. Dispatchers are not imported (each is
+a staff login); they are exported.
+
+Verified: 021 round trip on a clean 020 database identical; on the
+earlier dev database identical data, and the schema differs only in the
+order MySQL prints two `vans` unique keys after the column change; the
+down script refuses, leaving the database unchanged, once a policy has
+history; clean rebuild; `test_roster.sh` 94 passed; journey suite 157
+passed + the known `--soon` reschedule failure (office journey now adds
+the operator before the van); `test_group_f` 11, `test_roadside` 10;
+console analyze clean of errors and warnings. The console widget test
+does not load on the VM (`download.dart` imports `dart:js_interop`), as
+before this change.

@@ -40,10 +40,17 @@ UUID_PK = String(36)
 class CooperativePolicy(Base):
     __tablename__ = "cooperative_policies"
 
+    """One value a key has held (brief Table 33). In force: the latest row
+    whose effective_from has passed -- read through PolicyRepository."""
+
     policy_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    effective_from: Mapped[dt.datetime] = mapped_column(
+        DATETIME(fsp=6), primary_key=True
+    )
     policy_value: Mapped[str] = mapped_column(String(255))
     data_type: Mapped[str] = mapped_column(String(16))
     description: Mapped[str] = mapped_column(String(255))
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
@@ -122,7 +129,8 @@ class User(Base):
         back_populates="user", lazy="selectin"
     )
     staff_profile: Mapped[StaffProfile | None] = relationship(
-        back_populates="user", lazy="selectin"
+        back_populates="user", lazy="selectin",
+        foreign_keys="StaffProfile.user_id",
     )
 
 
@@ -160,8 +168,17 @@ class StaffProfile(Base):
         ForeignKey("terminals.terminal_id")
     )
     employment_status: Mapped[str] = mapped_column(String(16), default="active")
+    # The Dispatcher's roster validation (brief 8); unused for office staff.
+    validation_status: Mapped[str] = mapped_column(String(16), default="pending")
+    validated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    validated_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    import_batch_id: Mapped[str | None] = mapped_column(
+        ForeignKey("data_transfers.transfer_id")
+    )
 
-    user: Mapped[User] = relationship(back_populates="staff_profile")
+    user: Mapped[User] = relationship(
+        back_populates="staff_profile", foreign_keys=[user_id]
+    )
 
 
 class PassengerSettings(Base):
@@ -203,6 +220,9 @@ class Operator(Base):
     validation_status: Mapped[str] = mapped_column(String(16), default="pending")
     validated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     validated_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    import_batch_id: Mapped[str | None] = mapped_column(
+        ForeignKey("data_transfers.transfer_id")
+    )
     former_driver_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.user_id"), unique=True
     )
@@ -215,7 +235,7 @@ class Van(Base):
 
     van_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
     plate_number: Mapped[str] = mapped_column(String(20), unique=True)
-    operator_id: Mapped[str | None] = mapped_column(
+    operator_id: Mapped[str] = mapped_column(
         ForeignKey("operators.operator_id"), unique=True
     )
     cpc_case_no: Mapped[str | None] = mapped_column(String(64))
@@ -231,8 +251,74 @@ class Van(Base):
     has_cabin_camera: Mapped[bool] = mapped_column(Boolean, default=False)
     camera_installed_at: Mapped[dt.date | None] = mapped_column(Date)
     camera_device_id: Mapped[str | None] = mapped_column(String(64))
+    # Not part of an import; a van cannot be validated until all four exist.
+    photo_front_url: Mapped[str | None] = mapped_column(String(512))
+    photo_rear_url: Mapped[str | None] = mapped_column(String(512))
+    photo_left_url: Mapped[str | None] = mapped_column(String(512))
+    photo_right_url: Mapped[str | None] = mapped_column(String(512))
+    validation_status: Mapped[str] = mapped_column(String(16), default="pending")
+    validated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    validated_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    import_batch_id: Mapped[str | None] = mapped_column(
+        ForeignKey("data_transfers.transfer_id")
+    )
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class DataTransfer(Base):
+    """One import or export of a member list (brief Table 36)."""
+
+    __tablename__ = "data_transfers"
+
+    transfer_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    direction: Mapped[str] = mapped_column(String(8))
+    record_type: Mapped[str] = mapped_column(String(16))
+    file_name: Mapped[str] = mapped_column(String(255))
+    file_format: Mapped[str] = mapped_column(String(8))
+    export_purpose: Mapped[str | None] = mapped_column(String(16))
+    rows_in_file: Mapped[int]
+    rows_accepted: Mapped[int] = mapped_column(default=0)
+    rows_rejected: Mapped[int] = mapped_column(default=0)
+    error_file_url: Mapped[str | None] = mapped_column(String(512))
+    performed_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    performed_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class EdgeDevice(Base):
+    """A phone in the terminal's pool (brief Table 37)."""
+
+    __tablename__ = "edge_devices"
+
+    device_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    device_model: Mapped[str] = mapped_column(String(100))
+    android_version: Mapped[str | None] = mapped_column(String(20))
+    app_version: Mapped[str | None] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(16), default="in_office")
+    registered_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    registered_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    last_heartbeat_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    battery_pct: Mapped[int | None] = mapped_column(TINYINT(unsigned=True))
+    battery_temp_c: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
+    camera_ok: Mapped[bool | None] = mapped_column(Boolean)
+    gps_ok: Mapped[bool | None] = mapped_column(Boolean)
+
+
+class DeviceCheckout(Base):
+    """A phone out of the office with a Dispatcher and a van (Table 38).
+    Open while returned_at is NULL; one open row per phone and per van."""
+
+    __tablename__ = "device_checkouts"
+
+    checkout_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("edge_devices.device_id"))
+    van_id: Mapped[str] = mapped_column(ForeignKey("vans.van_id"))
+    dispatcher_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    checked_out_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    checked_out_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    returned_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    returned_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    return_note: Mapped[str | None] = mapped_column(String(255))
 
 
 # ======================================================================

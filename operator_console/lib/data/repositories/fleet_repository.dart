@@ -95,6 +95,28 @@ class StaffMember {
       );
 }
 
+/// A van owner on the member roster: no login, one van each (rev 468).
+class OperatorRecord {
+  const OperatorRecord({
+    required this.operatorId,
+    required this.fullName,
+    required this.licenseNumber,
+    this.vanId,
+  });
+
+  final String operatorId;
+  final String fullName;
+  final String licenseNumber;
+  final String? vanId;
+
+  factory OperatorRecord.fromJson(Map<String, dynamic> json) => OperatorRecord(
+        operatorId: json['operator_id'] as String,
+        fullName: json['full_name'] as String,
+        licenseNumber: json['license_number'] as String,
+        vanId: json['van_id'] as String?,
+      );
+}
+
 class FleetRepository {
   FleetRepository(this._api);
   final ApiClient _api;
@@ -104,8 +126,32 @@ class FleetRepository {
     return (json as List).map((e) => Van.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  Future<List<OperatorRecord>> listOperators() async {
+    final json = await _api.get('/fleet/operators');
+    return (json as List)
+        .map((e) => OperatorRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Added Pending; the Terminal Manager validates the record separately.
+  Future<OperatorRecord> createOperator({
+    required String fullName,
+    required String contactNumber,
+    required String licenseNumber,
+    required DateTime licenseExpiry,
+  }) async {
+    final json = await _api.post('/fleet/operators', body: {
+      'full_name': fullName.trim(),
+      'contact_number': contactNumber.trim(),
+      'license_number': licenseNumber.trim(),
+      'license_expiry': licenseExpiry.toIso8601String().substring(0, 10),
+    });
+    return OperatorRecord.fromJson(json as Map<String, dynamic>);
+  }
+
   Future<Van> createVan({
     required String plateNumber,
+    required String operatorId,
     String? brand,
     String? model,
     String? color,
@@ -115,6 +161,7 @@ class FleetRepository {
   }) async {
     final json = await _api.post('/fleet/vans', body: {
       'plate_number': plateNumber.trim().toUpperCase(),
+      'operator_id': operatorId,
       if (brand != null && brand.isNotEmpty) 'brand': brand,
       if (model != null && model.isNotEmpty) 'model': model,
       if (color != null && color.isNotEmpty) 'color': color,

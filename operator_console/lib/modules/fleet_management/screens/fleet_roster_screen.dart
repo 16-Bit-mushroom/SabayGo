@@ -546,6 +546,37 @@ class _AddVanDialogState extends State<_AddVanDialog> {
   bool _submitting = false;
   String? _error;
 
+  /// Operators with no van yet: one van per operator.
+  List<OperatorRecord>? _operators;
+  String? _operatorId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOperators();
+  }
+
+  Future<void> _loadOperators({String? select}) async {
+    try {
+      final all = await widget.fleet.listOperators();
+      if (!mounted) return;
+      setState(() {
+        _operators = all.where((o) => o.vanId == null).toList();
+        if (select != null) _operatorId = select;
+      });
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  Future<void> _addOperator() async {
+    final created = await showDialog<OperatorRecord>(
+      context: context,
+      builder: (_) => _AddOperatorDialog(fleet: widget.fleet),
+    );
+    if (created != null) await _loadOperators(select: created.operatorId);
+  }
+
   @override
   void dispose() {
     _plate.dispose();
@@ -564,6 +595,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
     try {
       await widget.fleet.createVan(
         plateNumber: _plate.text,
+        operatorId: _operatorId!,
         brand: _brand.text,
         model: _model.text,
         seatCapacity: int.parse(_seats.text),
@@ -594,6 +626,34 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                   Text(_error!, style: TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
                 ],
+                DropdownButtonFormField<String>(
+                  decoration: _decoration('Operator (the van\'s owner, who drives)'),
+                  dropdownColor: AppColors.surfaceSunken,
+                  style: TextStyle(color: AppColors.textPrimary),
+                  value: _operatorId,
+                  items: (_operators ?? [])
+                      .map((o) => DropdownMenuItem(
+                          value: o.operatorId,
+                          child: Text('${o.fullName} · ${o.licenseNumber}')))
+                      .toList(),
+                  onChanged: (v) => setState(() => _operatorId = v),
+                  validator: (v) => v == null ? 'Pick the operator' : null,
+                ),
+                if (_operators != null && _operators!.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('Every operator on the roster already has a van.',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _submitting ? null : _addOperator,
+                    icon: const Icon(Icons.person_add_alt_1, size: 18),
+                    label: const Text('Add a new operator'),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 _field(_plate, 'Plate number', validator: (v) =>
                     (v == null || v.trim().length < 3) ? 'Required' : null),
                 const SizedBox(height: 12),
@@ -662,6 +722,141 @@ class _AddVanDialogState extends State<_AddVanDialog> {
         labelText: label,
         labelStyle: TextStyle(color: AppColors.textMuted),
       );
+}
+
+/// A van owner, added to the roster as Pending. Returns the new record.
+class _AddOperatorDialog extends StatefulWidget {
+  const _AddOperatorDialog({required this.fleet});
+  final FleetRepository fleet;
+
+  @override
+  State<_AddOperatorDialog> createState() => _AddOperatorDialogState();
+}
+
+class _AddOperatorDialogState extends State<_AddOperatorDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _contact = TextEditingController();
+  final _licence = TextEditingController();
+  DateTime? _expiry;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _contact.dispose();
+    _licence.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickExpiry() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _expiry ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 15),
+    );
+    if (picked != null) setState(() => _expiry = picked);
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_expiry == null) {
+      setState(() => _error = 'Pick the licence expiry date.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final created = await widget.fleet.createOperator(
+        fullName: _name.text,
+        contactNumber: _contact.text,
+        licenseNumber: _licence.text,
+        licenseExpiry: _expiry!,
+      );
+      if (mounted) Navigator.of(context).pop(created);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String? required(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
+    final expiry = _expiry;
+    return AlertDialog(
+      title: const Text('Add an operator'),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_error != null) ...[
+                Text(_error!, style: TextStyle(color: AppColors.danger)),
+                const SizedBox(height: 12),
+              ],
+              _input(_name, 'Full name, as on the licence', required),
+              const SizedBox(height: 12),
+              _input(_contact, 'Mobile number (09XXXXXXXXX)', required),
+              const SizedBox(height: 12),
+              _input(_licence, 'LTO licence number (N01-23-456789)', required),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      expiry == null
+                          ? 'Licence expiry: not set'
+                          : 'Licence expiry: ${expiry.toIso8601String().substring(0, 10)}',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
+                  ),
+                  TextButton(onPressed: _pickExpiry, child: const Text('Pick date')),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text('Saved as Pending until the Terminal Manager validates it.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Add operator'),
+        ),
+      ],
+    );
+  }
+
+  Widget _input(TextEditingController controller, String label,
+      String? Function(String?) validator) {
+    return TextFormField(
+      controller: controller,
+      style: TextStyle(color: AppColors.textPrimary),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: AppColors.textMuted),
+      ),
+      validator: validator,
+    );
+  }
 }
 
 class _AddCrewDialog extends StatefulWidget {

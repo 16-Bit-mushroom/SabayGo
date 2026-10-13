@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import case, func, select
 
-from app.api.v1.deps import MANAGER, OFFICE, SessionDep
+from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep
 from app.application.scheduling.generate_trips import (
     CreateSpecialTripUseCase,
     GenerateDailyTripsUseCase,
@@ -34,6 +34,7 @@ from app.infrastructure.models import (
     Terminal,
     Trip,
 )
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 router = APIRouter(prefix="/config", tags=["configuration"])
 
@@ -46,6 +47,9 @@ class PolicyOut(BaseModel):
     policy_value: str
     data_type: str
     description: str
+    # In force since; who set it (NULL for values set before 021).
+    effective_from: dt.datetime
+    updated_by: str | None
     updated_at: dt.datetime
 
 
@@ -53,54 +57,48 @@ class PolicyIn(BaseModel):
     policy_value: str
 
 
+def _policy_out(p: CooperativePolicy) -> PolicyOut:
+    return PolicyOut(**{c: getattr(p, c) for c in PolicyOut.model_fields})
+
+
 @router.get("/policies", response_model=list[PolicyOut],
             dependencies=[Depends(OFFICE)])
 async def list_policies(session: SessionDep) -> list[PolicyOut]:
-    """Every configurable cooperative policy.
+    """Every configurable cooperative policy, at the value in force now.
 
     These are rows precisely so a cooperative can revise them without a
     deployment -- reschedule cutoff, advance-booking cap, geofence radius,
-    hold TTL, variance threshold.
+    hold TTL, variance threshold, start window, remittance rate.
     """
-    result = await session.execute(
-        select(CooperativePolicy).order_by(CooperativePolicy.policy_key)
-    )
-    return [PolicyOut(**{c: getattr(p, c) for c in PolicyOut.model_fields})
-            for p in result.scalars()]
+    return [_policy_out(p) for p in await PolicyRepository(session).current_rows()]
+
+
+@router.get("/policies/{policy_key}/history", response_model=list[PolicyOut],
+            dependencies=[Depends(OFFICE)])
+async def policy_history(policy_key: str, session: SessionDep) -> list[PolicyOut]:
+    """Every value the key has held, newest first, with who set it."""
+    return [_policy_out(p) for p in await PolicyRepository(session).history(policy_key)]
 
 
 @router.put("/policies/{policy_key}", response_model=PolicyOut,
             dependencies=[Depends(MANAGER)])
 async def update_policy(
-    policy_key: str, payload: PolicyIn, session: SessionDep
+    policy_key: str, payload: PolicyIn, session: SessionDep, user: CurrentUser
 ) -> PolicyOut:
-    policy = await session.get(CooperativePolicy, policy_key)
-    if policy is None:
-        raise NotFoundError(f"Policy '{policy_key}' does not exist.")
-
-    # Validate against the declared type before storing. A malformed value
-    # here would fail much later, inside a booking, as an opaque ValueError.
-    value = payload.policy_value.strip()
+    """Put a new value in force from now; the old one stays on record."""
     try:
-        if policy.data_type == "int":
-            int(value)
-        elif policy.data_type == "decimal":
-            Decimal(value)
-        elif policy.data_type == "bool":
-            if value.lower() not in ("true", "false", "1", "0", "yes", "no"):
-                raise ValueError
-    except (ValueError, ArithmeticError):
+        policy = await PolicyRepository(session).set(
+            policy_key, payload.policy_value, user.user_id
+        )
+    except ValueError as exc:
         raise ConflictError(
-            f"'{value}' is not a valid {policy.data_type} for {policy_key}."
+            f"'{payload.policy_value.strip()}' is not valid for {policy_key}: {exc}."
         ) from None
-
-    policy.policy_value = value
-    policy.updated_at = dt.datetime.now(APP_TZ)
     await session.commit()
 
     # Existing trips are unaffected: seat capacity, advance cap and
     # reschedule cutoff are snapshotted onto each trip at generation time.
-    return PolicyOut(**{c: getattr(policy, c) for c in PolicyOut.model_fields})
+    return _policy_out(policy)
 
 
 # ===================================================================

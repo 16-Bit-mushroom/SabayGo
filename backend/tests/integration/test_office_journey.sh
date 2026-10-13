@@ -74,10 +74,17 @@ S=$(code GET /fleet/vans "" "$OT")
 [ "$S" = "200" ] && ok "list vans ($(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))"))" \
                  || bad "vans gave $S"
 
-S=$(code POST /fleet/vans "{\"plate_number\":\"OPS-${STAMP: -4}\",\"brand\":\"Nissan\",
-  \"model\":\"NV350\",\"seat_capacity\":14,\"has_cabin_camera\":true,
+# One van per operator: the owner goes on the roster first (rev 468).
+S=$(code POST /fleet/operators "{\"full_name\":\"Office Journey Owner\",
+  \"contact_number\":\"0928${STAMP: -7}\",\"license_number\":\"Q${STAMP: -10}\",
+  \"license_expiry\":\"2029-01-31\"}" "$OT")
+[ "$S" = "201" ] && ok "operator added to the roster" || bad "add operator gave $S"
+OPERATOR=$(j "['operator_id']" < /tmp/resp.json)
+
+S=$(code POST /fleet/vans "{\"plate_number\":\"OPS-${STAMP: -4}\",\"operator_id\":\"$OPERATOR\",
+  \"brand\":\"Nissan\",\"model\":\"NV350\",\"seat_capacity\":14,\"has_cabin_camera\":true,
   \"camera_device_id\":\"EDGE-${STAMP: -4}\"}" "$OT")
-[ "$S" = "201" ] && ok "van added with camera" || bad "add van gave $S"
+[ "$S" = "201" ] && ok "van added with camera and its operator" || bad "add van gave $S"
 VAN=$(j "['van_id']" < /tmp/resp.json)
 
 S=$(code PATCH "/fleet/vans/$VAN/status" '{"operational_status":"maintenance"}' "$OT")

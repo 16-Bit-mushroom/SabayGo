@@ -83,17 +83,46 @@ The revenue view no longer sums roadside columns and LEFT JOINs routes (a
 rental has none). A preflight stops 020 before any change on a database
 with driver accounts or other history it would lose. **Still to drop:**
 the timetable's default van and Dispatcher (`generate_trips.py` staffs
-trips from them until assignment at the van's turn, step 4) and
-`vans.operator_id` NOT NULL (`POST /fleet/vans` makes a van with no
-operator until the roster step, step 3).
+trips from them until assignment at the van's turn, step 4).
 
-**Next: brief step 3, settings and roster.** `cooperative_policies` +
-`effective_from` with the new keys (start window, grace, heartbeat gap,
-retention, rate); operator / van / Dispatcher roster with validation;
-import with row preview and export, logged in `data_transfers`; phone
-pool check-out and return (`edge_devices`, `device_checkouts`). Van
-creation starts requiring an operator here, so `vans.operator_id` NOT NULL
-can follow.
+Done: brief step 3, settings and roster (migration 021, 14 Oct).
+`cooperative_policies` is Table 33: keyed (`policy_key`, `effective_from`),
+a change is a new row with `updated_by`, the value in force is the latest
+row that has taken effect. **Read policies only through
+`PolicyRepository`** — a bare lookup by key finds an arbitrary old row.
+Value rules (type, bounds, choices) are `domain/policies.py`. New keys:
+`start_opens_minutes` 30, `start_grace_minutes` 10,
+`heartbeat_gap_seconds` 120, `remittance_rate_pct` 15.00,
+`retention_mode` / `retention_days` shipped unset (no default in the
+paper; unset must delete nothing). `vans.operator_id` NOT NULL: a van is
+created with its operator. Roster (`api/v1/fleet.py`): operators CRUD;
+`PATCH .../validation` on operators, vans and Dispatchers (Terminal
+Manager); a van validates only with its four photos (`PUT
+/fleet/vans/{id}/photos/{side}`, bytes sniffed, `media/vans/`); any edit
+or new photo returns a validated record to Pending; whoever imported a
+record cannot validate it (brief 3). Plate, licence and CPC formats are
+value objects (`ABC-1234`, `N01-23-456789`; CPC is a placeholder rule).
+Import/export (`api/v1/roster.py`, `application/roster/`): template
+CSV/XLSX, preview, confirm re-checks the file, passing rows saved Pending
+under one batch, rejected rows + reason kept in `backend/storage/`
+(git-ignored) for re-upload; operators and vans only. Export CSV or PDF
+(fpdf2, new dependency), backup columns re-import as-is, `ltfrb_check`
+is vans only; every import and export logged in `data_transfers`. Phone
+pool (`api/v1/devices.py`): Terminal Manager adds and retires, office
+checks out to a Dispatcher and van and records the return; one open
+check-out per phone and per van; the phone's last report comes back as
+warnings, never a refusal. Console: the add-van dialog picks the operator
+and can add one; the rest of Member Records, Phones and the settings
+history screen are step 9. Test: `tests/integration/test_roster.sh`
+(94 checks, in the journey runner).
+
+**Next: brief step 4, trip lifecycle.** Timetable → trips days ahead with
+no van or Dispatcher; assignment at the van's turn (Terminal Manager,
+Cashier backup + 'Assignment by Cashier' alert; validated vans and
+Dispatchers only); Start / Depart API (`start_opens_minutes`); the
+auto-start job (`start_grace_minutes`); review hold; void and change-van
+(Terminal Manager only). Then drop the timetable's default van and
+Dispatcher.
 
 ---
 

@@ -131,6 +131,19 @@ else
   ./tests/integration/test_sos.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 468 step 3. Makes only new, stamped records, so it needs no reset.
+{
+  echo
+  echo "==================================================================="
+  echo "  SETTINGS, MEMBER ROSTER AND PHONE POOL (rev 468 step 3)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_roster.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_roster.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────

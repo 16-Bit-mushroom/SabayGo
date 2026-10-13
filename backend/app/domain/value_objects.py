@@ -2,7 +2,8 @@
 
 PhoneNumber, EmergencyContact and LicenseNumber are carried over from the
 Sprint 1 domain model -- the validation rules were correct and are
-domain-independent. Email's .edu.ph restriction was dropped: SabayGo
+domain-independent. PlateNumber and CpcReference are the member roster's
+(brief 8), shared by the console forms and the import. Email's .edu.ph restriction was dropped: SabayGo
 serves cooperative staff and the general commuting public, not a campus.
 """
 
@@ -51,14 +52,57 @@ class PhoneNumber:
 
 @dataclass(frozen=True)
 class LicenseNumber:
-    """LTO driver's licence. Salvaged unchanged from Sprint 1."""
+    """LTO driver's licence, kept as printed on the card: N01-23-456789.
+
+    The rule is Sprint 1's (a letter and ten digits); the stored form is
+    the printed one, so a licence typed with or without dashes is the
+    same licence to the roster's duplicate check.
+    """
 
     value: str
 
     def __post_init__(self) -> None:
         cleaned = self.value.replace("-", "").replace(" ", "").upper()
         if not re.match(r"^[A-Z]\d{10}$", cleaned):
-            raise ValueError("Must be a valid Philippine driver's license format.")
+            raise ValueError("Must be an LTO licence number, e.g. N01-23-456789.")
+        object.__setattr__(
+            self, "value", f"{cleaned[:3]}-{cleaned[3:5]}-{cleaned[5:]}"
+        )
+
+
+@dataclass(frozen=True)
+class PlateNumber:
+    """LTO plate: three letters and three or four digits, kept as ABC-1234.
+
+    Spaces and dashes are ignored on the way in, so 'abc 1234' and
+    'ABC-1234' are one van to the duplicate check.
+    """
+
+    value: str
+
+    def __post_init__(self) -> None:
+        cleaned = re.sub(r"[\s-]", "", self.value).upper()
+        if not re.fullmatch(r"[A-Z]{3}\d{3,4}", cleaned):
+            raise ValueError("Must be a plate number, e.g. ABC-1234.")
+        object.__setattr__(self, "value", f"{cleaned[:3]}-{cleaned[3:]}")
+
+
+@dataclass(frozen=True)
+class CpcReference:
+    """An LTFRB CPC case number or CPC number.
+
+    Placeholder rule -- letters, digits, '-', '/' and '.', 3 to 64
+    characters -- until A2Z's binder shows the real layout (brief 14).
+    """
+
+    value: str
+
+    def __post_init__(self) -> None:
+        cleaned = self.value.strip().upper()
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9./-]{2,63}", cleaned):
+            raise ValueError(
+                "Must be a CPC reference: letters, digits, '-', '/' or '.'."
+            )
         object.__setattr__(self, "value", cleaned)
 
 

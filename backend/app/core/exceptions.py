@@ -56,6 +56,14 @@ class PolicyViolationError(DomainError):
     code = "policy_violation"
 
 
+class InvalidInputError(DomainError):
+    """A file or value the client sent cannot be read (wrong format, too
+    large, missing columns). The 422 Pydantic gives a bad JSON body."""
+
+    status_code = 422
+    code = "invalid_input"
+
+
 class AuthenticationError(DomainError):
     status_code = 401
     code = "authentication_failed"
