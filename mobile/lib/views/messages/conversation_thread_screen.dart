@@ -188,10 +188,12 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'coop_admin':
-        return 'Cooperative office';
-      case 'conductor':
-        return 'Conductor';
+      case 'terminal_manager':
+      case 'cashier':
+        return 'A2Z office';
+      case 'dispatcher':
+        return 'Dispatcher';
+      // Legacy threads only: drivers have no accounts since migration 017.
       case 'driver':
         return 'Driver';
       case 'passenger':

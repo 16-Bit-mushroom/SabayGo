@@ -47,7 +47,7 @@ class UnauthorizedException extends ApiException {
       : super(statusCode: 401);
 }
 
-/// 403 — authenticated, but not permitted. A conductor scanning a trip
+/// 403 — authenticated, but not permitted. A Dispatcher scanning a trip
 /// they are not rostered to lands here.
 class ForbiddenException extends ApiException {
   const ForbiddenException(super.message, {super.code})

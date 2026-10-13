@@ -66,7 +66,7 @@ def read_audit(
             verdict="more_than_manifest",
             headline=f"{n} more {'person' if n == 1 else 'people'} than the passenger list",
             explanation="Possible unrecorded passengers.",
-            next_step="Ask the conductor about unlogged walk-ins; check the snapshot.",
+            next_step="Ask the Dispatcher about unlogged walk-ins; check the snapshot.",
             caution=caution,
         )
 

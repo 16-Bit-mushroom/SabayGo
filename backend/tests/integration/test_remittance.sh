@@ -17,11 +17,11 @@ code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
   curl "${a[@]}"; }
 
 CT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 OT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 
-hdr "conductor logs three cash passengers"
+hdr "Dispatcher logs three cash passengers"
 code POST "/trips/$TRIP/start-boarding" "" "$CT" >/dev/null
 for seg in "1 4" "2 4" "3 4"; do
   set -- $seg
@@ -97,6 +97,6 @@ else bad "short receive gave $S"; fi
 
 hdr "crew cannot confirm their own handover"
 S=$(code POST "/remittances/$RID2/receive" '{"received_amount":175}' "$CT")
-[ "$S" = "403" ] && ok "conductor blocked from confirming receipt (403)" || bad "gave $S"
+[ "$S" = "403" ] && ok "Dispatcher blocked from confirming receipt (403)" || bad "gave $S"
 
 printf '\n  passed %d   failed %d\n\n' "$P" "$F"

@@ -6,7 +6,7 @@ STAMP=$(date +%s)
 j() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1)"; }
 
 TOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 AUTH="Authorization: Bearer $TOKEN"
 JSON="Content-Type: application/json"
 
@@ -47,14 +47,14 @@ curl -s -X POST "$API/fleet/vans" -H "$AUTH" -H "$JSON" \
 echo
 
 echo
-echo "== provision a conductor ==============================="
+echo "== provision a dispatcher =============================="
 curl -s -X POST "$API/fleet/crew" -H "$AUTH" -H "$JSON" -d "{
   \"email\":\"cond${STAMP}@sabaygo.dev\",\"phone_number\":\"0918${STAMP: -7}\",
-  \"password\":\"sabaygo123\",\"role\":\"conductor\",
-  \"first_name\":\"New\",\"last_name\":\"Conductor\"}" | python3 -m json.tool
+  \"password\":\"sabaygo123\",\"role\":\"dispatcher\",
+  \"first_name\":\"New\",\"last_name\":\"Dispatcher\"}" | python3 -m json.tool
 
 echo
-echo "== driver without a licence should be rejected ========="
+echo "== a driver account is refused: the operator has no login ="
 curl -s -X POST "$API/fleet/crew" -H "$AUTH" -H "$JSON" -d "{
   \"email\":\"drv${STAMP}@sabaygo.dev\",\"phone_number\":\"0919${STAMP: -7}\",
   \"password\":\"sabaygo123\",\"role\":\"driver\",

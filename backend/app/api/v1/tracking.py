@@ -15,8 +15,7 @@ from app.domain.enums import Role
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
-CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN, Role.ADMIN)
-COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
+CREW = require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER, Role.CASHIER, Role.ADMIN)
 
 
 class PingRequest(BaseModel):

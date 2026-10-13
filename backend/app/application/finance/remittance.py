@@ -1,7 +1,7 @@
 """Cash remittance.
 
 Cash walk-ins are money the cooperative has earned but has not yet
-received -- it is in the conductor's pocket. Those are different states,
+received -- it is in the Dispatcher's pocket. Those are different states,
 and conflating them is what made the revenue report accuse honest crew.
 
 The handover is a three-step record:
@@ -11,8 +11,8 @@ The handover is a three-step record:
     received   what the office actually counted         (office types it)
 
 Only `received − expected` is a shortage. `declared` sits between them so
-a disagreement is visible: if a conductor declares the right amount and
-the office counts less, that is a different problem from a conductor who
+a disagreement is visible: if a Dispatcher declares the right amount and
+the office counts less, that is a different problem from a Dispatcher who
 declares less than they collected.
 
 Remittance is per trip, per crew member, at the end of the trip.
@@ -245,7 +245,7 @@ class RemittanceService:
     async def unremitted_trips(self, *, limit: int = 100) -> list[dict]:
         """Finished trips with cash still in a pocket and no handover started.
 
-        This is the list a cooperative administrator chases -- a conductor who simply never
+        This is the list the Terminal Manager chases -- a Dispatcher who simply never
         submits would otherwise be invisible.
         """
         result = await self.session.execute(
@@ -253,8 +253,7 @@ class RemittanceService:
                 BookingRow.trip_id,
                 Trip.trip_label,
                 Trip.service_date,
-                Trip.conductor_id,
-                Trip.driver_id,
+                Trip.dispatcher_id,
                 func.sum(BookingRow.fare_amount).label("amount"),
                 func.count(BookingRow.booking_id).label("bookings"),
             )
@@ -269,7 +268,7 @@ class RemittanceService:
             )
             .group_by(
                 BookingRow.trip_id, Trip.trip_label, Trip.service_date,
-                Trip.conductor_id, Trip.driver_id,
+                Trip.dispatcher_id,
             )
             .order_by(Trip.service_date.desc())
             .limit(limit)
@@ -279,8 +278,7 @@ class RemittanceService:
                 "trip_id": row.trip_id,
                 "trip_label": row.trip_label,
                 "service_date": row.service_date,
-                "conductor_id": row.conductor_id,
-                "driver_id": row.driver_id,
+                "dispatcher_id": row.dispatcher_id,
                 "cash_outstanding": row.amount,
                 "booking_count": row.bookings,
             }

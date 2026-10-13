@@ -6,7 +6,7 @@ import '../data/repositories/messaging_repository.dart';
 import '../models/message_model.dart';
 
 /// Conversation list for the signed-in user. Pass [pollEvery] to keep an
-/// unread badge current (the conductor/driver app bar does this), same
+/// unread badge current (the Dispatcher's app bar does this), same
 /// shape as NotificationsViewModel.
 class ConversationsViewModel extends ChangeNotifier {
   ConversationsViewModel(this._repo, {Duration? pollEvery}) {

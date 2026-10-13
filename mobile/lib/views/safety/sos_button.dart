@@ -12,7 +12,7 @@ import '../../data/repositories/sos_repository.dart';
 ///
 /// Two taps, never one: the icon opens a sheet, and the alert goes out
 /// only from the button inside it. A single-tap panic control on a screen
-/// a conductor uses all day would cry wolf often enough that the office
+/// a Dispatcher uses all day would cry wolf often enough that the office
 /// stopped believing it.
 class SosButton extends StatelessWidget {
   const SosButton({super.key, this.tripId, this.compact = true});

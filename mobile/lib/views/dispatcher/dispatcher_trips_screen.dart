@@ -10,17 +10,17 @@ import 'trip_manifest_screen.dart';
 
 /// The trips this crew member is rostered to.
 ///
-/// A conductor is restricted server-side to trips they are assigned to,
+/// A Dispatcher is restricted server-side to trips they are assigned to,
 /// so this list is also the boundary of what they can act on: tapping a
 /// trip opens its manifest, and nothing outside the list is reachable.
-class ConductorTripsScreen extends StatefulWidget {
-  const ConductorTripsScreen({super.key});
+class DispatcherTripsScreen extends StatefulWidget {
+  const DispatcherTripsScreen({super.key});
 
   @override
-  State<ConductorTripsScreen> createState() => _ConductorTripsScreenState();
+  State<DispatcherTripsScreen> createState() => _DispatcherTripsScreenState();
 }
 
-class _ConductorTripsScreenState extends State<ConductorTripsScreen> {
+class _DispatcherTripsScreenState extends State<DispatcherTripsScreen> {
   @override
   void initState() {
     super.initState();

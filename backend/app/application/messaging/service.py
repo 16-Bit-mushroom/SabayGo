@@ -1,15 +1,17 @@
 """Two-way in-app messaging (spec 2.2.3.1; ERD Conversations/Messages).
 
 Every conversation has exactly two sides, and which roles may pair is
-fixed, not left to the client: passenger<->conductor and conductor<->driver
-require a shared trip (the passenger's booking, or the crew assignment);
-anyone<->coop_admin is an "office" thread with no trip context.
+fixed, not left to the client: passenger<->Dispatcher requires a shared
+trip (the passenger's booking and the Dispatcher's assignment);
+anyone<->office is an "office" thread with no trip context. The operator
+has no account, so there is no thread with the van's driver; the legacy
+'conductor_driver' kind only keeps old history.
 
 The office kind is a shared inbox rather than a 1:1 thread with one
-employee -- `participant_two_id` stays NULL and any active coop_admin may
-read and reply, matching a cooperative office where more than one staff
-member picks up the desk. `participant_one_id` is always the non-admin
-party in that case.
+employee -- `participant_two_id` stays NULL and any active Terminal
+Manager or Cashier may read and reply, matching an office where more
+than one person picks up the desk. `participant_one_id` is always the
+non-office party in that case.
 
 `messages.sender_role` is denormalized (same shape as
 `notifications.audience`) so "unread by the other side" doesn't need a
@@ -62,6 +64,10 @@ class ContactRow:
         self.trip_label = trip_label
 
 
+OFFICE_ROLES = (Role.TERMINAL_MANAGER.value, Role.CASHIER.value, Role.ADMIN.value)
+OFFICE_NAME = "A2Z Office"
+
+
 class MessagingService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -70,13 +76,13 @@ class MessagingService:
     # Access
     # ------------------------------------------------------------------
     def _can_access(self, user: User, conv: Conversation) -> bool:
-        if user.role == Role.COOP_ADMIN.value:
+        if user.role in OFFICE_ROLES:
             return conv.kind == "office"
         return user.user_id in (conv.participant_one_id, conv.participant_two_id)
 
     def is_mine(self, user: User, msg: Message) -> bool:
-        if user.role == Role.COOP_ADMIN.value:
-            return msg.sender_role == Role.COOP_ADMIN.value
+        if user.role in OFFICE_ROLES:
+            return msg.sender_role in OFFICE_ROLES
         return msg.sender_id == user.user_id
 
     async def _get_conversation_for(self, conversation_id: str, user: User) -> Conversation:
@@ -93,14 +99,14 @@ class MessagingService:
     async def start_conversation(
         self, current_user: User, *, peer_user_id: str | None, trip_id: str | None,
     ) -> Conversation:
-        if current_user.role == Role.COOP_ADMIN.value:
+        if current_user.role in OFFICE_ROLES:
             if not peer_user_id:
                 raise PolicyViolationError("Choose which user to message.")
             peer = await self.session.get(User, peer_user_id)
             if peer is None:
                 raise NotFoundError("User not found.")
-            if peer.role == Role.COOP_ADMIN.value:
-                raise PermissionDeniedError("Message another coop_admin outside the app.")
+            if peer.role in OFFICE_ROLES:
+                raise PermissionDeniedError("Message other office staff outside the app.")
             return await self._get_or_create(kind="office", trip_id=None, p1=peer.user_id, p2=None)
 
         if peer_user_id is None:
@@ -112,17 +118,13 @@ class MessagingService:
         if peer is None:
             raise NotFoundError("User not found.")
 
-        if peer.role == Role.COOP_ADMIN.value:
+        if peer.role in OFFICE_ROLES:
             return await self._get_or_create(
                 kind="office", trip_id=None, p1=current_user.user_id, p2=None
             )
 
         pair = frozenset({current_user.role, peer.role})
-        if pair == frozenset({Role.PASSENGER.value, Role.CONDUCTOR.value}):
-            kind = "passenger_conductor"
-        elif pair == frozenset({Role.CONDUCTOR.value, Role.DRIVER.value}):
-            kind = "conductor_driver"
-        else:
+        if pair != frozenset({Role.PASSENGER.value, Role.DISPATCHER.value}):
             raise PermissionDeniedError(
                 f"A {current_user.role} may not message a {peer.role} directly."
             )
@@ -133,33 +135,28 @@ class MessagingService:
         if trip is None:
             raise NotFoundError("Trip not found.")
 
-        if kind == "conductor_driver":
-            crew = {trip.conductor_id, trip.driver_id}
-            if None in crew or current_user.user_id not in crew or peer.user_id not in crew:
-                raise PermissionDeniedError("Not crewed together on that trip.")
-            p1, p2 = trip.conductor_id, trip.driver_id
-        else:
-            is_passenger = current_user.role == Role.PASSENGER.value
-            conductor_id = peer.user_id if is_passenger else current_user.user_id
-            passenger_id = current_user.user_id if is_passenger else peer.user_id
-            if trip.conductor_id != conductor_id:
-                raise PermissionDeniedError("That conductor is not assigned to this trip.")
-            has_booking = await self.session.scalar(
-                select(Booking.booking_id)
-                .where(
-                    Booking.trip_id == trip_id,
-                    Booking.passenger_user_id == passenger_id,
-                    Booking.status.notin_(
-                        [BookingStatus.CANCELLED.value, BookingStatus.RESCHEDULED.value]
-                    ),
-                )
-                .limit(1)
+        is_passenger = current_user.role == Role.PASSENGER.value
+        dispatcher_id = peer.user_id if is_passenger else current_user.user_id
+        passenger_id = current_user.user_id if is_passenger else peer.user_id
+        if trip.dispatcher_id != dispatcher_id:
+            raise PermissionDeniedError("That Dispatcher is not assigned to this trip.")
+        has_booking = await self.session.scalar(
+            select(Booking.booking_id)
+            .where(
+                Booking.trip_id == trip_id,
+                Booking.passenger_user_id == passenger_id,
+                Booking.status.notin_(
+                    [BookingStatus.CANCELLED.value, BookingStatus.RESCHEDULED.value]
+                ),
             )
-            if has_booking is None:
-                raise PermissionDeniedError("No active booking on that trip.")
-            p1, p2 = passenger_id, conductor_id
+            .limit(1)
+        )
+        if has_booking is None:
+            raise PermissionDeniedError("No active booking on that trip.")
 
-        return await self._get_or_create(kind=kind, trip_id=trip_id, p1=p1, p2=p2)
+        return await self._get_or_create(
+            kind="passenger_dispatcher", trip_id=trip_id, p1=passenger_id, p2=dispatcher_id
+        )
 
     async def _get_or_create(
         self, *, kind: str, trip_id: str | None, p1: str, p2: str | None,
@@ -193,7 +190,7 @@ class MessagingService:
     # Reading
     # ------------------------------------------------------------------
     async def list_conversations(self, user: User) -> list[ConversationView]:
-        if user.role == Role.COOP_ADMIN.value:
+        if user.role in OFFICE_ROLES:
             stmt = select(Conversation).where(Conversation.kind == "office")
         else:
             stmt = select(Conversation).where(
@@ -207,8 +204,8 @@ class MessagingService:
         return [await self._to_view(user, conv) for conv in rows]
 
     async def _to_view(self, user: User, conv: Conversation) -> ConversationView:
-        if conv.kind == "office" and user.role != Role.COOP_ADMIN.value:
-            peer_id, peer_name, peer_role = None, "Cooperative Office", Role.COOP_ADMIN.value
+        if conv.kind == "office" and user.role not in OFFICE_ROLES:
+            peer_id, peer_name, peer_role = None, OFFICE_NAME, Role.TERMINAL_MANAGER.value
         else:
             peer_id = (
                 conv.participant_one_id
@@ -296,19 +293,19 @@ class MessagingService:
     # Who can this user start a conversation with
     # ------------------------------------------------------------------
     async def list_contacts(self, user: User) -> list[ContactRow]:
-        if user.role == Role.COOP_ADMIN.value:
+        if user.role in OFFICE_ROLES:
             return []
 
         contacts = [
             ContactRow(
-                peer_user_id=None, peer_role=Role.COOP_ADMIN.value,
-                peer_name="Cooperative Office", trip_id=None, trip_label=None,
+                peer_user_id=None, peer_role=Role.TERMINAL_MANAGER.value,
+                peer_name=OFFICE_NAME, trip_id=None, trip_label=None,
             )
         ]
 
         if user.role == Role.PASSENGER.value:
             rows = await self.session.execute(
-                select(Trip.trip_id, Trip.conductor_id, Trip.departure_datetime, Route.route_name)
+                select(Trip.trip_id, Trip.dispatcher_id, Trip.departure_datetime, Route.route_name)
                 .join(Booking, Booking.trip_id == Trip.trip_id)
                 .join(Route, Route.route_id == Trip.route_id)
                 .where(
@@ -316,55 +313,41 @@ class MessagingService:
                     Booking.status.notin_(
                         [BookingStatus.CANCELLED.value, BookingStatus.RESCHEDULED.value]
                     ),
-                    Trip.conductor_id.is_not(None),
+                    Trip.dispatcher_id.is_not(None),
                     Trip.status != TripStatus.CANCELLED.value,
                 )
                 .distinct()
             )
             seen: set[str] = set()
-            for trip_id, conductor_id, departure, route_name in rows:
-                if conductor_id in seen:
+            for trip_id, dispatcher_id, departure, route_name in rows:
+                if dispatcher_id in seen:
                     continue
-                seen.add(conductor_id)
-                conductor = await self.session.get(User, conductor_id)
-                if conductor is None:
+                seen.add(dispatcher_id)
+                dispatcher = await self.session.get(User, dispatcher_id)
+                if dispatcher is None:
                     continue
                 contacts.append(
                     ContactRow(
-                        peer_user_id=conductor_id, peer_role=Role.CONDUCTOR.value,
-                        peer_name=_display_name(conductor), trip_id=trip_id,
+                        peer_user_id=dispatcher_id, peer_role=Role.DISPATCHER.value,
+                        peer_name=_display_name(dispatcher), trip_id=trip_id,
                         trip_label=_trip_label(route_name, departure),
                     )
                 )
 
-        elif user.role == Role.CONDUCTOR.value:
+        elif user.role == Role.DISPATCHER.value:
             trip_rows = (
                 await self.session.execute(
-                    select(Trip.trip_id, Trip.driver_id, Trip.departure_datetime, Route.route_name)
+                    select(Trip.trip_id, Trip.departure_datetime, Route.route_name)
                     .join(Route, Route.route_id == Trip.route_id)
                     .where(
-                        Trip.conductor_id == user.user_id,
+                        Trip.dispatcher_id == user.user_id,
                         Trip.status != TripStatus.CANCELLED.value,
                     )
                 )
             ).all()
-            seen_drivers: set[str] = set()
-            trip_ids = []
-            for trip_id, driver_id, departure, route_name in trip_rows:
-                trip_ids.append(trip_id)
-                if driver_id and driver_id not in seen_drivers:
-                    seen_drivers.add(driver_id)
-                    driver = await self.session.get(User, driver_id)
-                    if driver is not None:
-                        contacts.append(
-                            ContactRow(
-                                peer_user_id=driver_id, peer_role=Role.DRIVER.value,
-                                peer_name=_display_name(driver), trip_id=trip_id,
-                                trip_label=_trip_label(route_name, departure),
-                            )
-                        )
+            trip_ids = [t[0] for t in trip_rows]
             if trip_ids:
-                trip_label_by_id = {t[0]: _trip_label(t[3], t[2]) for t in trip_rows}
+                trip_label_by_id = {t[0]: _trip_label(t[2], t[1]) for t in trip_rows}
                 pax_rows = await self.session.execute(
                     select(Booking.passenger_user_id, Booking.trip_id)
                     .where(
@@ -390,30 +373,5 @@ class MessagingService:
                                 trip_label=trip_label_by_id.get(trip_id),
                             )
                         )
-
-        elif user.role == Role.DRIVER.value:
-            rows = await self.session.execute(
-                select(Trip.trip_id, Trip.conductor_id, Trip.departure_datetime, Route.route_name)
-                .join(Route, Route.route_id == Trip.route_id)
-                .where(
-                    Trip.driver_id == user.user_id,
-                    Trip.conductor_id.is_not(None),
-                    Trip.status != TripStatus.CANCELLED.value,
-                )
-            )
-            seen: set[str] = set()
-            for trip_id, conductor_id, departure, route_name in rows:
-                if conductor_id in seen:
-                    continue
-                seen.add(conductor_id)
-                conductor = await self.session.get(User, conductor_id)
-                if conductor is not None:
-                    contacts.append(
-                        ContactRow(
-                            peer_user_id=conductor_id, peer_role=Role.CONDUCTOR.value,
-                            peer_name=_display_name(conductor), trip_id=trip_id,
-                            trip_label=_trip_label(route_name, departure),
-                        )
-                    )
 
         return contacts

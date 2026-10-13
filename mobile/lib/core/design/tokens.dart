@@ -24,7 +24,7 @@ import 'package:flutter/material.dart';
 ///
 /// The previous palette failed AA in two places that mattered most: the
 /// green `accent` (3.11:1) and the amber `warning` (1.97:1) were used for
-/// boarding status and unpaid-fare warnings — information a conductor reads
+/// boarding status and unpaid-fare warnings — information a Dispatcher reads
 /// at a van door in direct sunlight. Both are corrected below.
 class AppColors {
   // ── brand ──────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ class AppSizing {
   /// including icon buttons that look smaller than their hit area.
   static const double minTouchTarget = 48;
 
-  /// Primary actions. Carried over deliberately: a conductor works one
+  /// Primary actions. Carried over deliberately: a Dispatcher works one
   /// handed at a van door, often with a phone in a case and a queue behind
   /// the passenger.
   static const double primaryActionHeight = 52;

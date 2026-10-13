@@ -4,7 +4,50 @@ Capstone project: a booking and fleet-management system for terminal-based
 UV Express vans in Davao City, with A2Z Transport Cooperative as pilot
 partner. BSIT, University of Mindanao.
 
-**Development deadline 27 September 2026. Final defence 20 October.**
+**Final defence moved: the date waits on endorsement (was 20 October).**
+
+---
+
+## Redesign — paper revision 468 (decided 13 Oct)
+
+After the research coordinator's consultation and the A2Z interview, the
+study is now a **revenue audit**: A2Z takes 15 % of each van's gross fares
+daily, and door events (boardings and alightings) matched to QR scans and
+cash logs find fares that never entered the record. The spec is
+`docs/SabayGo-Changes-for-Claude-Code (1).md`; what exists against it is
+`docs/GAP_REPORT.md`. **Where they conflict with anything below, the brief
+wins.** Decisions:
+
+- Build the brief in its own order (section 13), Kotlin edge app last,
+  after a phone is benchmarked.
+- **YOLOv8n + ByteTrack run on the in-van phone** (paper design). The
+  phone sends door events and a blurred still as evidence, no video. This
+  reverses "YOLOv8 stays server-side" in Next, item 4.
+- **Unrecorded boardings are priced from the nearest stop** (brief 6.1,
+  configurable). This reverses the "previous terminal" roadside invariant.
+- **14 is passenger capacity per van, counted per stretch, as built.** A
+  space freed when someone alights may be resold, but only to a boarding
+  at a terminal stop.
+- **The Dispatcher cannot log a roadside passenger at all.** Cash
+  walk-ins are terminal-stop boardings only. A roadside boarding is seen
+  only by the camera: an unrecorded boarding, priced from the nearest
+  stop, flagged as a side pickup. **Not built yet** — first task of the
+  next session; see `docs/GAP_REPORT.md` §8.
+- Keep JWT, polled notifications and OpenStreetMap; the paper is
+  corrected, not the code.
+- Contribution statement follows the brief (revenue audit, Equation 2,
+  hash chain, NAHGM driving flags), not segment booking.
+- Repo keeps snake_case names; map paper names to them in docs.
+- Every new migration ships a `db/migrations/down/` script;
+  `./db/rollback.sh <version>` runs it.
+
+Done: migration 017 — `conductor` → `dispatcher`, `coop_admin` →
+`terminal_manager`, new `cashier`, `trips.conductor_id` → `dispatcher_id`,
+`operators` roster table (no login), `vans.operator_id` UNIQUE. Driver
+accounts became operator rows and were deactivated; `driver` survives in
+the role ENUMs only for that history. Contraction (drop `driver`,
+`driver_credentials`, `trips.driver_id`, timetable "usual" van/Dispatcher,
+`driver_headcounts`) is a later migration, approved separately.
 
 ---
 
@@ -66,15 +109,15 @@ cannot capture.
 | Role | Who |
 |---|---|
 | `passenger` | The commuting public. Self-registers |
-| `conductor` | Crew aboard. Scans, logs cash passengers, remits |
-| `driver` | Same as conductor plus a licence record |
-| `coop_admin` | Cooperative office staff. Web console only |
+| `dispatcher` | A2Z staff who rides the van. Scans, logs cash passengers. Mobile app |
+| `terminal_manager` | Decides what is owed, sets rules, validates records. Web console |
+| `cashier` | Records payments, starts trips. Web console; Terminal-Manager-only pages hidden |
 | `admin` | System administrator — the development team |
 
-**Never call `coop_admin` "operator."** Under LTFRB usage an *operator* is
-the franchise holder — the CPC holder, usually the van owner — which is a
-different party from office staff. This was renamed deliberately in
-migration 010.
+The **operator** is the van owner, who always drives: a row in
+`operators`, **no login**, one van each. Never call office staff
+"operator" — under LTFRB usage that word is the franchise holder. Guards:
+`MANAGER` and `OFFICE` in `api/v1/deps.py`.
 
 ---
 
@@ -114,7 +157,7 @@ last demo.
 
 `002_demo_dataset.sql` seeds three **live trips dated from the moment of
 the reset**, so reset shortly before a demo: `TRIP-A2Z-LIVE-BOARD`
-(boarding, the dev conductor@/driver@, passenger@ holds a ticket; leg 1
+(boarding, the dev dispatcher@, passenger@ holds a ticket; leg 1
 manifest = 4, so photograph 4 people for a match and 5+ for a flag),
 `TRIP-A2Z-LIVE-DEPART` (departed, roadside pickup, a no-show) and
 `TRIP-A2Z-LIVE-SOON` (scheduled in 2 h, bookable). They are special trips
@@ -177,8 +220,12 @@ python tests/integration/test_concurrency.py --requests 50
 python scripts/tracking_simulator.py --trip TRIP-DEMO-00000001 --speed 30
 ```
 
-Dev accounts: `passenger@` `conductor@` `driver@` `coopadmin@sabaygo.dev`,
+Dev accounts: `passenger@` `dispatcher@` `manager@` `cashier@sabaygo.dev`,
 password `sabaygo123`.
+
+Journey tests need the backend venv on `PATH` (the webhook simulator is
+run as plain `python`) and `backend/.env` exported, or every payment step
+fails as "unpaid".
 
 The shell is **fish**. `set VAR (cmd)` not `VAR=$(cmd)`; no heredocs —
 wrap them in `bash -c '...'`.
@@ -256,7 +303,9 @@ Before this, every honest conductor appeared to be stealing.
   no-refund — a cheaper journey would owe money back.
 - No refunds. Cooperative policy.
 - Roadside pickup is normal. Recorded from the **previous** terminal
-  passed, with a conductor-set fare. Anchoring forward would leave that
+  passed, with a conductor-set fare. *(Superseded 13 Oct: roadside
+  logging is blocked; a roadside boarding is a camera-detected,
+  unrecorded boarding priced from the nearest stop.)* Anchoring forward would leave that
   stretch of road looking empty while someone sits in it, and the camera
   check would flag a real passenger as leakage.
 
@@ -508,7 +557,8 @@ alpha testing from 6 Oct.
    whose hands are full at the door. `geolocator` is already a dependency
    (used for passenger check-in); reuse it to snap to the nearest
    terminal automatically, keeping the dropdown as a manual override.
-4. **Phone camera as the AI capture device** — YOLOv8 stays server-side
+4. *(Superseded by rev 468: the model runs on the phone.)* **Phone camera
+   as the AI capture device** — YOLOv8 stays server-side
    in `ai_service` on the server PC, never on the edge device; a phone
    just captures a photo and uploads it there for inference. Needs a new
    `ai_service` endpoint that accepts an uploaded image, since

@@ -12,15 +12,15 @@ import '../../../data/repositories/dispatch_repository.dart';
 import '../../ai_audit_queue/audit_reading_card.dart';
 import '../../ai_audit_queue/phone_capture.dart';
 
-/// The office's view of every trip on a day, as each conductor sees it.
+/// The office's view of every trip on a day, as each Dispatcher sees it.
 ///
 /// Left: the day's trips with live status and counts. Right: the selected
 /// trip as a set of panels -- the trip, its crew and seats, its camera
 /// checks, its passenger list. The passenger list is the SAME endpoint the
-/// conductor's app reads, so the office and the van door can never show
-/// two different lists. Status words match the conductor app (Boarded, At
+/// Dispatcher's app reads, so the office and the van door can never show
+/// two different lists. Status words match the Dispatcher app (Boarded, At
 /// terminal, Not yet boarded) so a dispatcher on the phone with a
-/// conductor is using their words.
+/// Dispatcher is using their words.
 ///
 /// Stops are named, not numbered: "Toril → Bangkal" rather than "Stop 1 →
 /// 3", from the trip's own stop list (`GET /trips/{id}/stops`).
@@ -35,7 +35,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
   late final DispatchRepository _dispatch = context.read<DispatchRepository>();
   late final AuditRepository _auditRepo = context.read<AuditRepository>();
 
-  /// Boarding and departures change minute to minute; the conductor is
+  /// Boarding and departures change minute to minute; the Dispatcher is
   /// scanning while the office watches.
   static const _refreshEvery = Duration(seconds: 15);
 
@@ -114,7 +114,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       setState(() => _error = e.message);
     }
     // Separately, so a check list that fails to load never hides the
-    // passenger list the conductor is working from.
+    // passenger list the Dispatcher is working from.
     try {
       final audits = await _auditRepo.forTrip(id);
       if (!mounted || _selectedId != id) return;
@@ -167,7 +167,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
           children: [
             PageHeader(
               title: 'Trips',
-              description: 'Every trip on the chosen day, as its conductor sees it. Pick a '
+              description: 'Every trip on the chosen day, as its Dispatcher sees it. Pick a '
                   'trip to see who is aboard. Updates every ${_refreshEvery.inSeconds} seconds.',
               actions: [
                 _DayPicker(day: _day, onShift: _shiftDay),
@@ -304,7 +304,7 @@ class _TripList extends StatelessWidget {
                                     Text(
                                       [
                                         trip.plateNumber ?? 'No van yet',
-                                        'Conductor: ${trip.conductorName ?? 'not assigned'}',
+                                        'Dispatcher: ${trip.dispatcherName ?? 'not assigned'}',
                                       ].join(' · '),
                                       overflow: TextOverflow.ellipsis,
                                       style: text.bodySmall,
@@ -440,7 +440,7 @@ class _TripDetail extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
-        // Crew and seats side by side, as the reference pairs driver and load.
+        // Crew and seats side by side. The operator owns and drives the van.
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -451,9 +451,9 @@ class _TripDetail extends StatelessWidget {
                   icon: Icons.badge_outlined,
                   child: Column(
                     children: [
-                      PersonRow(role: 'Driver', name: t.driverName),
+                      PersonRow(role: 'Operator', name: t.operatorName),
                       const SizedBox(height: AppSpacing.sm),
-                      PersonRow(role: 'Conductor', name: t.conductorName),
+                      PersonRow(role: 'Dispatcher', name: t.dispatcherName),
                     ],
                   ),
                 ),
@@ -714,8 +714,8 @@ class _PassengerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    // App passengers are identified by ticket, as on the conductor's
-    // screen; walk-ins carry the name the conductor typed.
+    // App passengers are identified by ticket, as on the Dispatcher's
+    // screen; walk-ins carry the name the Dispatcher typed.
     final who = p.name ?? 'Ticket ${p.ticketNumber}';
     final detail = [
       '${stop(p.boardingStop)} → ${stop(p.alightingStop)}',

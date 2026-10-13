@@ -11,7 +11,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/operations_repository.dart';
 import 'viewmodels/auth_provider.dart';
 import 'views/auth/welcome_screen.dart';
-import 'views/conductor/conductor_main_screen.dart';
+import 'views/dispatcher/dispatcher_main_screen.dart';
 import 'views/passenger_main_screen.dart';
 
 void main() {
@@ -41,7 +41,7 @@ class _SabayGoAppState extends State<SabayGoApp> {
       repository: AuthRepository(_api),
       tokens: _tokens,
     );
-    // One queue for the whole app session: a conductor may back out of
+    // One queue for the whole app session: a Dispatcher may back out of
     // the manifest screen and return to it without losing what's
     // pending, and a reconnect anywhere should flush it.
     _walkInSync = WalkInSyncService(OperationsRepository(_api))
@@ -100,9 +100,9 @@ class _RootRouter extends StatelessWidget {
       case AuthStatus.signedIn:
         final role = auth.role;
         if (role != null && role.isCrew) {
-          return const ConductorMainScreen();
+          return const DispatcherMainScreen();
         }
-        // Cooperative administrators use the web console, not this app.
+        // The Terminal Manager and the Cashier use the web console.
         // Signing in here lands them on the passenger view rather than
         // failing, which is the least surprising outcome.
         return const PassengerMainScreen();

@@ -30,15 +30,13 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
   List<TripBoardRow>? _trips;
   List<RouteSummary> _routes = [];
   List<Van> _vans = [];
-  List<StaffMember> _drivers = [];
-  List<StaffMember> _conductors = [];
+  List<StaffMember> _dispatchers = [];
   bool _loading = true;
   String? _error;
 
   String? _routeId;
   String? _vanId;
-  String? _driverId;
-  String? _conductorId;
+  String? _dispatcherId;
   TimeOfDay _departureTime = TimeOfDay.now();
   bool _dispatching = false;
   final _rowsScroll = ScrollController();
@@ -65,18 +63,15 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
         _dispatch.todaysTrips(),
         _dispatch.listRoutes(),
         _fleet.listVans(),
-        _fleet.listCrew(role: 'driver'),
-        _fleet.listCrew(role: 'conductor'),
+        _fleet.listCrew(role: 'dispatcher'),
       ]);
       if (!mounted) return;
       setState(() {
         _trips = results[0] as List<TripBoardRow>;
         _routes = results[1] as List<RouteSummary>;
         _vans = (results[2] as List<Van>).where((v) => v.operationalStatus == 'active').toList();
-        _drivers =
+        _dispatchers =
             (results[3] as List<StaffMember>).where((s) => s.employmentStatus == 'active').toList();
-        _conductors =
-            (results[4] as List<StaffMember>).where((s) => s.employmentStatus == 'active').toList();
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -102,8 +97,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
         routeId: _routeId!,
         departureDatetime: departure,
         vanId: _vanId,
-        driverId: _driverId,
-        conductorId: _conductorId,
+        dispatcherId: _dispatcherId,
       );
 
       if (!mounted) return;
@@ -117,8 +111,7 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
       setState(() {
         _routeId = null;
         _vanId = null;
-        _driverId = null;
-        _conductorId = null;
+        _dispatcherId = null;
       });
       await _load();
     } on ApiException catch (e) {
@@ -377,18 +370,12 @@ class _DispatchBoardScreenState extends State<DispatchBoardScreen> {
               (val) => setState(() => _vanId = val),
             ),
             const SizedBox(height: 16),
+            // No driver picker: the van's operator drives it.
             _buildDropdown<String>(
-              'Driver (optional)',
-              _drivers.map((d) => DropdownMenuItem(value: d.userId, child: Text(d.fullName))).toList(),
-              _driverId,
-              (val) => setState(() => _driverId = val),
-            ),
-            const SizedBox(height: 16),
-            _buildDropdown<String>(
-              'Conductor (optional)',
-              _conductors.map((c) => DropdownMenuItem(value: c.userId, child: Text(c.fullName))).toList(),
-              _conductorId,
-              (val) => setState(() => _conductorId = val),
+              'Dispatcher (optional)',
+              _dispatchers.map((c) => DropdownMenuItem(value: c.userId, child: Text(c.fullName))).toList(),
+              _dispatcherId,
+              (val) => setState(() => _dispatcherId = val),
             ),
             const SizedBox(height: 32),
             SizedBox(

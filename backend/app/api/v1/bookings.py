@@ -50,7 +50,7 @@ class WalkInRequest(BaseModel):
     is_roadside_pickup: bool = False
     pickup_landmark: str | None = None
     # Required for a roadside pickup: they have not travelled a fare-table
-    # distance, so the conductor sets the price.
+    # distance, so the Dispatcher sets the price.
     fare_override: Decimal | None = Field(default=None, ge=0)
     fare_note: str | None = None
     # Set by the mobile client only when this walk-in was queued
@@ -118,7 +118,7 @@ async def reserve(
     "/walk-in",
     response_model=BookingResponse,
     status_code=201,
-    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN))],
+    dependencies=[Depends(require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER))],
 )
 async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingResponse:
     """Record a cash passenger -- at the terminal or flagged down en route.

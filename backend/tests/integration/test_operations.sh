@@ -33,7 +33,7 @@ curl -s -X POST "$API/bookings/$BID/check-in" -H "Authorization: Bearer $PTOKEN"
 echo
 echo "== crew login =========================================="
 CTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 
 curl -s -X POST "$API/trips/$TRIP/start-boarding" -H "Authorization: Bearer $CTOKEN" >/dev/null
 
@@ -59,10 +59,8 @@ for p in m['passengers']:
     print(f\"    seat {p['seat_number']:>2}  stops {p['boarding_stop']}->{p['alighting_stop']}  {p['status']:<12} {p['booking_type']}\")"
 
 echo
-echo "== driver headcount ===================================="
-DTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"driver@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
-curl -s -X POST "$API/trips/$TRIP/headcount" -H "Authorization: Bearer $DTOKEN" \
+echo "== dispatcher headcount ================================"
+curl -s -X POST "$API/trips/$TRIP/headcount" -H "Authorization: Bearer $CTOKEN" \
   -H "Content-Type: application/json" -d '{"stop_sequence":1,"confirmed_count":2}' \
   | python3 -m json.tool
 
@@ -80,5 +78,5 @@ curl -s -X POST "$API/audits/trigger" -H "Authorization: Bearer $CTOKEN" \
 echo
 echo "== revenue summary ====================================="
 OTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 curl -s "$API/revenue/summary" -H "Authorization: Bearer $OTOKEN" | python3 -m json.tool

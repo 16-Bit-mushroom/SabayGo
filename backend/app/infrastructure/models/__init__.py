@@ -165,6 +165,9 @@ class StaffProfile(Base):
 
 
 class DriverCredential(Base):
+    """Legacy: licences of driver accounts. Migration 017 copied them into
+    `operators`; dropped in the contraction migration."""
+
     __tablename__ = "driver_credentials"
 
     user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
@@ -197,11 +200,37 @@ class SavedDestination(Base):
 # ======================================================================
 # Fleet
 # ======================================================================
+class Operator(Base):
+    """The van owner, who always drives. A roster record with no login."""
+
+    __tablename__ = "operators"
+
+    operator_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(255))
+    contact_number: Mapped[str] = mapped_column(String(20), unique=True)
+    email: Mapped[str | None] = mapped_column(String(255))
+    payout_ref: Mapped[str | None] = mapped_column(String(64))
+    license_number: Mapped[str] = mapped_column(String(64), unique=True)
+    license_expiry: Mapped[dt.date] = mapped_column(Date)
+    membership_status: Mapped[str] = mapped_column(String(16), default="active")
+    validation_status: Mapped[str] = mapped_column(String(16), default="pending")
+    validated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    validated_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    former_driver_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.user_id"), unique=True
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
 class Van(Base):
     __tablename__ = "vans"
 
     van_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
     plate_number: Mapped[str] = mapped_column(String(20), unique=True)
+    operator_id: Mapped[str | None] = mapped_column(
+        ForeignKey("operators.operator_id"), unique=True
+    )
     cpc_case_no: Mapped[str | None] = mapped_column(String(64))
     cpc_number: Mapped[str | None] = mapped_column(String(64))
     brand: Mapped[str | None] = mapped_column(String(64))
@@ -253,7 +282,7 @@ class Trip(Base):
     departure_datetime: Mapped[dt.datetime] = mapped_column(DateTime)
     van_id: Mapped[str | None] = mapped_column(ForeignKey("vans.van_id"))
     driver_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
-    conductor_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    dispatcher_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     trip_label: Mapped[str | None] = mapped_column(String(64))
     is_special_trip: Mapped[bool] = mapped_column(Boolean, default=False)
     seat_capacity: Mapped[int] = mapped_column(TINYINT(unsigned=True), default=14)

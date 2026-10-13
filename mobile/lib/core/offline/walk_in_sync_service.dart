@@ -22,7 +22,7 @@ class WalkInSubmission {
 }
 
 /// Logs walk-ins over the network when possible, and queues them on
-/// device otherwise -- the offline-capable conductor manifest (spec
+/// device otherwise -- the offline-capable Dispatcher manifest (spec
 /// section 2.3.5, Table 5's Walk-In Audit row). Scoped to walk-in
 /// logging only: the rest of the manifest still needs a live server
 /// round trip to view.
@@ -125,7 +125,7 @@ class WalkInSyncService extends ChangeNotifier {
   /// `NetworkException` -- still offline, nothing further will land
   /// either. A non-network failure (a genuine policy rejection, say)
   /// leaves that item queued rather than dropping it silently, so it
-  /// stays visible for the conductor rather than looping forever.
+  /// stays visible for the Dispatcher rather than looping forever.
   Future<void> flush() async {
     if (_flushing) return;
     _flushing = true;

@@ -10,9 +10,9 @@ import '../../../core/design/tokens.dart';
 
 /// Fares & Cash: per-trip revenue reconciliation.
 ///
-/// `cashInHand` (fare a conductor is holding but hasn't remitted yet) is
+/// `cashInHand` (fare a Dispatcher is holding but hasn't remitted yet) is
 /// shown separately from `unreconciledAmount` (fare nobody can account
-/// for) -- collapsing the two would make every honest conductor look
+/// for) -- collapsing the two would make every honest Dispatcher look
 /// like they were skimming until the moment they physically hand the
 /// cash over.
 class RevenueScreen extends StatefulWidget {

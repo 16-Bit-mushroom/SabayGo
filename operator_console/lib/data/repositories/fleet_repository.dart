@@ -50,13 +50,10 @@ class Van {
       );
 }
 
-/// A cooperative staff member -- conductor or driver.
+/// An A2Z staff account: Dispatcher, Cashier or Terminal Manager.
 ///
-/// The backend's crew-creation endpoint still accepts a stale "operator"
-/// role literal left over from before the operator/coop_admin rename
-/// (migration 010); there is no such Role in the domain any more, so this
-/// console never offers it. Only conductor and driver are provisioned
-/// here -- coop_admin accounts are not crew.
+/// The operator -- the van owner, who always drives -- is not staff and
+/// has no account; operators are roster records (migration 017).
 class StaffMember {
   const StaffMember({
     required this.userId,
@@ -69,9 +66,6 @@ class StaffMember {
     required this.employmentStatus,
     this.cooperativeName,
     this.assignedTerminalId,
-    this.licenseNumber,
-    this.licenseExpiryDate,
-    this.cttmoIdNumber,
   });
 
   final String userId;
@@ -84,9 +78,6 @@ class StaffMember {
   final String employmentStatus; // active | suspended | inactive
   final String? cooperativeName;
   final String? assignedTerminalId;
-  final String? licenseNumber;
-  final DateTime? licenseExpiryDate;
-  final String? cttmoIdNumber;
 
   String get fullName => '$firstName $lastName';
 
@@ -101,11 +92,6 @@ class StaffMember {
         employmentStatus: json['employment_status'] as String,
         cooperativeName: json['cooperative_name'] as String?,
         assignedTerminalId: json['assigned_terminal_id'] as String?,
-        licenseNumber: json['license_number'] as String?,
-        licenseExpiryDate: json['license_expiry_date'] == null
-            ? null
-            : DateTime.parse(json['license_expiry_date'] as String),
-        cttmoIdNumber: json['cttmo_id_number'] as String?,
       );
 }
 
@@ -155,11 +141,9 @@ class FleetRepository {
     required String email,
     required String phoneNumber,
     required String password,
-    required String role, // conductor | driver
+    required String role, // dispatcher | cashier | terminal_manager
     required String firstName,
     required String lastName,
-    String? licenseNumber,
-    DateTime? licenseExpiryDate,
   }) async {
     final json = await _api.post('/fleet/crew', body: {
       'email': email.trim().toLowerCase(),
@@ -168,13 +152,6 @@ class FleetRepository {
       'role': role,
       'first_name': firstName.trim(),
       'last_name': lastName.trim(),
-      if (licenseNumber != null && licenseNumber.isNotEmpty)
-        'license_number': licenseNumber,
-      if (licenseExpiryDate != null)
-        'license_expiry_date':
-            '${licenseExpiryDate.year.toString().padLeft(4, '0')}-'
-            '${licenseExpiryDate.month.toString().padLeft(2, '0')}-'
-            '${licenseExpiryDate.day.toString().padLeft(2, '0')}',
     });
     return StaffMember.fromJson(json as Map<String, dynamic>);
   }

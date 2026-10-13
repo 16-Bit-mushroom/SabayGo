@@ -1,7 +1,7 @@
 """2.3.5 -- door-closure and GPS-node triggered captures.
 
 Proves the automatic half of the AI audit: that a capture happens with no
-person asking, that it cannot fire twice for one leg, that a conductor's
+person asking, that it cannot fire twice for one leg, that a Dispatcher's
 own spot check does not suppress it, and that a dead camera loses the
 audit rather than the operation.
 
@@ -162,7 +162,7 @@ async def test_automatic_capture() -> None:
 
     print("\n== a manual spot check does not satisfy the quota")
     async with SessionFactory() as s:
-        crew = trip.conductor_id
+        crew = trip.dispatcher_id
         await TriggerAuditUseCase(s).execute(
             trip_id=TRIP, leg_sequence=3, triggered_by_user_id=crew,
             trigger_type=AuditTrigger.MANUAL.value,

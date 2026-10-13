@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 # App bookings close the moment a van starts loading.
 APP_BOOKABLE = {TripStatus.SCHEDULED.value}
 
-# Cash passengers are recorded whenever there is room. A conductor logs
+# Cash passengers are recorded whenever there is room. A Dispatcher logs
 # walk-ins while the van is loading, and a driver picks up roadside
 # passengers after departure. Blocking either would make the honest path
 # impossible and leave undocumented boarding as the only option -- which
@@ -65,7 +65,7 @@ class ReserveSeatCommand:
     # section they are travelling on.
     is_roadside_pickup: bool = False
     pickup_landmark: str | None = None
-    # Conductor-set fare. Required for roadside, optional otherwise.
+    # Dispatcher-set fare. Required for roadside, optional otherwise.
     fare_override: Decimal | None = None
     fare_note: str | None = None
     # Set by the mobile client when a walk-in was queued offline, so a
@@ -196,7 +196,7 @@ class ReserveSeatUseCase:
         if is_cash:
             await self.seats.confirm(booking_id=booking.booking_id)
             # Record the fare as collected but NOT settled. Cash in a
-            # conductor's pocket is a different state from money
+            # Dispatcher's pocket is a different state from money
             # missing, and the revenue view separates the two. It
             # settles when the crew remits at the end of the trip.
             self.session.add(
@@ -240,7 +240,7 @@ class ReserveSeatUseCase:
 
         A roadside passenger has not travelled a fare-table distance: they
         boarded partway along a section, so neither the previous nor the
-        next terminal's price is right. The conductor judges it, and the
+        next terminal's price is right. The Dispatcher judges it, and the
         system records that it was manual so the office can see how often
         and by how much fares are being set by hand.
         """
@@ -253,7 +253,7 @@ class ReserveSeatUseCase:
 
         if cmd.is_roadside_pickup:
             raise ConflictError(
-                "A roadside pickup needs a fare entered by the conductor."
+                "A roadside pickup needs a fare entered by the Dispatcher."
             )
 
         result = await self.session.execute(

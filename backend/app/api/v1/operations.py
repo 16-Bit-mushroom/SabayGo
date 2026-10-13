@@ -29,7 +29,7 @@ from app.infrastructure.models import DriverHeadcount, Trip
 
 router = APIRouter(tags=["operations"])
 
-CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN)
+CREW = require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER)
 
 
 # ----------------------------------------------------------------- check-in
@@ -128,10 +128,10 @@ async def scan_ticket(
 ) -> ScanResponse:
     """Validate a QR code at the van door.
 
-    Always 200, even for an invalid ticket -- the conductor needs a verdict
+    Always 200, even for an invalid ticket -- the Dispatcher needs a verdict
     on screen, not an error dialog, while a queue waits. Read `accepted`.
     """
-    # A conductor may only scan the trip they are rostered to. Without
+    # A Dispatcher may only scan the trip they are rostered to. Without
     # this the remittance record is meaningless: the fares a person is
     # accountable for would not match the runs they actually worked.
     await assert_assigned_to_trip(session, trip_id=payload.trip_id, user=user)
@@ -203,7 +203,7 @@ class HeadcountResponse(BaseModel):
 @router.post(
     "/trips/{trip_id}/headcount",
     response_model=HeadcountResponse,
-    dependencies=[Depends(require_roles(Role.DRIVER, Role.CONDUCTOR))],
+    dependencies=[Depends(require_roles(Role.DISPATCHER))],
 )
 async def confirm_headcount(
     trip_id: str,
@@ -211,9 +211,12 @@ async def confirm_headcount(
     session: SessionDep,
     user: CurrentUser,
 ) -> HeadcountResponse:
-    """Driver confirms how many people are physically aboard.
+    """Dispatcher confirms how many people are physically aboard.
 
-    A single number, deliberately -- asking a driver to itemise passengers
+    Superseded by door events (brief rev 468); retired with
+    driver_headcounts in the contraction migration.
+
+    A single number, deliberately -- asking crew to itemise passengers
     before departure guarantees it will not be done. This is the human
     cross-check on the YOLOv8 count: two independent observations of the
     same reality, and disagreement between them is itself a signal.
@@ -228,7 +231,7 @@ async def confirm_headcount(
     now = dt.datetime.now(APP_TZ)
 
     # driver_headcounts has UNIQUE (trip_id, stop_sequence): one
-    # authoritative figure per stop. A driver correcting their own count is
+    # authoritative figure per stop. Crew correcting their own count is
     # legitimate, so update in place rather than letting the constraint
     # raise an IntegrityError the caller cannot interpret.
     existing = await session.execute(

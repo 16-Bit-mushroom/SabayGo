@@ -13,7 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from app.api.v1.deps import CurrentUser, SessionDep, require_roles
+from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep, require_roles
 from app.core import timezone as app_tz
 from app.core.exceptions import AuthenticationError, ConflictError, DomainError
 from app.application.audit import phone_capture_queue
@@ -28,8 +28,7 @@ from app.infrastructure.clients.ai_node_client import AiNodeClient
 
 router = APIRouter(tags=["audit"])
 
-COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
-CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN, Role.ADMIN)
+CREW = require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER, Role.ADMIN)
 
 
 def verify_phone_device(x_device_key: str | None = Header(default=None)) -> None:
@@ -99,7 +98,7 @@ class ResolveRequest(BaseModel):
     notes: str = Field(min_length=1, max_length=512)
 
 
-@router.post("/audits/{audit_id}/resolve", dependencies=[Depends(COOP_ADMIN)])
+@router.post("/audits/{audit_id}/resolve", dependencies=[Depends(MANAGER)])
 async def resolve_audit(
     audit_id: str, payload: ResolveRequest, session: SessionDep, user: CurrentUser
 ) -> dict:
@@ -149,20 +148,20 @@ class AuditQueueOut(BaseModel):
     caution: str | None
 
 
-@router.get("/audits/pending", response_model=list[AuditQueueOut], dependencies=[Depends(COOP_ADMIN)])
+@router.get("/audits/pending", response_model=list[AuditQueueOut], dependencies=[Depends(MANAGER)])
 async def pending_audits(session: SessionDep, limit: int = Query(50, le=200)) -> list:
-    """Unresolved variances -- the cooperative administrator console's audit queue."""
+    """Unresolved variances -- the Terminal Manager's console's audit queue."""
     return await AuditQueueUseCase(session).pending(limit=limit)
 
 
 @router.get("/audits/trips/{trip_id}", response_model=list[AuditQueueOut],
-            dependencies=[Depends(COOP_ADMIN)])
+            dependencies=[Depends(MANAGER)])
 async def trip_audits(trip_id: str, session: SessionDep) -> list:
     """Every audit of one trip, open or closed -- for the Trips screen."""
     return await AuditQueueUseCase(session).for_trip(trip_id)
 
 
-@router.get("/audits/history", response_model=list[AuditQueueOut], dependencies=[Depends(COOP_ADMIN)])
+@router.get("/audits/history", response_model=list[AuditQueueOut], dependencies=[Depends(MANAGER)])
 async def audit_history(
     session: SessionDep,
     status: str | None = Query(None, description="reconciled | resolved | ignored | failed"),
@@ -307,7 +306,7 @@ class TripRevenueOut(BaseModel):
 @router.get(
     "/revenue/trips",
     response_model=list[TripRevenueOut],
-    dependencies=[Depends(COOP_ADMIN)],
+    dependencies=[Depends(OFFICE)],
     tags=["revenue"],
 )
 async def trip_revenue(
@@ -446,7 +445,7 @@ def _to_xlsx(trips: list[TripRevenueOut], date_from, date_to) -> bytes:
     return buf.getvalue()
 
 
-@router.get("/revenue/export", dependencies=[Depends(COOP_ADMIN)], tags=["revenue"])
+@router.get("/revenue/export", dependencies=[Depends(OFFICE)], tags=["revenue"])
 async def revenue_export(
     session: SessionDep,
     format: str = Query("xlsx", pattern="^(csv|xlsx)$"),
@@ -470,13 +469,13 @@ async def revenue_export(
     )
 
 
-@router.get("/revenue/summary", dependencies=[Depends(COOP_ADMIN)], tags=["revenue"])
+@router.get("/revenue/summary", dependencies=[Depends(OFFICE)], tags=["revenue"])
 async def revenue_summary(
     session: SessionDep,
     date_from: dt.date | None = None,
     date_to: dt.date | None = None,
 ) -> dict:
-    """Headline figures for the cooperative administrator dashboard."""
+    """Headline figures for the Terminal Manager dashboard."""
     clauses, params = [], {}
     if date_from:
         clauses.append("service_date >= :date_from")

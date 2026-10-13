@@ -1,5 +1,5 @@
-"""Two-way in-app messaging: passenger<->conductor, conductor<->driver,
-anyone<->coop_admin (a shared office inbox). See
+"""Two-way in-app messaging: passenger<->Dispatcher on a shared trip, and
+anyone<->the A2Z office (a shared inbox). See
 app/application/messaging/service.py for the role-pair and trip-scoping
 rules.
 """

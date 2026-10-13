@@ -250,15 +250,15 @@ need to explain the domain to it.
 Two pieces of vocabulary that will save you a wrong assumption. Capacity is
 counted in **spaces per leg**, not seats — UV Express assigns no seat
 numbers, and one space can carry two paying passengers on one trip when
-their journeys do not overlap. And `coop_admin` is **never** called
-"operator": under LTFRB usage an operator is the franchise holder, a
-different party from the cooperative's office staff.
+their journeys do not overlap. And office staff are **never** called
+"operator": under LTFRB usage the operator is the franchise holder, here
+the van owner who drives, who has no account (paper revision 468).
 
 ## Signing in
 
 Dev accounts, password `sabaygo123`:
-`passenger@sabaygo.dev`, `conductor@sabaygo.dev`, `driver@sabaygo.dev`,
-`coopadmin@sabaygo.dev`. The sign-in screen offers them as one-tap chips in
+`passenger@sabaygo.dev`, `dispatcher@sabaygo.dev`, `manager@sabaygo.dev`,
+`cashier@sabaygo.dev`. The sign-in screen offers them as one-tap chips in
 debug builds.
 
 ## What you can and cannot see in a browser

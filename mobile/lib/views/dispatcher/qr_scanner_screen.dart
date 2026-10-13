@@ -10,7 +10,7 @@ import '../../data/repositories/operations_repository.dart';
 
 /// Scan tickets at the van door for one trip at one stop.
 ///
-/// Stays open between passengers: a conductor works a queue, and
+/// Stays open between passengers: a Dispatcher works a queue, and
 /// returning to the dashboard after every scan would double the taps.
 /// Every scan goes to the server, which answers with a verdict for any
 /// outcome — refused tickets are normal here, not errors.
@@ -92,7 +92,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       _ => 'Refused',
     };
 
-    // Felt, not only seen: the conductor's eyes are on the passenger and
+    // Felt, not only seen: the Dispatcher's eyes are on the passenger and
     // the door, and the yard is too loud for a beep. One light tap for a
     // good ticket; two heavy ones for anything that needs attention, so
     // the two can be told apart without looking.

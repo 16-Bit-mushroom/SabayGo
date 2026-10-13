@@ -11,9 +11,9 @@ import '../../core/offline/walk_in_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
 import '../safety/sos_button.dart';
+import 'headcount_dialog.dart';
 import 'qr_scanner_screen.dart';
 import 'remittance_screen.dart';
-import 'drive_panel.dart';
 import 'walk_in_screen.dart';
 
 /// Who is booked on a trip and what has happened to them.
@@ -157,11 +157,6 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     final sync = context.watch<WalkInSyncService>();
     final pending = sync.pendingFor(trip.tripId);
 
-    // The driver of a moving van gets the glance panel instead of the
-    // boarding stats; everything else on the manifest stays reachable
-    // below it for when the van is stopped.
-    final driving = trip.roleOnTrip == 'driver' && departed && m != null;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(trip.title, style: const TextStyle(fontSize: 18)),
@@ -186,15 +181,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                   child: ListView(
                     padding: const EdgeInsets.only(bottom: 24),
                     children: [
-                      if (driving)
-                        DrivePanel(
-                          trip: trip,
-                          manifest: m,
-                          currentStop: shift.currentStop,
-                          onArrived: shift.setStop,
-                        )
-                      else
-                        _statusPanel(trip, m!, shift),
+                      _statusPanel(trip, m!, shift),
                       if (pending.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         _pendingSyncBanner(pending.length, sync),
@@ -295,7 +282,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     );
   }
 
-  /// Cash the conductor has already collected but the server doesn't
+  /// Cash the Dispatcher has already collected but the server doesn't
   /// know about yet -- logged in a dead zone, waiting on the queue.
   /// Never hidden: a variance the office can't see coming is worse than
   /// one flagged in advance.
@@ -434,7 +421,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
 
     // How the passenger got on the manifest — booked ahead through the
     // app, paid cash at the terminal, or flagged the van down on the
-    // road. A conductor scans a queue of strangers; this has to be
+    // road. A Dispatcher scans a queue of strangers; this has to be
     // legible at a glance, not a suffix at the end of a grey line.
     final (methodLabel, methodColour, methodIcon) = switch (p) {
       _ when p.isRoadsidePickup => ('ROADSIDE', AppColors.warning, Icons.pan_tool_alt),

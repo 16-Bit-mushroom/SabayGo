@@ -54,7 +54,7 @@ class RevenueSummary {
 /// `cashInHand` is cash the crew has collected but not yet remitted to the
 /// office -- it is deliberately kept separate from `unreconciledAmount`,
 /// which is fare nobody has accounted for at all. Conflating the two would
-/// make every honest conductor look like they were stealing until they
+/// make every honest Dispatcher look like they were stealing until they
 /// physically handed the cash over.
 class TripRevenue {
   const TripRevenue({

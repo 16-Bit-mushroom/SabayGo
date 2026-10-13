@@ -15,21 +15,21 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import or_, select
 
-from app.api.v1.deps import SessionDep, require_roles
+from app.api.v1.deps import MANAGER, OFFICE, SessionDep
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.core.timezone import APP_TZ
 from app.domain.enums import Role
-from app.domain.value_objects import LicenseNumber, PhoneNumber
+from app.domain.value_objects import PhoneNumber
 from app.infrastructure.models import (
-    DriverCredential,
     StaffProfile,
     User,
     Van,
 )
 
 router = APIRouter(prefix="/fleet", tags=["fleet"])
-COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
+
+STAFF_ROLES = (Role.DISPATCHER.value, Role.CASHIER.value, Role.TERMINAL_MANAGER.value)
 
 
 # ===================================================================
@@ -69,7 +69,7 @@ class VanStatusIn(BaseModel):
     operational_status: str = Field(pattern="^(active|maintenance|inactive)$")
 
 
-@router.get("/vans", response_model=list[VanOut], dependencies=[Depends(COOP_ADMIN)])
+@router.get("/vans", response_model=list[VanOut], dependencies=[Depends(OFFICE)])
 async def list_vans(session: SessionDep, status: str | None = None) -> list[VanOut]:
     stmt = select(Van).order_by(Van.plate_number)
     if status:
@@ -80,7 +80,7 @@ async def list_vans(session: SessionDep, status: str | None = None) -> list[VanO
 
 
 @router.post("/vans", response_model=VanOut, status_code=201,
-             dependencies=[Depends(COOP_ADMIN)])
+             dependencies=[Depends(MANAGER)])
 async def create_van(payload: VanIn, session: SessionDep) -> VanOut:
     plate = payload.plate_number.upper().strip()
     existing = await session.execute(select(Van).where(Van.plate_number == plate))
@@ -109,7 +109,7 @@ async def create_van(payload: VanIn, session: SessionDep) -> VanOut:
     return VanOut(**{c: getattr(van, c) for c in VanOut.model_fields})
 
 
-@router.patch("/vans/{van_id}/status", dependencies=[Depends(COOP_ADMIN)])
+@router.patch("/vans/{van_id}/status", dependencies=[Depends(MANAGER)])
 async def set_van_status(
     van_id: str, payload: VanStatusIn, session: SessionDep
 ) -> dict:
@@ -117,7 +117,7 @@ async def set_van_status(
 
     A van marked maintenance or inactive is not assigned by the trip
     generator. Existing trips keep their assignment -- reassigning a van
-    mid-schedule is a cooperative administrator decision, not an automatic one.
+    mid-schedule is the Terminal Manager decision, not an automatic one.
     """
     van = await session.get(Van, van_id)
     if van is None:
@@ -139,16 +139,12 @@ class StaffIn(BaseModel):
     email: EmailStr
     phone_number: str
     password: str = Field(min_length=8)
-    role: str = Field(pattern="^(conductor|driver|operator)$")
+    role: str = Field(pattern="^(dispatcher|cashier|terminal_manager)$")
     first_name: str
     last_name: str
     middle_name: str | None = None
     assigned_terminal_id: str | None = None
     cooperative_name: str | None = None
-    # Required when role is driver.
-    license_number: str | None = None
-    license_expiry_date: dt.date | None = None
-    cttmo_id_number: str | None = None
 
 
 class StaffOut(BaseModel):
@@ -162,16 +158,14 @@ class StaffOut(BaseModel):
     employment_status: str
     cooperative_name: str | None
     assigned_terminal_id: str | None
-    license_number: str | None = None
-    license_expiry_date: dt.date | None = None
-    cttmo_id_number: str | None = None
 
 
-@router.get("/crew", response_model=list[StaffOut], dependencies=[Depends(COOP_ADMIN)])
+@router.get("/crew", response_model=list[StaffOut], dependencies=[Depends(OFFICE)])
 async def list_crew(session: SessionDep, role: str | None = None) -> list[StaffOut]:
     stmt = (
         select(User, StaffProfile)
         .join(StaffProfile, StaffProfile.user_id == User.user_id)
+        .where(User.role.in_(STAFF_ROLES))
         .order_by(StaffProfile.last_name)
     )
     if role:
@@ -180,7 +174,6 @@ async def list_crew(session: SessionDep, role: str | None = None) -> list[StaffO
 
     out: list[StaffOut] = []
     for user, profile in result.all():
-        credential = await session.get(DriverCredential, user.user_id)
         out.append(
             StaffOut(
                 user_id=user.user_id,
@@ -193,21 +186,21 @@ async def list_crew(session: SessionDep, role: str | None = None) -> list[StaffO
                 employment_status=profile.employment_status,
                 cooperative_name=profile.cooperative_name,
                 assigned_terminal_id=profile.assigned_terminal_id,
-                license_number=credential.license_number if credential else None,
-                license_expiry_date=credential.license_expiry_date if credential else None,
-                cttmo_id_number=credential.cttmo_id_number if credential else None,
             )
         )
     return out
 
 
 @router.post("/crew", response_model=StaffOut, status_code=201,
-             dependencies=[Depends(COOP_ADMIN)])
+             dependencies=[Depends(MANAGER)])
 async def create_staff(payload: StaffIn, session: SessionDep) -> StaffOut:
-    """Provision a conductor, driver, or operator account.
+    """Provision a Dispatcher, Cashier or Terminal Manager account.
 
-    Staff are NOT self-registering -- employment is a cooperative decision,
-    so only a cooperative administrator can create these. /auth/register is passengers only.
+    Staff are NOT self-registering -- employment is A2Z's decision, so only
+    the Terminal Manager creates these. /auth/register is passengers only.
+    One login per person: StartedBy, AssignedBy and ChangedBy must name
+    someone, so a shared office account is not offered.
+    The operator (van owner) has no account -- a roster record instead.
     """
     phone = PhoneNumber(payload.phone_number).normalized()
     email = payload.email.lower()
@@ -217,17 +210,6 @@ async def create_staff(payload: StaffIn, session: SessionDep) -> StaffOut:
     )
     if clash.scalar_one_or_none() is not None:
         raise ConflictError("That email address or phone number is already in use.")
-
-    if payload.role == Role.DRIVER.value:
-        if not payload.license_number or not payload.license_expiry_date:
-            raise ConflictError(
-                "A driver requires a licence number and expiry date."
-            )
-        licence = LicenseNumber(payload.license_number)
-        if payload.license_expiry_date <= dt.date.today():
-            raise ConflictError("That licence has already expired.")
-    else:
-        licence = None
 
     now = dt.datetime.now(APP_TZ)
     user_id = str(uuid.uuid4())
@@ -258,16 +240,6 @@ async def create_staff(payload: StaffIn, session: SessionDep) -> StaffOut:
         )
     )
 
-    if licence is not None:
-        session.add(
-            DriverCredential(
-                user_id=user_id,
-                license_number=licence.value,
-                license_expiry_date=payload.license_expiry_date,
-                cttmo_id_number=payload.cttmo_id_number,
-            )
-        )
-
     await session.commit()
     return StaffOut(
         user_id=user_id,
@@ -280,27 +252,26 @@ async def create_staff(payload: StaffIn, session: SessionDep) -> StaffOut:
         employment_status="active",
         cooperative_name=payload.cooperative_name,
         assigned_terminal_id=payload.assigned_terminal_id,
-        license_number=licence.value if licence else None,
-        license_expiry_date=payload.license_expiry_date if licence else None,
-        cttmo_id_number=payload.cttmo_id_number if licence else None,
     )
 
 
-@router.patch("/crew/{user_id}/status", dependencies=[Depends(COOP_ADMIN)])
+@router.patch("/crew/{user_id}/status", dependencies=[Depends(MANAGER)])
 async def set_staff_status(
     user_id: str, status: str, session: SessionDep
 ) -> dict:
     """Suspend or reinstate a crew member.
 
-    Deactivating rather than deleting: a driver who leaves still appears on
-    historic manifests and headcounts, and those records must not break.
+    Deactivating rather than deleting: a Dispatcher who leaves still appears
+    on historic manifests, and those records must not break.
     """
     if status not in ("active", "suspended", "inactive"):
         raise ConflictError("Status must be active, suspended, or inactive.")
 
     user = await session.get(User, user_id)
     profile = await session.get(StaffProfile, user_id)
-    if user is None or profile is None:
+    # A legacy driver account (migration 017) is an operator now, and an
+    # operator has no login: it must not be reactivated from here.
+    if user is None or profile is None or user.role not in STAFF_ROLES:
         raise NotFoundError("Crew member not found.")
 
     user.account_status = status

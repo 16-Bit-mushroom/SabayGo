@@ -5,7 +5,6 @@ import '../../core/design/components/brand_logo.dart';
 import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
-import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/messaging_repository.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/operations_repository.dart';
@@ -15,24 +14,24 @@ import '../../viewmodels/notifications_viewmodel.dart';
 import '../../viewmodels/shift_viewmodel.dart';
 import '../messages/conversations_screen.dart';
 import '../notifications/notifications_screen.dart';
-import 'conductor_trips_screen.dart';
+import 'dispatcher_trips_screen.dart';
 import 'qr_scanner_screen.dart';
 
-/// Shell for crew working a van — conductor or driver.
+/// Shell for the Dispatcher working a van.
 ///
 /// One list: the trips this person is rostered to. Everything they do at
 /// the door — scan, log a cash passenger, count heads, open and close
 /// boarding, hand over cash — hangs off a trip, so it lives on that
 /// trip's manifest rather than in a separate tab that would have to ask
 /// "which trip?" again.
-class ConductorMainScreen extends StatefulWidget {
-  const ConductorMainScreen({super.key});
+class DispatcherMainScreen extends StatefulWidget {
+  const DispatcherMainScreen({super.key});
 
   @override
-  State<ConductorMainScreen> createState() => _ConductorMainScreenState();
+  State<DispatcherMainScreen> createState() => _DispatcherMainScreenState();
 }
 
-class _ConductorMainScreenState extends State<ConductorMainScreen> {
+class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
   late final ShiftViewModel _shift;
   late final NotificationsViewModel _notifications;
   late final ConversationsViewModel _conversations;
@@ -148,7 +147,6 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
-    final isDriver = auth.role == UserRole.driver;
 
     return ChangeNotifierProvider.value(
       value: _shift,
@@ -176,8 +174,8 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                     ),
                     const SizedBox(height: 2),
-                    StatusChip(
-                      isDriver ? 'DRIVER' : 'CONDUCTOR',
+                    const StatusChip(
+                      'DISPATCHER',
                       tone: StatusTone.brand,
                     ),
                   ],
@@ -228,7 +226,7 @@ class _ConductorMainScreenState extends State<ConductorMainScreen> {
             const SizedBox(width: 4),
           ],
         ),
-        body: const ConductorTripsScreen(),
+        body: const DispatcherTripsScreen(),
         // Scanning is the single most repeated action of a shift, so it
         // stays reachable from the list, not only from inside a manifest.
         floatingActionButton: FloatingActionButton.extended(

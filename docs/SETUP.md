@@ -289,15 +289,15 @@ flutter run -d chrome --web-port=3000 \
 flutter run -d 192.168.1.2:5555 \
   --dart-define=API_BASE_URL=http://192.168.1.8:8000/api/v1
 
-# operator console (coop_admin)
+# office console (Terminal Manager, Cashier)
 cd ../operator_console
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000/api/v1
 ```
 
 `192.168.1.8` is the backend machine's LAN IP — find yours with `ip -4 addr`.
 
-Sign in with `passenger@`, `conductor@`, `driver@` or
-`coopadmin@sabaygo.dev`, password `sabaygo123`. The sign-in screen shows
+Sign in with `passenger@` or `dispatcher@` on the phone, `manager@` or
+`cashier@sabaygo.dev` on the console, password `sabaygo123`. The sign-in screen shows
 dev-account chips in debug builds only.
 
 ### 6. Check it works

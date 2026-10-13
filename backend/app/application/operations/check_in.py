@@ -10,9 +10,9 @@ drives business logic; the distance is what lets you report GPS accuracy
 in the Results chapter.
 
 Check-in is a heads-up for dispatch, not a gate (Group D decision, 15 Sep):
-the conductor sees who is already at the terminal and can release the
+the Dispatcher sees who is already at the terminal and can release the
 space of someone who is not coming. It never blocks a scan -- the
-conductor looking at a passenger is better proof of presence than a phone
+Dispatcher looking at a passenger is better proof of presence than a phone
 reading. Two consequences:
 
 * The time window is measured against the passenger's OWN boarding stop
@@ -153,7 +153,7 @@ class CheckInUseCase:
             )
 
         # The attempt is recorded either way. A rejected check-in is
-        # evidence too -- it tells the cooperative administrator a passenger tried, and it
+        # evidence too -- it tells the Terminal Manager a passenger tried, and it
         # gives you the distance distribution for accuracy analysis.
         check_in_id = str(uuid.uuid4())
         self.session.add(
@@ -226,7 +226,7 @@ class UndoCheckInResult:
 class UndoCheckInUseCase:
     """D.2: withdraw an accidental "I'm here".
 
-    Allowed only while the booking is `checked_in`. Once the conductor has
+    Allowed only while the booking is `checked_in`. Once the Dispatcher has
     scanned the ticket the passenger is aboard and presence is no longer
     the phone's claim to retract.
     """

@@ -67,7 +67,7 @@ class PendingAudit {
 
   /// The office's words, not the enum's.
   String get triggerLabel => switch (triggerType) {
-        // door_close fires when the conductor closes boarding and departs;
+        // door_close fires when the Dispatcher closes boarding and departs;
         // there is no door sensor, so the label says what really happened.
         'door_close' => 'Automatic — van departed',
         'gps_node' => 'Automatic — van left a stop',
@@ -146,7 +146,7 @@ class AuditRepository {
         .toList();
   }
 
-  /// `resolution` is "resolved" (action taken -- e.g. driver flagged) or
+  /// `resolution` is "resolved" (action taken -- e.g. operator flagged) or
   /// "ignored" (reviewed, no action -- e.g. a standee, not a stowaway).
   Future<void> resolve({
     required String auditId,

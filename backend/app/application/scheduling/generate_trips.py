@@ -13,7 +13,7 @@ duplicate departures. That matters because a cron job that cannot safely
 be retried is a cron job that will eventually corrupt a day's schedule.
 
 Special trips are the complement -- rows with template_id NULL and
-is_special_trip TRUE, created by hand through the cooperative administrator console.
+is_special_trip TRUE, created by hand through the Terminal Manager's console.
 """
 
 from __future__ import annotations
@@ -134,7 +134,7 @@ class GenerateDailyTripsUseCase:
                 elif van.operational_status != "active":
                     # Fleet management is monitoring-only, but a van flagged
                     # out of service must not be dispatched. The trip is
-                    # still created -- unassigned -- so the cooperative administrator sees a
+                    # still created -- unassigned -- so the Terminal Manager sees a
                     # gap to fill rather than a silently missing departure.
                     report.warnings.append(
                         f"Van {van.plate_number} is {van.operational_status}; "
@@ -162,14 +162,13 @@ class GenerateDailyTripsUseCase:
             # A van cannot be in two places at once. The trip is still
             # created -- skipping it would leave passengers unable to
             # book a scheduled departure -- but the clashing resource is
-            # dropped and the cooperative administrator is warned, so they see a roster
+            # dropped and the Terminal Manager is warned, so they see a roster
             # gap rather than an impossible assignment.
             clashes = await ScheduleConflictChecker(self.session).find_conflicts(
                 route_id=template.route_id,
                 departure=departure,
                 van_id=assign_van,
-                driver_id=template.default_driver_id,
-                conductor_id=template.default_conductor_id,
+                dispatcher_id=template.default_conductor_id,
             )
             drop = {c.resource for c in clashes}
             for c in clashes:
@@ -188,11 +187,8 @@ class GenerateDailyTripsUseCase:
                     service_date=target,
                     departure_datetime=departure,
                     van_id=assign_van,
-                    driver_id=(
-                        None if "driver" in drop else template.default_driver_id
-                    ),
-                    conductor_id=(
-                        None if "conductor" in drop
+                    dispatcher_id=(
+                        None if "dispatcher" in drop
                         else template.default_conductor_id
                     ),
                     trip_label=template.trip_label,
@@ -294,8 +290,7 @@ class CreateSpecialTripUseCase:
         route_id: str,
         departure_datetime: datetime,
         van_id: str | None = None,
-        driver_id: str | None = None,
-        conductor_id: str | None = None,
+        dispatcher_id: str | None = None,
         trip_label: str | None = None,
         advance_booking_seat_cap: int | None = None,
     ) -> dict:
@@ -317,15 +312,14 @@ class CreateSpecialTripUseCase:
                 raise ConflictError(f"Van {van.plate_number} is {van.operational_status}.")
             capacity = van.seat_capacity
 
-        # Manual assignment blocks rather than warns: a cooperative administrator acting
+        # Manual assignment blocks rather than warns: a Terminal Manager acting
         # deliberately should be told immediately, not discover the clash
         # in a report later.
         clashes = await ScheduleConflictChecker(self.session).find_conflicts(
             route_id=route_id,
             departure=departure_datetime.replace(tzinfo=None),
             van_id=van_id,
-            driver_id=driver_id,
-            conductor_id=conductor_id,
+            dispatcher_id=dispatcher_id,
         )
         if clashes:
             raise ConflictError(clashes[0].message)
@@ -347,8 +341,7 @@ class CreateSpecialTripUseCase:
                 service_date=departure_datetime.date(),
                 departure_datetime=naive_departure,
                 van_id=van_id,
-                driver_id=driver_id,
-                conductor_id=conductor_id,
+                dispatcher_id=dispatcher_id,
                 trip_label=trip_label or "Special Trip",
                 is_special_trip=True,
                 seat_capacity=capacity,

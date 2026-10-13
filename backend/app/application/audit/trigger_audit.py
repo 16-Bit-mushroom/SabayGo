@@ -301,7 +301,7 @@ class ResolveAuditUseCase:
 
 
 class AuditQueueUseCase:
-    """Variance queue and history -- backs the cooperative administrator console.
+    """Variance queue and history -- backs the Terminal Manager's console.
 
     `pending` is the work list. `history` (G.2) is everything that has left
     it -- reconciled, resolved, ignored, failed -- so the office can look

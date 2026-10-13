@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Driver and operator journeys.
+# Office journeys: the Cashier and the Terminal Manager.
 #
-#   ./tests/integration/test_driver_operator_journey.sh
+#   ./tests/integration/test_office_journey.sh
 #
-# The driver's role is deliberately minimal -- confirm a headcount, issue a
-# ticket at an unstaffed stop. The operator does everything at the desk:
-# fleet, crew, routes, fares, schedules, policy, audits, revenue.
+# The Cashier reads what the counter needs and is refused everything that
+# decides what is owed. The Terminal Manager does the rest at the desk:
+# fleet, staff, routes, fares, schedules, policy, audits, revenue.
 set -uo pipefail
 
 API="http://127.0.0.1:8000/api/v1"
@@ -28,62 +28,47 @@ code() {
 }
 
 # ╔═══════════════════════════════════════════════════════════════╗
-# ║ DRIVER                                                        ║
+# ║ CASHIER                                                       ║
 # ╚═══════════════════════════════════════════════════════════════╝
-hdr "DRIVER — 1. Sign in"
+hdr "CASHIER — 1. Sign in"
 
-S=$(code POST /auth/login '{"email":"driver@sabaygo.dev","password":"sabaygo123"}')
+S=$(code POST /auth/login '{"email":"cashier@sabaygo.dev","password":"sabaygo123"}')
 [ "$S" = "200" ] && ok "login" || { bad "login gave $S"; exit 1; }
-DT=$(j "['access_token']" < /tmp/resp.json)
-[ "$(j "['role']" < /tmp/resp.json)" = "driver" ] && ok "role is driver" || bad "wrong role"
+CT=$(j "['access_token']" < /tmp/resp.json)
+[ "$(j "['role']" < /tmp/resp.json)" = "cashier" ] && ok "role is cashier" || bad "wrong role"
 
-S=$(code GET "/trips/$TRIP/manifest" "" "$DT")
-[ "$S" = "200" ] && ok "can read the manifest for their van" || bad "manifest gave $S"
+hdr "CASHIER — 2. What the counter needs"
 
-hdr "DRIVER — 2. Headcount before departure"
-
-S=$(code POST "/trips/$TRIP/headcount" '{"stop_sequence":1,"confirmed_count":3}' "$DT")
-[ "$S" = "200" ] && ok "headcount 3 -- variance $(j "['variance']" < /tmp/resp.json)" \
-                 || bad "headcount gave $S"
-
-# Correcting a miscount must work; a driver who cannot fix a typo stops
-# reporting honestly.
-S=$(code POST "/trips/$TRIP/headcount" '{"stop_sequence":1,"confirmed_count":5}' "$DT")
-[ "$S" = "200" ] && ok "corrected to 5 -- variance now $(j "['variance']" < /tmp/resp.json)" \
-                 || bad "correction gave $S"
-
-S=$(code POST "/trips/$TRIP/headcount" '{"stop_sequence":1,"confirmed_count":20}' "$DT")
-[ "$S" = "422" ] && ok "count above 14 rejected (422)" || bad "over-capacity gave $S"
-
-hdr "DRIVER — 3. Issue a ticket at an unstaffed stop"
-
-S=$(code POST /bookings/walk-in \
-  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":3,\"alighting_stop\":4}" "$DT")
-[ "$S" = "201" ] && ok "cash walk-in logged -- P$(j "['fare_amount']" < /tmp/resp.json)" \
-                 || bad "driver walk-in gave $S"
-
-S=$(code GET /audits/node-health "" "$DT")
-[ "$S" = "200" ] && ok "can check the camera node" || gap "AI node offline"
-
-hdr "DRIVER — 4. Boundaries"
-
-for ep in "GET /fleet/vans" "GET /config/policies" "GET /revenue/summary" \
-          "GET /audits/pending"; do
+for ep in "GET /revenue/summary" "GET /fleet/vans" "GET /config/trips" "GET /remittances/outstanding"; do
   m=${ep%% *}; p=${ep#* }
-  S=$(code "$m" "$p" "" "$DT")
-  [ "$S" = "403" ] && ok "$p blocked (403)" || bad "$p gave $S"
+  S=$(code "$m" "$p" "" "$CT")
+  [ "$S" = "200" ] && ok "$p readable" || bad "$p gave $S"
 done
 
-# ╔═══════════════════════════════════════════════════════════════╗
-# ║ OPERATOR                                                      ║
-# ╚═══════════════════════════════════════════════════════════════╝
-hdr "OPERATOR — 1. Sign in"
+hdr "CASHIER — 3. Separation of duties"
 
-S=$(code POST /auth/login '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}')
+# The person who records a payment does not decide what is owed, set the
+# rules, or validate records (brief 3).
+S=$(code PUT /config/policies/cancel_cutoff_hours '{"policy_value":"3"}' "$CT")
+[ "$S" = "403" ] && ok "cannot change a rule (403)" || bad "policy edit gave $S"
+S=$(code POST /fleet/vans '{"plate_number":"CSH-0001","seat_capacity":14}' "$CT")
+[ "$S" = "403" ] && ok "cannot add a van (403)" || bad "add van gave $S"
+S=$(code GET /audits/pending "" "$CT")
+[ "$S" = "403" ] && ok "cannot open the audit decisions (403)" || bad "audit queue gave $S"
+S=$(code POST /fleet/crew '{}' "$CT")
+[ "$S" = "403" ] && ok "cannot create staff accounts (403)" || bad "crew create gave $S"
+
+# ╔═══════════════════════════════════════════════════════════════╗
+# ║ TERMINAL MANAGER                                              ║
+# ╚═══════════════════════════════════════════════════════════════╝
+hdr "TERMINAL MANAGER — 1. Sign in"
+
+S=$(code POST /auth/login '{"email":"manager@sabaygo.dev","password":"sabaygo123"}')
 [ "$S" = "200" ] && ok "login" || { bad "login gave $S"; exit 1; }
 OT=$(j "['access_token']" < /tmp/resp.json)
+[ "$(j "['role']" < /tmp/resp.json)" = "terminal_manager" ] && ok "role is terminal_manager" || bad "wrong role"
 
-hdr "OPERATOR — 2. Fleet"
+hdr "TERMINAL MANAGER — 2. Fleet"
 
 S=$(code GET /fleet/vans "" "$OT")
 [ "$S" = "200" ] && ok "list vans ($(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))"))" \
@@ -102,32 +87,31 @@ S=$(code PATCH "/fleet/vans/$VAN/status" '{"operational_status":"maintenance"}' 
 S=$(code PATCH "/fleet/vans/$VAN/status" '{"operational_status":"active"}' "$OT")
 [ "$S" = "200" ] && ok "van returned to service" || bad "reactivate gave $S"
 
-hdr "OPERATOR — 3. Crew"
+hdr "TERMINAL MANAGER — 3. Staff"
 
 S=$(code GET /fleet/crew "" "$OT")
-[ "$S" = "200" ] && ok "list crew ($(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))"))" \
+[ "$S" = "200" ] && ok "list staff ($(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))"))" \
                  || bad "crew gave $S"
 
+S=$(code POST /fleet/crew "{\"email\":\"dsp${STAMP}@sabaygo.dev\",
+  \"phone_number\":\"0921${STAMP: -7}\",\"password\":\"sabaygo123\",\"role\":\"dispatcher\",
+  \"first_name\":\"Pedro\",\"last_name\":\"Reyes\"}" "$OT")
+[ "$S" = "201" ] && ok "Dispatcher provisioned" || bad "provision gave $S"
+NEW_DISPATCHER=$(j "['user_id']" < /tmp/resp.json)
+
+# The operator (van owner) is a roster record, never an account.
 S=$(code POST /fleet/crew "{\"email\":\"drv${STAMP}@sabaygo.dev\",
-  \"phone_number\":\"0921${STAMP: -7}\",\"password\":\"sabaygo123\",\"role\":\"driver\",
-  \"first_name\":\"Pedro\",\"last_name\":\"Reyes\",
-  \"license_number\":\"N02-34-567890\",\"license_expiry_date\":\"2029-12-31\"}" "$OT")
-[ "$S" = "201" ] && ok "driver provisioned with licence" || bad "provision gave $S"
-NEW_DRIVER=$(j "['user_id']" < /tmp/resp.json)
-
-S=$(code POST /fleet/crew "{\"email\":\"exp${STAMP}@sabaygo.dev\",
   \"phone_number\":\"0922${STAMP: -7}\",\"password\":\"sabaygo123\",\"role\":\"driver\",
-  \"first_name\":\"Expired\",\"last_name\":\"Licence\",
-  \"license_number\":\"N03-45-678901\",\"license_expiry_date\":\"2020-01-01\"}" "$OT")
-[ "$S" = "409" ] && ok "expired licence rejected (409)" || bad "expired licence gave $S"
+  \"first_name\":\"No\",\"last_name\":\"Login\"}" "$OT")
+[ "$S" = "422" ] && ok "driver account refused (422)" || bad "driver account gave $S"
 
-S=$(code PATCH "/fleet/crew/$NEW_DRIVER/status?status=suspended" "" "$OT")
-[ "$S" = "200" ] && ok "crew member suspended (deactivated, not deleted)" || bad "suspend gave $S"
+S=$(code PATCH "/fleet/crew/$NEW_DISPATCHER/status?status=suspended" "" "$OT")
+[ "$S" = "200" ] && ok "Dispatcher suspended (deactivated, not deleted)" || bad "suspend gave $S"
 
-S=$(code POST /auth/login "{\"email\":\"drv${STAMP}@sabaygo.dev\",\"password\":\"sabaygo123\"}")
+S=$(code POST /auth/login "{\"email\":\"dsp${STAMP}@sabaygo.dev\",\"password\":\"sabaygo123\"}")
 [ "$S" = "401" ] && ok "suspended account cannot log in (401)" || bad "suspended login gave $S"
 
-hdr "OPERATOR — 4. Configuration"
+hdr "TERMINAL MANAGER — 4. Configuration"
 
 S=$(code GET /config/policies "" "$OT")
 [ "$S" = "200" ] && ok "read all policies" || bad "policies gave $S"
@@ -171,7 +155,7 @@ S=$(code POST /config/fares "{\"route_id\":\"$ROUTE\",\"fares\":[
   {\"from_stop_sequence\":2,\"to_stop_sequence\":1,\"fare_amount\":120.00}]}" "$OT")
 { [ "$S" = "409" ] || [ "$S" = "422" ]; } && ok "reversed fare pair rejected ($S)" || bad "reversed fare gave $S"
 
-hdr "OPERATOR — 5. Schedules"
+hdr "TERMINAL MANAGER — 5. Schedules"
 
 S=$(code POST /config/schedule-templates "{\"route_id\":\"$ROUTE\",
   \"departure_time\":\"06:00:00\",\"days_of_week\":\"1111100\",
@@ -205,7 +189,7 @@ S=$(code POST /config/trips/special "{\"route_id\":\"$ROUTE\",
   \"departure_datetime\":\"2020-01-01T08:00:00\"}" "$OT")
 [ "$S" = "409" ] && ok "special trip in the past rejected (409)" || bad "past trip gave $S"
 
-hdr "OPERATOR — 6. Audit queue and revenue"
+hdr "TERMINAL MANAGER — 6. Audit queue and revenue"
 
 S=$(code GET /audits/pending "" "$OT")
 if [ "$S" = "200" ]; then
@@ -214,7 +198,7 @@ if [ "$S" = "200" ]; then
   if [ "$N" -gt 0 ]; then
     AID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))[0]['audit_id'])")
     S=$(code POST "/audits/$AID/resolve" \
-      '{"resolution":"resolved","notes":"Conductor logged the walk-in after departure."}' "$OT")
+      '{"resolution":"resolved","notes":"Dispatcher logged the walk-in after departure."}' "$OT")
     [ "$S" = "200" ] && ok "variance dispositioned with a note" || bad "resolve gave $S"
 
     S=$(code POST "/audits/$AID/resolve" '{"resolution":"ignored","notes":"again"}' "$OT")
@@ -259,7 +243,7 @@ else bad "revenue gave $S"; fi
 S=$(code GET /revenue/trips "" "$OT")
 [ "$S" = "200" ] && ok "per-trip reconciliation" || bad "revenue/trips gave $S"
 
-hdr "OPERATOR — 7. Gaps"
+hdr "TERMINAL MANAGER — 7. Gaps"
 
 # G.1 -- spreadsheet export of the reconciliation
 S=$(curl -s -o /tmp/export.csv -w '%{http_code}' -H "Authorization: Bearer $OT" "$API/revenue/export?format=csv")

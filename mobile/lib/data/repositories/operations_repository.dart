@@ -13,7 +13,6 @@ class CrewTrip {
     required this.departure,
     required this.status,
     required this.seatCapacity,
-    required this.roleOnTrip,
     required this.stops,
     this.tripLabel,
     this.plateNumber,
@@ -27,7 +26,6 @@ class CrewTrip {
   final String status;
   final String? plateNumber;
   final int seatCapacity;
-  final String roleOnTrip;
   final List<RouteStopDetail> stops;
 
   bool get isScheduled => status == 'scheduled';
@@ -52,7 +50,6 @@ class CrewTrip {
         status: j['status'] as String,
         plateNumber: j['plate_number'] as String?,
         seatCapacity: j['seat_capacity'] as int? ?? 14,
-        roleOnTrip: j['role_on_trip'] as String? ?? 'conductor',
         stops: (j['stops'] as List<dynamic>? ?? const [])
             .map((e) => RouteStopDetail.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -67,7 +64,6 @@ class CrewTrip {
         status: status ?? this.status,
         plateNumber: plateNumber,
         seatCapacity: seatCapacity,
-        roleOnTrip: roleOnTrip,
         stops: stops,
       );
 }
@@ -107,7 +103,7 @@ class ManifestPassenger {
   bool get isCancelled => status == 'cancelled';
 
   /// True only for a synthetic row built from the offline queue: a
-  /// walk-in the conductor logged in a dead zone that has not reached
+  /// walk-in the Dispatcher logged in a dead zone that has not reached
   /// the server yet, so it has no real booking id or ticket number.
   bool get isPendingSync => bookingId.isEmpty;
 
@@ -358,7 +354,7 @@ class OperationsRepository {
   /// Record a cash passenger.
   ///
   /// A roadside pickup is anchored to the last terminal passed, with the
-  /// conductor setting the fare — they have not travelled a fare-table
+  /// Dispatcher setting the fare — they have not travelled a fare-table
   /// distance, so the matrix has no answer for them.
   Future<WalkInResult> walkIn({
     required String tripId,

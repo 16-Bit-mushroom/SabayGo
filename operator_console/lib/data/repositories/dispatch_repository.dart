@@ -65,7 +65,7 @@ class TripBoardRow {
 }
 
 /// One trip on the office's trip board (GET /config/trips): live status,
-/// crew and passenger counts -- what each conductor sees, all at once.
+/// crew and passenger counts -- what each Dispatcher sees, all at once.
 class TripBoardEntry {
   const TripBoardEntry({
     required this.tripId,
@@ -75,8 +75,8 @@ class TripBoardEntry {
     required this.status,
     required this.departedAt,
     required this.plateNumber,
-    required this.driverName,
-    required this.conductorName,
+    required this.operatorName,
+    required this.dispatcherName,
     required this.seatCapacity,
     required this.booked,
     required this.checkedIn,
@@ -91,8 +91,9 @@ class TripBoardEntry {
   final String status;
   final DateTime? departedAt;
   final String? plateNumber;
-  final String? driverName;
-  final String? conductorName;
+  /// The van's owner, who drives it. A name beside the plate, never a user.
+  final String? operatorName;
+  final String? dispatcherName;
   final int seatCapacity;
   final int booked;
   final int checkedIn;
@@ -107,8 +108,8 @@ class TripBoardEntry {
         status: j['status'] as String,
         departedAt: j['departed_at'] == null ? null : DateTime.parse(j['departed_at'] as String),
         plateNumber: j['plate_number'] as String?,
-        driverName: j['driver_name'] as String?,
-        conductorName: j['conductor_name'] as String?,
+        operatorName: j['operator_name'] as String?,
+        dispatcherName: j['dispatcher_name'] as String?,
         seatCapacity: j['seat_capacity'] as int,
         booked: j['booked'] as int,
         checkedIn: j['checked_in'] as int,
@@ -117,7 +118,7 @@ class TripBoardEntry {
       );
 }
 
-/// The conductor's manifest (GET /trips/{id}/manifest), read by the office.
+/// The Dispatcher's manifest (GET /trips/{id}/manifest), read by the office.
 /// Same endpoint, same fields, so the two screens cannot disagree.
 class TripManifest {
   const TripManifest({
@@ -251,16 +252,14 @@ class DispatchRepository {
     required String routeId,
     required DateTime departureDatetime,
     String? vanId,
-    String? driverId,
-    String? conductorId,
+    String? dispatcherId,
     String? tripLabel,
   }) async {
     final json = await _api.post('/config/trips/special', body: {
       'route_id': routeId,
       'departure_datetime': departureDatetime.toIso8601String(),
       if (vanId != null) 'van_id': vanId,
-      if (driverId != null) 'driver_id': driverId,
-      if (conductorId != null) 'conductor_id': conductorId,
+      if (dispatcherId != null) 'dispatcher_id': dispatcherId,
       if (tripLabel != null && tripLabel.isNotEmpty) 'trip_label': tripLabel,
     });
     return json as Map<String, dynamic>;

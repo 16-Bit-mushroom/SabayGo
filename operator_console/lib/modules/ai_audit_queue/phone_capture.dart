@@ -162,7 +162,7 @@ class _PhoneCaptureButtonState extends State<PhoneCaptureButton> {
     return Tooltip(
       message: _underWay
           ? 'Ask the phone in the van to photograph the passengers and count them.'
-          : 'Available once the conductor starts boarding. Checks only apply to a trip '
+          : 'Available once the Dispatcher starts boarding. Checks only apply to a trip '
               'that is boarding or on the road.',
       child: button,
     );

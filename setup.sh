@@ -253,7 +253,7 @@ To run one piece at a time instead:
   cd operator_console && flutter run -d chrome --web-port=3001 \
     --dart-define=API_BASE_URL=http://localhost:8000/api/v1
 
-Sign in as passenger@ / conductor@ / driver@ / coopadmin@sabaygo.dev,
+Sign in as passenger@ / dispatcher@ / manager@ / cashier@sabaygo.dev,
 password sabaygo123.
 
 Conductor screens need a real handset or an emulator -- mobile_scanner

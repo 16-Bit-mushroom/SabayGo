@@ -36,8 +36,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   List<ScheduleTemplate>? _templates;
   List<RouteSummary> _routes = [];
   List<Van> _vans = [];
-  List<StaffMember> _drivers = [];
-  List<StaffMember> _conductors = [];
+  List<StaffMember> _dispatchers = [];
   bool _loading = true;
   String? _error;
   bool _generating = false;
@@ -66,16 +65,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         _schedule.listTemplates(),
         _dispatch.listRoutes(),
         _fleet.listVans(),
-        _fleet.listCrew(role: 'driver'),
-        _fleet.listCrew(role: 'conductor'),
+        _fleet.listCrew(role: 'dispatcher'),
       ]);
       if (!mounted) return;
       setState(() {
         _templates = results[0] as List<ScheduleTemplate>;
         _routes = results[1] as List<RouteSummary>;
         _vans = results[2] as List<Van>;
-        _drivers = results[3] as List<StaffMember>;
-        _conductors = results[4] as List<StaffMember>;
+        _dispatchers = results[3] as List<StaffMember>;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -131,8 +128,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         template: t,
         routeName: _routeName(t.routeId),
         van: find<Van>(_vans, t.defaultVanId, (v) => v.vanId),
-        driver: find<StaffMember>(_drivers, t.defaultDriverId, (s) => s.userId),
-        conductor: find<StaffMember>(_conductors, t.defaultConductorId, (s) => s.userId),
+        dispatcher: find<StaffMember>(_dispatchers, t.defaultDispatcherId, (s) => s.userId),
       ),
     );
   }
@@ -226,8 +222,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               schedule: _schedule,
                               routes: _routes,
                               vans: _vans,
-                              drivers: _drivers,
-                              conductors: _conductors,
+                              dispatchers: _dispatchers,
                               onCreated: _onTemplateCreated,
                             ),
                           ),
@@ -377,15 +372,13 @@ class _TemplateDetailsDialog extends StatelessWidget {
     required this.template,
     required this.routeName,
     this.van,
-    this.driver,
-    this.conductor,
+    this.dispatcher,
   });
 
   final ScheduleTemplate template;
   final String routeName;
   final Van? van;
-  final StaffMember? driver;
-  final StaffMember? conductor;
+  final StaffMember? dispatcher;
 
   @override
   Widget build(BuildContext context) {
@@ -431,31 +424,17 @@ class _TemplateDetailsDialog extends StatelessWidget {
                 unassignedNote: 'No usual van. Trips created from this start without one.',
               ),
               const SizedBox(height: AppSpacing.md),
-              _AssignmentBlock(
-                icon: Icons.person_outline,
-                role: 'Driver',
-                assigned: t.defaultDriverId != null,
-                title: driver?.fullName,
-                lines: [
-                  if (driver?.phoneNumber != null) driver!.phoneNumber!,
-                  if (driver?.licenseNumber != null)
-                    'Licence ${driver!.licenseNumber}'
-                        '${driver!.licenseExpiryDate != null ? ' · expires ${date(driver!.licenseExpiryDate!)}' : ''}',
-                ],
-                status: driver?.employmentStatus,
-                unassignedNote: 'No usual driver. Trips created from this start without one.',
-              ),
-              const SizedBox(height: AppSpacing.md),
+              // No driver block: the van's operator drives it.
               _AssignmentBlock(
                 icon: Icons.confirmation_number_outlined,
-                role: 'Conductor',
-                assigned: t.defaultConductorId != null,
-                title: conductor?.fullName,
+                role: 'Dispatcher',
+                assigned: t.defaultDispatcherId != null,
+                title: dispatcher?.fullName,
                 lines: [
-                  if (conductor?.phoneNumber != null) conductor!.phoneNumber!,
+                  if (dispatcher?.phoneNumber != null) dispatcher!.phoneNumber!,
                 ],
-                status: conductor?.employmentStatus,
-                unassignedNote: 'No usual conductor. Trips created from this start without one.',
+                status: dispatcher?.employmentStatus,
+                unassignedNote: 'No usual Dispatcher. Trips created from this start without one.',
               ),
             ],
           ),
@@ -624,16 +603,14 @@ class _NewTemplateCard extends StatefulWidget {
     required this.schedule,
     required this.routes,
     required this.vans,
-    required this.drivers,
-    required this.conductors,
+    required this.dispatchers,
     required this.onCreated,
   });
 
   final ScheduleRepository schedule;
   final List<RouteSummary> routes;
   final List<Van> vans;
-  final List<StaffMember> drivers;
-  final List<StaffMember> conductors;
+  final List<StaffMember> dispatchers;
   final Future<void> Function() onCreated;
 
   @override
@@ -647,8 +624,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
   TimeOfDay _time = _defaultTime;
   final _label = TextEditingController();
   String? _vanId;
-  String? _driverId;
-  String? _conductorId;
+  String? _dispatcherId;
   // Monday-first mask.
   final List<bool> _days = List.filled(7, true);
   bool _submitting = false;
@@ -669,8 +645,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
     _time = _defaultTime;
     _label.clear();
     _vanId = null;
-    _driverId = null;
-    _conductorId = null;
+    _dispatcherId = null;
     _days.fillRange(0, 7, true);
     _epoch++;
     _error = null;
@@ -697,8 +672,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
         departureTime: '$hh:$mm:00',
         daysOfWeek: _days.map((d) => d ? '1' : '0').join(),
         defaultVanId: _vanId,
-        defaultDriverId: _driverId,
-        defaultConductorId: _conductorId,
+        defaultDispatcherId: _dispatcherId,
         tripLabel: _label.text,
       );
       if (!mounted) return;
@@ -810,25 +784,14 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
             ),
             const SizedBox(height: AppSpacing.md),
             DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Usual driver (optional)'),
+              decoration: const InputDecoration(labelText: 'Usual Dispatcher (optional)'),
               isExpanded: true,
-              initialValue: _driverId,
-              key: ValueKey('driver-$_epoch'),
-              items: widget.drivers
-                  .map((d) => DropdownMenuItem(value: d.userId, child: Text(d.fullName)))
-                  .toList(),
-              onChanged: (v) => setState(() => _driverId = v),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Usual conductor (optional)'),
-              isExpanded: true,
-              initialValue: _conductorId,
-              key: ValueKey('conductor-$_epoch'),
-              items: widget.conductors
+              initialValue: _dispatcherId,
+              key: ValueKey('dispatcher-$_epoch'),
+              items: widget.dispatchers
                   .map((c) => DropdownMenuItem(value: c.userId, child: Text(c.fullName)))
                   .toList(),
-              onChanged: (v) => setState(() => _conductorId = v),
+              onChanged: (v) => setState(() => _dispatcherId = v),
             ),
             const SizedBox(height: AppSpacing.xl),
             FilledButton.icon(

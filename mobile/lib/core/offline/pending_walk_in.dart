@@ -1,6 +1,6 @@
 /// A walk-in logged while offline, waiting to reach the server.
 ///
-/// `clientRequestId` is generated once, at the moment the conductor taps
+/// `clientRequestId` is generated once, at the moment the Dispatcher taps
 /// submit, and sent on every retry. The backend dedupes bookings on
 /// `(trip_id, client_request_id)`, so replaying this row after a
 /// connectivity drop can never create a second booking for the same

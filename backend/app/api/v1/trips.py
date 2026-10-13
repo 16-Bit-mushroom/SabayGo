@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.core import timezone as app_tz
@@ -235,17 +235,16 @@ class AssignedTrip(BaseModel):
     status: str
     plate_number: str | None
     seat_capacity: int
-    role_on_trip: str
     stops: list[StopOut]
 
 
 @router.get(
     "/assigned",
     response_model=list[AssignedTrip],
-    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER))],
+    dependencies=[Depends(require_roles(Role.DISPATCHER))],
 )
 async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[AssignedTrip]:
-    """The trips this crew member is rostered to, today onward.
+    """The trips this Dispatcher is assigned to, today onward.
 
     This list is the boundary of what the crew app can act on: every
     scan, walk-in and headcount is guarded server-side by the same
@@ -257,7 +256,7 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
     result = await session.execute(
         select(Trip)
         .where(
-            or_(Trip.conductor_id == user.user_id, Trip.driver_id == user.user_id),
+            Trip.dispatcher_id == user.user_id,
             Trip.service_date >= today,
             Trip.status != TripStatus.CANCELLED.value,
         )
@@ -290,7 +289,6 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
             status=t.status,
             plate_number=t.van.plate_number if t.van else None,
             seat_capacity=t.seat_capacity,
-            role_on_trip="driver" if t.driver_id == user.user_id else "conductor",
             stops=stops_by_route.get(t.route_id, []),
         )
         for t in trips
@@ -321,12 +319,12 @@ class TripFareOut(BaseModel):
 @router.get(
     "/{trip_id}/fares",
     response_model=list[TripFareOut],
-    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER))],
+    dependencies=[Depends(require_roles(Role.DISPATCHER))],
 )
 async def trip_fares(trip_id: str, session: SessionDep) -> list[TripFareOut]:
     """The fare for every stop pair on this trip's route, for the crew.
 
-    So the walk-in screen can show the price *before* the conductor logs
+    So the walk-in screen can show the price *before* the Dispatcher logs
     the passenger, the way any till shows a total before taking money --
     it used to appear only on the confirmation, after the booking existed.
 

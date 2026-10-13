@@ -67,24 +67,35 @@ class _OperatorShellState extends State<OperatorShell> {
     _Module('Trips', Icons.departure_board_outlined, Icons.departure_board,
         TripMonitorScreen()),
     _Module('Special Trips', Icons.alt_route_outlined, Icons.alt_route,
-        DispatchBoardScreen()),
+        DispatchBoardScreen(), managerOnly: true),
     _Module('Emergencies (SOS)', Icons.emergency_outlined, Icons.emergency,
         SosConsoleScreen(), urgent: true),
     _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, MessagesScreen()),
     _Module('Fares & Cash', Icons.payments_outlined, Icons.payments, RevenueScreen(),
         group: 'Money & checks'),
     _Module('Passenger Count Checks', Icons.fact_check_outlined, Icons.fact_check,
-        AuditDashboardScreen()),
-    _Module('Timetable', Icons.calendar_month_outlined, Icons.calendar_month,
-        ScheduleScreen(), group: 'Setup'),
+        AuditDashboardScreen(), managerOnly: true),
+    // Vans & Crew opens the group: the Cashier sees it, so the heading
+    // must not sit on an entry the Cashier is not shown.
     _Module('Vans & Crew', Icons.airport_shuttle_outlined, Icons.airport_shuttle,
-        FleetRosterScreen()),
-    _Module('Rules & Settings', Icons.tune_outlined, Icons.tune, PolicyEditorScreen()),
+        FleetRosterScreen(), group: 'Setup'),
+    _Module('Timetable', Icons.calendar_month_outlined, Icons.calendar_month,
+        ScheduleScreen(), managerOnly: true),
+    _Module('Rules & Settings', Icons.tune_outlined, Icons.tune, PolicyEditorScreen(),
+        managerOnly: true),
   ];
+
+  /// The pages this person may open. The Cashier records payments and
+  /// does not decide what is owed, set rules or plan the timetable (brief
+  /// section 3), so those pages are not offered rather than refused.
+  List<_Module> get _visible {
+    final isManager = context.read<AuthProvider>().profile?.role.isManager ?? false;
+    return [for (final m in _modules) if (isManager || !m.managerOnly) m];
+  }
 
   /// Looked up by screen type rather than written out as an index.
   void _show(bool Function(Widget) test) {
-    final index = _modules.indexWhere((m) => test(m.screen));
+    final index = _visible.indexWhere((m) => test(m.screen));
     if (index >= 0) setState(() => _selectedIndex = index);
   }
 
@@ -101,6 +112,7 @@ class _OperatorShellState extends State<OperatorShell> {
 
   @override
   Widget build(BuildContext context) {
+    final modules = _visible;
     return ChangeNotifierProvider<NotificationProvider>.value(
       value: _notifications,
       child: Scaffold(
@@ -108,7 +120,7 @@ class _OperatorShellState extends State<OperatorShell> {
         body: Row(
           children: [
             _Sidebar(
-              modules: _modules,
+              modules: modules,
               selectedIndex: _selectedIndex,
               collapsed: _collapsed,
               onSelect: (i) => setState(() => _selectedIndex = i),
@@ -121,7 +133,7 @@ class _OperatorShellState extends State<OperatorShell> {
                     strip: TodayStrip(onOpen: _openToday),
                     bell: NotificationBell(onOpen: _openFor),
                   ),
-                  Expanded(child: _modules[_selectedIndex].screen),
+                  Expanded(child: modules[_selectedIndex].screen),
                 ],
               ),
             ),
@@ -455,7 +467,7 @@ class _SidebarButton extends StatelessWidget {
 /// One sidebar entry and the screen it shows.
 class _Module {
   const _Module(this.label, this.icon, this.selectedIcon, this.screen,
-      {this.group, this.urgent = false});
+      {this.group, this.urgent = false, this.managerOnly = false});
 
   /// The sidebar label -- and, word for word, the screen's own title.
   final String label;
@@ -468,4 +480,7 @@ class _Module {
 
   /// Drawn in the danger colour. Only the SOS console.
   final bool urgent;
+
+  /// Hidden from the Cashier; the Terminal Manager's decisions.
+  final bool managerOnly;
 }

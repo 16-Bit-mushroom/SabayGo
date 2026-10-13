@@ -1,4 +1,4 @@
-"""Conductor operations: QR boarding validation and the trip manifest."""
+"""Dispatcher operations: QR boarding validation and the trip manifest."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ class ScanResult:
 class ScanTicketUseCase:
     """Validate a QR payload at the van door and mark the passenger boarded.
 
-    Never raises for an invalid ticket. A conductor scanning in a queue
+    Never raises for an invalid ticket. A Dispatcher scanning in a queue
     needs a fast verdict on screen, not an exception -- so every outcome
     returns a `result` code that the app renders as green or red. The
     outcome is recorded in `boarding_scans` either way, which is what
@@ -151,7 +151,7 @@ class ScanTicketUseCase:
 
 
 class ManifestUseCase:
-    """Who is aboard, and what the cooperative administrator should see."""
+    """Who is aboard, and what the Terminal Manager should see."""
 
     def __init__(self, session: AsyncSession):
         self.session = session

@@ -25,8 +25,8 @@ code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
 login(){ curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d "{\"email\":\"$1\",\"password\":\"sabaygo123\"}" | j "['access_token']"; }
 
-CT=$(login conductor@sabaygo.dev)
-OT=$(login coopadmin@sabaygo.dev)
+CT=$(login dispatcher@sabaygo.dev)
+OT=$(login manager@sabaygo.dev)
 PT=$(login passenger@sabaygo.dev)
 
 # Re-runnable without a database reset: an alert left open by an earlier
@@ -38,7 +38,7 @@ for id in $(curl -s -H "Authorization: Bearer $OT" "$API/sos?status=open&limit=2
   code POST "/sos/$id/resolve" '{"notes":"Closed by the test harness."}' "$OT" >/dev/null
 done
 
-hdr "conductor raises an SOS from the van"
+hdr "Dispatcher raises an SOS from the van"
 S=$(code POST /sos "{\"trip_id\":\"$TRIP\",\"category\":\"medical\",\"note\":\"Passenger collapsed\",\"latitude\":7.0731,\"longitude\":125.6128,\"accuracy_m\":12}" "$CT")
 SOS=$(j "['sos_id']" < /tmp/sos.json)
 [ "$S" = "201" ] && [ -n "$SOS" ] \
@@ -99,7 +99,7 @@ python3 -c "
 import json,sys
 d=json.load(open('/tmp/sos.json'))
 hit=[n for n in d['items'] if n['type']=='sos_alert' and 'been seen' in n['title']]
-print('        conductor inbox:', hit[0]['message'] if hit else 'NOTHING')
+print('        dispatcher inbox:', hit[0]['message'] if hit else 'NOTHING')
 sys.exit(0 if hit else 1)" \
   && ok "the person who pressed the button was told" \
   || bad "raiser got no acknowledgement"

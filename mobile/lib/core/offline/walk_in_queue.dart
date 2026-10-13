@@ -10,7 +10,7 @@ import 'pending_walk_in.dart';
 /// again for the same submission without creating a second row.
 class WalkInQueue {
   /// `sqflite` has no web implementation, and the queue exists for a
-  /// conductor's handset in a dead zone -- not for a browser. Running
+  /// Dispatcher's handset in a dead zone -- not for a browser. Running
   /// `mobile/` on Chrome is a development convenience; the real web client
   /// is `operator_console/`, which has no walk-in flow.
   ///
@@ -49,7 +49,7 @@ class WalkInQueue {
     if (!isSupported) {
       throw UnsupportedError(
         'Offline walk-ins need on-device storage, which this platform does '
-        'not provide. Log this passenger from the conductor handset.',
+        'not provide. Log this passenger from the Dispatcher handset.',
       );
     }
     final db = await _open();

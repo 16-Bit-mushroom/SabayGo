@@ -17,31 +17,31 @@ log = logging.getLogger(__name__)
 async def assert_assigned_to_trip(
     session: AsyncSession, *, trip_id: str, user: User
 ) -> Trip:
-    """A conductor or driver may only act on the trip they are rostered to.
+    """A Dispatcher may only act on the trip they are assigned to.
 
-    Without this, any conductor could scan tickets, log cash passengers, or
+    Without this, any Dispatcher could scan tickets, log cash passengers, or
     confirm a headcount on any trip in the system -- which makes the
     remittance record meaningless, since the fares a person is accountable
     for would no longer correspond to the runs they actually worked.
 
-    Cooperative administrators and system admins are exempt: someone has to be able to step in when
-    a conductor's phone dies mid-route.
+    The Terminal Manager and system admins are exempt: someone has to be
+    able to step in when a Dispatcher's phone dies mid-route.
     """
     trip = await session.get(Trip, trip_id)
     if trip is None:
         raise NotFoundError("Trip not found.")
 
-    if user.role in (Role.COOP_ADMIN.value, Role.ADMIN.value):
+    if user.role in (Role.TERMINAL_MANAGER.value, Role.ADMIN.value):
         return trip
 
-    if user.user_id in (trip.conductor_id, trip.driver_id):
+    if user.user_id == trip.dispatcher_id:
         return trip
 
     # An unassigned trip is a roster gap, not an open invitation. Say so
     # plainly rather than returning a bare 403 the crew cannot act on.
-    if trip.conductor_id is None and trip.driver_id is None:
+    if trip.dispatcher_id is None:
         raise PermissionDeniedError(
-            "No crew is assigned to this trip. Ask the office to assign it."
+            "No Dispatcher is assigned to this trip. Ask the office to assign one."
         )
 
     raise PermissionDeniedError(

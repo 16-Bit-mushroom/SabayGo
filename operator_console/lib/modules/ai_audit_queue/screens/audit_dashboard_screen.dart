@@ -75,7 +75,7 @@ class _AuditDashboardScreenState extends State<AuditDashboardScreen> {
       builder: (_) => _ResolveNotesDialog(
         title: resolution == 'resolved' ? 'Confirm a problem' : 'Close this check',
         prompt: resolution == 'resolved'
-            ? 'What did you find? For example: two walk-ins the conductor did not log.'
+            ? 'What did you find? For example: two walk-ins the Dispatcher did not log.'
             : 'Why is no action needed? For example: one passenger was out of the photo.',
       ),
     );

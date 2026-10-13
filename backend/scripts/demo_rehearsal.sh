@@ -50,9 +50,8 @@ curl -s -o /dev/null -w '%{http_code}' "$API/../../docs" | grep -q 200 && ok "ba
   || die "PAYMONGO_WEBHOOK_SECRET not in the environment -- set -a; source .env; set +a"
 
 PT=$(login passenger@sabaygo.dev); [ -n "$PT" ] && ok "passenger@ logs in" || die "passenger@ login failed -- did reset-dev.sh run?"
-CT=$(login conductor@sabaygo.dev); [ -n "$CT" ] && ok "conductor@ logs in" || die "conductor@ login failed"
-DT=$(login driver@sabaygo.dev);    [ -n "$DT" ] && ok "driver@ logs in"    || die "driver@ login failed"
-OT=$(login coopadmin@sabaygo.dev); [ -n "$OT" ] && ok "coopadmin@ logs in" || die "coopadmin@ login failed"
+CT=$(login dispatcher@sabaygo.dev); [ -n "$CT" ] && ok "dispatcher@ logs in" || die "dispatcher@ login failed"
+OT=$(login manager@sabaygo.dev);    [ -n "$OT" ] && ok "manager@ logs in"    || die "manager@ login failed"
 
 TODAY=$(date +%F)
 S=$(code GET "/trips/search?origin_terminal_id=TERM-ECOLAND-000001&destination_terminal_id=TERM-COTABATO-00001&service_date=$TODAY" "" "$PT")
@@ -101,10 +100,10 @@ S=$(code POST "/bookings/$BID/check-in" "{\"latitude\":$LAT,\"longitude\":$LNG,\
 if [ "$S" = "200" ]; then ok "checked in -- manifest will show AT TERMINAL"
 else warn "check-in refused ($S): $(j "['detail']" < /tmp/resp.json) -- fine to show as the 'too early' rejection, then continue"; fi
 
-# ──────────────────────────────────────────────────────── 3. conductor
-step "3. Conductor: open boarding, scan, walk-in, manifest"
+# ─────────────────────────────────────────────────────── 3. dispatcher
+step "3. Dispatcher: open boarding, scan, walk-in, manifest"
 S=$(code GET /trips/assigned "" "$CT")
-grep -q "$TRIP" /tmp/resp.json && ok "trip is on conductor@'s assigned list" || die "fixture trip not in /trips/assigned for conductor@"
+grep -q "$TRIP" /tmp/resp.json && ok "trip is on dispatcher@'s assigned list" || die "fixture trip not in /trips/assigned for dispatcher@"
 
 S=$(code POST "/trips/$TRIP/start-boarding" "" "$CT")
 [ "$S" = "200" ] && ok "boarding opened" || die "start-boarding gave $S: $(j "['detail']" < /tmp/resp.json)"
@@ -117,7 +116,7 @@ S=$(code POST /scans "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_seque
   || warn "second scan gave $(j "['result']" < /tmp/resp.json)"
 
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
-[ "$S" = "201" ] && ok "cash walk-in logged -- ₱$(j "['fare_amount']" < /tmp/resp.json) pending in the conductor's hand" \
+[ "$S" = "201" ] && ok "cash walk-in logged -- ₱$(j "['fare_amount']" < /tmp/resp.json) pending in the Dispatcher's hand" \
   || die "walk-in gave $S: $(j "['detail']" < /tmp/resp.json)"
 
 S=$(code GET "/trips/$TRIP/manifest" "" "$CT")
@@ -127,11 +126,11 @@ ps=m.get('passengers',m if isinstance(m,list) else [])
 print(f\"{len(ps)} passengers, {sum(1 for p in ps if p.get('status')=='boarded')} boarded\")")"
 
 # ──────────────────────────────────────────────────────── 4. audit
-step "4. Driver: headcount, then the camera audit"
-S=$(code POST "/trips/$TRIP/headcount" '{"stop_sequence":1,"confirmed_count":2}' "$DT")
-[ "$S" = "200" ] && ok "driver headcount 2 -- variance $(j "['variance']" < /tmp/resp.json)" || warn "headcount gave $S: $(j "['detail']" < /tmp/resp.json)"
+step "4. Dispatcher: headcount, then the camera audit"
+S=$(code POST "/trips/$TRIP/headcount" '{"stop_sequence":1,"confirmed_count":2}' "$CT")
+[ "$S" = "200" ] && ok "dispatcher headcount 2 -- variance $(j "['variance']" < /tmp/resp.json)" || warn "headcount gave $S: $(j "['detail']" < /tmp/resp.json)"
 
-S=$(code POST /audits/trigger "{\"trip_id\":\"$TRIP\",\"leg_sequence\":1,\"trigger_type\":\"manual\"}" "$DT")
+S=$(code POST /audits/trigger "{\"trip_id\":\"$TRIP\",\"leg_sequence\":1,\"trigger_type\":\"manual\"}" "$CT")
 if [ "$S" = "200" ]; then
   ok "YOLOv8: visual $(j "['visual_count']" < /tmp/resp.json) vs manifest $(j "['booked_count']" < /tmp/resp.json) -- $(j "['resolution_status']" < /tmp/resp.json)"
 elif [ "$S" = "502" ]; then warn "AI node unreachable -> 502. The line: 'it refuses to invent a number'. Yesterday's audits are in the console History tab"

@@ -16,8 +16,8 @@ cd ai_service && python app.py  # optional -- see "If the camera is off"
 ```
 
 Phone: passenger app signed in as `passenger@sabaygo.dev`; a second phone
-(or the same one, after) as `conductor@sabaygo.dev`. Laptop: operator
-console as `coopadmin@sabaygo.dev`. Password everywhere `sabaygo123`.
+(or the same one, after) as `dispatcher@sabaygo.dev`. Laptop: office
+console as `manager@sabaygo.dev`. Password everywhere `sabaygo123`.
 
 The live loop uses the **Ecoland – Cotabato "First Trip"** because
 `--soon` puts it inside the check-in window. Everything else on screen

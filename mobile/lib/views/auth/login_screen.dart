@@ -238,9 +238,7 @@ class _DebugPanel extends StatelessWidget {
 
   static const _accounts = <String, String>{
     'Passenger': 'passenger@sabaygo.dev',
-    'Conductor': 'conductor@sabaygo.dev',
-    'Driver': 'driver@sabaygo.dev',
-    'Coop admin': 'coopadmin@sabaygo.dev',
+    'Dispatcher': 'dispatcher@sabaygo.dev',
   };
 
   @override

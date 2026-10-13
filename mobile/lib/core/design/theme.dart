@@ -121,7 +121,7 @@ ThemeData buildAppTheme() {
       ),
     ),
 
-    // The inner tab bars (booking history, the conductor's manifest). The
+    // The inner tab bars (booking history, the Dispatcher's manifest). The
     // indicator was the old 3.11:1 green; an indicator is the only thing
     // saying which tab is current, so it is held to 1.4.11's 3:1 and
     // reinforced by the label's own colour and weight.

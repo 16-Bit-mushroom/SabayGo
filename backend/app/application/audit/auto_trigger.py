@@ -3,12 +3,12 @@
     "an in-van IoT camera captures cabin snapshots triggered by door
      closures or specific GPS nodes to initiate physical audits"
 
-Until now every capture began with a person: the conductor tapping the
+Until now every capture began with a person: the Dispatcher tapping the
 manifest, the office tapping the queue, or the demo phone being polled.
 That is the weakest possible form of a leakage check, because the party it
 audits chooses when it happens. The two triggers here do not ask anyone.
 
-    door_close  the conductor closes boarding and the trip departs, so the
+    door_close  the Dispatcher closes boarding and the trip departs, so the
                 cabin for leg 1 is final -- no-shows released, everyone
                 who boarded aboard. See DepartTripUseCase.
 
@@ -23,7 +23,7 @@ terminal, and leg k is exactly the stretch they are now riding.
 Three rules this module exists to keep:
 
 **One automatic audit per leg, counted over automatic rows only.** A
-conductor's manual spot check must not satisfy the quota -- otherwise the
+Dispatcher's manual spot check must not satisfy the quota -- otherwise the
 systematic check is disabled by pre-empting it, which is precisely the
 behaviour it is meant to catch. A repeated GPS ping outside the fence must
 not fire a second time either.

@@ -1,4 +1,4 @@
-"""E.1 -- a flagged YOLOv8 variance alerts office, driver and conductor.
+"""E.1 -- a flagged YOLOv8 variance alerts the Terminal Manager and the Dispatcher, not the Cashier.
 
 The camera is replaced with a fake capture so the test is repeatable; the
 rest of the path (use case, notification rows, HTTP list/read endpoints)
@@ -26,10 +26,13 @@ API = "http://127.0.0.1:8000/api/v1"
 TRIP = "TRIP-DEMO-00000001"
 PASSWORD = "sabaygo123"
 ACCOUNTS = {
-    "coop_admin": "coopadmin@sabaygo.dev",
-    "driver": "driver@sabaygo.dev",
-    "conductor": "conductor@sabaygo.dev",
+    "terminal_manager": "manager@sabaygo.dev",
+    "dispatcher": "dispatcher@sabaygo.dev",
+    "cashier": "cashier@sabaygo.dev",
 }
+# Deciding on a camera difference is the Terminal Manager's; the Cashier
+# records payments and is not told (brief 3, separation of duties).
+ALERTED = {"terminal_manager", "dispatcher"}
 
 failures: list[str] = []
 
@@ -52,7 +55,7 @@ async def main() -> int:
         auth = {role: {"Authorization": f"Bearer {t}"} for role, t in tokens.items()}
 
         # Trip must be in progress for an audit to apply.
-        await client.post(f"{API}/trips/{TRIP}/start-boarding", headers=auth["conductor"])
+        await client.post(f"{API}/trips/{TRIP}/start-boarding", headers=auth["dispatcher"])
 
         before = {
             role: (await client.get(f"{API}/notifications", headers=h)).json()["unread_count"]
@@ -62,7 +65,7 @@ async def main() -> int:
         # --- fake camera: exceed the threshold by exactly one ---------------
         async with SessionFactory() as s:
             threshold = await PolicyRepository(s).get_int("variance_alert_threshold")
-            user_id = (await client.get(f"{API}/auth/me", headers=auth["conductor"])).json()["user_id"]
+            user_id = (await client.get(f"{API}/auth/me", headers=auth["dispatcher"])).json()["user_id"]
 
         from app.application.operations.boarding import ManifestUseCase
 
@@ -95,6 +98,9 @@ async def main() -> int:
         for role, h in auth.items():
             body = (await client.get(f"{API}/notifications", headers=h)).json()
             mine = [n for n in body["items"] if n["related_entity_id"] == result.audit_id]
+            if role not in ALERTED:
+                check(not mine and body["unread_count"] == before[role], f"{role} not alerted")
+                continue
             check(len(mine) == 1, f"{role} received one variance_alert")
             if mine:
                 check(mine[0]["type"] == "variance_alert", f"{role} row typed variance_alert")
@@ -102,17 +108,17 @@ async def main() -> int:
             check(body["unread_count"] == before[role] + 1, f"{role} unread_count +1")
 
         # --- mark read is scoped to the caller -----------------------------
-        admin_rows = (await client.get(f"{API}/notifications", headers=auth["coop_admin"])).json()["items"]
+        admin_rows = (await client.get(f"{API}/notifications", headers=auth["terminal_manager"])).json()["items"]
         nid = next(n["notification_id"] for n in admin_rows if n["related_entity_id"] == result.audit_id)
-        r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["driver"])
-        check(r.status_code == 404, "driver cannot mark coop_admin's row read")
-        r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["coop_admin"])
-        check(r.status_code == 200, "coop_admin marks own row read")
-        after = (await client.get(f"{API}/notifications", headers=auth["coop_admin"])).json()["unread_count"]
-        check(after == before["coop_admin"], "coop_admin unread_count back to baseline")
+        r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["cashier"])
+        check(r.status_code == 404, "cashier cannot mark the Terminal Manager's row read")
+        r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["terminal_manager"])
+        check(r.status_code == 200, "Terminal Manager marks own row read")
+        after = (await client.get(f"{API}/notifications", headers=auth["terminal_manager"])).json()["unread_count"]
+        check(after == before["terminal_manager"], "Terminal Manager unread_count back to baseline")
 
-        r = await client.post(f"{API}/notifications/read-all", headers=auth["conductor"])
-        check(r.status_code == 200 and r.json()["marked"] >= 1, "conductor read-all")
+        r = await client.post(f"{API}/notifications/read-all", headers=auth["dispatcher"])
+        check(r.status_code == 200 and r.json()["marked"] >= 1, "dispatcher read-all")
 
         # --- no alert, no rows ----------------------------------------------
         async def quiet_capture(self):  # noqa: ANN001
@@ -126,7 +132,7 @@ async def main() -> int:
             quiet = await TriggerAuditUseCase(s).execute(
                 trip_id=TRIP, leg_sequence=1, triggered_by_user_id=user_id,
             )
-        body = (await client.get(f"{API}/notifications", headers=auth["coop_admin"])).json()
+        body = (await client.get(f"{API}/notifications", headers=auth["terminal_manager"])).json()
         check(
             not quiet.alert_raised
             and not any(n["related_entity_id"] == quiet.audit_id for n in body["items"]),

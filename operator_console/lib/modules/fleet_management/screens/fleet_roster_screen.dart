@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/fleet_repository.dart';
+import '../../../viewmodels/auth_provider.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
@@ -17,6 +18,9 @@ class FleetRosterScreen extends StatefulWidget {
 class _FleetRosterScreenState extends State<FleetRosterScreen> {
   late final FleetRepository _fleet = context.read<FleetRepository>();
   late final DispatchRepository _dispatch = context.read<DispatchRepository>();
+
+  /// The Cashier sees the roster; only the Terminal Manager changes it.
+  bool get _canEdit => context.read<AuthProvider>().profile?.role.isManager ?? false;
 
   List<Van>? _vans;
   List<StaffMember>? _crew;
@@ -145,8 +149,8 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
             children: [
               PageHeader(
                 title: 'Vans & Crew',
-                description: 'The cooperative\'s vans, and the drivers and conductors who work '
-                    'them. Click a row for details; use the ⋮ button to change a status.',
+                description: 'A2Z\'s vans, and the staff who dispatch them and keep the office. '
+                    'Click a row for details; use the ⋮ button to change a status.',
                 actions: [RefreshButton(onPressed: _load, busy: _loading)],
               ),
               Expanded(
@@ -160,7 +164,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
                                 children: [
                                   Expanded(child: _buildVansTable()),
                                   const SizedBox(width: 24),
-                                  Expanded(child: _buildDriversTable()),
+                                  Expanded(child: _buildStaffTable()),
                                 ],
                               )
                             : SingleChildScrollView(
@@ -168,7 +172,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
                                   children: [
                                     _buildVansTable(),
                                     const SizedBox(height: 24),
-                                    _buildDriversTable(),
+                                    _buildStaffTable(),
                                   ],
                                 ),
                               ),
@@ -187,7 +191,7 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
       count: vans.length,
       icon: Icons.airport_shuttle_outlined,
       addLabel: 'Add van',
-      onAdd: _openAddVanDialog,
+      onAdd: _canEdit ? _openAddVanDialog : null,
       emptyMessage: 'No vans yet. Add the first one with "Add van".',
       scroll: _vansScroll,
       columns: const [
@@ -212,26 +216,26 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
               Text('${van.seatCapacity}', style: _figures),
               _statusBadge(van.operationalStatus, _vanStatus(van.operationalStatus)),
             ],
-            trailing: _buildVanStatusMenu(van),
+            trailing: _canEdit ? _buildVanStatusMenu(van) : const SizedBox.shrink(),
           ),
       ],
     );
   }
 
-  Widget _buildDriversTable() {
+  Widget _buildStaffTable() {
     final crew = _crew ?? [];
     return _RosterCard(
-      title: 'Drivers and conductors',
+      title: 'Staff',
       count: crew.length,
       icon: Icons.badge_outlined,
-      addLabel: 'Add crew member',
-      onAdd: _openAddCrewDialog,
-      emptyMessage: 'No drivers or conductors yet. Add the first with "Add crew member".',
+      addLabel: 'Add staff member',
+      onAdd: _canEdit ? _openAddCrewDialog : null,
+      emptyMessage: 'No staff yet. Add the first with "Add staff member".',
       scroll: _crewScroll,
       columns: const [
         ('Name', 24, false),
-        ('Role', 14, false),
-        ('Licence', 18, false),
+        ('Role', 18, false),
+        ('Phone', 16, false),
         ('Status', 14, false),
       ],
       rows: [
@@ -246,10 +250,10 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
                   style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               Text(_roleLabel(staff.role),
                   overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.textPrimary)),
-              Text(staff.licenseNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
+              Text(staff.phoneNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
               _statusBadge(staff.employmentStatus, _crewStatus(staff.employmentStatus)),
             ],
-            trailing: _buildCrewStatusMenu(staff),
+            trailing: _canEdit ? _buildCrewStatusMenu(staff) : const SizedBox.shrink(),
           ),
       ],
     );
@@ -260,12 +264,12 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     fontFeatures: [FontFeature.tabularFigures()],
   );
 
-  /// Role in words. `coop_admin` is office staff -- never "operator", which
-  /// under LTFRB usage is the franchise holder (see migration 010).
+  /// Role in words. Never "operator" for staff: under LTFRB usage that is
+  /// the franchise holder, here the van owner, who has no account.
   static String _roleLabel(String role) => switch (role) {
-        'driver' => 'Driver',
-        'conductor' => 'Conductor',
-        'coop_admin' => 'Office staff',
+        'dispatcher' => 'Dispatcher',
+        'terminal_manager' => 'Terminal Manager',
+        'cashier' => 'Cashier',
         'admin' => 'Administrator',
         _ => role,
       };
@@ -365,7 +369,8 @@ class _RosterCard extends StatelessWidget {
   final int count;
   final IconData icon;
   final String addLabel;
-  final VoidCallback onAdd;
+  /// Null hides the button: the Cashier reads the roster but does not edit it.
+  final VoidCallback? onAdd;
   final String emptyMessage;
   final ScrollController scroll;
 
@@ -445,11 +450,12 @@ class _RosterCard extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         if (count > 0) Text('$count', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
         const Spacer(),
-        TextButton.icon(
-          onPressed: onAdd,
-          icon: const Icon(Icons.add, size: 18),
-          label: Text(addLabel),
-        ),
+        if (onAdd != null)
+          TextButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(addLabel),
+          ),
       ]),
     );
 
@@ -673,12 +679,8 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _password = TextEditingController();
-  final _license = TextEditingController();
-  // Only conductor/driver are valid Role values for crew. The backend's
-  // StaffIn model still accepts a stale "operator" literal left over from
-  // before migration 010 renamed that role to coop_admin -- there is no
-  // such Role any more, so it is never offered here.
-  String _role = 'conductor';
+  // Staff accounts only. The operator (van owner) has no login.
+  String _role = 'dispatcher';
   bool _submitting = false;
   String? _error;
 
@@ -689,7 +691,6 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
     _email.dispose();
     _phone.dispose();
     _password.dispose();
-    _license.dispose();
     super.dispose();
   }
 
@@ -707,10 +708,6 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
         role: _role,
         firstName: _firstName.text,
         lastName: _lastName.text,
-        licenseNumber: _role == 'driver' ? _license.text : null,
-        licenseExpiryDate: _role == 'driver'
-            ? DateTime.now().add(const Duration(days: 365))
-            : null,
       );
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -723,7 +720,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add a crew member'),
+      title: const Text('Add a staff member'),
       content: SizedBox(
         width: 380,
         child: Form(
@@ -742,10 +739,11 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
                   style: TextStyle(color: AppColors.textPrimary),
                   value: _role,
                   items: const [
-                    DropdownMenuItem(value: 'conductor', child: Text('Conductor')),
-                    DropdownMenuItem(value: 'driver', child: Text('Driver')),
+                    DropdownMenuItem(value: 'dispatcher', child: Text('Dispatcher')),
+                    DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+                    DropdownMenuItem(value: 'terminal_manager', child: Text('Terminal Manager')),
                   ],
-                  onChanged: (v) => setState(() => _role = v ?? 'conductor'),
+                  onChanged: (v) => setState(() => _role = v ?? 'dispatcher'),
                 ),
                 const SizedBox(height: 12),
                 _field(_firstName, 'First name', required: true),
@@ -757,10 +755,6 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
                 _field(_phone, 'Phone number', required: true),
                 const SizedBox(height: 12),
                 _field(_password, 'Temporary password', required: true, obscure: true),
-                if (_role == 'driver') ...[
-                  const SizedBox(height: 12),
-                  _field(_license, 'Driver\'s licence number', required: true),
-                ],
               ],
             ),
           ),
@@ -776,7 +770,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
           child: _submitting
               ? const SizedBox(
                   width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Add crew member'),
+              : const Text('Add staff member'),
         ),
       ],
     );
@@ -802,8 +796,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
 }
 
 /// Row-click detail views. Fields the roster table has no room for --
-/// CPC papers, the camera unit's device id, a driver's full licence and
-/// CTTMO record -- already exist on the backend; this just surfaces them
+/// CPC papers and the camera unit's device id -- already exist on the backend; this just surfaces them
 /// instead of adding new ones. No photos yet: `vans` has no photo column
 /// at all, and wiring one up (migration + upload endpoint + storage) is
 /// separate follow-on work.
@@ -895,16 +888,6 @@ class _CrewDetailDialog extends StatelessWidget {
         ('Email', staff.email),
         ('Phone', staff.phoneNumber ?? '—'),
         ('Cooperative', staff.cooperativeName ?? '—'),
-        if (staff.role == 'driver') ...[
-          ('License number', staff.licenseNumber ?? '—'),
-          (
-            'License expiry',
-            staff.licenseExpiryDate == null
-                ? '—'
-                : '${staff.licenseExpiryDate!.year}-${staff.licenseExpiryDate!.month.toString().padLeft(2, '0')}-${staff.licenseExpiryDate!.day.toString().padLeft(2, '0')}'
-          ),
-          ('CTTMO ID', staff.cttmoIdNumber ?? '—'),
-        ],
       ],
     );
   }

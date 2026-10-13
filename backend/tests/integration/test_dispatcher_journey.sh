@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Conductor journey -- everything a conductor does at the terminal.
+# Dispatcher journey -- everything a Dispatcher does at the terminal.
 #
-#   ./tests/integration/test_conductor_journey.sh
+#   ./tests/integration/test_dispatcher_journey.sh
 #
-# The conductor works the van door: scan tickets, log cash walk-ins,
+# The Dispatcher works the van door: scan tickets, log cash walk-ins,
 # watch the manifest, trigger an audit, close boarding.
 set -uo pipefail
 
@@ -29,10 +29,10 @@ code() {
 # ═══════════════════════════════════════════════ 1. SIGN IN
 hdr "1. Conductor signs in"
 
-S=$(code POST /auth/login '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}')
+S=$(code POST /auth/login '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}')
 [ "$S" = "200" ] && ok "login" || { bad "login gave $S"; exit 1; }
 CT=$(j "['access_token']" < /tmp/resp.json)
-[ "$(j "['role']" < /tmp/resp.json)" = "conductor" ] && ok "role is conductor" || bad "wrong role"
+[ "$(j "['role']" < /tmp/resp.json)" = "dispatcher" ] && ok "role is dispatcher" || bad "wrong role"
 
 S=$(code GET /auth/me "" "$CT")
 [ "$S" = "200" ] && ok "profile: $(j "['display_name']" < /tmp/resp.json)" || bad "me gave $S"
@@ -79,7 +79,7 @@ R=$(j "['result']" < /tmp/resp.json)
 S=$(code POST /scans \
   "{\"qr_payload\":\"SBG-does-not-exist\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
 R=$(j "['result']" < /tmp/resp.json)
-# 200 on purpose: a conductor with a queue needs a verdict, not an exception.
+# 200 on purpose: a Dispatcher with a queue needs a verdict, not an exception.
 [ "$S" = "200" ] && [ "$R" = "wrong_trip" ] \
   && ok "unknown QR rejected without raising ($R)" || bad "unknown QR: $S/$R"
 
@@ -176,7 +176,7 @@ S=$(code POST /bookings/reserve \
 [ "$S" = "409" ] && ok "bookings closed after departure (409)" || bad "post-departure booking gave $S"
 
 # ═══════════════════════════════════════════════ 7. BOUNDARIES
-hdr "7. A conductor is not a cooperative administrator"
+hdr "7. A Dispatcher is not the Terminal Manager"
 
 for ep in "GET /fleet/vans" "GET /config/policies" "GET /revenue/summary" \
           "GET /audits/pending"; do

@@ -2,14 +2,14 @@ import '../../core/network/api_client.dart';
 
 /// Roles as the backend defines them.
 ///
-/// `coopAdmin` maps to `coop_admin`, not `operator`: under LTFRB usage
-/// an operator is the franchise holder — the CPC holder, usually the van
-/// owner — which is a different party from cooperative office staff.
+/// The operator — the van owner, who always drives — has no account, so
+/// there is no driver role. The Terminal Manager and the Cashier work in
+/// the web console; signing in here lands them on the passenger view.
 enum UserRole {
   passenger('passenger'),
-  conductor('conductor'),
-  driver('driver'),
-  coopAdmin('coop_admin'),
+  dispatcher('dispatcher'),
+  terminalManager('terminal_manager'),
+  cashier('cashier'),
   admin('admin');
 
   const UserRole(this.wire);
@@ -20,10 +20,11 @@ enum UserRole {
         orElse: () => UserRole.passenger,
       );
 
-  bool get isCrew =>
-      this == UserRole.conductor || this == UserRole.driver;
+  bool get isCrew => this == UserRole.dispatcher;
   bool get isOffice =>
-      this == UserRole.coopAdmin || this == UserRole.admin;
+      this == UserRole.terminalManager ||
+      this == UserRole.cashier ||
+      this == UserRole.admin;
 }
 
 class AuthSession {
@@ -94,8 +95,8 @@ class AuthRepository {
 
   /// Passenger self-registration.
   ///
-  /// Crew accounts are not creatable here — conductors, drivers and
-  /// cooperative administrators are provisioned by the office, because
+  /// Staff accounts are not creatable here — Dispatchers, Cashiers and
+  /// the Terminal Manager are provisioned by the office, because
   /// employment is a cooperative decision rather than self-service.
   Future<AuthSession> register({
     required String email,

@@ -15,18 +15,18 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import case, func, select
 
-from app.api.v1.deps import SessionDep, require_roles
+from app.api.v1.deps import MANAGER, OFFICE, SessionDep
 from app.application.scheduling.generate_trips import (
     CreateSpecialTripUseCase,
     GenerateDailyTripsUseCase,
 )
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ
-from app.domain.enums import Role
 from app.infrastructure.models import (
     Booking,
     CooperativePolicy,
     FareMatrix,
+    Operator,
     Route,
     RouteStop,
     ScheduleTemplate,
@@ -36,7 +36,6 @@ from app.infrastructure.models import (
 )
 
 router = APIRouter(prefix="/config", tags=["configuration"])
-COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
 
 
 # ===================================================================
@@ -55,7 +54,7 @@ class PolicyIn(BaseModel):
 
 
 @router.get("/policies", response_model=list[PolicyOut],
-            dependencies=[Depends(COOP_ADMIN)])
+            dependencies=[Depends(OFFICE)])
 async def list_policies(session: SessionDep) -> list[PolicyOut]:
     """Every configurable cooperative policy.
 
@@ -71,7 +70,7 @@ async def list_policies(session: SessionDep) -> list[PolicyOut]:
 
 
 @router.put("/policies/{policy_key}", response_model=PolicyOut,
-            dependencies=[Depends(COOP_ADMIN)])
+            dependencies=[Depends(MANAGER)])
 async def update_policy(
     policy_key: str, payload: PolicyIn, session: SessionDep
 ) -> PolicyOut:
@@ -117,7 +116,7 @@ class TerminalIn(BaseModel):
     is_staffed: bool = True
 
 
-@router.post("/terminals", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/terminals", status_code=201, dependencies=[Depends(MANAGER)])
 async def create_terminal(payload: TerminalIn, session: SessionDep) -> dict:
     terminal_id = str(uuid.uuid4())
     session.add(
@@ -160,7 +159,7 @@ class RouteOut(BaseModel):
 
 
 @router.get("/routes", response_model=list[RouteOut],
-            dependencies=[Depends(COOP_ADMIN)])
+            dependencies=[Depends(OFFICE)])
 async def list_routes(session: SessionDep) -> list[RouteOut]:
     """Routes for pickers -- dispatching a special trip, assigning a van.
 
@@ -180,7 +179,7 @@ async def list_routes(session: SessionDep) -> list[RouteOut]:
     ]
 
 
-@router.post("/routes", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/routes", status_code=201, dependencies=[Depends(MANAGER)])
 async def create_route(payload: RouteIn, session: SessionDep) -> dict:
     """Create a route with its ordered stop sequence.
 
@@ -253,7 +252,7 @@ class FareBulkIn(BaseModel):
     fares: list[FareIn] = Field(min_length=1)
 
 
-@router.post("/fares", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/fares", status_code=201, dependencies=[Depends(MANAGER)])
 async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     """Set the pairwise fare matrix for a route.
 
@@ -303,7 +302,7 @@ async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     return {"route_id": payload.route_id, "fares_created": created}
 
 
-@router.get("/routes/{route_id}/fares", dependencies=[Depends(COOP_ADMIN)])
+@router.get("/routes/{route_id}/fares", dependencies=[Depends(OFFICE)])
 async def list_fares(route_id: str, session: SessionDep) -> list[dict]:
     result = await session.execute(
         select(FareMatrix)
@@ -335,14 +334,15 @@ class TemplateIn(BaseModel):
     # Monday-first 7-char mask: '1111100' = weekdays only.
     days_of_week: str = Field(default="1111111", pattern="^[01]{7}$")
     default_van_id: str | None = None
-    default_driver_id: str | None = None
-    default_conductor_id: str | None = None
+    # Stored in schedule_templates.default_conductor_id until the timetable
+    # loses its "usual" van and Dispatcher (brief 4.2, lifecycle migration).
+    default_dispatcher_id: str | None = None
     trip_label: str | None = None
     valid_from: dt.date | None = None
     valid_until: dt.date | None = None
 
 
-@router.get("/schedule-templates", dependencies=[Depends(COOP_ADMIN)])
+@router.get("/schedule-templates", dependencies=[Depends(OFFICE)])
 async def list_templates(session: SessionDep) -> list[dict]:
     result = await session.execute(
         select(ScheduleTemplate).order_by(ScheduleTemplate.departure_time)
@@ -356,10 +356,7 @@ async def list_templates(session: SessionDep) -> list[dict]:
             "trip_label": t.trip_label,
             "default_van_id": t.default_van_id,
             # Returned so the console can show who a slot is crewed by.
-            # They were always stored and always copied onto generated
-            # trips; the list just never said so.
-            "default_driver_id": t.default_driver_id,
-            "default_conductor_id": t.default_conductor_id,
+            "default_dispatcher_id": t.default_conductor_id,
             "is_active": t.is_active,
             "valid_from": t.valid_from,
             "valid_until": t.valid_until,
@@ -369,7 +366,7 @@ async def list_templates(session: SessionDep) -> list[dict]:
 
 
 @router.post("/schedule-templates", status_code=201,
-             dependencies=[Depends(COOP_ADMIN)])
+             dependencies=[Depends(MANAGER)])
 async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
     if await session.get(Route, payload.route_id) is None:
         raise NotFoundError("Route not found.")
@@ -382,8 +379,7 @@ async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
             departure_time=payload.departure_time,
             days_of_week=payload.days_of_week,
             default_van_id=payload.default_van_id,
-            default_driver_id=payload.default_driver_id,
-            default_conductor_id=payload.default_conductor_id,
+            default_conductor_id=payload.default_dispatcher_id,
             trip_label=payload.trip_label,
             is_active=True,
             valid_from=payload.valid_from or dt.date.today(),
@@ -396,7 +392,7 @@ async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
 
 
 @router.patch("/schedule-templates/{template_id}/active",
-              dependencies=[Depends(COOP_ADMIN)])
+              dependencies=[Depends(MANAGER)])
 async def toggle_template(
     template_id: str, is_active: bool, session: SessionDep
 ) -> dict:
@@ -411,7 +407,7 @@ async def toggle_template(
 # ===================================================================
 # Trip generation
 # ===================================================================
-@router.post("/trips/generate", dependencies=[Depends(COOP_ADMIN)])
+@router.post("/trips/generate", dependencies=[Depends(MANAGER)])
 async def generate_trips(
     session: SessionDep,
     service_date: dt.date | None = None,
@@ -443,13 +439,12 @@ class SpecialTripIn(BaseModel):
     route_id: str
     departure_datetime: dt.datetime
     van_id: str | None = None
-    driver_id: str | None = None
-    conductor_id: str | None = None
+    dispatcher_id: str | None = None
     trip_label: str | None = None
     advance_booking_seat_cap: int | None = Field(default=None, ge=0, le=14)
 
 
-@router.post("/trips/special", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/trips/special", status_code=201, dependencies=[Depends(MANAGER)])
 async def create_special_trip(
     payload: SpecialTripIn, session: SessionDep
 ) -> dict:
@@ -458,8 +453,7 @@ async def create_special_trip(
         route_id=payload.route_id,
         departure_datetime=payload.departure_datetime,
         van_id=payload.van_id,
-        driver_id=payload.driver_id,
-        conductor_id=payload.conductor_id,
+        dispatcher_id=payload.dispatcher_id,
         trip_label=payload.trip_label,
         advance_booking_seat_cap=payload.advance_booking_seat_cap,
     )
@@ -474,8 +468,10 @@ class TripBoardOut(BaseModel):
     status: str
     departed_at: dt.datetime | None
     plate_number: str | None
-    driver_name: str | None
-    conductor_name: str | None
+    # The van's owner, who drives it. On a trip the operator is only ever
+    # a name beside the plate, never a user (brief 9).
+    operator_name: str | None
+    dispatcher_name: str | None
     seat_capacity: int
     booked: int
     checked_in: int
@@ -483,11 +479,11 @@ class TripBoardOut(BaseModel):
     no_show: int
 
 
-@router.get("/trips", response_model=list[TripBoardOut], dependencies=[Depends(COOP_ADMIN)])
+@router.get("/trips", response_model=list[TripBoardOut], dependencies=[Depends(OFFICE)])
 async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[TripBoardOut]:
     """Every trip on one service date with its live status and crew -- the
-    office's view of what the conductor sees on each van. Per-trip detail
-    is the conductor's own manifest, GET /trips/{id}/manifest.
+    office's view of what the Dispatcher sees on each van. Per-trip detail
+    is the Dispatcher's own manifest, GET /trips/{id}/manifest.
 
     A separate endpoint, not a column on the revenue view, because status
     is operational and the view is a reconciliation: adding it there would
@@ -518,13 +514,20 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
             )
         ).all()
     }
-    crew_ids = {u for t in trips for u in (t.driver_id, t.conductor_id) if u}
+    dispatcher_ids = {t.dispatcher_id for t in trips if t.dispatcher_id}
     names = {
         p.user_id: f"{p.first_name} {p.last_name}"
         for p in (
-            await session.execute(select(StaffProfile).where(StaffProfile.user_id.in_(crew_ids)))
+            await session.execute(select(StaffProfile).where(StaffProfile.user_id.in_(dispatcher_ids)))
         ).scalars()
-    } if crew_ids else {}
+    } if dispatcher_ids else {}
+    operator_ids = {t.van.operator_id for t in trips if t.van and t.van.operator_id}
+    operators = {
+        o.operator_id: o.full_name
+        for o in (
+            await session.execute(select(Operator).where(Operator.operator_id.in_(operator_ids)))
+        ).scalars()
+    } if operator_ids else {}
 
     out = []
     for t in trips:
@@ -537,8 +540,8 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
             status=t.status,
             departed_at=t.departed_at,
             plate_number=t.van.plate_number if t.van else None,
-            driver_name=names.get(t.driver_id),
-            conductor_name=names.get(t.conductor_id),
+            operator_name=operators.get(t.van.operator_id) if t.van else None,
+            dispatcher_name=names.get(t.dispatcher_id),
             seat_capacity=t.seat_capacity,
             booked=int(c.booked or 0) if c else 0,
             checked_in=int(c.checked_in or 0) if c else 0,

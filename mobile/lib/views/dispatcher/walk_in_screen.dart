@@ -14,7 +14,7 @@ import '../../viewmodels/shift_viewmodel.dart';
 /// A roadside pickup is anchored to the last terminal the van passed,
 /// not the next one: anchoring forward would leave that stretch of road
 /// looking empty while someone sits in it, and the camera check would
-/// flag a real passenger as leakage. The conductor sets the fare because
+/// flag a real passenger as leakage. The Dispatcher sets the fare because
 /// the passenger has not travelled a fare-table distance.
 ///
 /// Laid out as a till, for a queue at the van door (3 Oct):
@@ -26,7 +26,7 @@ import '../../viewmodels/shift_viewmodel.dart';
 ///   inside a dropdown (two taps and a scroll). Boarding defaults to where
 ///   the van is and is rarely changed, so it is a compact chip row.
 /// * **Optional things fold away.** Name, number and receipt are only for
-///   a receipt; they sit collapsed below, not between the conductor and
+///   a receipt; they sit collapsed below, not between the Dispatcher and
 ///   the button.
 /// * **Built for the next passenger.** After logging, "Next passenger"
 ///   clears the destination and keeps the screen; a run of walk-ins no
@@ -103,7 +103,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
   double? get _tableFare =>
       _alighting == null ? null : _fares?[(_boarding, _alighting!)];
 
-  /// What the bar says to collect. Roadside: what the conductor typed.
+  /// What the bar says to collect. Roadside: what the Dispatcher typed.
   double? get _total => _roadside ? double.tryParse(_fare.text) : _tableFare;
 
   String _peso(double v) => '₱${v.toStringAsFixed(2)}';
@@ -149,7 +149,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
       _logged++;
 
       // The server's fare, not the preview, is what is confirmed: if the
-      // two ever differ, the conductor collects what was recorded.
+      // two ever differ, the Dispatcher collects what was recorded.
       final collect = submission.queued ? fareOverride ?? _tableFare : submission.result!.fare;
       final next = await showModalBottomSheet<bool>(
         context: context,
@@ -278,7 +278,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
                     _DestinationRow(
                       name: destinations[i].terminalName,
                       selected: _alighting == destinations[i].stopSequence,
-                      // Roadside fares are the conductor's, so the table
+                      // Roadside fares are the Dispatcher's, so the table
                       // price would be misleading there.
                       fare: _roadside ? null : _fares?[(_boarding, destinations[i].stopSequence)],
                       peso: _peso,
@@ -452,7 +452,7 @@ class _TotalBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final caption = total != null
-        ? (manual ? 'Conductor-set fare' : 'Approved fare')
+        ? (manual ? 'Dispatcher-set fare' : 'Approved fare')
         : pending
             ? 'Fare set by the server when logged'
             : manual
@@ -517,7 +517,7 @@ class _TotalBar extends StatelessWidget {
 }
 
 /// Confirmation after logging. The amount is the largest thing on it, so
-/// the conductor can hold the phone up to the passenger. "Next passenger"
+/// the Dispatcher can hold the phone up to the passenger. "Next passenger"
 /// is the primary action because during a rush it is the common one.
 class _LoggedSheet extends StatelessWidget {
   const _LoggedSheet({
@@ -569,7 +569,7 @@ class _LoggedSheet extends StatelessWidget {
                 ),
               ),
               if (manual)
-                const Text('Conductor-set fare', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                const Text('Dispatcher-set fare', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
               if (queued) ...[
                 const SizedBox(height: AppSpacing.md),
                 const Text(

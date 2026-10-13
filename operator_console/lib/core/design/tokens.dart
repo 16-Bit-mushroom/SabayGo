@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens for the coop_admin console.
+/// Design tokens for the office console.
 ///
 /// **Two palettes, dark by default.** The console was redesigned in
 /// October 2026 as an operations dashboard: near-black canvas, grey panels,
@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 /// a washed-out projector. The person at the desk picks one with the
 /// sun/moon button in the top bar ([Appearance]).
 ///
-/// `mobile/` stays light and keeps its own tokens: a conductor reads it at
+/// `mobile/` stays light and keeps its own tokens: a Dispatcher reads it at
 /// a van door in direct sunlight.
 ///
 /// **Every pairing below is measured against WCAG 2.1 AA** in both
@@ -253,7 +253,7 @@ class AppSizing {
   /// including icon buttons that look smaller than their hit area.
   static const double minTouchTarget = 48;
 
-  /// Primary actions. Carried over deliberately: a conductor works one
+  /// Primary actions. Carried over deliberately: a Dispatcher works one
   /// handed at a van door, often with a phone in a case and a queue behind
   /// the passenger.
   static const double primaryActionHeight = 52;

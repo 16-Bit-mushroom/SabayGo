@@ -9,10 +9,14 @@ from enum import Enum
 
 
 class Role(str, Enum):
+    """Who can sign in. The operator (van owner, who drives) is not here:
+    a roster row in `operators`, no login. The DB ENUM still holds a legacy
+    'driver' for the accounts migration 017 deactivated; no code writes it."""
+
     PASSENGER = "passenger"
-    CONDUCTOR = "conductor"
-    DRIVER = "driver"
-    COOP_ADMIN = "coop_admin"
+    DISPATCHER = "dispatcher"
+    TERMINAL_MANAGER = "terminal_manager"
+    CASHIER = "cashier"
     ADMIN = "admin"
 
 

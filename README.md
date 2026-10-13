@@ -154,7 +154,7 @@ modes:
   ```fish
   set TOKEN (curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
     -H "Content-Type: application/json" \
-    -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' \
+    -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' \
     | python3 -c "import json,sys;print(json.load(sys.stdin)['access_token'])")
   curl -X POST http://127.0.0.1:8000/api/v1/audits/trigger-phone \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -180,7 +180,8 @@ flutter run -d chrome --dart-define=API_BASE_URL=http://192.168.1.8:8000/api/v1
 ```
 
 Dev accounts (password `sabaygo123`): `passenger@sabaygo.dev`,
-`conductor@sabaygo.dev`, `driver@sabaygo.dev`, `coopadmin@sabaygo.dev`.
+`dispatcher@sabaygo.dev`, `manager@sabaygo.dev` (Terminal Manager),
+`cashier@sabaygo.dev`. The operator (van owner, who drives) has no account.
 
 ### 6. Backend test scripts
 

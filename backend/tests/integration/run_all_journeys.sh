@@ -62,10 +62,10 @@ if grep -q "STOP" "$REPORT"; then
 fi
 
 # ── journeys ──────────────────────────────────────────────────────────
-# Each journey gets a clean database: the conductor script departs the
+# Each journey gets a clean database: the dispatcher script departs the
 # trip and the passenger script consumes seats, so shared state produces
 # failures that look like bugs but are really ordering.
-for journey in passenger conductor driver_operator; do
+for journey in passenger dispatcher office; do
   label=$(echo "$journey" | tr '[:lower:]_' '[:upper:] ')
   {
     echo

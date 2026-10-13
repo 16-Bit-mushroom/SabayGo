@@ -5,8 +5,8 @@ Rows in `notifications` are the record; FCM delivery is a later concern
 `delivery_status` stays 'queued' and `fcm_message_id` stays NULL).
 
 The first producer is the YOLOv8 audit: a flagged variance used to be
-written to `yolov8_audit_logs` and told no one. Now the office, the driver
-and the conductor each get a row pointing at the audit, so the console's
+written to `yolov8_audit_logs` and told no one. Now the Terminal Manager
+and the trip's Dispatcher each get a row pointing at the audit, so the console's
 queue is a destination rather than something staff must remember to open.
 """
 
@@ -26,6 +26,16 @@ class NotificationService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def _staff(self, *roles: Role) -> list[tuple[str, str]]:
+        """Every active account holding one of these roles, as (user_id, audience)."""
+        rows = await self.session.execute(
+            select(User.user_id, User.role).where(
+                User.role.in_([r.value for r in roles]),
+                User.account_status == "active",
+            )
+        )
+        return [(uid, role) for uid, role in rows.all()]
+
     # ------------------------------------------------------------------
     # Producers
     # ------------------------------------------------------------------
@@ -33,7 +43,7 @@ class NotificationService:
         self, *, audit_id: str, trip: Trip, leg_sequence: int,
         visual_count: int, booked_count: int, variance: int,
     ) -> int:
-        """Alert office, driver and conductor about a flagged headcount.
+        """Alert the Terminal Manager and the trip's Dispatcher about a flagged headcount.
 
         Adds rows to the session without committing; the caller owns the
         transaction so the audit log and its alerts land together.
@@ -52,18 +62,9 @@ class NotificationService:
             f"{visual_count}, passenger list shows {booked_count}. {detail}"
         )
 
-        recipients: list[tuple[str, str]] = []
-        office = await self.session.scalars(
-            select(User.user_id).where(
-                User.role == Role.COOP_ADMIN.value,
-                User.account_status == "active",
-            )
-        )
-        recipients.extend((uid, Role.COOP_ADMIN.value) for uid in office)
-        if trip.driver_id:
-            recipients.append((trip.driver_id, Role.DRIVER.value))
-        if trip.conductor_id:
-            recipients.append((trip.conductor_id, Role.CONDUCTOR.value))
+        recipients = await self._staff(Role.TERMINAL_MANAGER)
+        if trip.dispatcher_id:
+            recipients.append((trip.dispatcher_id, Role.DISPATCHER.value))
 
         now = app_tz.now()
         for user_id, audience in recipients:
@@ -106,19 +107,9 @@ class NotificationService:
             f"{route}{where}. {detail}"
         )
 
-        recipients: list[tuple[str, str]] = []
-        office = await self.session.scalars(
-            select(User.user_id).where(
-                User.role == Role.COOP_ADMIN.value,
-                User.account_status == "active",
-            )
-        )
-        recipients.extend((uid, Role.COOP_ADMIN.value) for uid in office)
-        if trip is not None:
-            if trip.driver_id:
-                recipients.append((trip.driver_id, Role.DRIVER.value))
-            if trip.conductor_id:
-                recipients.append((trip.conductor_id, Role.CONDUCTOR.value))
+        recipients = await self._staff(Role.TERMINAL_MANAGER, Role.CASHIER)
+        if trip is not None and trip.dispatcher_id:
+            recipients.append((trip.dispatcher_id, Role.DISPATCHER.value))
 
         now = app_tz.now()
         sent = 0
@@ -157,14 +148,14 @@ class NotificationService:
                 # notifications.audience has no 'admin' member -- the
                 # system administrator reads the office's queue.
                 audience=(
-                    Role.COOP_ADMIN.value
+                    Role.TERMINAL_MANAGER.value
                     if alert.raised_by_role == Role.ADMIN.value
                     else alert.raised_by_role
                 ),
                 type="sos_alert",
                 title="Your SOS has been seen",
                 message=(
-                    "The cooperative office has acknowledged your emergency "
+                    "The A2Z office has acknowledged your emergency "
                     "alert and is responding."
                 ),
                 related_entity_type="sos",
