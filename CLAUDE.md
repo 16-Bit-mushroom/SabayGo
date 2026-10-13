@@ -58,9 +58,22 @@ check-out per phone and per van, functional unique indexes),
 `remittances` (daily, per van), `remittance_lines`, `data_transfers`,
 `disputes`; plus `operators.import_batch_id` and Table 31's two columns
 on `trip_location_pings`. The paper→repo name map is the migration's
-header. Schema only, no ORM models or code yet. Still to come in the
-schema step: Fare_Matrix by terminal pair (27), `cooperative_policies`
-with `effective_from` (33), and the 7.3 column edits.
+header. Schema only, no ORM models or code yet.
+
+Done: migration 019 — the brief's 7.3 column edits, expand only. `trips`:
+`route_id` may be NULL (a van rental = `is_special_trip` and no route;
+`is_special_trip` alone still marks the office's extra departures), plus
+assignment, start, review, audit, departure-source and change columns
+(brief 4.3) and the operator name/licence/plate copied at start
+(backfilled for trips that already ran). `vans`: validation, import
+batch, four photo URLs. `staff_profiles`: the Dispatcher's validation and
+import batch. `bookings.logged_by`: who recorded a walk-in (written by
+`POST /bookings/walk-in`). Ten new notification types. Decided 13 Oct and
+**not** stored: booking origin/destination terminals and payment status
+(derived from stop sequences and `payments`), and `fare_matrix` stays per
+route by stop sequence — both written up in `MANUSCRIPT_CORRECTIONS.md`
+§11. Left for the settings step: `cooperative_policies` + `effective_from`
+(Table 33).
 
 ---
 

@@ -243,6 +243,38 @@ rolled-back transaction; clean rebuild via `reset-dev.sh`; office journey
 47 passed, dispatcher 23 passed, `test_auto_audit.py` all passed (writes
 GPS pings).
 
+**Done — step 2c, column edits (migration 019, 13 Oct).** Decisions:
+`trips.route_id` may be NULL, for a van rental (decided); booking
+origin/destination terminals and payment status are derived, not stored
+(decided); `fare_matrix` stays per route by stop sequence (decided). The
+last two, and `IsSpecial`, are written up for the paper in
+`MANUSCRIPT_CORRECTIONS.md` §11.
+
+| Brief 4.3 / 7.3 | Repo |
+|---|---|
+| TripSchedules start, review, audit, departure-source, change columns; DriverName, DriverLicenseNo, VanPlateNumber | added to `trips`; start/review/departure stay NULL on trips that ran before 019 (never recorded); the three copies are backfilled from the trip's driver and van |
+| IsSpecial; AssignedVanID NULL | `is_special_trip` AND `route_id` NULL; `van_id` was already NULL-able |
+| Vans validation, ImportBatchID, photo URLs | added; existing vans `pending`, as operators were in 017. Photo column names (front, rear, left, right) are a guess at the paper's four; rename if Table 9 names them otherwise |
+| Dispatchers validation, ImportBatchID | on `staff_profiles` |
+| LogBookEntries.LoggedBy | `bookings.logged_by`, written by the walk-in endpoint |
+| Notification types | ten added to `notifications.type` |
+| Bookings Origin/DestTerminalID, PaymentStatus/Reference; Fare_Matrix by terminal pair | not stored (above) |
+
+CHECKs: a trip without a route must be special; a manual start names its
+starter and an automatic one does not; a reviewed start names its
+reviewer; unaudited ⇔ reason and time; a change has who, when and a note.
+The down script narrows `route_id` and the notification ENUM first, so
+it refuses, changing nothing, while a routeless trip or a new-type
+notification exists.
+
+Verified: round trip pre-019 → 019 → pre-019 gives an identical schema and
+data fingerprint (the backfill keeps `trips.updated_at`); rollback refused
+with a routeless trip present, fingerprint unchanged; smoke test 7
+refused / 4 accepted; clean rebuild; roadside 10, dispatcher 23, office
+47, passenger 40 + the known `--soon` reschedule failure,
+`test_notifications` and `test_auto_audit` all passed; walk-ins carry
+`logged_by`.
+
 Consequence for the paper's sample trip (brief 12.1), which the group
 must redraw: E15's cash log can no longer exist, so E15 is an unrecorded
 boarding (Sta. Cruz → Digos, ₱30, matched FIFO to Digos with E13 and

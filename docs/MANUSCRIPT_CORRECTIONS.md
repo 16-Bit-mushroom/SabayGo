@@ -10,6 +10,8 @@ itself; the line numbers below are the export's, for locating the sentence.
 Sections 1-8 verified against the tree at `d5d22e9`, 28 September 2026.
 Sections 9-10 added 8 October 2026, when the evaluation harness
 (`ai_service/eval/`) was built and surfaced them.
+Section 11 added 13 October 2026, for the revision 468 data dictionary
+(migrations 018 and 019).
 
 ---
 
@@ -222,3 +224,47 @@ which is the actual contribution. The harness and its reasoning are in
 README), delete the clause beginning "rather than on footage from" and
 report the staged figures from Table 1b instead. That is a half-day of
 work and it is the single cheapest upgrade available to this chapter.
+
+## 11. Data dictionary (rev 468) — where the schema stores it differently  (Tables 25-39, brief 7.3)
+
+The schema keeps its own names (decided 13 Oct); this is the mapping to
+cite or to adopt in the data dictionary. The full lists are in the
+headers of `db/migrations/018_revenue_audit_tables.sql` and
+`019_trip_start_audit_columns.sql`. Three entries change what a column
+*is*, not just its name, and need a sentence in the paper:
+
+**Fare_Matrix (Table 27).** The paper keys fares by terminal pair:
+UNIQUE (OriginTerminalID, DestTerminalID, EffectiveFrom). The schema keys
+them per route by stop position: UNIQUE (route_id, from_stop_sequence,
+to_stop_sequence, effective_from). Every fare charged is one terminal to
+another along a route, so both give the same price; the schema form lets
+two routes price the same terminal pair differently if LTFRB approves
+them separately. Suggested sentence: "Fares are stored per route, from
+one stop of the route to a later stop, with the date each fare takes
+effect; a stop is a terminal's position on that route."
+
+**Bookings Origin/DestTerminalID, PaymentStatus, PaymentReference
+(7.3).** Not stored on the booking. The terminals are found from the
+booking's boarding and alighting stop positions on the trip's route,
+and the payment state and gateway reference are in `payments`
+(`status`, `provider_ref_id`), one row per payment attempt. Storing them
+again on the booking would let the two copies disagree. Suggested
+sentence: "A booking records its boarding and alighting stop positions;
+the terminals follow from the route, and payment state is recorded per
+payment in Payments."
+
+**IsSpecial (TripSchedules).** A van rental is a trip with
+`is_special_trip` set and **no route** (`route_id` NULL). `is_special_trip`
+alone also marks the office's extra departures on a fixed route, which
+the paper does not describe. Either describe them, or say that a special
+trip in the paper's sense is one with no route.
+
+Name-only mappings (no wording change needed beyond the table names):
+ScheduleID → `trip_id`; TerminalStaff and Dispatchers → `users` +
+`staff_profiles`; LogBookEntries → walk-in rows of `bookings`
+(`logged_by`, `alighting_stop_sequence`, `fare_amount`);
+Nahgm_tracking_logs → `trip_location_pings`; Passenger_Events'
+MatchedBookingID and MatchedLogEntryID → one `matched_booking_id`;
+Route_Stretches' From/ToTerminalID → the terminals at stops *k* and *k*+1;
+Notifications RecipientType/RecipientID → `audience`/`user_id`;
+Status 'En Route' → `departed`.

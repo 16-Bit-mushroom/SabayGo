@@ -112,7 +112,9 @@ async def reserve(
     status_code=201,
     dependencies=[Depends(require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER))],
 )
-async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingResponse:
+async def log_walk_in(
+    payload: WalkInRequest, session: SessionDep, user: CurrentUser
+) -> BookingResponse:
     """Record a cash passenger boarding at a terminal stop.
 
     Accepted whenever the trip has space, including while the van is
@@ -166,6 +168,7 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
             walkin_name=payload.name,
             walkin_phone=payload.phone,
             walkin_wants_receipt=payload.wants_receipt,
+            logged_by=user.user_id,
             client_request_id=payload.client_request_id,
         )
     )

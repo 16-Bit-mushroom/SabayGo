@@ -62,6 +62,8 @@ class ReserveSeatCommand:
     walkin_name: str | None = None
     walkin_phone: str | None = None
     walkin_wants_receipt: bool = False
+    # Who recorded a cash walk-in (the paper's LogBookEntries.LoggedBy).
+    logged_by: str | None = None
     # Set by the mobile client when a walk-in was queued offline, so a
     # retried sync can be recognised as a replay. The duplicate check
     # itself lives at the API boundary (bookings.py); this only persists
@@ -151,6 +153,7 @@ class ReserveSeatUseCase:
                 walkin_phone=booking.walkin_phone,
                 walkin_wants_receipt=booking.walkin_wants_receipt,
                 booking_type=booking.booking_type.value,
+                logged_by=cmd.logged_by if is_cash else None,
                 client_request_id=cmd.client_request_id,
                 boarding_stop_sequence=segment.boarding_stop,
                 alighting_stop_sequence=segment.alighting_stop,
