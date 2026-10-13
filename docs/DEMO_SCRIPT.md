@@ -37,20 +37,19 @@ dataset from `db/seed/002_demo_dataset.sql`.
 | 7 | Conductor | Assigned trips → Manifest | Passenger shows **AT TERMINAL** | |
 | 8 | Conductor | Scan | Scan the QR → **valid** | Scan it again → **already boarded**. This is the anti-fraud beat |
 | 9 | Conductor | Walk-in | Log a cash passenger 1 → 4 | Cash is *in hand*, not missing — the office sees the difference |
-| 10 | Driver / Conductor | Headcount | Enter 2 | Cross-check by a human before the camera |
-| 11 | Conductor | Audit | Trigger the camera | Visual vs manifest. Variance > 0 flags the trip and notifies the office |
-| 12 | Laptop | Console → bell | Variance alert → Passenger Count Checks | Same row, same transaction as the audit log |
-| 13 | Laptop | Audits → **History** | Yesterday's resolved / ignored / failed | The failed one: the node returned 502 rather than invent a count |
-| 14 | Laptop | Revenue | Last 3 days; cash in hand ₱790 vs unreconciled ₱0 | One conductor has not remitted yet — that is a pocket, not a leak |
-| 15 | Laptop | Revenue → **Export** | Download the .xlsx, open it | Totals row; the office keeps its books in Excel |
+| 10 | Conductor | Audit | Trigger the camera | Visual vs manifest. Variance > 0 flags the trip and notifies the office |
+| 11 | Laptop | Console → bell | Variance alert → Passenger Count Checks | Same row, same transaction as the audit log |
+| 12 | Laptop | Audits → **History** | Yesterday's resolved / ignored / failed | The failed one: the node returned 502 rather than invent a count |
+| 13 | Laptop | Revenue | Last 3 days; cash in hand ₱790 vs unreconciled ₱0 | One conductor has not remitted yet — that is a pocket, not a leak |
+| 14 | Laptop | Revenue → **Export** | Download the .xlsx, open it | Totals row; the office keeps its books in Excel |
 
 Stop there. Fifteen steps is twelve minutes at a comfortable pace.
 
 ## If the camera is off
 
-Step 11 returns **502**. Do not apologise — that is the design: *"the node
+Step 10 returns **502**. Do not apologise — that is the design: *"the node
 never fabricates a count. An earlier prototype substituted 1 and displayed
-it as real, which would flag an innocent driver."* Then go to step 13 and
+it as real, which would flag an innocent driver."* Then go to step 12 and
 show yesterday's audits, including the one that failed the same way.
 
 ## If the webhook simulator fails

@@ -126,10 +126,7 @@ ps=m.get('passengers',m if isinstance(m,list) else [])
 print(f\"{len(ps)} passengers, {sum(1 for p in ps if p.get('status')=='boarded')} boarded\")")"
 
 # ──────────────────────────────────────────────────────── 4. audit
-step "4. Dispatcher: headcount, then the camera audit"
-S=$(code POST "/trips/$TRIP/headcount" '{"stop_sequence":1,"confirmed_count":2}' "$CT")
-[ "$S" = "200" ] && ok "dispatcher headcount 2 -- variance $(j "['variance']" < /tmp/resp.json)" || warn "headcount gave $S: $(j "['detail']" < /tmp/resp.json)"
-
+step "4. The camera audit"
 S=$(code POST /audits/trigger "{\"trip_id\":\"$TRIP\",\"leg_sequence\":1,\"trigger_type\":\"manual\"}" "$CT")
 if [ "$S" = "200" ]; then
   ok "YOLOv8: visual $(j "['visual_count']" < /tmp/resp.json) vs manifest $(j "['booked_count']" < /tmp/resp.json) -- $(j "['resolution_status']" < /tmp/resp.json)"

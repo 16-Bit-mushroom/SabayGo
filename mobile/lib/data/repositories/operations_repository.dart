@@ -223,27 +223,6 @@ class WalkInResult {
       );
 }
 
-class HeadcountResult {
-  const HeadcountResult({
-    required this.confirmedCount,
-    required this.manifestCount,
-    required this.variance,
-    required this.message,
-  });
-
-  final int confirmedCount;
-  final int manifestCount;
-  final int variance;
-  final String message;
-
-  factory HeadcountResult.fromJson(Map<String, dynamic> j) => HeadcountResult(
-        confirmedCount: j['confirmed_count'] as int,
-        manifestCount: j['manifest_count'] as int,
-        variance: j['variance'] as int,
-        message: j['message'] as String,
-      );
-}
-
 class Remittance {
   const Remittance({
     required this.tripId,
@@ -364,18 +343,6 @@ class OperationsRepository {
       'client_request_id': ?clientRequestId,
     });
     return WalkInResult.fromJson(json as Map<String, dynamic>);
-  }
-
-  Future<HeadcountResult> headcount({
-    required String tripId,
-    required int stopSequence,
-    required int confirmedCount,
-  }) async {
-    final json = await _api.post('/trips/$tripId/headcount', body: {
-      'stop_sequence': stopSequence,
-      'confirmed_count': confirmedCount,
-    });
-    return HeadcountResult.fromJson(json as Map<String, dynamic>);
   }
 
   Future<void> startBoarding(String tripId) =>

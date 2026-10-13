@@ -275,6 +275,37 @@ refused / 4 accepted; clean rebuild; roadside 10, dispatcher 23, office
 `test_notifications` and `test_auto_audit` all passed; walk-ins carry
 `logged_by`.
 
+**Done — contraction (migration 020, 13 Oct).** Dropped the `driver`
+role value (users, notifications, SOS), `driver_credentials`,
+`trips.driver_id`, `schedule_templates.default_driver_id`, the four
+roadside/manual-fare booking columns, and `driver_headcounts`. The
+Dispatcher's manual headcount is retired with its table (endpoint,
+mobile dialog and widget test, journey step, demo-script step): it was a
+self-report by the audited person that nothing read, and brief 5.2's
+per-stop cabin snapshot is the drift check. The revenue view drops its
+two roadside sums and LEFT JOINs routes, so a rental trip (no route)
+keeps its fares. Demo data: the two "Roadside - …" walk-ins on completed
+trips renamed, and the audit note that told a roadside story reworded.
+
+A preflight (stored procedure + SIGNAL) stops 020 before any change if a
+driver account, a 'driver' notification or SOS row, a trip that ran with
+a driver but has no copied name, or an uncopied licence exists.
+
+Not dropped, and why: the timetable's default van and Dispatcher
+(`generate_trips.py` staffs trips from them until step 4's assignment at
+the van's turn); `vans.operator_id` NOT NULL (`POST /fleet/vans` creates a
+van with no operator, and nothing creates an operator before step 3);
+the legacy ENUM values `driver_issued` and `conductor_driver`.
+
+Verified: preflight refused with a driver account present, fingerprint
+unchanged; round trip on a clean 019 database gives identical data and
+an identical schema except four CHECK clauses MySQL re-prints with a
+`_utf8mb4` instead of `_latin1` literal after any ALTER of their table;
+clean rebuild; roadside 10, dispatcher 22 (one headcount check fewer),
+office 47, passenger 40 + the known `--soon` failure, notifications and
+auto-audit all passed; mobile analyze clean of errors/warnings, 29 widget
+tests pass.
+
 Consequence for the paper's sample trip (brief 12.1), which the group
 must redraw: E15's cash log can no longer exist, so E15 is an unrecorded
 boarding (Sta. Cruz → Digos, ₱30, matched FIFO to Digos with E13 and

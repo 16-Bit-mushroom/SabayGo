@@ -46,10 +46,8 @@ wins.** Decisions:
 Done: migration 017 — `conductor` → `dispatcher`, `coop_admin` →
 `terminal_manager`, new `cashier`, `trips.conductor_id` → `dispatcher_id`,
 `operators` roster table (no login), `vans.operator_id` UNIQUE. Driver
-accounts became operator rows and were deactivated; `driver` survives in
-the role ENUMs only for that history. Contraction (drop `driver`,
-`driver_credentials`, `trips.driver_id`, timetable "usual" van/Dispatcher,
-`driver_headcounts`) is a later migration, approved separately.
+accounts became operator rows and were deactivated; the contraction is
+migration 020 (below).
 
 Done: migration 018 — the brief's new tables (28–39, less 26, 27, 33):
 `route_stretches`, `edge_devices`, `device_checkouts` (one open
@@ -74,6 +72,20 @@ import batch. `bookings.logged_by`: who recorded a walk-in (written by
 route by stop sequence — both written up in `MANUSCRIPT_CORRECTIONS.md`
 §11. Left for the settings step: `cooperative_policies` + `effective_from`
 (Table 33).
+
+Done: migration 020 — the contraction. Dropped: the `driver` role value
+(users, notifications, SOS), `driver_credentials`, `trips.driver_id`,
+`schedule_templates.default_driver_id`, the roadside/manual-fare booking
+columns, and `driver_headcounts` with the Dispatcher's manual headcount
+(endpoint, dialog, tests): a self-report by the person being audited that
+nothing read; the camera's per-stop snapshot is the brief's drift check.
+The revenue view no longer sums roadside columns and LEFT JOINs routes (a
+rental has none). A preflight stops 020 before any change on a database
+with driver accounts or other history it would lose. **Still to drop:**
+the timetable's default van and Dispatcher (`generate_trips.py` staffs
+trips from them until assignment at the van's turn, step 4) and
+`vans.operator_id` NOT NULL (`POST /fleet/vans` makes a van with no
+operator until the roster step, step 3).
 
 ---
 
@@ -346,7 +358,7 @@ Changing any of these is a schema migration, not a config change.
 Schema (13 migrations) · JWT auth · segment booking with pessimistic
 locking · PayMongo checkout and verified webhooks · cash remittance ·
 geofenced check-in (window against the passenger's own stop, undoable) ·
-QR boarding · manifest · driver headcount · YOLOv8
+QR boarding · manifest · YOLOv8
 audit · revenue reconciliation · trip generation · fleet/crew/route/fare/
 policy CRUD · scheduling conflict detection · NAHGM live tracking ·
 `GET /trips/assigned` for crew · in-app notifications (`/notifications`),
@@ -402,7 +414,7 @@ real QR from `qr_payload` · geofenced check-in via `geolocator` · my
 bookings · reschedule · cancel · conductor trip list and manifest · QR
 boarding scan (valid/already-boarded/unpaid/cancelled/wrong-stop/
 wrong-trip verdicts) · walk-in cash logging (roadside logging and the
-conductor-set fare removed 13 Oct, rev 468) · driver/conductor headcount cross-check · depart with
+conductor-set fare removed 13 Oct, rev 468) · depart with
 automatic no-show release · cash remittance with variance flagging.
 
 Verified on a physical device on 11 and 14 September: the full passenger

@@ -59,12 +59,6 @@ for p in m['passengers']:
     print(f\"    seat {p['seat_number']:>2}  stops {p['boarding_stop']}->{p['alighting_stop']}  {p['status']:<12} {p['booking_type']}\")"
 
 echo
-echo "== dispatcher headcount ================================"
-curl -s -X POST "$API/trips/$TRIP/headcount" -H "Authorization: Bearer $CTOKEN" \
-  -H "Content-Type: application/json" -d '{"stop_sequence":1,"confirmed_count":2}' \
-  | python3 -m json.tool
-
-echo
 echo "== AI node health ======================================"
 curl -s "$API/audits/node-health" -H "Authorization: Bearer $CTOKEN" | python3 -m json.tool || \
   echo "  (start ai_service first: cd ai_service && python app.py)"

@@ -19,8 +19,8 @@ async def assert_assigned_to_trip(
 ) -> Trip:
     """A Dispatcher may only act on the trip they are assigned to.
 
-    Without this, any Dispatcher could scan tickets, log cash passengers, or
-    confirm a headcount on any trip in the system -- which makes the
+    Without this, any Dispatcher could scan tickets or log cash passengers
+    on any trip in the system -- which makes the
     remittance record meaningless, since the fares a person is accountable
     for would no longer correspond to the runs they actually worked.
 

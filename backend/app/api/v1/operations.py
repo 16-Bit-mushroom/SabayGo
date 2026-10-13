@@ -1,14 +1,12 @@
-"""Operations endpoints: check-in, boarding, manifest, headcount."""
+"""Operations endpoints: check-in, boarding, manifest."""
 
 from __future__ import annotations
 
 import datetime as dt
-import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.application.operations.boarding import (
@@ -25,7 +23,7 @@ from app.application.operations.guards import assert_assigned_to_trip
 from app.core.exceptions import NotFoundError
 from app.core.timezone import APP_TZ
 from app.domain.enums import Role
-from app.infrastructure.models import DriverHeadcount, Trip
+from app.infrastructure.models import Trip
 
 router = APIRouter(tags=["operations"])
 
@@ -179,103 +177,6 @@ class ManifestResponse(BaseModel):
 )
 async def manifest(trip_id: str, session: SessionDep) -> ManifestResponse:
     return ManifestResponse(**await ManifestUseCase(session).for_trip(trip_id))
-
-
-# ---------------------------------------------------------------- headcount
-class HeadcountRequest(BaseModel):
-    stop_sequence: int = Field(ge=1)
-    confirmed_count: int = Field(ge=0, le=14)
-
-
-class HeadcountResponse(BaseModel):
-    headcount_id: str
-    trip_id: str
-    stop_sequence: int
-    confirmed_count: int
-    manifest_count: int
-    variance: int
-    message: str
-
-
-@router.post(
-    "/trips/{trip_id}/headcount",
-    response_model=HeadcountResponse,
-    dependencies=[Depends(require_roles(Role.DISPATCHER))],
-)
-async def confirm_headcount(
-    trip_id: str,
-    payload: HeadcountRequest,
-    session: SessionDep,
-    user: CurrentUser,
-) -> HeadcountResponse:
-    """Dispatcher confirms how many people are physically aboard.
-
-    Superseded by door events (brief rev 468); retired with
-    driver_headcounts in the contraction migration.
-
-    A single number, deliberately -- asking crew to itemise passengers
-    before departure guarantees it will not be done. This is the human
-    cross-check on the YOLOv8 count: two independent observations of the
-    same reality, and disagreement between them is itself a signal.
-    """
-    trip = await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
-
-    manifest_count = await ManifestUseCase(session).booked_count_on_leg(
-        trip_id, payload.stop_sequence
-    )
-    variance = payload.confirmed_count - manifest_count
-
-    now = dt.datetime.now(APP_TZ)
-
-    # driver_headcounts has UNIQUE (trip_id, stop_sequence): one
-    # authoritative figure per stop. Crew correcting their own count is
-    # legitimate, so update in place rather than letting the constraint
-    # raise an IntegrityError the caller cannot interpret.
-    existing = await session.execute(
-        select(DriverHeadcount).where(
-            DriverHeadcount.trip_id == trip_id,
-            DriverHeadcount.stop_sequence == payload.stop_sequence,
-        )
-    )
-    record = existing.scalar_one_or_none()
-
-    if record is not None:
-        record.confirmed_count = payload.confirmed_count
-        record.manifest_count = manifest_count
-        record.variance = variance
-        record.confirmed_by_user_id = user.user_id
-        record.confirmed_at = now
-        headcount_id = record.headcount_id
-    else:
-        headcount_id = str(uuid.uuid4())
-        session.add(
-            DriverHeadcount(
-                headcount_id=headcount_id,
-                trip_id=trip_id,
-                stop_sequence=payload.stop_sequence,
-                confirmed_count=payload.confirmed_count,
-                manifest_count=manifest_count,
-                variance=variance,
-                confirmed_by_user_id=user.user_id,
-                confirmed_at=now,
-            )
-        )
-
-    await session.commit()
-
-    return HeadcountResponse(
-        headcount_id=headcount_id,
-        trip_id=trip_id,
-        stop_sequence=payload.stop_sequence,
-        confirmed_count=payload.confirmed_count,
-        manifest_count=manifest_count,
-        variance=variance,
-        message=(
-            "Headcount matches the manifest."
-            if variance == 0
-            else f"Headcount differs from the manifest by {variance:+d}."
-        ),
-    )
 
 
 # ------------------------------------------------------------------- depart

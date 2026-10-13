@@ -247,7 +247,7 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
     """The trips this Dispatcher is assigned to, today onward.
 
     This list is the boundary of what the crew app can act on: every
-    scan, walk-in and headcount is guarded server-side by the same
+    scan and walk-in is guarded server-side by the same
     assignment, so there is no point offering a trip the guard would
     refuse. Stops ride along because the scanner and the walk-in form
     need the sequence numbers immediately.

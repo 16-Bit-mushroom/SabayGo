@@ -11,7 +11,6 @@ import '../../core/offline/walk_in_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
 import '../safety/sos_button.dart';
-import 'headcount_dialog.dart';
 import 'qr_scanner_screen.dart';
 import 'remittance_screen.dart';
 import 'walk_in_screen.dart';
@@ -125,26 +124,6 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
       await _ops.depart(widget.trip.tripId);
       await _load();
       _snack('Trip departed.');
-    });
-  }
-
-  Future<void> _headcount() async {
-    final shift = context.read<ShiftViewModel>();
-    // A stepper from zero, not a keyboard pre-filled from the manifest --
-    // see showHeadcountDialog for why both matter.
-    final count = await showHeadcountDialog(
-      context,
-      stopName: widget.trip.stopName(shift.currentStop),
-      seatCapacity: _manifest?.seatCapacity ?? widget.trip.seatCapacity,
-    );
-    if (count == null) return;
-    await _act(() async {
-      final r = await _ops.headcount(
-        tripId: widget.trip.tripId,
-        stopSequence: shift.currentStop,
-        confirmedCount: count,
-      );
-      _snack('${r.message} (counted ${r.confirmedCount}, manifest ${r.manifestCount})');
     });
   }
 
@@ -319,14 +298,12 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         _actionButton(Icons.meeting_room, 'Open boarding', _startBoarding),
       if (!departed) ...[
         _actionButton(Icons.person_add, 'Walk-in', () => _push(WalkInScreen(trip: trip))),
-        _actionButton(Icons.groups, 'Headcount', _headcount),
         _actionButton(Icons.logout, 'Depart', _depart, colour: AppColors.danger),
       ],
       if (departed) ...[
         // A walk-in at a later terminal. Never roadside (rev 468): the
         // camera records a passenger picked up between terminals.
         _actionButton(Icons.person_add, 'Walk-in', () => _push(WalkInScreen(trip: trip))),
-        _actionButton(Icons.groups, 'Headcount', _headcount),
         _actionButton(Icons.payments, 'Remit cash', () => _push(RemittanceScreen(trip: trip))),
       ],
     ];

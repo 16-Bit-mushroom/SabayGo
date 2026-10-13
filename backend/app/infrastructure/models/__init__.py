@@ -164,19 +164,6 @@ class StaffProfile(Base):
     user: Mapped[User] = relationship(back_populates="staff_profile")
 
 
-class DriverCredential(Base):
-    """Legacy: licences of driver accounts. Migration 017 copied them into
-    `operators`; dropped in the contraction migration."""
-
-    __tablename__ = "driver_credentials"
-
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
-    license_number: Mapped[str] = mapped_column(String(64), unique=True)
-    license_expiry_date: Mapped[dt.date] = mapped_column(Date)
-    cttmo_id_number: Mapped[str | None] = mapped_column(String(64))
-    cttmo_id_photo_url: Mapped[str | None] = mapped_column(String(512))
-
-
 class PassengerSettings(Base):
     __tablename__ = "passenger_settings"
 
@@ -259,7 +246,6 @@ class ScheduleTemplate(Base):
     departure_time: Mapped[dt.time]
     days_of_week: Mapped[str] = mapped_column(String(7), default="1111111")
     default_van_id: Mapped[str | None] = mapped_column(ForeignKey("vans.van_id"))
-    default_driver_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     default_conductor_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.user_id")
     )
@@ -277,11 +263,11 @@ class Trip(Base):
     template_id: Mapped[str | None] = mapped_column(
         ForeignKey("schedule_templates.template_id")
     )
-    route_id: Mapped[str] = mapped_column(ForeignKey("routes.route_id"))
+    # NULL only on a van rental (special trip with no fixed route, 019).
+    route_id: Mapped[str | None] = mapped_column(ForeignKey("routes.route_id"))
     service_date: Mapped[dt.date] = mapped_column(Date)
     departure_datetime: Mapped[dt.datetime] = mapped_column(DateTime)
     van_id: Mapped[str | None] = mapped_column(ForeignKey("vans.van_id"))
-    driver_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     dispatcher_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     trip_label: Mapped[str | None] = mapped_column(String(64))
     is_special_trip: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -350,10 +336,6 @@ class Booking(Base):
     booking_type: Mapped[str] = mapped_column(String(16))
     # Who recorded a cash walk-in. NULL on app bookings.
     logged_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
-    # History only since rev 468: no path writes a roadside pickup or a
-    # hand-set fare. Dropped in a later contraction migration.
-    is_roadside_pickup: Mapped[bool] = mapped_column(Boolean, default=False)
-    pickup_landmark: Mapped[str | None] = mapped_column(String(255))
     # Set only on a walk-in the mobile client may retry after an
     # ambiguous connectivity drop. Lets /bookings/walk-in recognise a
     # replay instead of double-booking. NULL for every other path.
@@ -362,8 +344,6 @@ class Booking(Base):
     alighting_stop_sequence: Mapped[int] = mapped_column(SmallInteger)
     seat_number: Mapped[int] = mapped_column(TINYINT(unsigned=True))
     fare_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    fare_is_manual: Mapped[bool] = mapped_column(Boolean, default=False)
-    fare_note: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(16), default="pending")
     qr_payload: Mapped[str | None] = mapped_column(String(255), unique=True)
     rescheduled_from_booking_id: Mapped[str | None] = mapped_column(String(36))
@@ -489,21 +469,6 @@ class Message(Base):
     body: Mapped[str] = mapped_column(String(1000))
     read_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
-
-
-class DriverHeadcount(Base):
-    __tablename__ = "driver_headcounts"
-
-    headcount_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
-    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
-    stop_sequence: Mapped[int] = mapped_column(SmallInteger)
-    confirmed_count: Mapped[int] = mapped_column(SmallInteger)
-    manifest_count: Mapped[int] = mapped_column(SmallInteger)
-    variance: Mapped[int] = mapped_column(SmallInteger)
-    confirmed_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
-    confirmed_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
-    client_recorded_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
-    synced_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
 
 
 class CashRemittance(Base):

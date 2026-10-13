@@ -12,7 +12,6 @@ import 'package:mobile_v2_uv_express/models/transit_node_model.dart';
 import 'package:mobile_v2_uv_express/models/uv_trip_model.dart';
 import 'package:mobile_v2_uv_express/viewmodels/home_search_viewmodel.dart';
 import 'package:mobile_v2_uv_express/views/auth/welcome_screen.dart';
-import 'package:mobile_v2_uv_express/views/dispatcher/headcount_dialog.dart';
 import 'package:mobile_v2_uv_express/views/home_search/widgets/time_block_filter.dart';
 import 'package:mobile_v2_uv_express/views/home_search/widgets/trip_card.dart';
 import 'package:mobile_v2_uv_express/views/home_search/widgets/trip_details_sheet.dart';
@@ -224,51 +223,4 @@ void main() {
       ),
     ),
   );
-
-  // ── dispatcher ─────────────────────────────────────────────────────────
-  // Opens the real dialog at the hardest size and drives it: starts at
-  // zero (never the manifest's figure), cannot go below it, and returns
-  // what was counted.
-  for (final scale in const [1.0, 2.0]) {
-    testWidgets('headcount stepper · 320dp · ${(scale * 100).round()}% text', (tester) async {
-      int? result;
-      await pumpScreen(
-        tester,
-        // The app theme's InkSparkle splash loads a shader the headless
-        // test renderer has no build of, so a tap would fail on the ripple
-        // rather than on anything under test. A plain ripple here.
-        Builder(
-          builder: (context) => Theme(
-            data: Theme.of(context).copyWith(splashFactory: InkRipple.splashFactory),
-            child: Builder(
-              builder: (context) => Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () async => result = await showHeadcountDialog(context,
-                        stopName: 'Toril Public Market Terminal', seatCapacity: 14),
-                    child: const Text('open'),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        size: kSmallPhone,
-        textScale: scale,
-      );
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(find.text('Record 0 aboard'), findsOneWidget);
-
-      await tester.tap(find.byTooltip('One fewer'));
-      for (var i = 0; i < 3; i++) {
-        await tester.tap(find.byTooltip('One more'));
-      }
-      await tester.pump();
-      await tester.tap(find.text('Record 3 aboard'));
-      await tester.pumpAndSettle();
-      expect(result, 3);
-    });
-  }
 }

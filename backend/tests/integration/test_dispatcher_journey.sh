@@ -138,7 +138,7 @@ if [ "$S" = "404" ]; then
 else ok "passenger lookup"; fi
 
 # ═══════════════════════════════════════════════ 5. AUDIT
-hdr "5. Headcount audit"
+hdr "5. Camera audit"
 
 S=$(code GET /audits/node-health "" "$CT")
 if [ "$S" = "200" ]; then
@@ -159,12 +159,6 @@ fi
 
 # ═══════════════════════════════════════════════ 6. DEPARTURE
 hdr "6. Departure"
-
-S=$(code POST "/trips/$TRIP/headcount" \
-  '{"stop_sequence":1,"confirmed_count":4}' "$CT")
-if [ "$S" = "200" ]; then
-  ok "headcount confirmed -- variance $(j "['variance']" < /tmp/resp.json)"
-else bad "headcount gave $S"; fi
 
 S=$(code POST "/trips/$TRIP/depart" "" "$CT")
 if [ "$S" = "200" ]; then
