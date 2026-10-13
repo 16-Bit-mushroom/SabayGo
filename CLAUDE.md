@@ -31,8 +31,10 @@ wins.** Decisions:
 - **The Dispatcher cannot log a roadside passenger at all.** Cash
   walk-ins are terminal-stop boardings only. A roadside boarding is seen
   only by the camera: an unrecorded boarding, priced from the nearest
-  stop, flagged as a side pickup. **Not built yet** — first task of the
-  next session; see `docs/GAP_REPORT.md` §8.
+  stop, flagged as a side pickup. Built 13 Oct: `POST /bookings/walk-in`
+  refuses `is_roadside_pickup` (422), every fare comes from the fare
+  table (no Dispatcher-set fare), and the app has no roadside mode. The
+  camera half arrives with the door-event pipeline.
 - Keep JWT, polled notifications and OpenStreetMap; the paper is
   corrected, not the code.
 - Contribution statement follows the brief (revenue audit, Equation 2,
@@ -159,7 +161,7 @@ last demo.
 the reset**, so reset shortly before a demo: `TRIP-A2Z-LIVE-BOARD`
 (boarding, the dev dispatcher@, passenger@ holds a ticket; leg 1
 manifest = 4, so photograph 4 people for a match and 5+ for a flag),
-`TRIP-A2Z-LIVE-DEPART` (departed, roadside pickup, a no-show) and
+`TRIP-A2Z-LIVE-DEPART` (departed, a no-show) and
 `TRIP-A2Z-LIVE-SOON` (scheduled in 2 h, bookable). They are special trips
 (template `NULL`) because `uq_trip_instance` is (template, date).
 
@@ -375,8 +377,8 @@ search · reserve · PayMongo checkout with status polled from the server ·
 real QR from `qr_payload` · geofenced check-in via `geolocator` · my
 bookings · reschedule · cancel · conductor trip list and manifest · QR
 boarding scan (valid/already-boarded/unpaid/cancelled/wrong-stop/
-wrong-trip verdicts) · walk-in and roadside cash logging with a
-conductor-set fare · driver/conductor headcount cross-check · depart with
+wrong-trip verdicts) · walk-in cash logging (roadside logging and the
+conductor-set fare removed 13 Oct, rev 468) · driver/conductor headcount cross-check · depart with
 automatic no-show release · cash remittance with variance flagging.
 
 Verified on a physical device on 11 and 14 September: the full passenger

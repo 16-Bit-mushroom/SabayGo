@@ -198,9 +198,6 @@ class ManifestUseCase:
                     "booking_type": b.booking_type,
                     "status": b.status,
                     "fare_amount": b.fare_amount,
-                    "fare_is_manual": b.fare_is_manual,
-                    "is_roadside_pickup": b.is_roadside_pickup,
-                    "pickup_landmark": b.pickup_landmark,
                     # Walk-ins may legitimately be anonymous.
                     "name": b.walkin_name,
                 }

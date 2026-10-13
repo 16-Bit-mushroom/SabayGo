@@ -7,9 +7,8 @@ import '../data/repositories/operations_repository.dart';
 /// working now, and the stop the van is currently at.
 ///
 /// The stop matters because every scan is judged against it — a ticket
-/// for Digos is refused at Ecoland — and a roadside pickup is anchored to
-/// the last stop passed. One place to hold it, rather than each screen
-/// asking again.
+/// for Digos is refused at Ecoland — and a walk-in boards there. One place
+/// to hold it, rather than each screen asking again.
 class ShiftViewModel extends ChangeNotifier {
   ShiftViewModel(this._ops);
 

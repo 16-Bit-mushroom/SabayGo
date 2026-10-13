@@ -348,6 +348,8 @@ class Booking(Base):
     walkin_phone: Mapped[str | None] = mapped_column(String(20))
     walkin_wants_receipt: Mapped[bool] = mapped_column(Boolean, default=False)
     booking_type: Mapped[str] = mapped_column(String(16))
+    # History only since rev 468: no path writes a roadside pickup or a
+    # hand-set fare. Dropped in a later contraction migration.
     is_roadside_pickup: Mapped[bool] = mapped_column(Boolean, default=False)
     pickup_landmark: Mapped[str | None] = mapped_column(String(255))
     # Set only on a walk-in the mobile client may retry after an

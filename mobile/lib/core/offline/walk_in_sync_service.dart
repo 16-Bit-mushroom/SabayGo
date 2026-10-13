@@ -70,10 +70,6 @@ class WalkInSyncService extends ChangeNotifier {
     String? name,
     String? phone,
     bool wantsReceipt = false,
-    bool isRoadsidePickup = false,
-    String? pickupLandmark,
-    double? fareOverride,
-    String? fareNote,
   }) async {
     final item = PendingWalkIn(
       clientRequestId: _newRequestId(),
@@ -83,10 +79,6 @@ class WalkInSyncService extends ChangeNotifier {
       name: name,
       phone: phone,
       wantsReceipt: wantsReceipt,
-      isRoadsidePickup: isRoadsidePickup,
-      pickupLandmark: pickupLandmark,
-      fareOverride: fareOverride,
-      fareNote: fareNote,
       queuedAt: DateTime.now(),
     );
     try {
@@ -108,10 +100,7 @@ class WalkInSyncService extends ChangeNotifier {
         name: item.name,
         phone: item.phone,
         wantsReceipt: item.wantsReceipt,
-        isRoadsidePickup: item.isRoadsidePickup,
-        pickupLandmark: item.pickupLandmark,
-        fareOverride: item.fareOverride,
-        fareNote: item.fareNote,
+        queuedAsRoadside: item.queuedAsRoadside,
         clientRequestId: item.clientRequestId,
       );
 

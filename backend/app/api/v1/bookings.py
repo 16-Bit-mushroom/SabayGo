@@ -20,7 +20,7 @@ from app.application.booking.reserve_seat import (
     ReserveSeatUseCase,
 )
 from app.core import timezone as app_tz
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, PolicyViolationError
 from app.domain.enums import BookingType, Role
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import RouteStop, Terminal, Trip
@@ -45,14 +45,10 @@ class WalkInRequest(BaseModel):
     name: str | None = None
     phone: str | None = None
     wants_receipt: bool = False
-    # Flagged down between terminals. Recorded from the section they are
-    # travelling on, which means the LAST terminal the van passed.
+    # Always refused when true (rev 468). Kept so a stale build, or a
+    # roadside entry still waiting in a handset's offline queue, is told
+    # so instead of being re-recorded as a terminal walk-in.
     is_roadside_pickup: bool = False
-    pickup_landmark: str | None = None
-    # Required for a roadside pickup: they have not travelled a fare-table
-    # distance, so the Dispatcher sets the price.
-    fare_override: Decimal | None = Field(default=None, ge=0)
-    fare_note: str | None = None
     # Set by the mobile client only when this walk-in was queued
     # offline. A sync retry after an ambiguous connectivity drop is
     # recognised by this id and returns the original booking instead of
@@ -69,10 +65,8 @@ class BookingResponse(BaseModel):
     boarding_stop: int
     alighting_stop: int
     fare_amount: Decimal
-    fare_is_manual: bool = False
     status: str
     qr_payload: str | None
-    is_roadside_pickup: bool = False
 
 
 class AvailabilityResponse(BaseModel):
@@ -107,10 +101,8 @@ async def reserve(
         boarding_stop=result.boarding_stop,
         alighting_stop=result.alighting_stop,
         fare_amount=result.fare_amount,
-        fare_is_manual=result.fare_is_manual,
         status=result.status.value,
         qr_payload=result.qr_payload,
-        is_roadside_pickup=result.is_roadside_pickup,
     )
 
 
@@ -121,12 +113,16 @@ async def reserve(
     dependencies=[Depends(require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER))],
 )
 async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingResponse:
-    """Record a cash passenger -- at the terminal or flagged down en route.
+    """Record a cash passenger boarding at a terminal stop.
 
     Accepted whenever the trip has space, including while the van is
-    loading and after it has departed. Blocking either would make the
-    honest path impossible and leave undocumented boarding as the only
-    option.
+    loading and, at a later terminal, after it has departed. The fare is
+    the approved terminal-to-terminal fare; the Dispatcher never sets it.
+
+    A roadside pickup is refused (rev 468). Boarding is allowed only
+    inside a stop zone; a passenger flagged down between terminals is seen
+    by the in-van camera as an unrecorded boarding, priced from the
+    nearest stop and flagged as a side pickup.
 
     Passenger details are optional; supply them only for a receipt.
 
@@ -136,6 +132,12 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
     booking with that id already exists for this trip, it is returned
     as-is rather than reserving a second space.
     """
+    if payload.is_roadside_pickup:
+        raise PolicyViolationError(
+            "A roadside pickup cannot be logged. Boarding is allowed only at "
+            "a terminal stop; the van's camera records a passenger picked up "
+            "on the road, for the Terminal Manager to review."
+        )
     if payload.client_request_id is not None:
         existing = await session.execute(
             select(BookingRow).where(
@@ -151,10 +153,8 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
                 boarding_stop=row.boarding_stop_sequence,
                 alighting_stop=row.alighting_stop_sequence,
                 fare_amount=row.fare_amount,
-                fare_is_manual=row.fare_is_manual,
                 status=row.status,
                 qr_payload=row.qr_payload,
-                is_roadside_pickup=row.is_roadside_pickup,
             )
 
     result = await ReserveSeatUseCase(session).execute(
@@ -166,10 +166,6 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
             walkin_name=payload.name,
             walkin_phone=payload.phone,
             walkin_wants_receipt=payload.wants_receipt,
-            is_roadside_pickup=payload.is_roadside_pickup,
-            pickup_landmark=payload.pickup_landmark,
-            fare_override=payload.fare_override,
-            fare_note=payload.fare_note,
             client_request_id=payload.client_request_id,
         )
     )
@@ -179,10 +175,8 @@ async def log_walk_in(payload: WalkInRequest, session: SessionDep) -> BookingRes
         boarding_stop=result.boarding_stop,
         alighting_stop=result.alighting_stop,
         fare_amount=result.fare_amount,
-        fare_is_manual=result.fare_is_manual,
         status=result.status.value,
         qr_payload=result.qr_payload,
-        is_roadside_pickup=result.is_roadside_pickup,
     )
 
 

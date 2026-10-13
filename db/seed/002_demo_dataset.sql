@@ -15,7 +15,7 @@
 --     the terminal picker / search has to resolve routes properly
 --   * departures today and for the next two days on every route
 --   * two days of COMPLETED trips with app bookings, walk-ins, a roadside
---     pickup, a no-show, a cancellation, remittances in every state and
+--     pickup (pre-rev-468 history; no path writes one now), a no-show, a cancellation, remittances in every state and
 --     YOLOv8 audits in every state -- so Revenue, the audit History view
 --     and the spreadsheet export are not empty on stage
 --
@@ -449,8 +449,6 @@ CALL seed_booking('BKG-A2Z-L203', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 2, 3
 CALL seed_booking('BKG-A2Z-L204', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 2, 3, 3,  45.00, 'confirmed', 'paymongo', 'gcash', FALSE, NULL, NOW() - INTERVAL 4 HOUR);
 CALL seed_booking('BKG-A2Z-L205', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 3, 4, 110.00, 'no_show',   'paymongo', 'card',  FALSE, NULL, NOW() - INTERVAL 30 HOUR);
 CALL seed_booking('BKG-A2Z-L206', @t, NULL, 'Lito Pacheco', 'walk_in', 1, 3, 5, 110.00, 'boarded', 'cash', 'cash', FALSE, NULL, @now_min - INTERVAL 34 MINUTE);
--- Roadside pickup after departure, anchored to the PREVIOUS terminal passed.
-CALL seed_booking('BKG-A2Z-L207', @t, NULL, 'Roadside - Toril crossing', 'walk_in', 1, 3, 6, 80.00, 'boarded', 'cash', 'cash', TRUE, 'Toril crossing, near the gas station', NOW() - INTERVAL 10 MINUTE);
 -- Departure released the no-show's space, as DepartTripUseCase does.
 UPDATE seat_inventory SET status = 'available', booking_id = NULL
  WHERE booking_id = 'BKG-A2Z-L205';

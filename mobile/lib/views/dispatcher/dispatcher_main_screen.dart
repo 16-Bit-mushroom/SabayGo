@@ -71,7 +71,7 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
     }
     if (trip.isDeparted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('That trip has departed. Log roadside pickups from its manifest.'),
+        content: Text('That trip has departed. Log walk-ins at later terminals from its manifest.'),
         behavior: SnackBarBehavior.floating,
       ));
       return;

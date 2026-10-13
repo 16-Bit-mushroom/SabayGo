@@ -323,7 +323,9 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         _actionButton(Icons.logout, 'Depart', _depart, colour: AppColors.danger),
       ],
       if (departed) ...[
-        _actionButton(Icons.person_add, 'Roadside', () => _push(WalkInScreen(trip: trip, roadside: true))),
+        // A walk-in at a later terminal. Never roadside (rev 468): the
+        // camera records a passenger picked up between terminals.
+        _actionButton(Icons.person_add, 'Walk-in', () => _push(WalkInScreen(trip: trip))),
         _actionButton(Icons.groups, 'Headcount', _headcount),
         _actionButton(Icons.payments, 'Remit cash', () => _push(RemittanceScreen(trip: trip))),
       ],
@@ -373,7 +375,6 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         ManifestPassenger.pendingSync(
           boardingStop: p.boardingStop,
           alightingStop: p.alightingStop,
-          isRoadsidePickup: p.isRoadsidePickup,
           name: p.name,
         ),
     ]..sort((a, b) => a.boardingStop.compareTo(b.boardingStop));
@@ -420,11 +421,10 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     };
 
     // How the passenger got on the manifest — booked ahead through the
-    // app, paid cash at the terminal, or flagged the van down on the
-    // road. A Dispatcher scans a queue of strangers; this has to be
-    // legible at a glance, not a suffix at the end of a grey line.
+    // app or paid cash at a terminal. A Dispatcher scans a queue of
+    // strangers; this has to be legible at a glance, not a suffix at the
+    // end of a grey line.
     final (methodLabel, methodColour, methodIcon) = switch (p) {
-      _ when p.isRoadsidePickup => ('ROADSIDE', AppColors.warning, Icons.pan_tool_alt),
       _ when p.isWalkIn => ('TERMINAL CASH', AppColors.success, Icons.storefront),
       _ => ('APP BOOKING', AppColors.primary, Icons.smartphone),
     };
@@ -446,30 +446,16 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 4),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: methodColour.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  methodLabel,
-                  style: TextStyle(color: methodColour, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.4),
-                ),
-              ),
-              if (p.pickupLandmark != null) ...[
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    p.pickupLandmark!,
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: methodColour.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              methodLabel,
+              style: TextStyle(color: methodColour, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.4),
+            ),
           ),
           const SizedBox(height: 3),
           Text(
@@ -487,7 +473,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           Text(
             p.isPendingSync
                 ? '—'
-                : '₱${p.fare.toStringAsFixed(0)}${p.fareIsManual ? '*' : ''}',
+                : '₱${p.fare.toStringAsFixed(0)}',
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],

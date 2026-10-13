@@ -12,13 +12,10 @@ class PendingWalkIn {
     required this.boardingStop,
     required this.alightingStop,
     required this.wantsReceipt,
-    required this.isRoadsidePickup,
     required this.queuedAt,
     this.name,
     this.phone,
-    this.pickupLandmark,
-    this.fareOverride,
-    this.fareNote,
+    this.queuedAsRoadside = false,
   });
 
   final String clientRequestId;
@@ -28,10 +25,11 @@ class PendingWalkIn {
   final String? name;
   final String? phone;
   final bool wantsReceipt;
-  final bool isRoadsidePickup;
-  final String? pickupLandmark;
-  final double? fareOverride;
-  final String? fareNote;
+  /// True only on a row a pre-rev-468 build queued as a roadside pickup.
+  /// No new row sets it; it is kept so that row is refused by the server
+  /// rather than replayed as a terminal walk-in. The table's other
+  /// roadside columns (landmark, fare override, note) are left NULL.
+  final bool queuedAsRoadside;
   final DateTime queuedAt;
 
   Map<String, Object?> toMap() => {
@@ -42,10 +40,7 @@ class PendingWalkIn {
         'name': name,
         'phone': phone,
         'wants_receipt': wantsReceipt ? 1 : 0,
-        'is_roadside_pickup': isRoadsidePickup ? 1 : 0,
-        'pickup_landmark': pickupLandmark,
-        'fare_override': fareOverride,
-        'fare_note': fareNote,
+        'is_roadside_pickup': queuedAsRoadside ? 1 : 0,
         'queued_at': queuedAt.toIso8601String(),
       };
 
@@ -57,10 +52,7 @@ class PendingWalkIn {
         name: m['name'] as String?,
         phone: m['phone'] as String?,
         wantsReceipt: (m['wants_receipt'] as int) == 1,
-        isRoadsidePickup: (m['is_roadside_pickup'] as int) == 1,
-        pickupLandmark: m['pickup_landmark'] as String?,
-        fareOverride: m['fare_override'] as double?,
-        fareNote: m['fare_note'] as String?,
+        queuedAsRoadside: (m['is_roadside_pickup'] as int) == 1,
         queuedAt: DateTime.parse(m['queued_at'] as String),
       );
 }

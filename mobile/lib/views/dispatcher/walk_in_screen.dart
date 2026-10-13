@@ -9,13 +9,12 @@ import '../../core/offline/walk_in_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
 
-/// Record a cash passenger — at the terminal or flagged down en route.
+/// Record a cash passenger boarding at a terminal stop.
 ///
-/// A roadside pickup is anchored to the last terminal the van passed,
-/// not the next one: anchoring forward would leave that stretch of road
-/// looking empty while someone sits in it, and the camera check would
-/// flag a real passenger as leakage. The Dispatcher sets the fare because
-/// the passenger has not travelled a fare-table distance.
+/// There is no roadside mode (rev 468): boarding is allowed only at a
+/// terminal, and the fare is always the approved one. A passenger flagged
+/// down between terminals is left to the van's camera, which records an
+/// unrecorded boarding for the Terminal Manager to review.
 ///
 /// Laid out as a till, for a queue at the van door (3 Oct):
 ///
@@ -32,10 +31,9 @@ import '../../viewmodels/shift_viewmodel.dart';
 ///   clears the destination and keeps the screen; a run of walk-ins no
 ///   longer means backing out and re-opening it each time.
 class WalkInScreen extends StatefulWidget {
-  const WalkInScreen({super.key, required this.trip, this.roadside = false});
+  const WalkInScreen({super.key, required this.trip});
 
   final CrewTrip trip;
-  final bool roadside;
 
   @override
   State<WalkInScreen> createState() => _WalkInScreenState();
@@ -46,13 +44,9 @@ class _WalkInScreenState extends State<WalkInScreen> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
-  final _landmark = TextEditingController();
-  final _fare = TextEditingController();
-  final _fareNote = TextEditingController();
 
   late int _boarding;
   int? _alighting;
-  late bool _roadside;
   bool _wantsReceipt = false;
   bool _submitting = false;
   int _logged = 0;
@@ -65,14 +59,12 @@ class _WalkInScreenState extends State<WalkInScreen> {
   void initState() {
     super.initState();
     _sync = context.read<WalkInSyncService>();
-    _roadside = widget.roadside;
     _boarding = context.read<ShiftViewModel>().currentStop;
     final last = _lastStop;
     if (_boarding >= last) _boarding = last - 1;
     // Most walk-ins ride to the end of the line; preselect it so the
     // common case is one tap (Log), and any other is two.
     _alighting = last > _boarding ? last : null;
-    _fare.addListener(() => setState(() {}));
     _loadFares();
   }
 
@@ -94,23 +86,21 @@ class _WalkInScreenState extends State<WalkInScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _phone, _landmark, _fare, _fareNote]) {
+    for (final c in [_name, _phone]) {
       c.dispose();
     }
     super.dispose();
   }
 
+  /// What the bar says to collect: the approved fare, once loaded.
   double? get _tableFare =>
       _alighting == null ? null : _fares?[(_boarding, _alighting!)];
-
-  /// What the bar says to collect. Roadside: what the Dispatcher typed.
-  double? get _total => _roadside ? double.tryParse(_fare.text) : _tableFare;
 
   String _peso(double v) => '₱${v.toStringAsFixed(2)}';
 
   void _nextPassenger() {
     _form.currentState?.reset();
-    for (final c in [_name, _phone, _landmark, _fare, _fareNote]) {
+    for (final c in [_name, _phone]) {
       c.clear();
     }
     setState(() {
@@ -131,7 +121,6 @@ class _WalkInScreenState extends State<WalkInScreen> {
     if (!_form.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      final fareOverride = _roadside ? double.tryParse(_fare.text) : null;
       final submission = await _sync.submitOrQueue(
         tripId: widget.trip.tripId,
         boardingStop: _boarding,
@@ -139,10 +128,6 @@ class _WalkInScreenState extends State<WalkInScreen> {
         name: _name.text.trim(),
         phone: _phone.text.trim(),
         wantsReceipt: _wantsReceipt,
-        isRoadsidePickup: _roadside,
-        pickupLandmark: _landmark.text.trim(),
-        fareOverride: fareOverride,
-        fareNote: _fareNote.text.trim(),
       );
       if (!mounted) return;
       HapticFeedback.mediumImpact();
@@ -150,7 +135,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
 
       // The server's fare, not the preview, is what is confirmed: if the
       // two ever differ, the Dispatcher collects what was recorded.
-      final collect = submission.queued ? fareOverride ?? _tableFare : submission.result!.fare;
+      final collect = submission.queued ? _tableFare : submission.result!.fare;
       final next = await showModalBottomSheet<bool>(
         context: context,
         isDismissible: false,
@@ -159,7 +144,6 @@ class _WalkInScreenState extends State<WalkInScreen> {
           queued: submission.queued,
           ticketNumber: submission.queued ? null : submission.result!.ticketNumber,
           collect: collect,
-          manual: submission.queued ? fareOverride != null : submission.result!.fareIsManual,
           route: '${widget.trip.stopName(_boarding)} → ${widget.trip.stopName(_alighting!)}',
         ),
       );
@@ -189,7 +173,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_roadside ? 'Roadside pickup' : 'Walk-in passenger'),
+        title: const Text('Walk-in passenger'),
         actions: [
           if (_logged > 0)
             Padding(
@@ -202,9 +186,8 @@ class _WalkInScreenState extends State<WalkInScreen> {
         ],
       ),
       bottomNavigationBar: _TotalBar(
-        total: _total,
-        pending: !_roadside && _alighting != null && _fares == null,
-        manual: _roadside,
+        total: _tableFare,
+        pending: _alighting != null && _fares == null,
         submitting: _submitting,
         onSubmit: _submitting ? null : _submit,
         peso: _peso,
@@ -214,28 +197,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.xxl),
           children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, icon: Icon(Icons.storefront_outlined), label: Text('At terminal')),
-                ButtonSegment(value: true, icon: Icon(Icons.pan_tool_alt_outlined), label: Text('Roadside')),
-              ],
-              selected: {_roadside},
-              showSelectedIcon: false,
-              style: const ButtonStyle(
-                minimumSize: WidgetStatePropertyAll(Size.fromHeight(48)),
-              ),
-              onSelectionChanged: (s) => setState(() => _roadside = s.first),
-            ),
-            if (_roadside)
-              const Padding(
-                padding: EdgeInsets.only(top: AppSpacing.sm),
-                child: Text('Flagged down between terminals. Recorded from the last terminal passed, '
-                    'with a fare you set.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-              ),
-
-            const SizedBox(height: AppSpacing.xl),
-            _Heading(_roadside ? 'Last terminal passed' : 'Boarding at'),
+            const _Heading('Boarding at'),
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
@@ -278,9 +240,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
                     _DestinationRow(
                       name: destinations[i].terminalName,
                       selected: _alighting == destinations[i].stopSequence,
-                      // Roadside fares are the Dispatcher's, so the table
-                      // price would be misleading there.
-                      fare: _roadside ? null : _fares?[(_boarding, destinations[i].stopSequence)],
+                      fare: _fares?[(_boarding, destinations[i].stopSequence)],
                       peso: _peso,
                       onTap: () => setState(() => _alighting = destinations[i].stopSequence),
                     ),
@@ -288,35 +248,6 @@ class _WalkInScreenState extends State<WalkInScreen> {
                 ],
               ),
             ),
-
-            if (_roadside) ...[
-              const SizedBox(height: AppSpacing.xl),
-              const _Heading('Fare charged'),
-              TextFormField(
-                controller: _fare,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                decoration: const InputDecoration(prefixText: '₱ ', hintText: '0.00'),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Enter the fare you collected.';
-                  return null;
-                },
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextFormField(
-                controller: _landmark,
-                decoration: const InputDecoration(
-                    labelText: 'Where they boarded', hintText: 'e.g. Ulas crossing, near the market'),
-                textCapitalization: TextCapitalization.sentences,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextFormField(
-                controller: _fareNote,
-                decoration: const InputDecoration(
-                    labelText: 'Fare note (optional)', hintText: 'e.g. half distance, student'),
-              ),
-            ],
 
             const SizedBox(height: AppSpacing.lg),
             Theme(
@@ -436,7 +367,6 @@ class _TotalBar extends StatelessWidget {
   const _TotalBar({
     required this.total,
     required this.pending,
-    required this.manual,
     required this.submitting,
     required this.onSubmit,
     required this.peso,
@@ -444,7 +374,6 @@ class _TotalBar extends StatelessWidget {
 
   final double? total;
   final bool pending;
-  final bool manual;
   final bool submitting;
   final VoidCallback? onSubmit;
   final String Function(double) peso;
@@ -452,12 +381,10 @@ class _TotalBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final caption = total != null
-        ? (manual ? 'Dispatcher-set fare' : 'Approved fare')
+        ? 'Approved fare'
         : pending
             ? 'Fare set by the server when logged'
-            : manual
-                ? 'Enter the fare you collected'
-                : 'Pick a destination';
+            : 'Pick a destination';
     return Material(
       color: AppColors.surfaceRaised,
       child: SafeArea(
@@ -524,14 +451,12 @@ class _LoggedSheet extends StatelessWidget {
     required this.queued,
     required this.ticketNumber,
     required this.collect,
-    required this.manual,
     required this.route,
   });
 
   final bool queued;
   final String? ticketNumber;
   final double? collect;
-  final bool manual;
   final String route;
 
   @override
@@ -568,8 +493,6 @@ class _LoggedSheet extends StatelessWidget {
                   style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w800, height: 1.1),
                 ),
               ),
-              if (manual)
-                const Text('Dispatcher-set fare', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
               if (queued) ...[
                 const SizedBox(height: AppSpacing.md),
                 const Text(

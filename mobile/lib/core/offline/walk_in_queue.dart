@@ -22,6 +22,9 @@ class WalkInQueue {
 
   Database? _db;
 
+  // The roadside columns are history since rev 468 and stay so the table
+  // needs no migration on an installed handset; only is_roadside_pickup is
+  // still read (PendingWalkIn.queuedAsRoadside).
   Future<Database> _open() async {
     return _db ??= await openDatabase(
       join(await getDatabasesPath(), 'sabaygo_walkin_queue.db'),

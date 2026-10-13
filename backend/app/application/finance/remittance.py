@@ -141,7 +141,7 @@ class RemittanceService:
         if trip is None:
             raise NotFoundError("Trip not found.")
         # Remittance closes a trip's cash. Doing it before departure would
-        # miss every roadside passenger picked up along the way.
+        # miss every passenger logged at a later terminal.
         if trip.status not in ("departed", "completed"):
             raise ConflictError(
                 f"Cash is remitted after the trip runs; this one is {trip.status}."

@@ -77,9 +77,6 @@ class ManifestPassenger {
     required this.bookingType,
     required this.status,
     required this.fare,
-    required this.fareIsManual,
-    required this.isRoadsidePickup,
-    this.pickupLandmark,
     this.name,
   });
 
@@ -90,9 +87,6 @@ class ManifestPassenger {
   final String bookingType;
   final String status;
   final double fare;
-  final bool fareIsManual;
-  final bool isRoadsidePickup;
-  final String? pickupLandmark;
   final String? name;
 
   bool get isWalkIn => bookingType == 'walk_in';
@@ -113,7 +107,6 @@ class ManifestPassenger {
   factory ManifestPassenger.pendingSync({
     required int boardingStop,
     required int alightingStop,
-    required bool isRoadsidePickup,
     String? name,
   }) =>
       ManifestPassenger(
@@ -124,8 +117,6 @@ class ManifestPassenger {
         bookingType: 'walk_in',
         status: 'pending_sync',
         fare: 0,
-        fareIsManual: false,
-        isRoadsidePickup: isRoadsidePickup,
         name: name,
       );
 
@@ -137,9 +128,6 @@ class ManifestPassenger {
         bookingType: j['booking_type'] as String? ?? 'app',
         status: j['status'] as String,
         fare: double.parse(j['fare_amount'].toString()),
-        fareIsManual: j['fare_is_manual'] as bool? ?? false,
-        isRoadsidePickup: j['is_roadside_pickup'] as bool? ?? false,
-        pickupLandmark: j['pickup_landmark'] as String?,
         name: j['name'] as String?,
       );
 }
@@ -222,19 +210,16 @@ class WalkInResult {
     required this.bookingId,
     required this.ticketNumber,
     required this.fare,
-    required this.fareIsManual,
   });
 
   final String bookingId;
   final String ticketNumber;
   final double fare;
-  final bool fareIsManual;
 
   factory WalkInResult.fromJson(Map<String, dynamic> j) => WalkInResult(
         bookingId: j['booking_id'] as String,
         ticketNumber: j['ticket_number'] as String,
         fare: double.parse(j['fare_amount'].toString()),
-        fareIsManual: j['fare_is_manual'] as bool? ?? false,
       );
 }
 
@@ -351,11 +336,8 @@ class OperationsRepository {
     return ScanVerdict.fromJson(json as Map<String, dynamic>);
   }
 
-  /// Record a cash passenger.
-  ///
-  /// A roadside pickup is anchored to the last terminal passed, with the
-  /// Dispatcher setting the fare — they have not travelled a fare-table
-  /// distance, so the matrix has no answer for them.
+  /// Record a cash passenger boarding at a terminal stop. The server
+  /// prices it from the approved fare table.
   Future<WalkInResult> walkIn({
     required String tripId,
     required int boardingStop,
@@ -363,10 +345,10 @@ class OperationsRepository {
     String? name,
     String? phone,
     bool wantsReceipt = false,
-    bool isRoadsidePickup = false,
-    String? pickupLandmark,
-    double? fareOverride,
-    String? fareNote,
+    // Set only by the offline sync queue, for a row a pre-rev-468 build
+    // queued as a roadside pickup: sent so the server refuses it and it
+    // stays visible, rather than being re-recorded as a terminal walk-in.
+    bool queuedAsRoadside = false,
     // Set only by the offline sync queue, so a retry after a lost
     // response is recognised as a replay rather than a second booking.
     String? clientRequestId,
@@ -378,11 +360,7 @@ class OperationsRepository {
       if (name != null && name.isNotEmpty) 'name': name,
       if (phone != null && phone.isNotEmpty) 'phone': phone,
       'wants_receipt': wantsReceipt,
-      'is_roadside_pickup': isRoadsidePickup,
-      if (pickupLandmark != null && pickupLandmark.isNotEmpty)
-        'pickup_landmark': pickupLandmark,
-      if (fareOverride != null) 'fare_override': fareOverride.toStringAsFixed(2),
-      if (fareNote != null && fareNote.isNotEmpty) 'fare_note': fareNote,
+      if (queuedAsRoadside) 'is_roadside_pickup': true,
       'client_request_id': ?clientRequestId,
     });
     return WalkInResult.fromJson(json as Map<String, dynamic>);

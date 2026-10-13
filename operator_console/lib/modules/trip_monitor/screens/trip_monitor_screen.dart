@@ -721,7 +721,6 @@ class _PassengerRow extends StatelessWidget {
       '${stop(p.boardingStop)} → ${stop(p.alightingStop)}',
       p.bookingType == 'walk_in' ? 'walk-in, paid cash' : 'booked in app',
       '₱${p.fareAmount}',
-      if (p.isRoadsidePickup) 'picked up on the road: ${p.pickupLandmark ?? 'no landmark'}',
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),

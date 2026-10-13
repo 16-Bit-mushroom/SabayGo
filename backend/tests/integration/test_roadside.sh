@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Walk-in timing, roadside pickup, manual fares, no-show release.
+# Walk-in timing, roadside refusal (rev 468), table fares only, no-show release.
 set -uo pipefail
 API="http://127.0.0.1:8000/api/v1"
 TRIP="TRIP-DEMO-00000001"
@@ -38,18 +38,22 @@ code POST "/trips/$TRIP/depart" "" "$CT" >/dev/null
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,\"alighting_stop\":4}" "$CT")
 [ "$S" = "201" ] && ok "walk-in accepted after departure" || bad "post-departure walk-in gave $S"
 
-hdr "roadside pickup"
+hdr "roadside pickup refused (rev 468)"
+BEFORE=$(code GET "/trips/$TRIP/manifest" "" "$CT" >/dev/null; j "['total_bookings']" < /tmp/r.json)
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,
   \"alighting_stop\":4,\"is_roadside_pickup\":true,
-  \"pickup_landmark\":\"Km 42 waiting shed\",\"fare_override\":250.00,
-  \"fare_note\":\"Boarded past Digos\"}" "$CT")
-if [ "$S" = "201" ]; then
-  ok "roadside recorded — P$(j "['fare_amount']" < /tmp/r.json), manual=$(j "['fare_is_manual']" < /tmp/r.json)"
-else bad "roadside gave $S"; fi
+  \"pickup_landmark\":\"Km 42 waiting shed\",\"fare_override\":250.00}" "$CT")
+[ "$S" = "422" ] && ok "roadside pickup refused (422)" || bad "roadside gave $S"
+AFTER=$(code GET "/trips/$TRIP/manifest" "" "$CT" >/dev/null; j "['total_bookings']" < /tmp/r.json)
+[ "$BEFORE" = "$AFTER" ] && ok "refusal wrote no booking ($AFTER)" || bad "bookings went $BEFORE -> $AFTER"
 
+hdr "the Dispatcher cannot set a fare"
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,
-  \"alighting_stop\":4,\"is_roadside_pickup\":true}" "$CT")
-[ "$S" = "409" ] && ok "roadside without a fare rejected (409)" || bad "no-fare roadside gave $S"
+  \"alighting_stop\":4,\"fare_override\":1.00}" "$CT")
+FARE=$(j "['fare_amount']" < /tmp/r.json)
+grep -q fare_is_manual /tmp/r.json && bad "response still reports fare_is_manual" || true
+[ "$S" = "201" ] && [ "$FARE" != "1.00" ] && ok "fare_override ignored, table fare P$FARE" \
+  || bad "walk-in with fare_override gave $S, fare $FARE"
 
 hdr "app bookings still use the approved table"
 S=$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")
@@ -66,15 +70,14 @@ print(f'        no-shows: {len(ns)}  total: {m[\"total_bookings\"]}')"
 S=$(code "GET" "/bookings/availability?trip_id=$TRIP&boarding_stop=3&alighting_stop=4")
 ok "space still sellable on later sections: $(j "['seats_available']" < /tmp/r.json)"
 
-hdr "manifest shows roadside flags, no seat numbers"
+hdr "manifest has no roadside flags, no seat numbers"
 code GET "/trips/$TRIP/manifest" "" "$CT" >/dev/null
 grep -q '"seat_number"' /tmp/r.json && bad "manifest still has seat_number" || ok "manifest has no seat numbers"
+grep -qE '"is_roadside_pickup"|"fare_is_manual"|"pickup_landmark"' /tmp/r.json \
+  && bad "manifest still reports roadside fields" || ok "manifest reports no roadside fields"
 python3 -c "
 import json;m=json.load(open('/tmp/r.json'))
 for p in m['passengers']:
-    tag = 'roadside' if p.get('is_roadside_pickup') else p['booking_type']
-    fare = f\"P{p['fare_amount']}\" + ('*' if p.get('fare_is_manual') else '')
-    print(f\"        {p['boarding_stop']}->{p['alighting_stop']}  {p['status']:<11} {tag:<14} {fare}\")
-print('        (* = fare set by hand)')"
+    print(f\"        {p['boarding_stop']}->{p['alighting_stop']}  {p['status']:<11} {p['booking_type']:<14} P{p['fare_amount']}\")"
 
 printf '\n  passed %d   failed %d\n\n' "$P" "$F"

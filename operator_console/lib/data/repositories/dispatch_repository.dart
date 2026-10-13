@@ -158,8 +158,6 @@ class ManifestPassenger {
     required this.bookingType,
     required this.status,
     required this.fareAmount,
-    required this.isRoadsidePickup,
-    required this.pickupLandmark,
   });
 
   final String ticketNumber;
@@ -169,8 +167,6 @@ class ManifestPassenger {
   final String bookingType;
   final String status;
   final String fareAmount;
-  final bool isRoadsidePickup;
-  final String? pickupLandmark;
 
   factory ManifestPassenger.fromJson(Map<String, dynamic> j) => ManifestPassenger(
         ticketNumber: j['ticket_number'] as String,
@@ -180,8 +176,6 @@ class ManifestPassenger {
         bookingType: j['booking_type'] as String,
         status: j['status'] as String,
         fareAmount: j['fare_amount'].toString(),
-        isRoadsidePickup: j['is_roadside_pickup'] as bool? ?? false,
-        pickupLandmark: j['pickup_landmark'] as String?,
       );
 }
 

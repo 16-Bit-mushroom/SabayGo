@@ -182,20 +182,28 @@ model. Each belongs to a later step of the brief.
 per-stretch capacity (no change to `seat_repository.py`); a freed space is
 resold only to a terminal-stop boarding.
 
-**Roadside logging is blocked (decided 13 Oct). First task of the next
-session, before the new tables:**
+**Done — roadside logging blocked (13 Oct).** `POST /bookings/walk-in`
+refuses `is_roadside_pickup: true` with 422 and writes nothing; the field
+stays in the request only so a stale build, or a roadside entry still in a
+handset's offline queue, is told so instead of being re-recorded as a
+terminal walk-in. The Dispatcher can no longer set a fare: `fare_override`
+is gone from the use case, and every cash fare comes from `fare_matrix`.
+The manifest no longer reports `is_roadside_pickup`, `pickup_landmark` or
+`fare_is_manual`; the columns stay for history until a contraction
+migration. Mobile: no roadside mode on the walk-in screen; after
+departure the manifest offers **Walk-in** (a later terminal) instead of
+Roadside. The offline queue keeps its SQLite schema; a row an older build
+queued as roadside is still sent with the flag, refused, and left visible
+in the queue. Demo data: `BKG-A2Z-L207` dropped; the two roadside rows on
+completed trips (P110, P125) stay as pre-468 history. Console: the trip
+panel's "picked up on the road" note is gone.
 
-- Backend: the walk-in endpoint refuses a roadside pickup
-  (`api/v1/bookings.py`, `application/booking/reserve_seat.py`); stop
-  reporting roadside in `boarding.py`, `operations.py`, `remittance.py`.
-  The `is_roadside_pickup`, `pickup_landmark`, `fare_is_manual` columns
-  stay for history until a contraction migration.
-- Mobile: remove roadside mode from `walk_in_screen.dart` and the offline
-  queue (`pending_walk_in.dart`, `walk_in_queue.dart`,
-  `walk_in_sync_service.dart`, `operations_repository.dart`,
-  `shift_viewmodel.dart`, manifest and main screen badges).
-- Tests: `test_roadside.sh` becomes the refusal test. Demo data: drop
-  booking `BKG-A2Z-L207`.
+Verified: `test_roadside.sh` (now the refusal test) 10 passed; dispatcher
+journey 23 passed, office journey 47 passed; mobile `flutter analyze` no
+errors or warnings, 31 widget tests pass; console `flutter analyze` no
+errors or warnings. `test_remittance.sh` has 2 failures that are the same
+at `39db1aa` (its second section re-opens boarding on a trip whose cash
+was already received), so not caused by this change.
 
 Consequence for the paper's sample trip (brief 12.1), which the group
 must redraw: E15's cash log can no longer exist, so E15 is an unrecorded

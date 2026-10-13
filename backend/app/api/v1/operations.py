@@ -155,9 +155,6 @@ class ManifestPassenger(BaseModel):
     booking_type: str
     status: str
     fare_amount: Decimal
-    fare_is_manual: bool = False
-    is_roadside_pickup: bool = False
-    pickup_landmark: str | None = None
     name: str | None
 
 
