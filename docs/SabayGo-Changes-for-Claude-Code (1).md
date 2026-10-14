@@ -241,7 +241,7 @@ Scheduled ──start──▶ Boarding ──depart──▶ En Route ──arr
 - The app runs in the **foreground**, with location access **always allowed** and battery optimization **turned off** [ASSUMED].
 - GPS readings come **every 1 to 2 seconds** from the phone's GNSS receiver. This replaces the older 15-second phone ping (a van at 55 km/h covers about 229 m in 15 s, more than the 200 m width of a 100 m stop zone). An **alarm fires if the readings stop**.
 - Speed is the speed reported by the phone's GNSS receiver. The study applies no hardware GPS-spoofing protection beyond plausibility checks.
-- The exact Realme model, Android version, RAM, and processor are **not known yet**. [OPEN] Do not hard-code device assumptions. Keep a bracketed placeholder.
+- The pilot phone, read over `adb` on 14 Oct 2026: **realme 8 5G (RMX3241)**, **Android 13** (API 33, Realme UI 4.0, build `RMX3241_11_F.12`, security patch 2024-06-05), **MediaTek Dimensity 700 (MT6833)**: 2 × Cortex-A76 at 2.2 GHz and 6 × Cortex-A55 at 2.0 GHz, Mali-G57 MC2 GPU, arm64-v8a. **RAM 7.5 GiB** as the kernel reports it (`MemTotal` 7 824 820 kB; sold as 8 GB). Storage: 10 GB free of 107 GB on `/data`. Still do not hard-code device assumptions: A2Z's own phones may be another model.
 
 ### 5.2 Detection logic [PAPER]
 1. A **virtual line across the doorway**. A tracked person crossing **inward = boarding**, **outward = alighting**.

@@ -218,18 +218,26 @@ Image sniffing is shared in `core/images.py`. Test:
 which plays four phones.
 
 **Next: brief step 5, the phone half.** A2Z allows a camera in the
-cabin (confirmed 14 Oct). The Realme phone is **bare** (14 Oct): never
-set up, no developer options, nothing of the project on it, no YOLOv8.
+cabin (confirmed 14 Oct). The Realme phone is not a clean device: 17
+user apps and 97 of 107 GB used. **Decided 14 Oct:** develop and
+benchmark on it as it is, factory-reset it at deployment. The benchmark
+report states the background apps, and a short re-run after the reset
+confirms its figures. Storage is not a constraint (the app needs under
+100 MB, a day offline about 100 MB, 1 GB at the 2 MB snapshot cap).
 Work in this order:
 
-1. **Set up the phone.**
+1. **Set up the phone.** *Done 14 Oct:* `adb devices` lists it
+   (RMX3241, Android 13), authorised over USB, and `adb install` works
+   without the permission-monitoring toggle.
    - Settings → About phone → Version: tap *Build number* 7 times.
    - Developer options: turn on USB debugging (and *Disable permission
      monitoring* if `adb install` is blocked).
    - Plug the phone into this laptop and accept the prompt;
      `adb devices` (`/usr/bin/adb`) should list it. The Android SDK is
      at `/opt/android-sdk`; Java is 17.
-2. **Record what the phone is.** Read
+2. **Record what the phone is.** *Done 14 Oct:* realme 8 5G, Android 13,
+   Dimensity 700 (MT6833), 7.5 GiB RAM, 10 GB free; written into brief
+   5.1 and `GAP_REPORT.md` §5. Read
    `adb shell getprop ro.product.model`, `ro.build.version.release`,
    `ro.soc.model` (or `ro.board.platform`), and the total in
    `/proc/meminfo`. Write them into the docs, replacing the brief's
@@ -241,6 +249,14 @@ Work in this order:
    and level to CSV over a full trip on vehicle power. The report goes
    in `docs/benchmarks/`. No frame rate is stated anywhere until that
    report exists.
+   *Built 14 Oct, not yet run:* `edge_app/` (read its README). Export is
+   `edge_app/tools/export_models.sh`, its own Python 3.13 venv, not
+   `ai_service`'s (litert-torch targets 3.13; that venv is 3.14). Runtime
+   is LiteRT 2.3 `CompiledModel` (GPU only exists there), so the app uses
+   Kotlin 2.3.21, not `mobile/`'s 2.2.20. Sweep (4 backends × 2 sizes)
+   and Run (until Stop, the trip); `tools/summarise_benchmark.py` turns
+   the CSVs into the report's tables. Realme refuses `pm grant`: allow
+   the camera on screen at first launch.
 4. **Then the edge app** (brief 5.1–5.3) against `/edge/*` above:
    - door line and seat mask, ByteTrack, the offline queue, heartbeats
      every 30–60 s, clock sync from `GET /edge/session`, and the

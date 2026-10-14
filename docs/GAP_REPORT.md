@@ -95,7 +95,7 @@ each needs an explicit yes before code changes.
 
 | Advice | Follow? |
 |---|---|
-| Native Kotlin edge app, YOLOv8n at 320–416 px, foreground services, Realme setup checklist | Yes for the final design. Not buildable this week: model, Android version and RAM are [OPEN], and no figure may be stated before benchmarking |
+| Native Kotlin edge app, YOLOv8n at 320–416 px, foreground services, Realme setup checklist | Yes for the final design. Phone recorded 14 Oct: realme 8 5G (RMX3241), Android 13, Dimensity 700 (MT6833), 7.5 GiB RAM (brief 5.1). No figure may be stated before benchmarking |
 | Offline queue, clock sync, heartbeat 30–60 s, blocked-lens check | Yes, on the server side first (intake accepts late, ordered, idempotent batches) |
 | Functional unique index for one open check-out per phone and per van | Yes; MySQL 8.0 in Docker is ≥ 8.0.13. Verify on the container |
 | Genesis hash from `ScheduleID` | Yes |
