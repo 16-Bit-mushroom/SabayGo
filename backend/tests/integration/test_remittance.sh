@@ -22,7 +22,7 @@ OT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 
 hdr "Dispatcher logs three cash passengers"
-code POST "/trips/$TRIP/start-boarding" "" "$CT" >/dev/null
+code POST "/trips/$TRIP/start" "" "$OT" >/dev/null
 for seg in "1 4" "2 4" "3 4"; do
   set -- $seg
   code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":$1,\"alighting_stop\":$2}" "$CT" >/dev/null
@@ -47,7 +47,7 @@ S=$(code POST "/remittances/trips/$TRIP/submit" '{"declared_amount":1005}' "$CT"
 [ "$S" = "409" ] && ok "cannot remit a trip still boarding (409)" || bad "early submit gave $S"
 
 hdr "trip departs, crew previews what they owe"
-code POST "/trips/$TRIP/depart" "" "$CT" >/dev/null
+code POST "/trips/$TRIP/depart" "" "$OT" >/dev/null
 S=$(code GET "/remittances/trips/$TRIP/preview" "" "$CT")
 EXPECTED=$(j "['expected_amount']" < /tmp/r.json)
 [ "$S" = "200" ] && ok "expected P$EXPECTED across $(j "['booking_count']" < /tmp/r.json) fare(s)" \
@@ -83,10 +83,13 @@ print(f\"        unreconciled P{r['unreconciled_amount']}\")"
 ok "cash moved from in-hand to collected"
 
 hdr "a short handover is recorded, not refused"
-code POST "/trips/$TRIP/start-boarding" "" "$CT" >/dev/null
-code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":3,\"alighting_stop\":4}" "$CT" >/dev/null
-code POST "/trips/$TRIP/depart" "" "$CT" >/dev/null
-code POST "/remittances/trips/$TRIP/submit" '{"declared_amount":100}' "$CT" >/dev/null
+# A second trip: remittance is one per trip per Dispatcher, so a second
+# handover on the first trip would be refused, not recorded short.
+TRIP2="TRIP-DEMO-00000002"
+code POST "/trips/$TRIP2/start" "" "$OT" >/dev/null
+code POST /bookings/walk-in "{\"trip_id\":\"$TRIP2\",\"boarding_stop\":3,\"alighting_stop\":4}" "$CT" >/dev/null
+code POST "/trips/$TRIP2/depart" "" "$OT" >/dev/null
+code POST "/remittances/trips/$TRIP2/submit" '{"declared_amount":100}' "$CT" >/dev/null
 RID2=$(j "['remittance_id']" < /tmp/r.json)
 S=$(code POST "/remittances/$RID2/receive" '{"received_amount":100,"notes":"Short by 75"}' "$OT")
 if [ "$S" = "200" ]; then

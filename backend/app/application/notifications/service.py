@@ -166,6 +166,67 @@ class NotificationService:
             )
         )
 
+    async def notify_trip(
+        self, *, trip: Trip, type: str, title: str, message: str,
+        roles: tuple[Role, ...], dispatcher: bool = False,
+        skip_user_id: str | None = None,
+    ) -> int:
+        """A trip-lifecycle alert (brief 4.2, 4.4) to the office roles
+        named, and to the trip's Dispatcher when `dispatcher` is set.
+
+        Same contract as notify_variance: rows join the caller's
+        transaction. The person whose own action raised the alert sees it
+        on screen already and is skipped."""
+        recipients = await self._staff(*roles)
+        if dispatcher and trip.dispatcher_id:
+            recipients.append((trip.dispatcher_id, Role.DISPATCHER.value))
+        now = app_tz.now()
+        sent = 0
+        for user_id, audience in dict(recipients).items():
+            if user_id == skip_user_id:
+                continue
+            self.session.add(
+                Notification(
+                    notification_id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    # notifications.audience has no 'admin' member.
+                    audience=(Role.TERMINAL_MANAGER.value
+                              if audience == Role.ADMIN.value else audience),
+                    type=type,
+                    title=title[:100],
+                    message=message[:500],
+                    related_entity_type="trip",
+                    related_entity_id=trip.trip_id,
+                    is_read=False,
+                    delivery_status="queued",
+                    created_at=now,
+                )
+            )
+            sent += 1
+        return sent
+
+    async def notify_passengers(
+        self, *, trip: Trip, user_ids: list[str], title: str, message: str,
+    ) -> None:
+        """A trip update to passengers holding a ticket on it."""
+        now = app_tz.now()
+        for user_id in dict.fromkeys(user_ids):
+            self.session.add(
+                Notification(
+                    notification_id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    audience=Role.PASSENGER.value,
+                    type="trip_update",
+                    title=title[:100],
+                    message=message[:500],
+                    related_entity_type="trip",
+                    related_entity_id=trip.trip_id,
+                    is_read=False,
+                    delivery_status="queued",
+                    created_at=now,
+                )
+            )
+
     # ------------------------------------------------------------------
     # Consumers
     # ------------------------------------------------------------------

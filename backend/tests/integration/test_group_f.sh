@@ -53,8 +53,8 @@ code POST /fleet/crew "{\"email\":\"other${STAMP}@sabaygo.dev\",
 OTHER=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d "{\"email\":\"other${STAMP}@sabaygo.dev\",\"password\":\"sabaygo123\"}" | j "['access_token']")
 
-S=$(code POST "/trips/$TRIP/start-boarding" "" "$CT")
-[ "$S" = "200" ] && ok "assigned Dispatcher can open boarding" || bad "gave $S"
+S=$(code POST "/trips/$TRIP/start" "" "$OT")
+[ "$S" = "200" ] && ok "the office starts the trip" || bad "gave $S"
 
 S=$(code POST /scans "{\"qr_payload\":\"x\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$OTHER")
 [ "$S" = "403" ] && ok "unassigned Dispatcher cannot scan (403)" || bad "scan gave $S"

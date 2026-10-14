@@ -331,10 +331,7 @@ class ScheduleTemplate(Base):
     route_id: Mapped[str] = mapped_column(ForeignKey("routes.route_id"))
     departure_time: Mapped[dt.time]
     days_of_week: Mapped[str] = mapped_column(String(7), default="1111111")
-    default_van_id: Mapped[str | None] = mapped_column(ForeignKey("vans.van_id"))
-    default_conductor_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.user_id")
-    )
+    # No van or Dispatcher: both are assigned to a trip at the van's turn.
     trip_label: Mapped[str | None] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     valid_from: Mapped[dt.date] = mapped_column(Date)
@@ -353,8 +350,15 @@ class Trip(Base):
     route_id: Mapped[str | None] = mapped_column(ForeignKey("routes.route_id"))
     service_date: Mapped[dt.date] = mapped_column(Date)
     departure_datetime: Mapped[dt.datetime] = mapped_column(DateTime)
+    # NULL until assigned at the van's turn (brief 4.2 rule 2).
     van_id: Mapped[str | None] = mapped_column(ForeignKey("vans.van_id"))
     dispatcher_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    assigned_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    assigned_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    # Copied at the start, so the record stays fixed if the roster changes.
+    driver_name: Mapped[str | None] = mapped_column(String(255))
+    driver_license_no: Mapped[str | None] = mapped_column(String(64))
+    van_plate_number: Mapped[str | None] = mapped_column(String(20))
     trip_label: Mapped[str | None] = mapped_column(String(64))
     is_special_trip: Mapped[bool] = mapped_column(Boolean, default=False)
     seat_capacity: Mapped[int] = mapped_column(TINYINT(unsigned=True), default=14)
@@ -363,13 +367,28 @@ class Trip(Base):
     )
     reschedule_cutoff_hours: Mapped[int] = mapped_column(SmallInteger, default=6)
     status: Mapped[str] = mapped_column(String(16), default="scheduled")
+    # How the trip was started; started_by is NULL when the system did it.
+    start_mode: Mapped[str | None] = mapped_column(String(16))
+    started_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    started_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    start_review_status: Mapped[str] = mapped_column(String(16), default="not_required")
+    start_reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    start_reviewed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    audit_status: Mapped[str] = mapped_column(String(16), default="audited")
+    unaudited_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    unaudited_reason: Mapped[str | None] = mapped_column(String(16))
     cancellation_reason: Mapped[str | None] = mapped_column(String(255))
     departed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    departure_source: Mapped[str | None] = mapped_column(String(16))
     completed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    # The Terminal Manager's void or van change: who, when and why.
+    changed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    changed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    change_note: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
-    route: Mapped[Route] = relationship(lazy="selectin")
+    route: Mapped[Route | None] = relationship(lazy="selectin")
     van: Mapped[Van | None] = relationship(lazy="selectin")
 
 

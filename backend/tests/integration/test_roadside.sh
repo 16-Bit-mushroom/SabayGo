@@ -17,6 +17,8 @@ code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
 
 CT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+OT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
+  -d '{"email":"cashier@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 PT=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" \
   -d "{\"email\":\"rs${STAMP}@sabaygo.dev\",\"phone_number\":\"0917${STAMP: -7}\",
        \"password\":\"sabaygo123\",\"first_name\":\"Road\",\"last_name\":\"Side\"}" \
@@ -29,12 +31,12 @@ BID=$(j "['booking_id']" < /tmp/r.json)
 python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1
 
 hdr "walk-in while the van is loading"
-code POST "/trips/$TRIP/start-boarding" "" "$CT" >/dev/null
+code POST "/trips/$TRIP/start" "" "$OT" >/dev/null
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
 [ "$S" = "201" ] && ok "walk-in accepted during boarding (was 409)" || bad "walk-in gave $S"
 
 hdr "walk-in after departure"
-code POST "/trips/$TRIP/depart" "" "$CT" >/dev/null
+code POST "/trips/$TRIP/depart" "" "$OT" >/dev/null
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,\"alighting_stop\":4}" "$CT")
 [ "$S" = "201" ] && ok "walk-in accepted after departure" || bad "post-departure walk-in gave $S"
 

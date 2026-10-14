@@ -89,41 +89,26 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     _load();
   }
 
-  Future<void> _startBoarding() => _act(() async {
-        await _ops.startBoarding(widget.trip.tripId);
-        await _load();
-        _snack('Boarding open.');
-      });
-
-  Future<void> _depart() async {
-    final m = _manifest;
-    final awaiting = m == null ? 0 : m.awaiting + m.checkedIn;
+  Future<void> _arrive() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Depart now?'),
-        content: Text(
-          awaiting > 0
-              ? '$awaiting paid passenger${awaiting == 1 ? '' : 's'} ha${awaiting == 1 ? 's' : 've'} '
-                  'not been scanned aboard. Departing marks them as no-shows and '
-                  'releases their space. No refund is issued.'
-              : 'Boarding will close. This cannot be undone.',
+        title: const Text('Arrived?'),
+        content: const Text(
+          'Tap this when the van is at its last stop and everyone is off. '
+          'The trip will be completed.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            child: const Text('Depart'),
-          ),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Arrived')),
         ],
       ),
     );
     if (ok != true) return;
     await _act(() async {
-      await _ops.depart(widget.trip.tripId);
+      await _ops.arrive(widget.trip.tripId);
       await _load();
-      _snack('Trip departed.');
+      _snack('Trip completed.');
     });
   }
 
@@ -293,18 +278,17 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
       );
 
   Widget _actions(CrewTrip trip, bool departed) {
+    // The office starts and departs the trip (rev 468); from assignment
+    // on, the Dispatcher scans and logs cash, before the start as well.
     final buttons = <Widget>[
-      if (trip.isScheduled)
-        _actionButton(Icons.meeting_room, 'Open boarding', _startBoarding),
-      if (!departed) ...[
+      if (!trip.isCompleted)
+        // After departure, a walk-in at a later terminal. Never roadside
+        // (rev 468): the camera records a passenger picked up between
+        // terminals.
         _actionButton(Icons.person_add, 'Walk-in', () => _push(WalkInScreen(trip: trip))),
-        _actionButton(Icons.logout, 'Depart', _depart, colour: AppColors.danger),
-      ],
       if (departed) ...[
-        // A walk-in at a later terminal. Never roadside (rev 468): the
-        // camera records a passenger picked up between terminals.
-        _actionButton(Icons.person_add, 'Walk-in', () => _push(WalkInScreen(trip: trip))),
         _actionButton(Icons.payments, 'Remit cash', () => _push(RemittanceScreen(trip: trip))),
+        if (!trip.isCompleted) _actionButton(Icons.flag, 'Arrived', _arrive),
       ],
     ];
 

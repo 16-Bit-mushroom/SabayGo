@@ -144,6 +144,21 @@ else
   ./tests/integration/test_roster.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 468 step 4. Starts, departs and voids trips, so it gets a clean
+# database with the fixture trips inside the start window.
+{
+  echo
+  echo "==================================================================="
+  echo "  TRIP LIFECYCLE (rev 468 step 4)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_trip_lifecycle.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_trip_lifecycle.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────

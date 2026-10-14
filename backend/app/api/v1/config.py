@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -33,6 +34,7 @@ from app.infrastructure.models import (
     StaffProfile,
     Terminal,
     Trip,
+    User,
 )
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
@@ -331,10 +333,7 @@ class TemplateIn(BaseModel):
     departure_time: dt.time
     # Monday-first 7-char mask: '1111100' = weekdays only.
     days_of_week: str = Field(default="1111111", pattern="^[01]{7}$")
-    default_van_id: str | None = None
-    # Stored in schedule_templates.default_conductor_id until the timetable
-    # loses its "usual" van and Dispatcher (brief 4.2, lifecycle migration).
-    default_dispatcher_id: str | None = None
+    # No van or Dispatcher: the timetable has no usual crew (brief 4.2).
     trip_label: str | None = None
     valid_from: dt.date | None = None
     valid_until: dt.date | None = None
@@ -352,9 +351,6 @@ async def list_templates(session: SessionDep) -> list[dict]:
             "departure_time": str(t.departure_time),
             "days_of_week": t.days_of_week,
             "trip_label": t.trip_label,
-            "default_van_id": t.default_van_id,
-            # Returned so the console can show who a slot is crewed by.
-            "default_dispatcher_id": t.default_conductor_id,
             "is_active": t.is_active,
             "valid_from": t.valid_from,
             "valid_until": t.valid_until,
@@ -376,8 +372,6 @@ async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
             route_id=payload.route_id,
             departure_time=payload.departure_time,
             days_of_week=payload.days_of_week,
-            default_van_id=payload.default_van_id,
-            default_conductor_id=payload.default_dispatcher_id,
             trip_label=payload.trip_label,
             is_active=True,
             valid_from=payload.valid_from or dt.date.today(),
@@ -442,9 +436,10 @@ class SpecialTripIn(BaseModel):
     advance_booking_seat_cap: int | None = Field(default=None, ge=0, le=14)
 
 
-@router.post("/trips/special", status_code=201, dependencies=[Depends(MANAGER)])
+@router.post("/trips/special", status_code=201)
 async def create_special_trip(
-    payload: SpecialTripIn, session: SessionDep
+    payload: SpecialTripIn, session: SessionDep,
+    user: Annotated[User, Depends(MANAGER)],
 ) -> dict:
     """Create an ad-hoc departure outside the regular schedule."""
     return await CreateSpecialTripUseCase(session).execute(
@@ -454,6 +449,7 @@ async def create_special_trip(
         dispatcher_id=payload.dispatcher_id,
         trip_label=payload.trip_label,
         advance_booking_seat_cap=payload.advance_booking_seat_cap,
+        by=user,
     )
 
 
@@ -465,11 +461,25 @@ class TripBoardOut(BaseModel):
     departure_datetime: dt.datetime
     status: str
     departed_at: dt.datetime | None
+    van_id: str | None
+    dispatcher_id: str | None
     plate_number: str | None
     # The van's owner, who drives it. On a trip the operator is only ever
-    # a name beside the plate, never a user (brief 9).
+    # a name beside the plate, never a user (brief 9). From the copy made
+    # at the start once the trip has started.
     operator_name: str | None
     dispatcher_name: str | None
+    # The lifecycle (brief 4): who assigned and started it, and how.
+    assigned_by_name: str | None
+    start_opens_at: dt.datetime
+    start_mode: str | None
+    started_by_name: str | None
+    started_at: dt.datetime | None
+    start_review_status: str
+    audit_status: str
+    unaudited_reason: str | None
+    departure_source: str | None
+    change_note: str | None
     seat_capacity: int
     booked: int
     checked_in: int
@@ -512,7 +522,9 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
             )
         ).all()
     }
-    dispatcher_ids = {t.dispatcher_id for t in trips if t.dispatcher_id}
+    people = {t.dispatcher_id for t in trips} | {t.assigned_by for t in trips} \
+        | {t.started_by for t in trips}
+    dispatcher_ids = people - {None}
     names = {
         p.user_id: f"{p.first_name} {p.last_name}"
         for p in (
@@ -527,19 +539,32 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
         ).scalars()
     } if operator_ids else {}
 
+    opens = dt.timedelta(minutes=await PolicyRepository(session).get_int("start_opens_minutes"))
     out = []
     for t in trips:
         c = counts.get(t.trip_id)
         out.append(TripBoardOut(
             trip_id=t.trip_id,
             trip_label=t.trip_label,
-            route_name=t.route.route_name,
+            route_name=t.route.route_name if t.route else "Van rental",
             departure_datetime=t.departure_datetime,
             status=t.status,
             departed_at=t.departed_at,
-            plate_number=t.van.plate_number if t.van else None,
-            operator_name=operators.get(t.van.operator_id) if t.van else None,
+            van_id=t.van_id,
+            dispatcher_id=t.dispatcher_id,
+            plate_number=t.van_plate_number or (t.van.plate_number if t.van else None),
+            operator_name=t.driver_name or (operators.get(t.van.operator_id) if t.van else None),
             dispatcher_name=names.get(t.dispatcher_id),
+            assigned_by_name=names.get(t.assigned_by),
+            start_opens_at=t.departure_datetime - opens,
+            start_mode=t.start_mode,
+            started_by_name=names.get(t.started_by),
+            started_at=t.started_at,
+            start_review_status=t.start_review_status,
+            audit_status=t.audit_status,
+            unaudited_reason=t.unaudited_reason,
+            departure_source=t.departure_source,
+            change_note=t.change_note,
             seat_capacity=t.seat_capacity,
             booked=int(c.booked or 0) if c else 0,
             checked_in=int(c.checked_in or 0) if c else 0,

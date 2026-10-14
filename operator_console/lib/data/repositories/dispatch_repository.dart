@@ -74,9 +74,21 @@ class TripBoardEntry {
     required this.departureDatetime,
     required this.status,
     required this.departedAt,
+    required this.vanId,
+    required this.dispatcherId,
     required this.plateNumber,
     required this.operatorName,
     required this.dispatcherName,
+    required this.assignedByName,
+    required this.startOpensAt,
+    required this.startMode,
+    required this.startedByName,
+    required this.startedAt,
+    required this.startReviewStatus,
+    required this.auditStatus,
+    required this.unauditedReason,
+    required this.departureSource,
+    required this.changeNote,
     required this.seatCapacity,
     required this.booked,
     required this.checkedIn,
@@ -90,10 +102,29 @@ class TripBoardEntry {
   final DateTime departureDatetime;
   final String status;
   final DateTime? departedAt;
+  final String? vanId;
+  final String? dispatcherId;
   final String? plateNumber;
   /// The van's owner, who drives it. A name beside the plate, never a user.
   final String? operatorName;
   final String? dispatcherName;
+
+  // The lifecycle (rev 468, brief 4): assignment at the van's turn, the
+  // start (by a person, or by the system and then held for review), the
+  // phone's audit state, and the Terminal Manager's last change.
+  final String? assignedByName;
+  final DateTime startOpensAt;
+  final String? startMode; // manual | auto_assigned | auto_detected
+  final String? startedByName;
+  final DateTime? startedAt;
+  final String startReviewStatus; // not_required | pending | reviewed
+  final String auditStatus; // audited | unaudited
+  final String? unauditedReason;
+  final String? departureSource; // confirmed | detected
+  final String? changeNote;
+
+  bool get isAssigned => vanId != null && dispatcherId != null;
+  bool get awaitsReview => startReviewStatus == 'pending';
   final int seatCapacity;
   final int booked;
   final int checkedIn;
@@ -107,9 +138,21 @@ class TripBoardEntry {
         departureDatetime: DateTime.parse(j['departure_datetime'] as String),
         status: j['status'] as String,
         departedAt: j['departed_at'] == null ? null : DateTime.parse(j['departed_at'] as String),
+        vanId: j['van_id'] as String?,
+        dispatcherId: j['dispatcher_id'] as String?,
         plateNumber: j['plate_number'] as String?,
         operatorName: j['operator_name'] as String?,
         dispatcherName: j['dispatcher_name'] as String?,
+        assignedByName: j['assigned_by_name'] as String?,
+        startOpensAt: DateTime.parse(j['start_opens_at'] as String),
+        startMode: j['start_mode'] as String?,
+        startedByName: j['started_by_name'] as String?,
+        startedAt: j['started_at'] == null ? null : DateTime.parse(j['started_at'] as String),
+        startReviewStatus: j['start_review_status'] as String,
+        auditStatus: j['audit_status'] as String,
+        unauditedReason: j['unaudited_reason'] as String?,
+        departureSource: j['departure_source'] as String?,
+        changeNote: j['change_note'] as String?,
         seatCapacity: j['seat_capacity'] as int,
         booked: j['booked'] as int,
         checkedIn: j['checked_in'] as int,
@@ -258,4 +301,37 @@ class DispatchRepository {
     });
     return json as Map<String, dynamic>;
   }
+
+  // ---------------------------------------------------------- lifecycle
+  // The office assigns, starts and departs; the Terminal Manager alone
+  // reviews an automatic start, changes a started trip's van or voids it.
+
+  Future<void> assign(String tripId, {String? vanId, String? dispatcherId}) =>
+      _api.put('/trips/$tripId/assignment', body: {
+        'van_id': vanId,
+        'dispatcher_id': dispatcherId,
+      });
+
+  /// Starts the trip. Returns the warnings for the person who started it:
+  /// an expired licence, no phone with the van. A start is never refused
+  /// for them.
+  Future<List<String>> start(String tripId, {String? vanId}) async {
+    final json = await _api.post('/trips/$tripId/start',
+        body: {if (vanId != null) 'van_id': vanId});
+    return ((json as Map<String, dynamic>)['warnings'] as List).cast<String>();
+  }
+
+  Future<void> depart(String tripId) => _api.post('/trips/$tripId/depart');
+
+  Future<void> reviewStart(String tripId, {String? vanId, String? note}) =>
+      _api.post('/trips/$tripId/start-review', body: {
+        if (vanId != null) 'van_id': vanId,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+
+  Future<void> changeVan(String tripId, {required String vanId, required String reason}) =>
+      _api.post('/trips/$tripId/change-van', body: {'van_id': vanId, 'reason': reason});
+
+  Future<void> voidTrip(String tripId, {required String reason}) =>
+      _api.post('/trips/$tripId/void', body: {'reason': reason});
 }

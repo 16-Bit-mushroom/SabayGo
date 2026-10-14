@@ -4,8 +4,11 @@ Consultation: "Creating trips should be automatic everyday - set regular
 schedule."
 
 A TEMPLATE is a recurring pattern (route, departure time, days of week).
-A TRIP is one dated instance. This job materialises tomorrow's trips from
-today's templates, along with their legs and seat inventory.
+A TRIP is one dated instance. This job materialises trips days ahead from
+the templates, along with their legs and seat inventory. A trip is created
+with no van and no Dispatcher (rev 468, brief 4.2): the timetable has no
+"usual" van, and both are assigned at the van's turn
+(`application/operations/trip_lifecycle.py`).
 
 Idempotency comes from UNIQUE (template_id, service_date) on `trips`: the
 job can run twice, or be re-run after a partial failure, without producing
@@ -26,6 +29,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.operations.trip_lifecycle import TripLifecycle
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ
 from app.domain.enums import TripStatus
@@ -34,9 +38,8 @@ from app.infrastructure.models import (
     ScheduleTemplate,
     Trip,
     TripLeg,
-    Van,
+    User,
 )
-from app.application.scheduling.conflicts import ScheduleConflictChecker
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
@@ -92,9 +95,10 @@ class GenerateDailyTripsUseCase:
         ]
         report.templates_considered = len(templates)
 
-        default_capacity = await self.policies.get_int("default_seat_capacity")
+        capacity = await self.policies.get_int("default_seat_capacity")
         default_cap = await self.policies.get_int("advance_booking_seat_cap")
         default_cutoff = await self.policies.get_int("reschedule_cutoff_hours")
+        now_naive = datetime.now(APP_TZ).replace(tzinfo=None)
 
         for template in templates:
             if template.days_of_week[weekday_index] != "1":
@@ -124,57 +128,13 @@ class GenerateDailyTripsUseCase:
                 )
                 continue
 
-            capacity = default_capacity
-            if template.default_van_id:
-                van = await self.session.get(Van, template.default_van_id)
-                if van is None:
-                    report.warnings.append(
-                        f"Template {template.template_id}: default van missing."
-                    )
-                elif van.operational_status != "active":
-                    # Fleet management is monitoring-only, but a van flagged
-                    # out of service must not be dispatched. The trip is
-                    # still created -- unassigned -- so the Terminal Manager sees a
-                    # gap to fill rather than a silently missing departure.
-                    report.warnings.append(
-                        f"Van {van.plate_number} is {van.operational_status}; "
-                        f"trip created without a van assignment."
-                    )
-                else:
-                    capacity = van.seat_capacity
-
-            assign_van = (
-                template.default_van_id
-                if capacity != default_capacity or template.default_van_id is None
-                else template.default_van_id
-            )
-            # Re-resolve: only assign the van if it is actually active.
-            if template.default_van_id:
-                van = await self.session.get(Van, template.default_van_id)
-                assign_van = (
-                    template.default_van_id
-                    if van and van.operational_status == "active"
-                    else None
-                )
-
             departure = datetime.combine(target, template.departure_time)
-
-            # A van cannot be in two places at once. The trip is still
-            # created -- skipping it would leave passengers unable to
-            # book a scheduled departure -- but the clashing resource is
-            # dropped and the Terminal Manager is warned, so they see a roster
-            # gap rather than an impossible assignment.
-            clashes = await ScheduleConflictChecker(self.session).find_conflicts(
-                route_id=template.route_id,
-                departure=departure,
-                van_id=assign_van,
-                dispatcher_id=template.default_conductor_id,
-            )
-            drop = {c.resource for c in clashes}
-            for c in clashes:
-                report.warnings.append(f"{target}: {c.message}")
-            if "van" in drop:
-                assign_van = None
+            # A departure already gone cannot be booked or run; created
+            # now it would only reach the auto-start job as a trip nobody
+            # started.
+            if departure <= now_naive:
+                report.trips_skipped += 1
+                continue
 
             trip_id = str(uuid.uuid4())
             now = datetime.now(APP_TZ)
@@ -186,11 +146,8 @@ class GenerateDailyTripsUseCase:
                     route_id=template.route_id,
                     service_date=target,
                     departure_datetime=departure,
-                    van_id=assign_van,
-                    dispatcher_id=(
-                        None if "dispatcher" in drop
-                        else template.default_conductor_id
-                    ),
+                    # No van or Dispatcher: both are assigned at the van's
+                    # turn (brief 4.2 rule 2). Bookings attach from today.
                     trip_label=template.trip_label,
                     is_special_trip=False,
                     # Policy snapshot: a later change never alters terms a
@@ -289,6 +246,7 @@ class CreateSpecialTripUseCase:
         *,
         route_id: str,
         departure_datetime: datetime,
+        by: User,
         van_id: str | None = None,
         dispatcher_id: str | None = None,
         trip_label: str | None = None,
@@ -304,26 +262,6 @@ class CreateSpecialTripUseCase:
             raise NotFoundError("Route not found, or it has fewer than two stops.")
 
         capacity = await self.policies.get_int("default_seat_capacity")
-        if van_id:
-            van = await self.session.get(Van, van_id)
-            if van is None:
-                raise NotFoundError("Van not found.")
-            if van.operational_status != "active":
-                raise ConflictError(f"Van {van.plate_number} is {van.operational_status}.")
-            capacity = van.seat_capacity
-
-        # Manual assignment blocks rather than warns: a Terminal Manager acting
-        # deliberately should be told immediately, not discover the clash
-        # in a report later.
-        clashes = await ScheduleConflictChecker(self.session).find_conflicts(
-            route_id=route_id,
-            departure=departure_datetime.replace(tzinfo=None),
-            van_id=van_id,
-            dispatcher_id=dispatcher_id,
-        )
-        if clashes:
-            raise ConflictError(clashes[0].message)
-
         cap = advance_booking_seat_cap
         if cap is None:
             cap = await self.policies.get_int("advance_booking_seat_cap")
@@ -340,8 +278,6 @@ class CreateSpecialTripUseCase:
                 route_id=route_id,
                 service_date=departure_datetime.date(),
                 departure_datetime=naive_departure,
-                van_id=van_id,
-                dispatcher_id=dispatcher_id,
                 trip_label=trip_label or "Special Trip",
                 is_special_trip=True,
                 seat_capacity=capacity,
@@ -359,7 +295,14 @@ class CreateSpecialTripUseCase:
         seat_legs = await self.generator._materialise_legs_and_seats(
             trip_id, stops, naive_departure, capacity
         )
-        await self.session.commit()
+        # Crew named now goes through the same assignment as any trip:
+        # validated van, operator and Dispatcher, no clash. It commits.
+        if van_id is not None or dispatcher_id is not None:
+            await TripLifecycle(self.session).assign(
+                trip_id, van_id=van_id, dispatcher_id=dispatcher_id, by=by
+            )
+        else:
+            await self.session.commit()
 
         log.info("Special trip %s created for %s", trip_id, departure_datetime)
         return {

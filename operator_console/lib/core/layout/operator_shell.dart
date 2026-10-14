@@ -101,7 +101,9 @@ class _OperatorShellState extends State<OperatorShell> {
 
   void _openFor(AppNotification n) => n.isSosAlert
       ? _show((w) => w is SosConsoleScreen)
-      : _show((w) => w is AuditDashboardScreen);
+      : n.isTripAlert
+          ? _show((w) => w is TripMonitorScreen)
+          : _show((w) => w is AuditDashboardScreen);
 
   void _openToday(TodayTarget target) => switch (target) {
         TodayTarget.fleet => _show((w) => w is FleetMapScreen),

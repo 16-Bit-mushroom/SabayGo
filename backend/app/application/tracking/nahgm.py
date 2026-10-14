@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
 from app.application.operations.check_in import haversine_m
+from app.application.operations.trip_lifecycle import TripLifecycle
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ, localize
 from app.domain.enums import AuditTrigger, TripStatus
@@ -158,6 +159,17 @@ class TrackingService:
             auto_trigger.schedule(
                 trip_id=trip_id, leg_sequence=leg, trigger=AuditTrigger.GPS_NODE
             )
+
+        # Leaving the origin stop departs the trip, or starts it first if
+        # nobody did (brief 4.2 rules 7 and 9). The report is already
+        # stored; a failure here is logged, never returned to the unit,
+        # which would only resend a ping the track already has.
+        if leg == 1:
+            try:
+                await TripLifecycle(self.session).van_left_origin(trip_id)
+            except Exception:
+                await self.session.rollback()
+                log.exception("Departure detection failed for trip %s.", trip_id)
 
         return {
             "trip_id": trip_id,

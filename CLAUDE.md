@@ -81,9 +81,8 @@ columns, and `driver_headcounts` with the Dispatcher's manual headcount
 nothing read; the camera's per-stop snapshot is the brief's drift check.
 The revenue view no longer sums roadside columns and LEFT JOINs routes (a
 rental has none). A preflight stops 020 before any change on a database
-with driver accounts or other history it would lose. **Still to drop:**
-the timetable's default van and Dispatcher (`generate_trips.py` staffs
-trips from them until assignment at the van's turn, step 4).
+with driver accounts or other history it would lose. The timetable's
+default van and Dispatcher went in 022 (step 4).
 
 Done: brief step 3, settings and roster (migration 021, 14 Oct).
 `cooperative_policies` is Table 33: keyed (`policy_key`, `effective_from`),
@@ -116,13 +115,55 @@ and can add one; the rest of Member Records, Phones and the settings
 history screen are step 9. Test: `tests/integration/test_roster.sh`
 (94 checks, in the journey runner).
 
-**Next: brief step 4, trip lifecycle.** Timetable → trips days ahead with
-no van or Dispatcher; assignment at the van's turn (Terminal Manager,
-Cashier backup + 'Assignment by Cashier' alert; validated vans and
-Dispatchers only); Start / Depart API (`start_opens_minutes`); the
-auto-start job (`start_grace_minutes`); review hold; void and change-van
-(Terminal Manager only). Then drop the timetable's default van and
-Dispatcher.
+Done: brief step 4, trip lifecycle (migration 022, 14 Oct). The rules
+live in `application/operations/trip_lifecycle.py` (read its docstring);
+the endpoints are in `api/v1/operations.py`. The generator creates trips
+days ahead with **no van or Dispatcher**, and skips a departure already
+past; 022 dropped `schedule_templates.default_van_id` /
+`default_conductor_id`. `PUT /trips/{id}/assignment` (office) takes a
+validated van (validated, active operator) and a validated Dispatcher.
+It refuses a clash. A Cashier's assignment alerts the Terminal Manager.
+Special trips assign through the same path. `POST .../start` (office)
+opens `start_opens_minutes` before departure and needs both assigned. It
+copies operator name, licence and plate onto the trip, and warns (never
+refuses) on an expired licence, no phone out with the van (→ Unaudited
+`no_phone` + alert to the Terminal Manager, Cashier and Dispatcher), or
+the Dispatcher's phone being on another van. **The Dispatcher no longer
+starts or departs**: scanning and cash work on a scheduled trip once
+assigned, and the app's only lifecycle action is **Arrived**
+(`POST .../arrive`, departed → completed). `POST .../depart` (office)
+needs a started trip and records `departure_source`. The fallback is
+`start_overdue_trips`, a `PeriodicJob` (`core/periodic.py`, which now
+runs the hold sweep too). At departure + `start_grace_minutes` it starts
+the trip with its assigned van (`auto_assigned`, review `pending`,
+'Unconfirmed Trip Start', "No Dispatcher" when none). With no van it
+raises 'Trip Not Started' once. It reaches back 12 h at most. A GPS ping
+leaving stop 1 with a boarding counted starts the trip if nobody did,
+then departs it as `detected` (`nahgm.record_ping` →
+`van_left_origin`). Terminal Manager only: `start-review`, `change-van`
+(started trips) and `void` (scheduled or boarding), each with who, when
+and why, earlier van and operator in `change_note`. Voiding notifies
+ticket holders and refunds nothing. Console: the Trips page's **Start
+and departure** panel (`trip_monitor/trip_lifecycle_panel.dart`); the
+Timetable lost its crew pickers; trip alerts open Trips. Demo seed:
+vans and Dispatchers validated (VAN-0007 stays pending); upcoming
+timetable trips unassigned; today's departures already past are seeded
+completed. Test: `tests/integration/test_trip_lifecycle.sh` (80 checks,
+in the runner). **Fixed on the way:** a cash walk-in was created
+`confirmed`, so Depart made it a no-show and released a space someone
+sat in. It is created `boarded` now.
+
+Waits for step 5 (needs the phone's reports): `auto_detected` starts,
+`silent_at_start` / `lens_blocked`, completion when aboard reaches 0,
+and boardings counted from door events rather than bookings. Waits for
+step 6: the statement leaving out `pending` starts and creating fare
+lines at review. A GPS-not-working phone warns only: no Unaudited reason
+fits (4.4 lists four, none for GPS).
+
+**Next: brief step 5, edge ingestion API.** Authenticated, idempotent,
+offline-tolerant door-event upload with `device_id`, the heartbeat into
+`edge_devices` (stored reports after a reconnect), and the rest of the
+Unaudited check. Then the Android edge app.
 
 ---
 
@@ -452,7 +493,7 @@ bookings · reschedule · cancel · conductor trip list and manifest · QR
 boarding scan (valid/already-boarded/unpaid/cancelled/wrong-stop/
 wrong-trip verdicts) · walk-in cash logging (roadside logging and the
 conductor-set fare removed 13 Oct, rev 468) · depart with
-automatic no-show release · cash remittance with variance flagging.
+automatic no-show release (moved to the office console 14 Oct, rev 468) · cash remittance with variance flagging.
 
 Verified on a physical device on 11 and 14 September: the full passenger
 loop (reserve → webhook-confirmed → QR → check-in rejection → cancel →
@@ -770,7 +811,7 @@ was inserted.
   two: the phone slot is an in-memory single-slot stand-in that retires
   when the Orange Pi arrives. Alpha testing in real vans from 6 Oct will
   produce no automatic audits until the kit is installed.
-- Automatic captures are in-process, like `HoldSweeper` and the phone
+- Automatic captures are in-process, like the hold sweep and the phone
   capture slot. With more than one backend worker the per-leg check
   against `yolov8_audit_logs` still holds, but the in-flight guard does
   not, so a simultaneous double-fire could write two rows for one leg.

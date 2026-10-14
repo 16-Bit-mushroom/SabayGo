@@ -90,10 +90,14 @@ class Booking:
             seat_number=seat_number,
             fare_amount=fare_amount,
             booking_type=booking_type,
+            # A walk-in pays cash at the door and is aboard as it is
+            # logged. 'confirmed' would read as "not yet boarded" on the
+            # manifest, and departure would make the passenger a no-show
+            # and release a space someone is sitting in.
             status=(
                 BookingStatus.PENDING
                 if booking_type is BookingType.APP
-                else BookingStatus.CONFIRMED  # walk-ins pay cash on the spot
+                else BookingStatus.BOARDED
             ),
             passenger_user_id=passenger_user_id,
             walkin_name=walkin_name,

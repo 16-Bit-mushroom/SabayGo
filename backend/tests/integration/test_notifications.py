@@ -54,8 +54,9 @@ async def main() -> int:
         tokens = {role: await login(client, email) for role, email in ACCOUNTS.items()}
         auth = {role: {"Authorization": f"Bearer {t}"} for role, t in tokens.items()}
 
-        # Trip must be in progress for an audit to apply.
-        await client.post(f"{API}/trips/{TRIP}/start-boarding", headers=auth["dispatcher"])
+        # Trip must be in progress for an audit to apply. The office starts
+        # it (rev 468).
+        await client.post(f"{API}/trips/{TRIP}/start", headers=auth["cashier"])
 
         before = {
             role: (await client.get(f"{API}/notifications", headers=h)).json()["unread_count"]

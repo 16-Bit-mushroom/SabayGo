@@ -101,12 +101,13 @@ if [ "$S" = "200" ]; then ok "checked in -- manifest will show AT TERMINAL"
 else warn "check-in refused ($S): $(j "['detail']" < /tmp/resp.json) -- fine to show as the 'too early' rejection, then continue"; fi
 
 # ─────────────────────────────────────────────────────── 3. dispatcher
-step "3. Dispatcher: open boarding, scan, walk-in, manifest"
+step "3. Office starts the trip; Dispatcher scans, logs a walk-in, reads the manifest"
 S=$(code GET /trips/assigned "" "$CT")
 grep -q "$TRIP" /tmp/resp.json && ok "trip is on dispatcher@'s assigned list" || die "fixture trip not in /trips/assigned for dispatcher@"
 
-S=$(code POST "/trips/$TRIP/start-boarding" "" "$CT")
-[ "$S" = "200" ] && ok "boarding opened" || die "start-boarding gave $S: $(j "['detail']" < /tmp/resp.json)"
+# The Cashier or the Terminal Manager starts it (rev 468, brief 4.2).
+S=$(code POST "/trips/$TRIP/start" "" "$OT")
+[ "$S" = "200" ] && ok "manager@ starts the trip" || die "start gave $S: $(j "['detail']" < /tmp/resp.json)"
 
 S=$(code POST /scans "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
 RES=$(j "['result']" < /tmp/resp.json)

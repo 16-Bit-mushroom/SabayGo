@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
 from app.core import timezone as app_tz
-from app.core.exceptions import NotFoundError
-from app.domain.enums import AuditTrigger, BookingStatus, TripStatus
+from app.core.exceptions import ConflictError, NotFoundError
+from app.domain.enums import AuditTrigger, BookingStatus, DepartureSource, TripStatus
 from app.infrastructure.models import BoardingScan
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import Trip
@@ -220,15 +220,34 @@ class ManifestUseCase:
 
 
 class DepartTripUseCase:
-    """Close boarding: mark the trip departed and no-show anyone unscanned."""
+    """Close boarding: mark the trip departed and no-show anyone unscanned.
+
+    Brief 4.2 rule 9: the Cashier or the Terminal Manager taps Depart
+    ('confirmed'), or the van's GPS leaves the origin stop zone with a
+    boarding counted ('detected'), whichever is first. Only a started
+    trip departs; the row lock keeps the two from both releasing the
+    no-shows.
+    """
 
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def execute(self, *, trip_id: str) -> dict:
-        trip = await self.session.get(Trip, trip_id)
+    async def execute(
+        self, *, trip_id: str, source: DepartureSource = DepartureSource.CONFIRMED
+    ) -> dict:
+        trip = (await self.session.execute(
+            select(Trip).where(Trip.trip_id == trip_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )).scalar_one_or_none()
         if trip is None:
             raise NotFoundError("Trip not found.")
+        if trip.status != TripStatus.BOARDING.value:
+            raise ConflictError(
+                "Start the trip before it departs."
+                if trip.status == TripStatus.SCHEDULED.value
+                else f"This trip is already {trip.status}."
+            )
 
         now = app_tz.now()
         result = await self.session.execute(
@@ -255,6 +274,7 @@ class DepartTripUseCase:
 
         trip.status = TripStatus.DEPARTED.value
         trip.departed_at = now
+        trip.departure_source = source.value
         trip.updated_at = now
         await self.session.commit()
 
@@ -275,5 +295,6 @@ class DepartTripUseCase:
             "trip_id": trip_id,
             "status": TripStatus.DEPARTED.value,
             "departed_at": now.isoformat(),
+            "departure_source": source.value,
             "no_shows": len(no_shows),
         }

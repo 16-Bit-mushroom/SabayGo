@@ -33,6 +33,9 @@ S=$(code POST /auth/login '{"email":"dispatcher@sabaygo.dev","password":"sabaygo
 [ "$S" = "200" ] && ok "login" || { bad "login gave $S"; exit 1; }
 CT=$(j "['access_token']" < /tmp/resp.json)
 [ "$(j "['role']" < /tmp/resp.json)" = "dispatcher" ] && ok "role is dispatcher" || bad "wrong role"
+# The office starts and departs the trip (rev 468, brief 4.2 rules 5, 9).
+code POST /auth/login '{"email":"cashier@sabaygo.dev","password":"sabaygo123"}' >/dev/null
+OFF=$(j "['access_token']" < /tmp/resp.json)
 
 S=$(code GET /auth/me "" "$CT")
 [ "$S" = "200" ] && ok "profile: $(j "['display_name']" < /tmp/resp.json)" || bad "me gave $S"
@@ -61,8 +64,8 @@ UNPAID_QR=$(j "['qr_payload']" < /tmp/resp.json)
 # ═══════════════════════════════════════════════ 2. BOARDING
 hdr "2. Boarding"
 
-S=$(code POST "/trips/$TRIP/start-boarding" "" "$CT")
-[ "$S" = "200" ] && ok "boarding opened" || bad "start-boarding gave $S"
+S=$(code POST "/trips/$TRIP/start" "" "$OFF")
+[ "$S" = "200" ] && ok "the cashier starts the trip" || bad "start gave $S"
 
 S=$(code POST /scans \
   "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
@@ -160,7 +163,7 @@ fi
 # ═══════════════════════════════════════════════ 6. DEPARTURE
 hdr "6. Departure"
 
-S=$(code POST "/trips/$TRIP/depart" "" "$CT")
+S=$(code POST "/trips/$TRIP/depart" "" "$OFF")
 if [ "$S" = "200" ]; then
   ok "departed -- $(j "['no_shows']" < /tmp/resp.json) no-show(s) recorded"
 else bad "depart gave $S"; fi

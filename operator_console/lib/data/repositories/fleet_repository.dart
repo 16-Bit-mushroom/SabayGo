@@ -9,6 +9,8 @@ class Van {
     this.color,
     required this.seatCapacity,
     required this.operationalStatus,
+    this.operatorName,
+    this.validationStatus = 'pending',
     this.registeredRouteId,
     required this.hasCabinCamera,
     this.cameraDeviceId,
@@ -24,6 +26,10 @@ class Van {
   final String? color;
   final int seatCapacity;
   final String operationalStatus; // active | maintenance | inactive
+  /// The van's owner, who drives it.
+  final String? operatorName;
+  /// Only a validated van can be assigned to a trip (rev 468).
+  final String validationStatus;
   final String? registeredRouteId;
   final bool hasCabinCamera;
   final String? cameraDeviceId;
@@ -39,6 +45,8 @@ class Van {
         color: json['color'] as String?,
         seatCapacity: json['seat_capacity'] as int,
         operationalStatus: json['operational_status'] as String,
+        operatorName: json['operator_name'] as String?,
+        validationStatus: json['validation_status'] as String? ?? 'pending',
         registeredRouteId: json['registered_route_id'] as String?,
         hasCabinCamera: json['has_cabin_camera'] as bool? ?? false,
         cameraDeviceId: json['camera_device_id'] as String?,
@@ -64,6 +72,7 @@ class StaffMember {
     this.middleName,
     required this.lastName,
     required this.employmentStatus,
+    this.validationStatus = 'pending',
     this.cooperativeName,
     this.assignedTerminalId,
   });
@@ -76,6 +85,8 @@ class StaffMember {
   final String? middleName;
   final String lastName;
   final String employmentStatus; // active | suspended | inactive
+  /// A Dispatcher's roster validation; only a validated one is assigned.
+  final String validationStatus;
   final String? cooperativeName;
   final String? assignedTerminalId;
 
@@ -90,6 +101,7 @@ class StaffMember {
         middleName: json['middle_name'] as String?,
         lastName: json['last_name'] as String,
         employmentStatus: json['employment_status'] as String,
+        validationStatus: json['validation_status'] as String? ?? 'pending',
         cooperativeName: json['cooperative_name'] as String?,
         assignedTerminalId: json['assigned_terminal_id'] as String?,
       );

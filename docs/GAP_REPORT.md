@@ -348,3 +348,40 @@ the operator before the van); `test_group_f` 11, `test_roadside` 10;
 console analyze clean of errors and warnings. The console widget test
 does not load on the VM (`download.dart` imports `dart:js_interop`), as
 before this change.
+
+**Done — step 4, trip lifecycle (migration 022, 14 Oct).** Rules in
+`application/operations/trip_lifecycle.py`; endpoints in
+`api/v1/operations.py`.
+
+| Brief (4.2) | Repo |
+|---|---|
+| Rule 1, trips days ahead, no usual van | generator leaves `van_id` / `dispatcher_id` NULL and skips a departure already past; 022 drops `schedule_templates.default_van_id`, `default_conductor_id` |
+| Rule 2, assignment at the van's turn | `PUT /trips/{id}/assignment` (Terminal Manager, Cashier); validated van of a validated, active operator, validated Dispatcher, no clash; `assigned_by` / `assigned_at`; the Cashier's raises `assignment_by_cashier` |
+| Rule 3, scanning before the start | unchanged: scan and walk-in check the assignment, not the status |
+| Rules 4–5, start | `POST /trips/{id}/start` (office), from `start_opens_minutes` before departure; blocked without van and Dispatcher (T8); copies operator name, licence and plate; warnings: expired licence (+ `system_alert` to the Terminal Manager), no phone with the van (Unaudited `no_phone`, `unaudited_trip` to the office and the Dispatcher, T22), the Dispatcher's phone on another van (T10) |
+| Rule 7, fallback | `start_overdue_trips` every 60 s (`core/periodic.py`): `auto_assigned`, review `pending`, `unconfirmed_trip_start` (T3, T9); no van → `trip_not_started`, once (T7). Also when a ping leaves stop 1 with a boarding counted |
+| Rule 8, review | `POST /trips/{id}/start-review` (Terminal Manager); a changed van needs a reason (T4) |
+| Rule 9, departure | `POST /trips/{id}/depart` (office), a started trip only; or a ping leaving stop 1 with a boarding counted; `departure_source` |
+| Rule 10, void and change van | `POST /trips/{id}/void` (scheduled or boarding), `POST /trips/{id}/change-van` (started), Terminal Manager only (T11); `change_note` keeps the earlier van and operator |
+| 4.1 Completed | `POST /trips/{id}/arrive`, the trip's Dispatcher (T26) |
+
+Decided here, not in the brief: a void cancels nothing else (no refunds)
+and tells app ticket holders to see the office. The fallback reaches back
+12 hours, so a server back from a weekend does not start Friday's trips.
+"Boarding counted" is a `boarded` booking until door events exist. A GPS
+fault warns without marking Unaudited (no reason in 4.4 fits). A cash
+walk-in is now created `boarded`: as `confirmed` it read "not yet" on the
+manifest, and Depart made it a no-show and released its space.
+
+Left for step 5: `auto_detected`, `silent_at_start`, `lens_blocked`,
+completion at aboard = 0, events between trips (rule 12). Left for step 6:
+the statement leaving out `pending` starts, fare lines at review, the
+reopen rule (T5).
+
+Verified: `test_trip_lifecycle.sh` 80 passed; journey suite 331 passed +
+the known `--soon` reschedule failure; `test_remittance` 10 passed (its
+second section now uses the second fixture trip: one handover per trip
+per Dispatcher), `test_roadside` 10, `test_group_f` 11,
+`demo_rehearsal.sh` complete; 022 rolled back and re-applied; mobile
+analyze clean, widget tests pass; console analyze clean of errors and
+warnings.

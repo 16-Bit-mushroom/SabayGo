@@ -86,28 +86,38 @@ VALUES
   ('VAN-0002', 'XYZ-9876', 'OP-0002', 'Nissan', 'NV350 Urvan',    'Silver', 14,
    'active', @route, FALSE, NULL);
 
+-- Validated, so they can be assigned to a trip (brief 4.2 rule 2). The
+-- four-photo rule binds a person validating through the API; seed vans
+-- carry no photographs.
+UPDATE vans
+   SET validation_status = 'validated', validated_by = 'USER-MANAGER-0001',
+       validated_at = '2026-09-01 09:00:00'
+ WHERE van_id IN ('VAN-0001', 'VAN-0002');
+UPDATE staff_profiles
+   SET validation_status = 'validated', validated_by = 'USER-MANAGER-0001',
+       validated_at = '2026-09-01 09:00:00'
+ WHERE user_id = 'USER-DISPATCHER-0001';
+
 -- -------------------------------------------------------- schedule template
+-- Route, time and operating days only: no usual van or Dispatcher
+-- (rev 468). Both are assigned to a trip at the van's turn.
 INSERT INTO schedule_templates
-  (template_id, route_id, departure_time, days_of_week,
-   default_van_id, default_conductor_id,
-   trip_label, valid_from)
+  (template_id, route_id, departure_time, days_of_week, trip_label, valid_from)
 VALUES
-  ('TMPL-ECO-COT-0530', @route, '05:30:00', '1111111',
-   'VAN-0001', 'USER-DISPATCHER-0001', 'First Trip', '2026-01-01'),
-  ('TMPL-ECO-COT-0730', @route, '07:30:00', '1111100',
-   'VAN-0002', NULL, 'Second Trip', '2026-01-01');
+  ('TMPL-ECO-COT-0530', @route, '05:30:00', '1111111', 'First Trip', '2026-01-01'),
+  ('TMPL-ECO-COT-0730', @route, '07:30:00', '1111100', 'Second Trip', '2026-01-01');
 
 -- ------------------------------------------------- one materialized trip
 -- In production the nightly generator creates these. Seeded here so you
 -- have something to hammer with the Week 2 concurrency test today.
 INSERT INTO trips
   (trip_id, template_id, route_id, service_date, departure_datetime,
-   van_id, dispatcher_id, trip_label,
+   van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
    seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status)
 VALUES
   ('TRIP-DEMO-00000001', 'TMPL-ECO-COT-0530', @route,
    CURRENT_DATE, CONCAT(CURRENT_DATE, ' 05:30:00'),
-   'VAN-0001', 'USER-DISPATCHER-0001', 'First Trip',
+   'VAN-0001', 'USER-DISPATCHER-0001', 'USER-MANAGER-0001', NOW(6), 'First Trip',
    14, 10, 6, 'scheduled');
 
 -- trip_legs: derived from the route's stop sequence (4 stops -> 3 legs)
@@ -138,12 +148,12 @@ WHERE l.trip_id = 'TRIP-DEMO-00000001';
 -- keeps the van overlap check from firing.
 INSERT INTO trips
   (trip_id, template_id, route_id, service_date, departure_datetime,
-   van_id, dispatcher_id, trip_label,
+   van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
    seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status)
 VALUES
   ('TRIP-DEMO-00000002', 'TMPL-ECO-COT-0730', @route,
    CURRENT_DATE, CONCAT(CURRENT_DATE, ' 07:30:00'),
-   'VAN-0002', 'USER-DISPATCHER-0001', 'Second Trip',
+   'VAN-0002', 'USER-DISPATCHER-0001', 'USER-MANAGER-0001', NOW(6), 'Second Trip',
    14, 14, 6, 'scheduled');
 
 INSERT INTO trip_legs (trip_id, leg_sequence, from_stop_sequence, to_stop_sequence, departs_at)

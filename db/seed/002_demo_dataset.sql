@@ -95,6 +95,11 @@ INSERT INTO staff_profiles (user_id, first_name, last_name, cooperative_name, as
   ('USER-DISPATCHER-0003', 'Ricky',  'Tanudra',  @coop, @t_ecoland),
   ('USER-DISPATCHER-0004', 'Bong',   'Sumagang', @coop, @t_ecoland),
   ('USER-DISPATCHER-0005', 'Ely',    'Dagohoy',  @coop, @t_ecoland);
+UPDATE staff_profiles
+   SET validation_status = 'validated', validated_by = 'USER-MANAGER-0001',
+       validated_at = '2026-09-01 09:00:00'
+ WHERE user_id IN ('USER-DISPATCHER-0002', 'USER-DISPATCHER-0003',
+                   'USER-DISPATCHER-0004', 'USER-DISPATCHER-0005');
 
 -- --------------------------------------------------------------- operators
 -- Van owners, who always drive. Roster records, no login. One van each.
@@ -141,17 +146,26 @@ VALUES
   ('VAN-0006', 'LCT-9042', 'OP-0006', 'Foton',  'View Traveller',    'White',  14, 'active', @r_mat, FALSE, NULL),
   ('VAN-0007', 'GAK-2205', 'OP-0007', 'Toyota', 'HiAce Commuter',    'White',  14, 'maintenance', @r_tag, FALSE, NULL);
 
+-- Validated, so they can be assigned to a trip (brief 4.2 rule 2).
+-- Sabandal's van stays Pending with his record. The four-photo rule
+-- binds a person validating through the API; seed vans carry no photos.
+UPDATE vans
+   SET validation_status = 'validated', validated_by = 'USER-MANAGER-0001',
+       validated_at = '2026-09-01 09:00:00'
+ WHERE van_id IN ('VAN-0003', 'VAN-0004', 'VAN-0005', 'VAN-0006');
+
 -- ------------------------------------------------------- schedule templates
+-- Route, time and operating days only: no usual van or Dispatcher
+-- (rev 468). Both are assigned to a trip at the van's turn.
 INSERT INTO schedule_templates
-  (template_id, route_id, departure_time, days_of_week,
-   default_van_id, default_conductor_id, trip_label, valid_from)
+  (template_id, route_id, departure_time, days_of_week, trip_label, valid_from)
 VALUES
-  ('TMPL-ECO-TAG-0600', @r_tag, '06:00:00', '1111111', 'VAN-0003', 'USER-DISPATCHER-0002', 'Morning Express', '2026-01-01'),
-  ('TMPL-ECO-TAG-0900', @r_tag, '09:00:00', '1111111', 'VAN-0004', 'USER-DISPATCHER-0005', 'Mid-morning',     '2026-01-01'),
-  ('TMPL-ECO-TAG-1400', @r_tag, '14:00:00', '1111100', 'VAN-0003', 'USER-DISPATCHER-0002', 'Afternoon',       '2026-01-01'),
-  ('TMPL-ECO-DIG-0630', @r_dig, '06:30:00', '1111111', 'VAN-0005', 'USER-DISPATCHER-0004', 'First Trip',      '2026-01-01'),
-  ('TMPL-ECO-DIG-1230', @r_dig, '12:30:00', '1111111', 'VAN-0005', 'USER-DISPATCHER-0004', 'Noon Trip',       '2026-01-01'),
-  ('TMPL-ECO-MAT-0700', @r_mat, '07:00:00', '1111111', 'VAN-0006', 'USER-DISPATCHER-0003', 'Daily Mati',      '2026-01-01');
+  ('TMPL-ECO-TAG-0600', @r_tag, '06:00:00', '1111111', 'Morning Express', '2026-01-01'),
+  ('TMPL-ECO-TAG-0900', @r_tag, '09:00:00', '1111111', 'Mid-morning',     '2026-01-01'),
+  ('TMPL-ECO-TAG-1400', @r_tag, '14:00:00', '1111100', 'Afternoon',       '2026-01-01'),
+  ('TMPL-ECO-DIG-0630', @r_dig, '06:30:00', '1111111', 'First Trip',      '2026-01-01'),
+  ('TMPL-ECO-DIG-1230', @r_dig, '12:30:00', '1111111', 'Noon Trip',       '2026-01-01'),
+  ('TMPL-ECO-MAT-0700', @r_mat, '07:00:00', '1111111', 'Daily Mati',      '2026-01-01');
 
 -- ===================================================== helper procedures
 -- Materialise a trip the way the nightly generator does: trip row, one
@@ -165,18 +179,38 @@ CREATE PROCEDURE seed_trip(
   IN p_dispatcher CHAR(36), IN p_label VARCHAR(64), IN p_status VARCHAR(16))
 BEGIN
   DECLARE v_last_offset INT;
+  DECLARE v_started BOOLEAN DEFAULT p_status IN ('boarding','departed','completed');
   SELECT MAX(offset_minutes) INTO v_last_offset FROM route_stops WHERE route_id = p_route;
 
+  -- As the lifecycle leaves a trip (brief 4.2): the Terminal Manager
+  -- assigned the crew, the Cashier started it and tapped Depart, and the
+  -- operator's name and licence and the plate were copied at the start.
   INSERT INTO trips
     (trip_id, template_id, route_id, service_date, departure_datetime,
-     van_id, dispatcher_id, trip_label,
+     van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
      seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status,
+     start_mode, started_by, started_at, departure_source,
+     driver_name, driver_license_no, van_plate_number,
      departed_at, completed_at)
-  VALUES
-    (p_trip_id, p_tmpl, p_route, DATE(p_departs), p_departs,
-     p_van, p_dispatcher, p_label, 14, 10, 6, p_status,
+  SELECT
+     p_trip_id, p_tmpl, p_route, DATE(p_departs), p_departs,
+     p_van, p_dispatcher,
+     IF(p_van IS NULL, NULL, 'USER-MANAGER-0001'),
+     IF(p_van IS NULL, NULL, LEAST(NOW(6), p_departs - INTERVAL 40 MINUTE)),
+     p_label, 14, 10, 6, p_status,
+     IF(v_started, 'manual', NULL),
+     IF(v_started, 'USER-CASHIER-0001', NULL),
+     IF(v_started, p_departs - INTERVAL 20 MINUTE, NULL),
+     IF(p_status IN ('departed','completed'), 'confirmed', NULL),
+     IF(v_started, o.full_name, NULL),
+     IF(v_started, o.license_number, NULL),
+     IF(v_started, v.plate_number, NULL),
      IF(p_status IN ('departed','completed'), p_departs + INTERVAL 4 MINUTE, NULL),
-     IF(p_status = 'completed', p_departs + INTERVAL (v_last_offset + 12) MINUTE, NULL));
+     IF(p_status = 'completed',
+        LEAST(NOW(6), p_departs + INTERVAL (v_last_offset + 12) MINUTE), NULL)
+  FROM (SELECT 1) one
+  LEFT JOIN vans v ON v.van_id = p_van
+  LEFT JOIN operators o ON o.operator_id = v.operator_id;
 
   INSERT INTO trip_legs (trip_id, leg_sequence, from_stop_sequence, to_stop_sequence, departs_at)
   SELECT p_trip_id, rs.stop_sequence, rs.stop_sequence, rs.stop_sequence + 1,
@@ -236,18 +270,19 @@ END$$
 DELIMITER ;
 
 -- ============================================================ upcoming trips
--- Today and the next two days, every template. Today's early ones may
--- already be in the past at seed time; search hides them, which is right.
+-- Today and the next two days, every template. Today's departures that
+-- are already past at seed time ran (completed); the rest wait, with no
+-- van or Dispatcher until the van's turn (cleared below).
 SET @d0 = CURRENT_DATE;
 SET @d1 = CURRENT_DATE + INTERVAL 1 DAY;
 SET @d2 = CURRENT_DATE + INTERVAL 2 DAY;
 
-CALL seed_trip('TRIP-A2Z-TAG-D0-0600', 'TMPL-ECO-TAG-0600', @r_tag, TIMESTAMP(@d0, '06:00:00'), 'VAN-0003', 'USER-DISPATCHER-0002', 'Morning Express', 'scheduled');
-CALL seed_trip('TRIP-A2Z-TAG-D0-0900', 'TMPL-ECO-TAG-0900', @r_tag, TIMESTAMP(@d0, '09:00:00'), 'VAN-0004', 'USER-DISPATCHER-0005', 'Mid-morning',     'scheduled');
-CALL seed_trip('TRIP-A2Z-TAG-D0-1400', 'TMPL-ECO-TAG-1400', @r_tag, TIMESTAMP(@d0, '14:00:00'), 'VAN-0003', 'USER-DISPATCHER-0002', 'Afternoon',       'scheduled');
-CALL seed_trip('TRIP-A2Z-DIG-D0-0630', 'TMPL-ECO-DIG-0630', @r_dig, TIMESTAMP(@d0, '06:30:00'), 'VAN-0005', 'USER-DISPATCHER-0004', 'First Trip',      'scheduled');
-CALL seed_trip('TRIP-A2Z-DIG-D0-1230', 'TMPL-ECO-DIG-1230', @r_dig, TIMESTAMP(@d0, '12:30:00'), 'VAN-0005', 'USER-DISPATCHER-0004', 'Noon Trip',       'scheduled');
-CALL seed_trip('TRIP-A2Z-MAT-D0-0700', 'TMPL-ECO-MAT-0700', @r_mat, TIMESTAMP(@d0, '07:00:00'), 'VAN-0006', 'USER-DISPATCHER-0003', 'Daily Mati',      'scheduled');
+CALL seed_trip('TRIP-A2Z-TAG-D0-0600', 'TMPL-ECO-TAG-0600', @r_tag, TIMESTAMP(@d0, '06:00:00'), 'VAN-0003', 'USER-DISPATCHER-0002', 'Morning Express', IF(TIMESTAMP(@d0, '06:00:00') <= NOW(), 'completed', 'scheduled'));
+CALL seed_trip('TRIP-A2Z-TAG-D0-0900', 'TMPL-ECO-TAG-0900', @r_tag, TIMESTAMP(@d0, '09:00:00'), 'VAN-0004', 'USER-DISPATCHER-0005', 'Mid-morning',     IF(TIMESTAMP(@d0, '09:00:00') <= NOW(), 'completed', 'scheduled'));
+CALL seed_trip('TRIP-A2Z-TAG-D0-1400', 'TMPL-ECO-TAG-1400', @r_tag, TIMESTAMP(@d0, '14:00:00'), 'VAN-0003', 'USER-DISPATCHER-0002', 'Afternoon',       IF(TIMESTAMP(@d0, '14:00:00') <= NOW(), 'completed', 'scheduled'));
+CALL seed_trip('TRIP-A2Z-DIG-D0-0630', 'TMPL-ECO-DIG-0630', @r_dig, TIMESTAMP(@d0, '06:30:00'), 'VAN-0005', 'USER-DISPATCHER-0004', 'First Trip',      IF(TIMESTAMP(@d0, '06:30:00') <= NOW(), 'completed', 'scheduled'));
+CALL seed_trip('TRIP-A2Z-DIG-D0-1230', 'TMPL-ECO-DIG-1230', @r_dig, TIMESTAMP(@d0, '12:30:00'), 'VAN-0005', 'USER-DISPATCHER-0004', 'Noon Trip',       IF(TIMESTAMP(@d0, '12:30:00') <= NOW(), 'completed', 'scheduled'));
+CALL seed_trip('TRIP-A2Z-MAT-D0-0700', 'TMPL-ECO-MAT-0700', @r_mat, TIMESTAMP(@d0, '07:00:00'), 'VAN-0006', 'USER-DISPATCHER-0003', 'Daily Mati',      IF(TIMESTAMP(@d0, '07:00:00') <= NOW(), 'completed', 'scheduled'));
 
 CALL seed_trip('TRIP-A2Z-TAG-D1-0600', 'TMPL-ECO-TAG-0600', @r_tag, TIMESTAMP(@d1, '06:00:00'), 'VAN-0003', 'USER-DISPATCHER-0002', 'Morning Express', 'scheduled');
 CALL seed_trip('TRIP-A2Z-TAG-D1-0900', 'TMPL-ECO-TAG-0900', @r_tag, TIMESTAMP(@d1, '09:00:00'), 'VAN-0004', 'USER-DISPATCHER-0005', 'Mid-morning',     'scheduled');
@@ -261,6 +296,12 @@ CALL seed_trip('TRIP-A2Z-TAG-D2-0900', 'TMPL-ECO-TAG-0900', @r_tag, TIMESTAMP(@d
 CALL seed_trip('TRIP-A2Z-DIG-D2-0630', 'TMPL-ECO-DIG-0630', @r_dig, TIMESTAMP(@d2, '06:30:00'), 'VAN-0005', 'USER-DISPATCHER-0004', 'First Trip',      'scheduled');
 CALL seed_trip('TRIP-A2Z-DIG-D2-1230', 'TMPL-ECO-DIG-1230', @r_dig, TIMESTAMP(@d2, '12:30:00'), 'VAN-0005', 'USER-DISPATCHER-0004', 'Noon Trip',       'scheduled');
 CALL seed_trip('TRIP-A2Z-MAT-D2-0700', 'TMPL-ECO-MAT-0700', @r_mat, TIMESTAMP(@d2, '07:00:00'), 'VAN-0006', 'USER-DISPATCHER-0003', 'Daily Mati',      'scheduled');
+
+-- Rev 468: an upcoming timetable trip has no crew until the van's turn
+-- (brief 4.2 rule 2). The calls above name the van each ran with.
+UPDATE trips
+   SET van_id = NULL, dispatcher_id = NULL, assigned_by = NULL, assigned_at = NULL
+ WHERE trip_id LIKE 'TRIP-A2Z-%' AND template_id IS NOT NULL AND status = 'scheduled';
 
 -- A few advance bookings on tomorrow's trips so the dispatcher is not blank.
 CALL seed_booking('BKG-A2Z-U001', 'TRIP-A2Z-TAG-D1-0600', 'USER-PAX-DEMO-0001', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', 'paymongo', 'gcash', NOW() - INTERVAL 3 HOUR);

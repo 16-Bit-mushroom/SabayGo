@@ -29,6 +29,7 @@ class CrewTrip {
   final List<RouteStopDetail> stops;
 
   bool get isScheduled => status == 'scheduled';
+  bool get isCompleted => status == 'completed';
   bool get isBoarding => status == 'boarding';
   bool get isDeparted => status == 'departed' || status == 'completed';
 
@@ -345,12 +346,10 @@ class OperationsRepository {
     return WalkInResult.fromJson(json as Map<String, dynamic>);
   }
 
-  Future<void> startBoarding(String tripId) =>
-      _api.post('/trips/$tripId/start-boarding');
-
-  /// Close boarding. Confirmed passengers who never scanned become
-  /// no-shows and their space is released.
-  Future<void> depart(String tripId) => _api.post('/trips/$tripId/depart');
+  /// The van has arrived and everyone is off: the trip is completed.
+  /// Starting and departing are the office's (rev 468, brief 4.2); the
+  /// Dispatcher scans and logs fares from the moment they are assigned.
+  Future<void> arrive(String tripId) => _api.post('/trips/$tripId/arrive');
 
   /// The cash this crew member is holding for a trip, computed by the
   /// server from the bookings they logged — never typed in.

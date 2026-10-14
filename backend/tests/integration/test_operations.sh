@@ -35,7 +35,10 @@ echo "== crew login =========================================="
 CTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 
-curl -s -X POST "$API/trips/$TRIP/start-boarding" -H "Authorization: Bearer $CTOKEN" >/dev/null
+# The office starts the trip (rev 468).
+OTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
+  -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+curl -s -X POST "$API/trips/$TRIP/start" -H "Authorization: Bearer $OTOKEN" >/dev/null
 
 echo "== scan the QR (valid) ================================="
 curl -s -X POST "$API/scans" -H "Authorization: Bearer $CTOKEN" \

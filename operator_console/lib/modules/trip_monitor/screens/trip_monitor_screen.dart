@@ -11,6 +11,7 @@ import '../../../data/repositories/audit_repository.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../ai_audit_queue/audit_reading_card.dart';
 import '../../ai_audit_queue/phone_capture.dart';
+import '../trip_lifecycle_panel.dart';
 
 /// The office's view of every trip on a day, as each Dispatcher sees it.
 ///
@@ -158,6 +159,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
         audits: _tripAudits,
         stopNames: _stopNames,
         onCaptureFinished: _loadManifest,
+        onLifecycleChanged: _load,
       );
 
       return Padding(
@@ -339,12 +341,14 @@ class _TripDetail extends StatelessWidget {
     required this.audits,
     required this.stopNames,
     required this.onCaptureFinished,
+    required this.onLifecycleChanged,
   });
   final TripBoardEntry? trip;
   final TripManifest? manifest;
   final List<PendingAudit>? audits;
   final Map<int, String> stopNames;
   final VoidCallback onCaptureFinished;
+  final VoidCallback onLifecycleChanged;
 
   String _stop(int seq) => stopNames[seq] ?? 'Stop $seq';
 
@@ -439,6 +443,8 @@ class _TripDetail extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: AppSpacing.lg),
+        TripLifecyclePanel(trip: t, onChanged: onLifecycleChanged),
         const SizedBox(height: AppSpacing.lg),
         // Crew and seats side by side. The operator owns and drives the van.
         IntrinsicHeight(

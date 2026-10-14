@@ -23,9 +23,12 @@ class AppNotification {
 
   bool get isVarianceAlert => type == 'variance_alert';
   bool get isSosAlert => type == 'sos_alert';
+  /// A trip-lifecycle alert (rev 468): assignment by the Cashier, an
+  /// unconfirmed or missing start, an unaudited trip, an expired licence.
+  bool get isTripAlert => relatedEntityType == 'trip';
 
   /// Notifications that point at a module worth opening.
-  bool get isActionable => isVarianceAlert || isSosAlert;
+  bool get isActionable => isVarianceAlert || isSosAlert || isTripAlert;
 
   AppNotification copyWith({bool? isRead}) => AppNotification(
         notificationId: notificationId,

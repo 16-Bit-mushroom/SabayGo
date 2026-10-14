@@ -33,6 +33,41 @@ class TripStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class StartMode(str, Enum):
+    """How a trip was started (brief 4.2 rules 5 and 7; migration 019)."""
+
+    MANUAL = "manual"
+    AUTO_ASSIGNED = "auto_assigned"
+    AUTO_DETECTED = "auto_detected"
+
+
+class StartReview(str, Enum):
+    """An automatic start is held off the statement until reviewed."""
+
+    NOT_REQUIRED = "not_required"
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+
+
+class TripAuditStatus(str, Enum):
+    AUDITED = "audited"
+    UNAUDITED = "unaudited"
+
+
+class UnauditedReason(str, Enum):
+    NO_PHONE = "no_phone"
+    SILENT_AT_START = "silent_at_start"
+    LOST_EN_ROUTE = "lost_en_route"
+    LENS_BLOCKED = "lens_blocked"
+
+
+class DepartureSource(str, Enum):
+    """The office tapped Depart, or the van's GPS left the origin stop."""
+
+    CONFIRMED = "confirmed"
+    DETECTED = "detected"
+
+
 class BookingStatus(str, Enum):
     PENDING = "pending"
     CONFIRMED = "confirmed"

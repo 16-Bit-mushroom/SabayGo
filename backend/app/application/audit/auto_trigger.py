@@ -39,7 +39,7 @@ loses the audit, never the operation.
 zero, not a placeholder. TriggerAuditUseCase.execute() raises before it
 reaches the insert, which is the behaviour being relied on here.
 
-In-process, like HoldSweeper and the phone capture slot: one backend
+In-process, like the hold sweep and the phone capture slot: one backend
 worker. With two workers the durable per-leg check still holds (it is a
 SELECT against yolov8_audit_logs), but the in-flight guard would not, so
 a simultaneous double-fire could produce two rows for one leg. Stated in

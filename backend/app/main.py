@@ -31,9 +31,11 @@ from app.api.v1 import (
     users,
 )
 from app.config import settings
-from app.application.operations.guards import HoldSweeper
+from app.application.operations.guards import sweep_abandoned_holds
+from app.application.operations.trip_lifecycle import start_overdue_trips
 from app.core.db import SessionFactory, engine
 from app.core.exceptions import DomainError
+from app.core.periodic import PeriodicJob
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -52,12 +54,19 @@ async def lifespan(app: FastAPI):
     # Abandoned payment holds were only released when another booking
     # happened to try that exact space. Until then search showed it as
     # unavailable.
-    sweeper = HoldSweeper(SessionFactory, interval_seconds=60)
-    sweeper.start()
+    jobs = [
+        PeriodicJob("Hold sweep", 60, lambda: sweep_abandoned_holds(SessionFactory)),
+        # A trip nobody started by departure + grace is started by the
+        # system and held for review (brief 4.2 rule 7).
+        PeriodicJob("Trip start fallback", 60, lambda: start_overdue_trips(SessionFactory)),
+    ]
+    for job in jobs:
+        job.start()
 
     yield
 
-    await sweeper.stop()
+    for job in jobs:
+        await job.stop()
     await engine.dispose()
 
 
