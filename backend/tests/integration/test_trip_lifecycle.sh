@@ -131,7 +131,7 @@ field detail | grep -q "Start opens at" && ok "and says when it opens" || bad "d
 is "$(code POST /trips/$TRIP1/start "" "$DT")" 403 "a Dispatcher cannot start a trip"
 
 code POST /devices '{"device_model":"realme 5G lifecycle"}' "$OT" >/dev/null
-PHONE=$(field device_id)
+PHONE=$(field device_id); PHONE_TOKEN=$(field device_token)
 is "$(code POST /devices/$PHONE/checkout '{"van_id":"VAN-0002","dispatcher_id":"USER-DISPATCHER-0001"}' "$CT")" 200 \
    "a phone goes out with van XYZ-9876 and dispatcher@"
 
@@ -150,6 +150,10 @@ is "$(notes "$DT" unaudited_trip $TRIP1)" 1 "the Dispatcher too"
 is "$(notes "$CT" unaudited_trip $TRIP1)" 0 "the cashier who started it sees it on screen instead"
 is "$(code POST /trips/$TRIP1/start "" "$OT")" 409 "a trip starts once"
 
+# The phone is reporting (step 5): a phone that never reported is silent.
+curl -s -o /dev/null -X POST "$API/edge/heartbeats" -H "X-Device-Token: $PHONE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"reports\":[{\"recorded_at\":\"$(date '+%Y-%m-%dT%H:%M:%S')\",\"camera_ok\":true,\"gps_ok\":true}]}"
 is "$(code POST /trips/$TRIP2/start "" "$OT")" 200 "manager starts the trip whose van has the phone"
 is "$(field audit_status)" audited "with its phone out, the trip is Audited"
 is "$(field warnings)" "[]" "and nothing to warn about"

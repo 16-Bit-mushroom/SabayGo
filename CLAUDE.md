@@ -160,10 +160,93 @@ step 6: the statement leaving out `pending` starts and creating fare
 lines at review. A GPS-not-working phone warns only: no Unaudited reason
 fits (4.4 lists four, none for GPS).
 
-**Next: brief step 5, edge ingestion API.** Authenticated, idempotent,
-offline-tolerant door-event upload with `device_id`, the heartbeat into
-`edge_devices` (stored reports after a reconnect), and the rest of the
-Unaudited check. Then the Android edge app.
+Done: brief step 5, server half (migration 023, 14 Oct).
+
+**Phone authentication.** Each phone has its own token, sent as
+`X-Device-Token`. The token is shown once when the Terminal Manager adds
+the phone (`POST /devices`), and `POST /devices/{id}/token` re-issues it
+and revokes the old one. Only its SHA-256 is stored; retiring the phone
+clears it.
+
+**API** (`api/v1/edge.py`, every upload a batch that is safe to resend):
+- `GET /edge/session`: server time for the phone's clock, its van and
+  Dispatcher, the silence gap.
+- `POST /edge/heartbeats`: one `device_heartbeats` row per report, so
+  the reports a phone stored offline can be judged.
+- `POST /edge/events`: door events, keyed by the phone's own `event_id`.
+- `PUT /edge/events/{id}/snapshot`: the blurred still, saved to
+  `storage/snapshots/` (not the public `/media`) with its SHA-256. It is
+  never replaced.
+- `POST /edge/fixes`: GPS readings, which go on the trip of the van at
+  that time and through `TrackingService.record_ping`.
+
+A batch dated more than 2 min ahead is refused whole.
+
+**Which trip an event belongs to** (`application/edge/ledger.py`): the
+van the phone was checked out with at the event's time, then that van's
+started trip covering that time, or else its next trip whose start
+window was open. Matching is by time, never by what is open at upload,
+because a phone offline all trip uploads afterwards. An event with no
+such trip goes to `held_door_events` (rule 12) and raises 'Trip Not
+Started' once per van. A trip's start moves the held events it claims.
+
+**Unaudited** (`application/edge/evidence.py`, read its docstring): at
+the start, `no_phone`, `silent_at_start` or `lens_blocked` (a covered
+lens or a camera not working). During the trip, a covered lens is
+marked at once. A silence is alerted at once by the `Phone silence`
+`PeriodicJob`, but marked `lost_en_route`, from the start of the gap,
+only if the stored reports the phone sends on reconnecting leave the
+gap open, or the trip ends first. A report covers time only when the
+camera and the GPS both worked.
+
+**Detected departures.** "Boarding counted" now includes door events.
+When a phone has held boardings at a terminal and its van then leaves
+that terminal with no trip, `TripLifecycle.detected_start` takes action
+(rule 7, `auto_detected`, held for review, then departed as detected):
+- it gives the van the trip on its own route from that terminal still
+  waiting for a van, nearest in time;
+- otherwise it creates an **"Unscheduled run"** (special trip, no
+  template) on the van's route, starting from the first boarding.
+- This answers brief 4.6's open question for vans running outside the
+  timetable. Nothing a phone counts is lost, and a person decides at
+  review what the run was. When the route cannot be told (the van's
+  route does not start at that terminal), the events stay held and the
+  Terminal Manager is alerted.
+
+Image sniffing is shared in `core/images.py`. Test:
+`tests/integration/test_edge_ingestion.sh` (66 checks, in the runner),
+which plays four phones.
+
+**Next: brief step 5, the phone half.** A2Z allows a camera in the
+cabin (confirmed 14 Oct). The Realme phone is **bare** (14 Oct): never
+set up, no developer options, nothing of the project on it, no YOLOv8.
+Work in this order:
+
+1. **Set up the phone.**
+   - Settings → About phone → Version: tap *Build number* 7 times.
+   - Developer options: turn on USB debugging (and *Disable permission
+     monitoring* if `adb install` is blocked).
+   - Plug the phone into this laptop and accept the prompt;
+     `adb devices` (`/usr/bin/adb`) should list it. The Android SDK is
+     at `/opt/android-sdk`; Java is 17.
+2. **Record what the phone is.** Read
+   `adb shell getprop ro.product.model`, `ro.build.version.release`,
+   `ro.soc.model` (or `ro.board.platform`), and the total in
+   `/proc/meminfo`. Write them into the docs, replacing the brief's
+   "[OPEN] exact model" placeholder (5.1).
+3. **Benchmark before anything else.** Export YOLOv8n to TFLite at 320
+   and 416 px (`ultralytics` in the `ai_service` venv). Build a minimal
+   native Kotlin app (new folder, separate from `mobile/`, brief 5.3)
+   with CameraX and TFLite. It logs inference time, battery temperature
+   and level to CSV over a full trip on vehicle power. The report goes
+   in `docs/benchmarks/`. No frame rate is stated anywhere until that
+   report exists.
+4. **Then the edge app** (brief 5.1–5.3) against `/edge/*` above:
+   - door line and seat mask, ByteTrack, the offline queue, heartbeats
+     every 30–60 s, clock sync from `GET /edge/session`, and the
+     blurred still;
+   - the Realme setup checklist: auto-launch, background activity,
+     battery optimisation off, Location "Allow all the time".
 
 ---
 

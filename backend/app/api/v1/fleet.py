@@ -29,6 +29,7 @@ from app.core.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from app.core.images import sniff_image_ext
 from app.core.security import hash_password
 from app.core.timezone import APP_TZ
 from app.domain.enums import Role
@@ -478,17 +479,6 @@ async def set_van_status(
     }
 
 
-def _image_ext(data: bytes) -> str | None:
-    """Sniff the bytes, not the client's content type."""
-    if data.startswith(b"\xff\xd8\xff"):
-        return "jpg"
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "png"
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "webp"
-    return None
-
-
 @router.put("/vans/{van_id}/photos/{side}", response_model=VanOut,
             dependencies=[Depends(OFFICE)])
 async def upload_van_photo(
@@ -503,7 +493,7 @@ async def upload_van_photo(
     data = await image.read(MAX_PHOTO_BYTES + 1)
     if len(data) > MAX_PHOTO_BYTES:
         raise InvalidInputError("The photo is larger than 5 MB.")
-    ext = _image_ext(data)
+    ext = sniff_image_ext(data)
     if ext is None:
         raise InvalidInputError("The photo must be a JPEG, PNG or WebP image.")
 

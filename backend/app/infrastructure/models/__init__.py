@@ -294,6 +294,9 @@ class EdgeDevice(Base):
     device_model: Mapped[str] = mapped_column(String(100))
     android_version: Mapped[str | None] = mapped_column(String(20))
     app_version: Mapped[str | None] = mapped_column(String(20))
+    # SHA-256 of the phone's own token (023); the token itself is shown once.
+    token_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    token_issued_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     status: Mapped[str] = mapped_column(String(16), default="in_office")
     registered_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
     registered_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
@@ -319,6 +322,79 @@ class DeviceCheckout(Base):
     returned_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     returned_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     return_note: Mapped[str | None] = mapped_column(String(255))
+
+
+class DeviceHeartbeat(Base):
+    """One status report from a phone (023), kept so a gap can be judged
+    against the reports the phone stored while offline (brief 4.4)."""
+
+    __tablename__ = "device_heartbeats"
+
+    heartbeat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("edge_devices.device_id"))
+    recorded_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    received_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    battery_pct: Mapped[int | None] = mapped_column(TINYINT(unsigned=True))
+    battery_temp_c: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
+    charging: Mapped[bool | None] = mapped_column(Boolean)
+    camera_ok: Mapped[bool] = mapped_column(Boolean)
+    gps_ok: Mapped[bool] = mapped_column(Boolean)
+    lens_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    detection_rate_hz: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+
+
+class PassengerEvent(Base):
+    """A door event in the ledger (brief Table 28): one boarding or
+    alighting the phone saw, on the trip of the van it was in."""
+
+    __tablename__ = "passenger_events"
+
+    event_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    device_id: Mapped[str] = mapped_column(ForeignKey("edge_devices.device_id"))
+    event_type: Mapped[str] = mapped_column(String(8))
+    event_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    distance_from_start_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    stretch_no: Mapped[int | None] = mapped_column(SmallInteger)
+    nearest_stop_sequence: Mapped[int | None] = mapped_column(SmallInteger)
+    nearest_stop_dist_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    side_pickup: Mapped[bool] = mapped_column(Boolean, default=False)
+    occupancy_after: Mapped[int | None] = mapped_column(TINYINT(unsigned=True))
+    track_id: Mapped[int | None]
+    match_status: Mapped[str | None] = mapped_column(String(16))
+    matched_booking_id: Mapped[str | None] = mapped_column(ForeignKey("bookings.booking_id"))
+    dest_stop_sequence: Mapped[int | None] = mapped_column(SmallInteger)
+    estimated_fare: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    snapshot_url: Mapped[str | None] = mapped_column(String(512))
+    snapshot_hash: Mapped[str | None] = mapped_column(String(64))
+    snapshot_deleted_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    event_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    resolution_status: Mapped[str | None] = mapped_column(String(16))
+    resolved_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    resolved_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class HeldDoorEvent(Base):
+    """A door event from a van with no trip it belongs to (brief 4.2
+    rule 12), held outside the ledger until a trip of that van starts."""
+
+    __tablename__ = "held_door_events"
+
+    event_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("edge_devices.device_id"))
+    van_id: Mapped[str] = mapped_column(ForeignKey("vans.van_id"))
+    event_type: Mapped[str] = mapped_column(String(8))
+    event_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    occupancy_after: Mapped[int | None] = mapped_column(TINYINT(unsigned=True))
+    track_id: Mapped[int | None]
+    snapshot_url: Mapped[str | None] = mapped_column(String(512))
+    snapshot_hash: Mapped[str | None] = mapped_column(String(64))
+    received_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
 # ======================================================================

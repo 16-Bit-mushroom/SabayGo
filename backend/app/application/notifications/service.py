@@ -22,6 +22,14 @@ from app.domain.enums import Role
 from app.infrastructure.models import Notification, Trip, User
 
 
+def trip_label(trip: Trip) -> str:
+    """'Ecoland - Tagum 14 Oct 06:00 (LAB-4521)' for alert text."""
+    route = trip.route.route_name if trip.route is not None else "Van rental"
+    plate = trip.van_plate_number or (trip.van.plate_number if trip.van else None)
+    when = f"{trip.departure_datetime:%d %b %H:%M}"
+    return f"{route} {when}" + (f" ({plate})" if plate else "")
+
+
 class NotificationService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -172,17 +180,31 @@ class NotificationService:
         skip_user_id: str | None = None,
     ) -> int:
         """A trip-lifecycle alert (brief 4.2, 4.4) to the office roles
-        named, and to the trip's Dispatcher when `dispatcher` is set.
+        named, and to the trip's Dispatcher when `dispatcher` is set."""
+        return await self.notify_staff(
+            type=type, title=title, message=message, roles=roles,
+            entity=("trip", trip.trip_id),
+            also=[trip.dispatcher_id] if dispatcher and trip.dispatcher_id else [],
+            skip_user_id=skip_user_id,
+        )
+
+    async def notify_staff(
+        self, *, type: str, title: str, message: str, roles: tuple[Role, ...],
+        entity: tuple[str, str], also: list[str] = (),
+        skip_user_id: str | None = None,
+    ) -> int:
+        """An alert to every active account in `roles`, plus the Dispatchers
+        in `also`, about one entity (a trip, a van).
 
         Same contract as notify_variance: rows join the caller's
         transaction. The person whose own action raised the alert sees it
         on screen already and is skipped."""
-        recipients = await self._staff(*roles)
-        if dispatcher and trip.dispatcher_id:
-            recipients.append((trip.dispatcher_id, Role.DISPATCHER.value))
+        recipients = dict(await self._staff(*roles))
+        for user_id in also:
+            recipients.setdefault(user_id, Role.DISPATCHER.value)
         now = app_tz.now()
         sent = 0
-        for user_id, audience in dict(recipients).items():
+        for user_id, audience in recipients.items():
             if user_id == skip_user_id:
                 continue
             self.session.add(
@@ -195,8 +217,8 @@ class NotificationService:
                     type=type,
                     title=title[:100],
                     message=message[:500],
-                    related_entity_type="trip",
-                    related_entity_id=trip.trip_id,
+                    related_entity_type=entity[0],
+                    related_entity_id=entity[1],
                     is_read=False,
                     delivery_status="queued",
                     created_at=now,

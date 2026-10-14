@@ -159,6 +159,21 @@ else
   ./tests/integration/test_trip_lifecycle.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 468 step 5. Plays four phones; moves trips in time with SQL, so it
+# gets its own clean database.
+{
+  echo
+  echo "==================================================================="
+  echo "  EDGE PHONE INGESTION (rev 468 step 5)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_edge_ingestion.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_edge_ingestion.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────

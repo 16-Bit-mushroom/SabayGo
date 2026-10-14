@@ -10,8 +10,11 @@ enforces both (functional unique indexes, 018); the checks here say why.
 
 The setup check is a person looking at the phone. What the server knows
 is the phone's own last status report, which comes back as warnings and
-never as a refusal: no phone check blocks the service (brief 4.4). Until
-the edge app reports (step 5), every check-out says the phone is silent.
+never as a refusal: no phone check blocks the service (brief 4.4).
+
+Each phone authenticates its uploads (api/v1/edge.py) with its own token,
+shown once when the phone is added and again only when the Terminal
+Manager issues a new one, which revokes the old.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from sqlalchemy import select
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep
 from app.core.db import commit_or_conflict
 from app.core.exceptions import ConflictError, NotFoundError
+from app.core.security import new_device_token
 from app.core.timezone import now
 from app.domain.enums import Role
 from app.infrastructure.models import (
@@ -88,6 +92,11 @@ class DeviceOut(BaseModel):
     checkout: CheckoutOut | None
 
 
+class DeviceWithToken(DeviceOut):
+    # Shown once. Enter it in the edge app; the server keeps only a hash.
+    device_token: str
+
+
 class CheckoutResult(BaseModel):
     device: DeviceOut
     warnings: list[str]
@@ -145,20 +154,39 @@ async def list_devices(session: SessionDep, include_retired: bool = False) -> li
     return await _out(session, list((await session.execute(stmt)).scalars()))
 
 
-@router.post("", response_model=DeviceOut, status_code=201,
+@router.post("", response_model=DeviceWithToken, status_code=201,
              dependencies=[Depends(MANAGER)])
-async def add_device(payload: DeviceIn, session: SessionDep, user: CurrentUser) -> DeviceOut:
+async def add_device(payload: DeviceIn, session: SessionDep, user: CurrentUser) -> DeviceWithToken:
     """Add a phone to the pool: the Terminal Manager only (brief 3)."""
+    token, token_hash = new_device_token()
     device = EdgeDevice(
         device_id=str(uuid.uuid4()),
         **payload.model_dump(),
         status="in_office",
+        token_hash=token_hash,
+        token_issued_at=_now(),
         registered_by=user.user_id,
         registered_at=_now(),
     )
     session.add(device)
     await session.commit()
-    return (await _out(session, [device]))[0]
+    out = (await _out(session, [device]))[0]
+    return DeviceWithToken(**out.model_dump(), device_token=token)
+
+
+@router.post("/{device_id}/token", response_model=DeviceWithToken,
+             dependencies=[Depends(MANAGER)])
+async def reissue_token(device_id: str, session: SessionDep) -> DeviceWithToken:
+    """A new token for the phone; the old one stops working at once (a
+    lost or reset phone)."""
+    device = await _device(session, device_id)
+    if device.status == "retired":
+        raise ConflictError("A retired phone gets no token.")
+    token, device.token_hash = new_device_token()
+    device.token_issued_at = _now()
+    await session.commit()
+    out = (await _out(session, [device]))[0]
+    return DeviceWithToken(**out.model_dump(), device_token=token)
 
 
 @router.post("/{device_id}/checkout", response_model=CheckoutResult,
@@ -250,5 +278,6 @@ async def retire(device_id: str, session: SessionDep) -> DeviceOut:
     if device.status == "checked_out":
         raise ConflictError("Record the phone's return before retiring it.")
     device.status = "retired"
+    device.token_hash = None  # it uploads nothing more
     await session.commit()
     return (await _out(session, [device]))[0]

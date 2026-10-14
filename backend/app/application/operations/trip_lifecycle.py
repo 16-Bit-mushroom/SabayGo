@@ -32,23 +32,25 @@ names who, when and why, and the earlier van and operator go into
 `change_note`. Departure is `boarding.DepartTripUseCase`, which also
 releases the no-shows.
 
-Not yet, because they need the edge phone's reports (brief step 5): the
-'auto_detected' start (the van whose phone detects the departure),
-'silent_at_start' and 'lens_blocked', and completion when the count
-aboard falls to 0. 'no_phone' is decided here: it needs only
-`device_checkouts`.
+Whether the phone can watch the trip is `edge.evidence`; which trip a
+door event belongs to is `edge.ledger`. Not yet: completion when the
+count aboard falls to 0 (the per-stop counts arrive with matching,
+step 6).
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.notifications.service import NotificationService
+from app.application.edge.evidence import PhoneEvidence
+from app.application.edge.ledger import TRIP_REACH, release_held
+from app.application.notifications.service import NotificationService, trip_label
 from app.application.operations.boarding import DepartTripUseCase
 from app.application.scheduling.conflicts import ScheduleConflictChecker
 from app.core import timezone as app_tz
@@ -60,15 +62,16 @@ from app.domain.enums import (
     Role,
     StartMode,
     StartReview,
-    TripAuditStatus,
     TripStatus,
-    UnauditedReason,
 )
 from app.infrastructure.models import (
     Booking,
     DeviceCheckout,
     Notification,
     Operator,
+    PassengerEvent,
+    Route,
+    RouteStop,
     StaffProfile,
     Trip,
     User,
@@ -77,11 +80,6 @@ from app.infrastructure.models import (
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
-
-# The fallback is for a trip running now. One still Scheduled half a day
-# after its departure did not run, or ran without the system; starting it
-# then would put a ghost in Boarding. It stays for the Terminal Manager.
-FALLBACK_REACH = timedelta(hours=12)
 
 STARTED = (TripStatus.BOARDING.value, TripStatus.DEPARTED.value,
            TripStatus.COMPLETED.value)
@@ -97,14 +95,6 @@ class StartOutcome:
 def _now() -> datetime:
     """Naive Manila time, comparable with the naive DATETIME columns."""
     return app_tz.now().replace(tzinfo=None)
-
-
-def describe(trip: Trip) -> str:
-    """'Ecoland - Tagum 06:00 (LAB-4521)' for alert text."""
-    route = trip.route.route_name if trip.route is not None else "Van rental"
-    plate = trip.van_plate_number or (trip.van.plate_number if trip.van else None)
-    when = f"{trip.departure_datetime:%d %b %H:%M}"
-    return f"{route} {when}" + (f" ({plate})" if plate else "")
 
 
 class TripLifecycle:
@@ -159,7 +149,7 @@ class TripLifecycle:
                 message=(f"{await self._name(by.user_id)} assigned "
                          f"{trip.van.plate_number if trip.van else 'no van'} and "
                          f"{await self._name(dispatcher_id) if dispatcher_id else 'no Dispatcher'} "
-                         f"to {describe(trip)}. You can change it before the start."),
+                         f"to {trip_label(trip)}. You can change it before the start."),
                 roles=(Role.TERMINAL_MANAGER,),
             )
 
@@ -217,11 +207,117 @@ class TripLifecycle:
             trip=trip, type="unconfirmed_trip_start",
             title="Unconfirmed trip start"
                   + (" · No Dispatcher" if trip.dispatcher_id is None else ""),
-            message=f"{describe(trip)} was started by the system. " + " ".join(detail + warnings),
+            message=f"{trip_label(trip)} was started by the system. " + " ".join(detail + warnings),
             roles=(Role.TERMINAL_MANAGER,),
         )
         await self.session.commit()
         log.info("Trip %s started automatically (%s).", trip_id, why)
+        return trip
+
+    async def detected_start(
+        self, *, van: Van, origin_terminal_id: str, at: datetime,
+        first_boarding: datetime, dispatcher_id: str,
+    ) -> Trip | None:
+        """A checked-out phone saw boardings and its van leave a terminal,
+        and the van has no trip at that time (rule 7, 'auto_detected').
+
+        The van is given, in order:
+          1. a trip of its route from that terminal still waiting for a
+             van, nearest in time -- the timetable trip nobody assigned;
+          2. otherwise a new trip on its route, 'Unscheduled run', from
+             the first boarding: the van ran outside the timetable.
+        Either way the system starts it, held for the Terminal Manager's
+        review, so the door events have a trip and a person decides what
+        the run was. Returns None, held events untouched and the Terminal
+        Manager alerted, when the van's route cannot be told.
+        """
+        routes = await self._routes_from(origin_terminal_id, van)
+        if len(routes) != 1:
+            await self.notifications.notify_staff(
+                type="trip_not_started", title="Trip not started",
+                message=(f"{van.plate_number} left a terminal with passengers aboard and no "
+                         "trip, and the system cannot tell its route. Its door events are "
+                         "held: create and start its trip."),
+                roles=(Role.TERMINAL_MANAGER,), entity=("van", van.van_id),
+            )
+            await self.session.commit()
+            return None
+        route_id = routes[0]
+
+        opens = timedelta(minutes=await self.policies.get_int("start_opens_minutes"))
+        waiting = (await self.session.execute(
+            select(Trip).where(
+                Trip.route_id == route_id,
+                Trip.status == TripStatus.SCHEDULED.value,
+                Trip.van_id.is_(None),
+                Trip.departure_datetime <= at + opens,
+                Trip.departure_datetime >= at - TRIP_REACH,
+            )
+        )).scalars().all()
+        if waiting:
+            nearest = min(waiting, key=lambda t: abs(t.departure_datetime - at))
+            trip = await self._locked(nearest.trip_id)
+            why = f"no van was assigned, and the phone in {van.plate_number} detected its departure"
+        else:
+            trip = await self._unscheduled_run(route_id, van, first_boarding)
+            why = (f"{van.plate_number} ran outside the timetable; the system created this "
+                   "trip when its phone detected the departure")
+
+        # Assigned by the system, so no assigned_by: the review names the person.
+        trip.van_id = van.van_id
+        trip.dispatcher_id = trip.dispatcher_id or dispatcher_id
+        await self.session.flush()
+        warnings = await self._begin(trip, mode=StartMode.AUTO_DETECTED, by=None, now=at)
+        await self.notifications.notify_trip(
+            trip=trip, type="unconfirmed_trip_start", title="Unconfirmed trip start · detected",
+            message=f"{trip_label(trip)} was started by the system: {why}. It is left off the "
+                    "daily statement until you review it. " + " ".join(warnings),
+            roles=(Role.TERMINAL_MANAGER,),
+        )
+        await self.session.commit()
+        log.info("Trip %s started from %s's detected departure.", trip.trip_id, van.plate_number)
+        return trip
+
+    async def _routes_from(self, terminal_id: str, van: Van) -> list[str]:
+        """The van's own route, when it starts at this terminal; with no
+        registered route, every active route that does."""
+        starting = set((await self.session.execute(
+            select(RouteStop.route_id)
+            .join(Route, Route.route_id == RouteStop.route_id)
+            .where(RouteStop.terminal_id == terminal_id, RouteStop.stop_sequence == 1,
+                   Route.is_active.is_(True))
+        )).scalars().all())
+        if van.registered_route_id is not None:
+            return [van.registered_route_id] if van.registered_route_id in starting else []
+        return sorted(starting)
+
+    async def _unscheduled_run(self, route_id: str, van: Van, departs: datetime) -> Trip:
+        from app.application.scheduling.generate_trips import GenerateDailyTripsUseCase
+
+        generator = GenerateDailyTripsUseCase(self.session)
+        capacity = await self.policies.get_int("default_seat_capacity")
+        now = _now()
+        trip = Trip(
+            trip_id=str(uuid.uuid4()),
+            template_id=None,
+            route_id=route_id,
+            service_date=departs.date(),
+            departure_datetime=departs,
+            trip_label="Unscheduled run",
+            is_special_trip=True,
+            seat_capacity=capacity,
+            advance_booking_seat_cap=min(
+                await self.policies.get_int("advance_booking_seat_cap"), capacity),
+            reschedule_cutoff_hours=await self.policies.get_int("reschedule_cutoff_hours"),
+            status=TripStatus.SCHEDULED.value,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(trip)
+        await self.session.flush()
+        await generator._materialise_legs_and_seats(
+            trip.trip_id, await generator._route_stops(route_id), departs, capacity
+        )
         return trip
 
     async def van_left_origin(self, trip_id: str) -> None:
@@ -229,13 +325,17 @@ class TripLifecycle:
 
         With at least one boarding counted, a trip nobody started is
         started by the system, and a started trip departs as 'detected'.
-        Boardings are counted from the record (QR scans and logged fares)
-        until the phone's door events arrive in step 5.
+        A boarding is counted from the record (a QR scan or a logged fare)
+        or from the phone (a door event).
         """
         boarded = (await self.session.execute(
             select(func.count()).select_from(Booking).where(
                 Booking.trip_id == trip_id,
                 Booking.status == BookingStatus.BOARDED.value,
+            )
+        )).scalar_one() or (await self.session.execute(
+            select(func.count()).select_from(PassengerEvent).where(
+                PassengerEvent.trip_id == trip_id, PassengerEvent.event_type == "board",
             )
         )).scalar_one()
         if not boarded:
@@ -324,7 +424,7 @@ class TripLifecycle:
         )).scalars().all()
         await self.notifications.notify_passengers(
             trip=trip, user_ids=list(holders), title="Your trip was cancelled",
-            message=f"The cooperative cancelled {describe(trip)}. Please see the "
+            message=f"The cooperative cancelled {trip_label(trip)}. Please see the "
                     "terminal office about your ticket.",
         )
         await self.session.commit()
@@ -341,6 +441,9 @@ class TripLifecycle:
         trip.status = TripStatus.COMPLETED.value
         trip.completed_at = now
         trip.updated_at = now
+        await self.session.flush()
+        # A silence still open at the end is final now (4.4).
+        await PhoneEvidence(self.session).review_coverage(trip)
         await self.session.commit()
         return trip
 
@@ -373,6 +476,8 @@ class TripLifecycle:
         trip.updated_at = now
         await self.session.flush()
         await self.session.refresh(trip, ["van"])
+        # Door events held because no trip of the van was open (rule 12).
+        await release_held(self.session, trip, now)
 
         warnings: list[str] = []
         skip = by.user_id if by else None
@@ -385,26 +490,15 @@ class TripLifecycle:
             warnings.append(text)
             await self.notifications.notify_trip(
                 trip=trip, type="system_alert", title="Expired licence on a started trip",
-                message=f"{describe(trip)}: {text}",
+                message=f"{trip_label(trip)}: {text}",
                 roles=(Role.TERMINAL_MANAGER,), skip_user_id=skip,
             )
 
-        # The edge phone travels with the van (brief 4.4). With none out,
-        # there is no camera evidence for this trip: Unaudited at once.
-        phone = await self._open_checkout(DeviceCheckout.van_id == van.van_id)
-        if phone is None:
-            text = (f"No phone is checked out with {van.plate_number}. The trip is "
-                    "Unaudited: the camera cannot check it.")
-            warnings.append(text)
-            trip.audit_status = TripAuditStatus.UNAUDITED.value
-            trip.unaudited_at = now
-            trip.unaudited_reason = UnauditedReason.NO_PHONE.value
-            await self.notifications.notify_trip(
-                trip=trip, type="unaudited_trip", title="Unaudited trip · no phone",
-                message=f"{describe(trip)}: {text} The statement counts only its QR "
-                        "tickets and logged fares.",
-                roles=OFFICE, dispatcher=True, skip_user_id=skip,
-            )
+        # The edge phone travels with the van (brief 4.4): with none out,
+        # or one that is silent or blind, the trip is Unaudited at once.
+        warnings += await PhoneEvidence(self.session).at_start(
+            trip, van, now=now, skip_user_id=skip
+        )
 
         # The Dispatcher's phone is on another van: door events will be
         # matched to the van whose phone sends them, by time (rule 11).
@@ -430,7 +524,7 @@ class TripLifecycle:
             return
         await self.notifications.notify_trip(
             trip=trip, type="trip_not_started", title="Trip not started",
-            message=f"{describe(trip)}: {why}, and no van is assigned, so the system "
+            message=f"{trip_label(trip)}: {why}, and no van is assigned, so the system "
                     "could not start it. Assign a van and start it, or void it.",
             roles=(Role.TERMINAL_MANAGER,),
         )
@@ -529,7 +623,7 @@ async def start_overdue_trips(session_factory) -> None:
             select(Trip.trip_id).where(
                 Trip.status == TripStatus.SCHEDULED.value,
                 Trip.departure_datetime <= now - timedelta(minutes=grace),
-                Trip.departure_datetime > now - FALLBACK_REACH,
+                Trip.departure_datetime > now - TRIP_REACH,
             ).order_by(Trip.departure_datetime)
         )).scalars().all()
 

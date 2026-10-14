@@ -17,6 +17,7 @@ from app.api.v1 import (
     auth,
     bookings,
     devices,
+    edge,
     messaging,
     notifications,
     config as config_router,
@@ -31,6 +32,7 @@ from app.api.v1 import (
     users,
 )
 from app.config import settings
+from app.application.edge.evidence import alert_silent_phones
 from app.application.operations.guards import sweep_abandoned_holds
 from app.application.operations.trip_lifecycle import start_overdue_trips
 from app.core.db import SessionFactory, engine
@@ -59,6 +61,9 @@ async def lifespan(app: FastAPI):
         # A trip nobody started by departure + grace is started by the
         # system and held for review (brief 4.2 rule 7).
         PeriodicJob("Trip start fallback", 60, lambda: start_overdue_trips(SessionFactory)),
+        # The phone of a trip under way went silent: alert at once; the
+        # Unaudited mark waits for its stored reports (brief 4.4).
+        PeriodicJob("Phone silence", 60, lambda: alert_silent_phones(SessionFactory)),
     ]
     for job in jobs:
         job.start()
@@ -118,6 +123,7 @@ app.include_router(messaging.router, prefix="/api/v1")
 app.include_router(fleet.router, prefix="/api/v1")
 app.include_router(roster.router, prefix="/api/v1")
 app.include_router(devices.router, prefix="/api/v1")
+app.include_router(edge.router, prefix="/api/v1")
 app.include_router(config_router.router, prefix="/api/v1")
 app.include_router(remittances.router, prefix="/api/v1")
 app.include_router(tracking.router, prefix="/api/v1")

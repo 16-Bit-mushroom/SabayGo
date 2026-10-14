@@ -1,5 +1,7 @@
 """Password hashing and JWT issuance."""
 
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -42,3 +44,16 @@ def decode_access_token(token: str) -> dict[str, Any]:
         raise AuthenticationError("Token has expired.") from exc
     except jwt.InvalidTokenError as exc:
         raise AuthenticationError("Invalid token.") from exc
+
+# ----------------------------------------------------------- edge phones
+# Each phone holds its own random token (023). It is random, not chosen
+# by a person, so a plain SHA-256 is enough to store it: there is no
+# dictionary to guess from, and the lookup must be by hash.
+def new_device_token() -> tuple[str, str]:
+    """(token, its hash). The token is shown once and never stored."""
+    token = secrets.token_urlsafe(32)
+    return token, hash_device_token(token)
+
+
+def hash_device_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()

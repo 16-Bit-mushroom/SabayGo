@@ -385,3 +385,45 @@ per Dispatcher), `test_roadside` 10, `test_group_f` 11,
 `demo_rehearsal.sh` complete; 022 rolled back and re-applied; mobile
 analyze clean, widget tests pass; console analyze clean of errors and
 warnings.
+
+**Done — step 5, server half (migration 023, 14 Oct).** `api/v1/edge.py`;
+rules in `application/edge/` (`ledger.py` which trip, `evidence.py`
+Unaudited, `ingestion.py` the uploads).
+
+| Brief | Repo |
+|---|---|
+| Authenticated upload with DeviceID (13, step 5) | `X-Device-Token`, one per phone, issued when it is added, re-issued by the Terminal Manager (old one revoked), SHA-256 only in `edge_devices.token_hash`, cleared on retire |
+| Offline-tolerant, idempotent | every upload a batch of up to 500; events keyed by the phone's `event_id`, reports by (phone, `recorded_at`); a resent batch stores nothing new |
+| Clock sync (5.3) | `GET /edge/session` returns server time; a batch more than 2 min in the future is refused whole |
+| Heartbeat into Edge_Devices, stored reports after reconnect (4.4) | `device_heartbeats` (new, not in the paper) keeps every report; `edge_devices` shows the newest |
+| Rule 11, events by van and time | phone → check-out at that time → van → that van's trip at that time |
+| Rule 12, unassigned list | `held_door_events` (new); 'Trip Not Started' per van, once while events wait; moved when a trip of the van starts |
+| Unaudited (4.4; T12, T13, T22, T23) | at start: `no_phone`, `silent_at_start`, `lens_blocked`; in the trip: covered lens at once; silence alerted at once, `lost_en_route` only if the stored reports or the trip's end leave it uncovered |
+| Snapshot + SnapshotHash (5.1, 4.5) | `PUT /edge/events/{id}/snapshot`, image bytes sniffed, ≤ 2 MB, `storage/snapshots/` (not public), SHA-256 on the event, never replaced |
+| GPS 1–2 s from the phone (5.1) | `POST /edge/fixes`, onto the trip by time, through the existing NAHGM path |
+| Rule 7 `Auto_Detected` (T6) | held boardings at a terminal, then a fix outside it, no trip: the waiting trip on the van's route, else a new one |
+
+Decided here, for brief 4.6's open question (how a van running outside
+the timetable gets a trip): the system creates it. When the phone of a
+van with no trip records boardings at a terminal and the van then leaves,
+the van gets the trip on its own route from that terminal still waiting
+for a van, nearest in time. If there is none, the system creates an
+**Unscheduled run** on the van's route from the first boarding. Either
+way the trip is started `auto_detected`, departed as detected, and held
+for the Terminal Manager's review, who decides what the run was. Nothing
+the phone counted is lost, and nothing reaches the statement without a
+person. If the van's registered route does not start at that terminal,
+the events stay held and the Terminal Manager is alerted. Also decided:
+a report covers time only when the camera and the GPS both worked (the
+brief's "camera and GPS working through the gap"), and a camera that
+reports itself not working at the start counts as `lens_blocked`.
+
+Verified: `test_edge_ingestion.sh` 66 passed; `test_trip_lifecycle.sh`
+80 (its audited-start case now has the phone report first); journey
+suite 395 passed + the known `--soon` reschedule failure; 023 rolled back
+and re-applied.
+
+Left for the phone half: the benchmark on the real phone, then the
+Kotlin edge app. Left for step 6: the hash chain over events (with
+`SnapshotHash`), matching, nearest-stop and stretch on each event, the
+capacity alert, and completion at aboard = 0.
