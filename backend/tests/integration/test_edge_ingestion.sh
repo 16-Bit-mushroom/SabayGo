@@ -235,7 +235,7 @@ hdr "7. GPS from the phone (rules 9, 11)"
 is "$(edge POST /edge/fixes "$(fix 2 "$ELAT" "$ELON")" "$TA")" 200 "a reading at the terminal"
 is "$(field recorded)" 1 "goes on ABC-1234's trip"
 edge POST /edge/fixes "$(fix 3 "$FAR" "$ELON")" "$TA" >/dev/null
-is "$(board $TRIP1 status)/$(board $TRIP1 departure_source)" departed/detected \
+is "$(board $TRIP1 status)/$(board $TRIP1 departure_source)" departed/gps \
    "leaving the terminal with a boarding counted departs the trip: Detected"
 
 # ╔═══════════════════════════════════════════════════════════════╗
@@ -255,7 +255,7 @@ is "$(field ignored)" 1 "still at the terminal: nothing happens"
 edge POST /edge/fixes "$(fix 2 "$FAR" "$ELON")" "$TD" >/dev/null
 is "$(board $S6 van_id)/$(board $S6 start_mode)" "VAN-0006/auto_detected" \
    "T6 it leaves: the Mati trip waiting for a van gets it, Auto_Detected"
-is "$(board $S6 start_review_status)/$(board $S6 status)/$(board $S6 departure_source)" pending/departed/detected \
+is "$(board $S6 start_review_status)/$(board $S6 status)/$(board $S6 departure_source)" pending/departed/gps \
    "held for review, departed, Detected"
 is "$(board $S6 dispatcher_id)" USER-DISPATCHER-0003 "the Dispatcher who has the phone is on it"
 is "$(events_on $S6)" 1 "the held boarding is on the trip"

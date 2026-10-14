@@ -360,20 +360,21 @@ class PassengerEvent(Base):
     stretch_no: Mapped[int | None] = mapped_column(SmallInteger)
     nearest_stop_sequence: Mapped[int | None] = mapped_column(SmallInteger)
     nearest_stop_dist_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
-    side_pickup: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Before the trip departed: checked against the list (brief 5.2).
+    pre_departure: Mapped[bool] = mapped_column(Boolean, default=False)
     occupancy_after: Mapped[int | None] = mapped_column(TINYINT(unsigned=True))
     track_id: Mapped[int | None]
     match_status: Mapped[str | None] = mapped_column(String(16))
     matched_booking_id: Mapped[str | None] = mapped_column(ForeignKey("bookings.booking_id"))
-    dest_stop_sequence: Mapped[int | None] = mapped_column(SmallInteger)
-    estimated_fare: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     snapshot_url: Mapped[str | None] = mapped_column(String(512))
     snapshot_hash: Mapped[str | None] = mapped_column(String(64))
     snapshot_deleted_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     event_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
-    resolution_status: Mapped[str | None] = mapped_column(String(16))
+    chain_seq: Mapped[int | None]
+    resolution_status: Mapped[str] = mapped_column(String(16), default="not_needed")
     resolved_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     resolved_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    resolution_note: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
@@ -453,6 +454,14 @@ class Trip(Base):
     audit_status: Mapped[str] = mapped_column(String(16), default="audited")
     unaudited_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     unaudited_reason: Mapped[str | None] = mapped_column(String(16))
+    # The 15 % before Start (brief 2.1): 'paid', 'overridden' by the
+    # Terminal Manager, or 'left_unpaid' when the system started it.
+    payment_status: Mapped[str] = mapped_column(String(16), default="unpaid")
+    list_locked_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    crew_aboard: Mapped[int] = mapped_column(TINYINT(unsigned=True), default=0)
+    payment_override_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    payment_override_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    payment_override_note: Mapped[str | None] = mapped_column(String(255))
     cancellation_reason: Mapped[str | None] = mapped_column(String(255))
     departed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     departure_source: Mapped[str | None] = mapped_column(String(16))
@@ -517,6 +526,9 @@ class Booking(Base):
     booking_type: Mapped[str] = mapped_column(String(16))
     # Who recorded a cash walk-in. NULL on app bookings.
     logged_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    # Home pickup (brief 2.6); the pickup itself is in assisted_pickups.
+    booked_for_other: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_home_pickup_seat: Mapped[bool] = mapped_column(Boolean, default=False)
     # Set only on a walk-in the mobile client may retry after an
     # ambiguous connectivity drop. Lets /bookings/walk-in recognise a
     # replay instead of double-booking. NULL for every other path.
@@ -648,6 +660,11 @@ class Message(Base):
     sender_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
     sender_role: Mapped[str] = mapped_column(String(16))
     body: Mapped[str] = mapped_column(String(1000))
+    # An image, for a home pickup's payment proof only (brief 2.6).
+    attachment_url: Mapped[str | None] = mapped_column(String(255))
+    attachment_type: Mapped[str | None] = mapped_column(String(8))
+    attachment_size_kb: Mapped[int | None]
+    retain_until: Mapped[dt.date | None] = mapped_column(Date)
     read_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 

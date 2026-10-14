@@ -11,12 +11,10 @@ from decimal import Decimal, InvalidOperation
 
 _BOOL_SPELLINGS = {"true", "false", "1", "0", "yes", "no"}
 
-# Values the paper leaves undecided (brief 4.5): empty means "not set",
-# and whatever reads them must then do nothing -- retention deletes no
-# evidence while its mode or period is unset.
-MAY_BE_UNSET = frozenset({"retention_mode", "retention_days"})
-
-_CHOICES = {"retention_mode": ("fixed_days", "until_settled")}
+# Values that wait on a site survey or on A2Z (brief 4.2 rule 8, 2.6):
+# empty means "not set", and whatever reads them must then do nothing --
+# no GPS departure, no home pickup offered.
+MAY_BE_UNSET = frozenset({"depart_zone_radius_m", "depart_readings", "home_pickup_max_route_m"})
 
 # Inclusive bounds. Every other number must not be negative: no policy
 # has a meaningful negative value.
@@ -25,6 +23,12 @@ _BOUNDS: dict[str, tuple[Decimal, Decimal | None]] = {
     # 0 would count every phone as silent the moment it reported.
     "heartbeat_gap_seconds": (Decimal(1), None),
     "retention_days": (Decimal(1), None),
+    "match_window_seconds": (Decimal(1), None),
+    "depart_zone_radius_m": (Decimal(1), None),
+    "depart_readings": (Decimal(1), None),
+    "home_pickup_max_route_m": (Decimal(1), None),
+    "chat_image_max_kb": (Decimal(1), None),
+    "chat_image_retention_days": (Decimal(1), None),
 }
 
 
@@ -54,8 +58,4 @@ def check_policy_value(key: str, data_type: str, raw: str) -> str:
         if number < low or (high is not None and number > high):
             upper = f" and at most {high}" if high is not None else ""
             raise ValueError(f"must be at least {low}{upper}")
-
-    choices = _CHOICES.get(key)
-    if choices and value not in choices:
-        raise ValueError(f"must be one of: {', '.join(choices)}")
     return value

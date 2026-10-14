@@ -427,3 +427,132 @@ Left for the phone half: the benchmark on the real phone, then the
 Kotlin edge app. Left for step 6: the hash chain over events (with
 `SnapshotHash`), matching, nearest-stop and stretch on each event, the
 capacity alert, and completion at aboard = 0.
+
+---
+
+## 9. Revision 603 delta (15 Oct)
+
+`docs/SabayGo-Changes-for-Claude-Code (3).md` replaces the rev 514 brief
+(`(1).md`). It rebuilds the money and boarding model: **one boarding
+point (the starting terminal), a passenger list complete before
+departure, and the 15 % paid at the counter before Start.** The return
+leg is outside the system. The camera prices nothing. Nothing below has
+been changed yet.
+
+### 9.1 Built work that rev 603 reverses
+
+| # | Built (rev 514) | Rev 603 | Where |
+|---|---|---|---|
+| R1 | Boarding at any terminal stop; a space freed by an alighting is resold | Boarding **only at the starting terminal, before departure**; strictly 14 per van; fare lines by drop-off terminal | `bookings.py` (`boarding_stop ≥ 1`), search, reserve, reschedule, walk-in |
+| R2 | Unrecorded boarding priced from the nearest stop, flagged as a side pickup | **No camera pricing.** Before departure: aboard vs listed (fewer = no-show; more = Dispatcher fixes the list or types a reason). After departure: the 14 cap only | step 6 not built; 018 columns |
+| R3 | Depart is office-only; the Dispatcher's only action is Arrived | **Dispatcher taps Depart** (primary), Cashier or Terminal Manager may too; refused while an unlisted boarding is pending | `operations.py:254`, `mobile/` |
+| R4 | `departure_source` ('confirmed','detected') | ('dispatcher','staff','gps') | 019 |
+| R5 | `start_overdue_trips` starts a trip at departure + `start_grace_minutes` | **No grace timer**; `StartGraceMin` removed. The system starts a trip only when the van departs | `trip_lifecycle.py:616`, 021, `core/periodic.py` |
+| R6 | GPS departure: one ping outside stop 1's stop zone | **N consecutive readings** outside a **terminal zone** while moving, with a boarding counted; `DepartZoneRadiusM`, `DepartReadings` from a site survey, not invented | `nahgm.record_ping` → `van_left_origin` |
+| R7 | No trip for a detected departure → system creates an **Unscheduled run** | "No separate independent-van path": a van outside the timetable runs a **special trip**, from an app request or a counter entry | `trip_lifecycle.py:294` |
+| R8 | An event goes to the van's started trip, else its next trip whose start window is open | The trip the van **is assigned to**, by time, started or not | `ledger.py` rule 2 |
+| R9 | `retention_mode` + `retention_days`, shipped unset | One `RetentionDays`, **30 assumed**; no mode | 021 |
+| R10 | Notification types `unrecorded_boarding`, `side_pickup` | Removed. New: Departed With More Than Listed, Left Unpaid, Payment Block Override, Home Pickup Proof | 019 |
+| R11 | `passenger_events`: `side_pickup`, `dest_stop_sequence`, `estimated_fare`; `match_status` 'unrecorded','mismatch'; `resolution_status` ('pending','confirmed','dismissed') | Dropped. `match_status` gains 'unlisted'; `resolution_status` ('not_needed','pending','listed','explained') + `resolved_by`, `resolution_note`; new `pre_departure` | 018 |
+| R12 | `remittances.estimated_income`, `amount_at_risk`; `remittance_lines.income_group` 'estimated'; `disputes.subject` 'estimated_fare' + `event_id` | Dropped. New `remittances.held_share`, `handed_over_by`; `remittance_lines.is_top_up` | 018 |
+
+R1 does not touch the allocator. With every boarding at stop 1 the
+per-stretch count already equals the per-van count (the busiest stretch
+is the first), so `seat_repository.py` and the 0-double-booking result
+stand; the restriction belongs at the booking entry points. What goes is
+the vocabulary claim in CLAUDE.md that one space carries two paying
+passengers on one trip.
+
+Rule 14 (events with no assigned trip wait, 'Trip Not Started') and rule
+13 (the phone pauses at arrival, resumes at the next assignment) both
+hold. The server's part of the pause is telling the phone, through
+`GET /edge/session`, whether its van has an assigned trip that has not
+completed.
+
+### 9.2 New in rev 603, not built
+
+- **Payment block.** Start refused until the trip's share is recorded
+  (`payment_status` 'paid' or 'overridden'). Assignment refused while the
+  van's balance (`owed + held − settled`, less disputed shares) is above
+  zero. Terminal Manager override with a written reason; the Cashier
+  cannot. GPS auto-start is never blocked: 'left_unpaid', `held_share`,
+  'Left Unpaid' alert.
+- **Cashier payment record** with the handing Dispatcher; **list lock**
+  (`list_locked_at`) at payment or departure, whichever first;
+  cancellation removes the seat and its share before the lock, refused
+  after; a seat added after payment is a **top-up line** and re-blocks
+  Start.
+- **Crew toggle** (`trips.crew_aboard`): the Dispatcher is not a
+  boarding and not counted toward 14.
+- **'Not a passenger trip'** (Table 40 `Non_Passenger_Moves`): nothing
+  started, nothing owed, GPS fallback off; a passenger seen aboard starts
+  the trip `auto_detected`, pending review.
+- **Home pickup** (Table 41 `Assisted_Pickups`, `bookings.booked_for_other`,
+  `is_home_pickup_seat`): Book for Someone Else, relative's own seat,
+  map pin accepted within `HomePickupMaxRouteM`, digital payment only,
+  activation by QR or Dispatcher entry, up to `HomePickupWaitMin` wait,
+  close early / no-show, wait subtracted from the stretch time, not an
+  unscheduled stop.
+- **Messages** (chat, now required): image attachments for the payment
+  proof, `ChatImageMaxKb` 10240, `ChatImageRetentionDays` 30, Dispatcher
+  confirms the proof to the Terminal Manager.
+- **Walk-in special trip** at the counter (`special_trip_requests`:
+  `passenger_id` NULL, `customer_name`, `customer_contact`, `entered_by`,
+  `fee_note`); fee paid before the van leaves; a van may decline.
+- **Trips columns:** `payment_status`, `list_locked_at`, `crew_aboard`,
+  `payment_override_by/at/note`.
+- **Snapshots: Terminal Manager only**, in the API. No endpoint serves
+  them yet; the first one must check the role.
+- **Settings:** `depart_zone_radius_m`, `depart_readings` (survey),
+  `home_pickup_wait_min` 10, `home_pickup_max_route_m` (to be set),
+  `chat_image_max_kb` 10240, `chat_image_retention_days` 30.
+- **Van status board:** shows which vans still owe their last trip's
+  share.
+
+### 9.3 Unchanged
+
+Roles, roster, import/export, phone pool and check-out (step 3); phone
+tokens, upload endpoints, heartbeats, Unaudited rules, held events and
+snapshot storage (step 5); assignment rules, void and change-van
+(Terminal Manager only), start review, Arrived, expired-licence and
+no-phone warnings (step 4). The hash-chain genesis is still [OPEN], and
+the brief still advises a value derived from the trip ID. Booking
+origin/destination and payment status stay derived, not stored
+(`MANUSCRIPT_CORRECTIONS.md` §11); rev 603 still lists them as columns.
+
+### 9.4 Decisions (15 Oct) and roadmap
+
+The owner asked for Claude's recommendations to be applied. Decided:
+
+1. **Boarding at stop 1 only**, refused at search, reserve, reschedule
+   and walk-in. `seat_repository.py` is not touched.
+2. **One migration (024)** drops the estimate and side-pickup columns and
+   adds the rev 603 columns and tables, with its down script.
+3. **`retention_days` = 30**, `retention_mode` removed. Nothing deletes
+   until the retention job (R8) exists.
+4. **Terminal zone and N ship unset**: GPS departure is off until the
+   Terminal Manager sets both. Tests and the demo seed set illustrative
+   values.
+5. **The Unscheduled run is removed.** A detected departure with no
+   waiting trip on the van's route leaves the events held and alerts
+   the Terminal Manager.
+6. **Hash-chain genesis** = SHA-256 of `"sabaygo:" + trip_id` (the
+   brief's advice; the owner delegated the choice).
+7. **Chat** extends the existing `messages` table (migration 014) with
+   the attachment columns; no second table.
+
+Roadmap, in the brief's order (§13), each step tested and committed
+before the next:
+
+| Step | Brief | What |
+|---|---|---|
+| R1 | 2 | Migration 024: columns, Tables 40 and 41, chat attachments, settings |
+| R2 | 2.4 | Boarding at the starting terminal only |
+| R3 | 4 | Lifecycle rework: statement and fare lines, Cashier payment, list lock, top-ups, payment block and override, Start, Dispatcher Depart, GPS departure (N readings), automatic start at departure, Left Unpaid, crew toggle, Not a passenger trip; grace timer and Unscheduled run removed |
+| R4 | 5 | Edge: events to the assigned trip; the session tells the phone to pause |
+| R5 | 6 | Checking: pre-departure list match, unlisted fix or reason, capacity alert with general location, hash chain, completion at aboard 0 |
+| R6 | 2.6 | Home pickup and chat image proof |
+| R7 | 2.1 | Disputes |
+| R8 | 4.5 | Retention job |
+| R9 | 6.3–6.4 | Driving flags with the home-pickup wait |
+| R10 | 9 | Screens |

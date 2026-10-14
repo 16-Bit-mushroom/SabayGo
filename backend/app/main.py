@@ -34,7 +34,6 @@ from app.api.v1 import (
 from app.config import settings
 from app.application.edge.evidence import alert_silent_phones
 from app.application.operations.guards import sweep_abandoned_holds
-from app.application.operations.trip_lifecycle import start_overdue_trips
 from app.core.db import SessionFactory, engine
 from app.core.exceptions import DomainError
 from app.core.periodic import PeriodicJob
@@ -58,9 +57,6 @@ async def lifespan(app: FastAPI):
     # unavailable.
     jobs = [
         PeriodicJob("Hold sweep", 60, lambda: sweep_abandoned_holds(SessionFactory)),
-        # A trip nobody started by departure + grace is started by the
-        # system and held for review (brief 4.2 rule 7).
-        PeriodicJob("Trip start fallback", 60, lambda: start_overdue_trips(SessionFactory)),
         # The phone of a trip under way went silent: alert at once; the
         # Unaudited mark waits for its stored reports (brief 4.4).
         PeriodicJob("Phone silence", 60, lambda: alert_silent_phones(SessionFactory)),

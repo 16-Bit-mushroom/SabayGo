@@ -6,6 +6,15 @@ partner. BSIT, University of Mindanao.
 
 **Final defence moved: the date waits on endorsement (was 20 October).**
 
+**15 Oct: brief rev 603 arrived** (`docs/SabayGo-Changes-for-Claude-Code
+(3).md`) and replaces `(1).md` (rev 514) as the spec. It reverses parts of
+steps 4–5 below (boarding at stop 1 only, no camera pricing, Dispatcher
+taps Depart, no grace timer, payment before Start). The delta, the
+decisions (owner delegated them 15 Oct) and the roadmap R1–R10 are
+`docs/GAP_REPORT.md` §9. **Where rev 603 conflicts with the rev 468/514
+notes below, rev 603 wins.** Progress is recorded under "Rev 603
+progress" at the end of this section.
+
 ---
 
 ## Redesign — paper revision 468 (decided 13 Oct)
@@ -302,6 +311,28 @@ Work in this order:
      blurred still;
    - the Realme setup checklist: auto-launch, background activity,
      battery optimisation off, Location "Allow all the time".
+
+### Rev 603 progress (roadmap R1–R10, `docs/GAP_REPORT.md` §9.4)
+
+Done: **R1, migration 024** (15 Oct). Drops the rev 514 estimate and
+side-pickup columns (preflight refuses a database where they hold
+data); `departure_source` is now `dispatcher`/`staff`/`gps` (old rows
+mapped); new `trips.payment_status`, `list_locked_at`, `crew_aboard`,
+`payment_override_*`; `passenger_events.pre_departure`, `chain_seq`,
+`resolution_status` (`not_needed`/`pending`/`listed`/`explained`) +
+`resolution_note`; `remittances.held_share`, `handed_over_by`;
+`remittance_lines.is_top_up`; walk-in special-trip columns; booking
+home-pickup flags; image columns on the existing chat `messages` (014);
+Tables 40 `non_passenger_moves` and 41 `assisted_pickups`; four new
+notification types. Policies: `start_grace_minutes` and `retention_mode`
+gone, `retention_days` 30, new `match_window_seconds` 120,
+`home_pickup_wait_minutes` 10, `chat_image_max_kb` 10240,
+`chat_image_retention_days` 30, and **unset** `depart_zone_radius_m`,
+`depart_readings`, `home_pickup_max_route_m` (unset = no GPS departure,
+no home pickup offered). The grace-timer job is gone with its key. ORM
+models for the money tables (remittances, lines, disputes, special trip
+requests, Tables 40–41) come with the step that uses them. Rollback
+verified to the exact pre-024 schema.
 
 ---
 

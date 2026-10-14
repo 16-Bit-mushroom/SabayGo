@@ -62,10 +62,11 @@ class UnauditedReason(str, Enum):
 
 
 class DepartureSource(str, Enum):
-    """The office tapped Depart, or the van's GPS left the origin stop."""
+    """Who tapped Depart, or 'gps' when nobody did (brief 4.2 rule 7)."""
 
-    CONFIRMED = "confirmed"
-    DETECTED = "detected"
+    DISPATCHER = "dispatcher"
+    STAFF = "staff"
+    GPS = "gps"
 
 
 class BookingStatus(str, Enum):

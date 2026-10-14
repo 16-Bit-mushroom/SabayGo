@@ -222,9 +222,10 @@ class ManifestUseCase:
 class DepartTripUseCase:
     """Close boarding: mark the trip departed and no-show anyone unscanned.
 
-    Brief 4.2 rule 9: the Cashier or the Terminal Manager taps Depart
-    ('confirmed'), or the van's GPS leaves the origin stop zone with a
-    boarding counted ('detected'), whichever is first. Only a started
+    Brief 4.2 rules 7-8: the Dispatcher taps Depart ('dispatcher'), or
+    the Cashier or the Terminal Manager ('staff'), or the van's GPS
+    leaves the terminal with a boarding counted ('gps'), whichever is
+    first. Only a started
     trip departs; the row lock keeps the two from both releasing the
     no-shows.
     """
@@ -233,7 +234,7 @@ class DepartTripUseCase:
         self.session = session
 
     async def execute(
-        self, *, trip_id: str, source: DepartureSource = DepartureSource.CONFIRMED
+        self, *, trip_id: str, source: DepartureSource = DepartureSource.STAFF
     ) -> dict:
         trip = (await self.session.execute(
             select(Trip).where(Trip.trip_id == trip_id)

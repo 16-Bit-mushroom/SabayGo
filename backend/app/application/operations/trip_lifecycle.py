@@ -18,10 +18,10 @@ Who may do what is the API's guard (brief 3); the rules are here:
                Copies the operator's name and licence and the plate onto
                the trip. Warns, never blocks, on an expired licence or a
                phone that is not with the van (rule 5).
-  fall back    The system starts any trip nobody started by departure +
-               `start_grace_minutes`, or when its van leaves the origin
-               stop with a boarding counted -- whichever is first (rule 7).
-               Held for review; no assigned van means 'Trip Not Started'.
+  fall back    The system starts a trip nobody started when its van
+               leaves the origin stop with a boarding counted (rule 7).
+               There is no grace timer (rev 603). Held for review; no
+               assigned van means 'Trip Not Started'.
   review       Terminal Manager: confirm or change the van of a held start.
   change van   Terminal Manager only, on a started trip, with a reason.
   void         Terminal Manager only, with a reason (rule 10).
@@ -348,7 +348,7 @@ class TripLifecycle:
                 return
         if trip.status == TripStatus.BOARDING.value:
             await DepartTripUseCase(self.session).execute(
-                trip_id=trip_id, source=DepartureSource.DETECTED
+                trip_id=trip_id, source=DepartureSource.GPS
             )
 
     # ------------------------------------------------------------ review
@@ -612,28 +612,3 @@ class TripLifecycle:
         profile = await self.session.get(StaffProfile, user_id)
         return f"{profile.first_name} {profile.last_name}" if profile else "Someone"
 
-
-async def start_overdue_trips(session_factory) -> None:
-    """The fallback start (rule 7), as a `PeriodicJob` tick: every trip
-    still Scheduled at departure + `start_grace_minutes`."""
-    async with session_factory() as session:
-        grace = await PolicyRepository(session).get_int("start_grace_minutes")
-        now = _now()
-        due = (await session.execute(
-            select(Trip.trip_id).where(
-                Trip.status == TripStatus.SCHEDULED.value,
-                Trip.departure_datetime <= now - timedelta(minutes=grace),
-                Trip.departure_datetime > now - TRIP_REACH,
-            ).order_by(Trip.departure_datetime)
-        )).scalars().all()
-
-    # One transaction per trip: a trip that fails is retried next tick and
-    # does not hold back the rest.
-    for trip_id in due:
-        try:
-            async with session_factory() as session:
-                await TripLifecycle(session).fall_back_start(
-                    trip_id, why=f"the {grace}-minute grace after departure passed"
-                )
-        except Exception:
-            log.exception("Fallback start of trip %s failed; retrying next tick.", trip_id)

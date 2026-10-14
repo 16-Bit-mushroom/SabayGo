@@ -183,7 +183,7 @@ BEGIN
   SELECT MAX(offset_minutes) INTO v_last_offset FROM route_stops WHERE route_id = p_route;
 
   -- As the lifecycle leaves a trip (brief 4.2): the Terminal Manager
-  -- assigned the crew, the Cashier started it and tapped Depart, and the
+  -- assigned the crew, the Cashier started it, the Dispatcher tapped Depart, and the
   -- operator's name and licence and the plate were copied at the start.
   INSERT INTO trips
     (trip_id, template_id, route_id, service_date, departure_datetime,
@@ -201,7 +201,7 @@ BEGIN
      IF(v_started, 'manual', NULL),
      IF(v_started, 'USER-CASHIER-0001', NULL),
      IF(v_started, p_departs - INTERVAL 20 MINUTE, NULL),
-     IF(p_status IN ('departed','completed'), 'confirmed', NULL),
+     IF(p_status IN ('departed','completed'), 'dispatcher', NULL),
      IF(v_started, o.full_name, NULL),
      IF(v_started, o.license_number, NULL),
      IF(v_started, v.plate_number, NULL),

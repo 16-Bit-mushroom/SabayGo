@@ -50,35 +50,40 @@ OT=$(login manager); CT=$(login cashier)
 hdr "1. Settings keep their history (Table 33)"
 
 is "$(code GET /config/policies "" "$CT")" 200 "cashier reads the rules"
-python3 - <<'EOF' && ok "step-3 keys present; retention ships unset" || bad "step-3 keys"
+python3 - <<'EOF' && ok "settings keys present (rev 603)" || bad "settings keys"
 import json
 p = {r["policy_key"]: r for r in json.load(open("/tmp/resp.json"))}
 assert p["start_opens_minutes"]["policy_value"] == "30"
-assert p["start_grace_minutes"]["policy_value"] == "10"
+assert "start_grace_minutes" not in p and "retention_mode" not in p
 assert p["heartbeat_gap_seconds"]["policy_value"] == "120"
 assert p["remittance_rate_pct"]["policy_value"] in ("15.00", "15")
-assert p["retention_mode"]["policy_value"] == "" and p["retention_days"]["policy_value"] == ""
+assert p["retention_days"]["policy_value"] == "30"
+assert p["depart_zone_radius_m"]["policy_value"] == "" and p["depart_readings"]["policy_value"] == ""
+assert p["home_pickup_max_route_m"]["policy_value"] == ""
+assert p["chat_image_max_kb"]["policy_value"] == "10240" and p["match_window_seconds"]["policy_value"] == "120"
 assert all("effective_from" in r for r in p.values())
 EOF
-is "$(code PUT /config/policies/start_grace_minutes '{"policy_value":"15"}' "$CT")" 403 \
+is "$(code PUT /config/policies/start_opens_minutes '{"policy_value":"15"}' "$CT")" 403 \
    "cashier cannot change a rule"
 is "$(code PUT /config/policies/remittance_rate_pct '{"policy_value":"150"}' "$OT")" 409 \
    "a rate above 100 % is refused"
-is "$(code PUT /config/policies/retention_mode '{"policy_value":"forever"}' "$OT")" 409 \
-   "retention mode must be fixed_days or until_settled"
+is "$(code PUT /config/policies/retention_days '{"policy_value":""}' "$OT")" 409 \
+   "retention cannot be unset"
+is "$(code PUT /config/policies/depart_readings '{"policy_value":"0"}' "$OT")" 409 \
+   "zero departure readings is refused"
 is "$(code PUT /config/policies/retention_days '{"policy_value":"0"}' "$OT")" 409 \
    "a retention period of 0 days is refused"
 is "$(code PUT /config/policies/heartbeat_gap_seconds '{"policy_value":"-5"}' "$OT")" 409 \
    "a negative gap is refused"
 
-code GET /config/policies/start_grace_minutes/history "" "$OT" >/dev/null
+code GET /config/policies/start_opens_minutes/history "" "$OT" >/dev/null
 BEFORE=$(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))")
-is "$(code PUT /config/policies/start_grace_minutes '{"policy_value":"15"}' "$OT")" 200 \
-   "manager sets the grace to 15"
+is "$(code PUT /config/policies/start_opens_minutes '{"policy_value":"15"}' "$OT")" 200 \
+   "manager sets the start window to 15"
 [ "$(j "['updated_by']" < /tmp/resp.json)" = "USER-MANAGER-0001" ] \
   && ok "the new value names who set it" || bad "updated_by missing"
-code PUT /config/policies/start_grace_minutes '{"policy_value":"15"}' "$OT" >/dev/null
-code GET /config/policies/start_grace_minutes/history "" "$OT" >/dev/null
+code PUT /config/policies/start_opens_minutes '{"policy_value":"15"}' "$OT" >/dev/null
+code GET /config/policies/start_opens_minutes/history "" "$OT" >/dev/null
 python3 - "$BEFORE" <<'EOF' && ok "history: one new row, newest first; re-saving the same value adds none" || bad "history"
 import json, sys
 h = json.load(open("/tmp/resp.json"))
@@ -86,9 +91,9 @@ assert len(h) == int(sys.argv[1]) + 1, len(h)
 assert h[0]["policy_value"] == "15" and h[0]["effective_from"] > h[1]["effective_from"]
 EOF
 code GET /config/policies "" "$OT" >/dev/null
-python3 -c "import json;p={r['policy_key']:r for r in json.load(open('/tmp/resp.json'))};assert p['start_grace_minutes']['policy_value']=='15'" \
+python3 -c "import json;p={r['policy_key']:r for r in json.load(open('/tmp/resp.json'))};assert p['start_opens_minutes']['policy_value']=='15'" \
   && ok "the list shows the value in force" || bad "list shows an old value"
-code PUT /config/policies/start_grace_minutes '{"policy_value":"10"}' "$OT" >/dev/null
+code PUT /config/policies/start_opens_minutes '{"policy_value":"30"}' "$OT" >/dev/null
 is "$(code PUT /config/policies/no_such_key '{"policy_value":"1"}' "$OT")" 404 "unknown key 404"
 
 # ╔═══════════════════════════════════════════════════════════════╗

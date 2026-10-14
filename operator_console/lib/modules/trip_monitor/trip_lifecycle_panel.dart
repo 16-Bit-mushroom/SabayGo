@@ -56,10 +56,12 @@ class TripLifecyclePanel extends StatelessWidget {
       if (t.auditStatus == 'unaudited')
         (Icons.videocam_off_outlined, 'Unaudited: ${_unaudited(t.unauditedReason)}. The camera cannot '
             'check this trip; only QR tickets and logged fares count.', AppColors.danger),
-      if (t.departureSource == 'detected')
+      if (t.departureSource == 'gps')
         (Icons.gps_fixed, 'Departure detected: the van\'s GPS left the terminal', null)
-      else if (t.departureSource == 'confirmed')
-        (Icons.logout, 'Departure confirmed by the office', null),
+      else if (t.departureSource == 'staff')
+        (Icons.logout, 'Departed: tapped by the office', null)
+      else if (t.departureSource == 'dispatcher')
+        (Icons.logout, 'Departed: tapped by the Dispatcher', null),
       if (t.changeNote != null) (Icons.edit_note, t.changeNote!, null),
     ];
 

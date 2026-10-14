@@ -218,7 +218,7 @@ class EdgeIngestion:
             trip = await trip_for(self.session, van_id, e.event_at)
             if trip is not None:
                 self.session.add(PassengerEvent(**fields, trip_id=trip.trip_id,
-                                                side_pickup=False, created_at=now))
+                                                created_at=now))
                 counts["stored"] += 1
             else:
                 self.session.add(HeldDoorEvent(**fields, van_id=van_id, received_at=now))
@@ -348,7 +348,7 @@ class EdgeIngestion:
         )
         if trip is not None and trip.status == TripStatus.BOARDING.value:
             await DepartTripUseCase(self.session).execute(
-                trip_id=trip.trip_id, source=DepartureSource.DETECTED
+                trip_id=trip.trip_id, source=DepartureSource.GPS
             )
         return trip
 

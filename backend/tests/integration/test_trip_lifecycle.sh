@@ -6,8 +6,8 @@
 # Needs the backend on :8000 and a database just reset with --soon: the
 # two fixture trips depart in 20 minutes, inside the 30-minute start
 # window. The brief's acceptance tests are named where they apply (T1..).
-# The fallback start is driven by calling the job's tick directly; the
-# running server's own tick may get there first, which is the same code.
+# The fallback start is called directly (rev 603 has no grace timer;
+# the GPS departure that drives it is section 8).
 set -uo pipefail
 
 API="http://127.0.0.1:8000/api/v1"
@@ -54,15 +54,16 @@ async def m():
     await engine.dispose()
 asyncio.run(m())" "$1")
 }
-tick() {
+fallback() {
   (cd "$BACKEND" && "$PY" -c "
-import asyncio
+import asyncio, sys
 from app.core.db import SessionFactory, engine
-from app.application.operations.trip_lifecycle import start_overdue_trips
+from app.application.operations.trip_lifecycle import TripLifecycle
 async def m():
-    await start_overdue_trips(SessionFactory)
+    async with SessionFactory() as s:
+        await TripLifecycle(s).fall_back_start(sys.argv[1], why='the van left the terminal')
     await engine.dispose()
-asyncio.run(m())" 2>&1 | grep -iE "error|traceback" || true)
+asyncio.run(m())" "$1" 2>&1 | grep -iE "error|traceback" || true)
 }
 ping() {
   curl -s -o /dev/null -w "%{http_code}" -X POST "$API/tracking/trips/$1/ping" \
@@ -165,9 +166,8 @@ is "$(code POST /trips/$S1/start "" "$CT")" 409 "T8 manual start is blocked with
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "5. The fallback start and its review (rules 7, 8; T3, T4, T7, T9)"
-sql "UPDATE trips SET departure_datetime = NOW() - INTERVAL 15 MINUTE WHERE trip_id = '$S1'"
-tick
-is "$(board $S1 status)" boarding "T3 grace passed: the system starts S1"
+fallback $S1
+is "$(board $S1 status)" boarding "T3 the van left: the system starts S1"
 is "$(board $S1 start_mode)/$(board $S1 started_by_name)" "auto_assigned/None" "Auto_Assigned, StartedBy NULL"
 is "$(board $S1 start_review_status)" pending "held for review, off the statement"
 is "$(board $S1 dispatcher_id)" None "T9 started with no Dispatcher"
@@ -177,10 +177,9 @@ python3 -c "import json;n=[x for x in json.load(open('/tmp/resp.json'))['items']
 
 code POST /config/trips/special "{\"route_id\":\"$MATI\",\"departure_datetime\":\"$SOON\",\"trip_label\":\"Lifecycle S2\"}" "$OT" >/dev/null
 S2=$(field trip_id)
-sql "UPDATE trips SET departure_datetime = NOW() - INTERVAL 15 MINUTE WHERE trip_id = '$S2'"
-tick; tick
+fallback $S2; fallback $S2
 is "$(board $S2 status)" scheduled "T7 no van assigned: the trip stays open"
-is "$(notes "$OT" trip_not_started $S2)" 1 "'Trip Not Started' raised once, not every tick"
+is "$(notes "$OT" trip_not_started $S2)" 1 "'Trip Not Started' raised once, not every time"
 
 is "$(code POST /trips/$S1/start-review "" "$CT")" 403 "the cashier cannot review a start"
 is "$(code POST /trips/$S1/start-review '{"van_id":"VAN-0004"}' "$OT")" 409 "changing the van at review needs a reason"
@@ -213,7 +212,7 @@ hdr "7. Depart and arrive (rule 9, 4.1, T26)"
 is "$(code POST /trips/$TRIP1/depart "" "$DT")" 403 "the Dispatcher no longer departs the trip"
 is "$(code POST /trips/$TAG6/depart "" "$OT")" 409 "a trip that has not started cannot depart"
 is "$(code POST /trips/$TRIP1/depart "" "$CT")" 200 "cashier taps Depart"
-is "$(field departure_source)" confirmed "DepartureSource confirmed"
+is "$(field departure_source)" staff "DepartureSource staff"
 is "$(code POST /trips/$TRIP1/depart "" "$OT")" 409 "a trip departs once"
 is "$(code POST /trips/$TRIP1/arrive "" "$D2T")" 403 "another Dispatcher cannot tap Arrived"
 is "$(code POST /trips/$TRIP2/arrive "" "$DT")" 409 "a trip still boarding cannot arrive"
@@ -235,13 +234,13 @@ ping $LIVE "$LAT" "$LON" >/dev/null
 is "$(ping $LIVE "$FARLAT" "$LON")" 201 "the ping itself is accepted"
 is "$(board $LIVE start_mode)" auto_assigned "the van leaving starts the trip (Auto_Assigned)"
 is "$(board $LIVE start_review_status)" pending "held for review"
-is "$(board $LIVE status)/$(board $LIVE departure_source)" departed/detected "and it departs, Detected"
+is "$(board $LIVE status)/$(board $LIVE departure_source)" departed/gps "and it departs, GPS"
 
 code POST /bookings/walk-in "{\"trip_id\":\"$TRIP2\",\"boarding_stop\":1,\"alighting_stop\":2}" "$DT" >/dev/null
 code GET /trips/$TRIP2/stops "" "$OT" >/dev/null
 read -r LAT LON < <(python3 -c "import json;s=json.load(open('/tmp/resp.json'))[0];print(s['latitude'],s['longitude'])")
 ping $TRIP2 "$LAT" "$LON" >/dev/null; ping $TRIP2 "$(python3 -c "print($LAT + 0.05)")" "$LON" >/dev/null
-is "$(board $TRIP2 status)/$(board $TRIP2 departure_source)/$(board $TRIP2 start_mode)" departed/detected/manual \
+is "$(board $TRIP2 status)/$(board $TRIP2 departure_source)/$(board $TRIP2 start_mode)" departed/gps/manual \
    "a started trip departs when its van leaves with a boarding counted"
 
 code POST /devices/$PHONE/return '{}' "$OT" >/dev/null

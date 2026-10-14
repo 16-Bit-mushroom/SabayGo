@@ -86,7 +86,6 @@ def to_ledger(held: HeldDoorEvent, trip_id: str, now: datetime) -> PassengerEven
         track_id=held.track_id,
         snapshot_url=held.snapshot_url,
         snapshot_hash=held.snapshot_hash,
-        side_pickup=False,
         created_at=now,
     )
 
