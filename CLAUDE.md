@@ -217,6 +217,45 @@ Image sniffing is shared in `core/images.py`. Test:
 `tests/integration/test_edge_ingestion.sh` (66 checks, in the runner),
 which plays four phones.
 
+**Handoff, 14 Oct: steps 6–9 are next and need no phone.** Two tracks
+now run side by side. The phone track (below) stays with whoever holds
+the Realme. Steps 6–9 are server and console work against tables and
+endpoints that already exist: build them in the brief's order (§13).
+The phone's interface is `/edge/*`, done and tested, so a test plays
+the phone the way `test_edge_ingestion.sh` does: add a phone
+(`POST /devices`, token shown once), check it out to a van, then
+`POST /edge/events`, `/edge/fixes`, `/edge/heartbeats`.
+
+- **Step 6: matching, hash chain, alerts, remittance, disputes.** Read
+  brief §2.1–2.4 (money, fare lines, capacity, boarding rule), §6.1–6.2
+  (matching, the four phases) and §12 (acceptance tests, sample trip in
+  §12.1). Tables are migration 018 (`passenger_events`,
+  `remittances`, `remittance_lines`, `disputes`). Also due here, from
+  step 4: the statement leaves out `pending` starts, and fare lines are
+  created at review. Check whether boardings and completion ("aboard
+  reaches 0") should now come from door events. **Open: the hash
+  chain's genesis value** (brief §6.2 `EventHash`, marked [OPEN]). The
+  brief advises one derived from the trip ID and so does Claude; the
+  owner has not answered yet. Ask before writing the chain; the rest of
+  step 6 does not wait on it.
+- **Step 7: retention job** (brief §4.5, test T18 in §12.2), after the
+  hash chain works. It skips trips with an open dispute, keeps
+  `SnapshotHash` when it deletes a still, and must delete nothing while
+  `retention_mode` / `retention_days` are unset (they ship unset). Run
+  it as a `PeriodicJob` (`core/periodic.py`).
+- **Step 8: driving flags** (brief §6.3–6.4) into `driving_events` from
+  the GPS readings. `POST /edge/fixes` already feeds
+  `TrackingService.record_ping`; `scripts/tracking_simulator.py` drives a
+  trip without a van.
+- **Step 9: screens** (brief §9). Already there: the Trips page's Start
+  and departure panel (step 4) and the add-van dialog. Deferred to here
+  from step 3: Member Records, Phones, the settings history screen.
+
+The usual rules hold: the brief wins over this file; every migration
+ships a `db/migrations/down/` script; read policies only through
+`PolicyRepository`; run the one test script for the feature, add it to
+`run_all_journeys.sh`, and record what is done here.
+
 **Next: brief step 5, the phone half.** A2Z allows a camera in the
 cabin (confirmed 14 Oct). The Realme phone is not a clean device: 17
 user apps and 97 of 107 GB used. **Decided 14 Oct:** develop and
