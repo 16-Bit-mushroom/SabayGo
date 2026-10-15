@@ -704,6 +704,17 @@ uses, `ai_service`, and the read-only `/revenue/*` report and its view
 steps 10-14 now walk the rev 603 screens. Journey suite **907 passed, 1
 failed** (the known `--soon` reschedule cutoff).
 
+Done: **office Special Trips page** (15 Oct, a §9 gap R10 did not
+list). `operator_console/lib/modules/special_trips/`: requests waiting /
+approved / closed, **Walk-in request** (customer, pickup, destination,
+count, fee and basis note), **Agree the fee** (creates the trip),
+**Refuse** with a reason; an approved request shows its trip's Start and
+departure panel for assignment. Terminal Manager and Cashier (brief 3).
+The rev 468 extra-departure form (`modules/trip_dispatcher`, and the
+repository's `TripBoardRow`, `todaysTrips`, `createSpecialTrip`) is
+gone: brief 2.5 has no van-outside-the-timetable path but a rental;
+`POST /config/trips/special` stays for the tests and seed.
+
 **R10 is done.** Open: the capture app and `ai_service` are rev 468
 leftovers (manual counts only); `/revenue/*` has no client.
 

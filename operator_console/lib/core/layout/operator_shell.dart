@@ -7,7 +7,7 @@ import '../../modules/phones/phones_screen.dart';
 import '../../modules/remittance/remittance_screen.dart';
 import '../../modules/start_review/start_review_screen.dart';
 import '../../modules/van_board/van_board_screen.dart';
-import '../../modules/trip_dispatcher/screens/dispatch_board_screen.dart';
+import '../../modules/special_trips/special_trips_screen.dart';
 import '../../modules/fleet_management/screens/fleet_roster_screen.dart';
 import '../../modules/schedule_management/screens/schedule_screen.dart';
 import '../../modules/policy_editor/screens/policy_editor_screen.dart';
@@ -73,8 +73,9 @@ class _OperatorShellState extends State<OperatorShell> {
         TripMonitorScreen()),
     _Module('Van Status Board', Icons.view_list_outlined, Icons.view_list, VanBoardScreen()),
     _Module('Review Starts', Icons.rule_outlined, Icons.rule, StartReviewScreen(), managerOnly: true),
-    _Module('Special Trips', Icons.alt_route_outlined, Icons.alt_route,
-        DispatchBoardScreen(), managerOnly: true),
+    // The Terminal Manager and the Cashier both review requests and enter
+    // walk-ins (brief 3).
+    _Module('Special Trips', Icons.alt_route_outlined, Icons.alt_route, SpecialTripsScreen()),
     _Module('Emergencies (SOS)', Icons.emergency_outlined, Icons.emergency,
         SosConsoleScreen(), urgent: true),
     _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, MessagesScreen()),
@@ -121,6 +122,7 @@ class _OperatorShellState extends State<OperatorShell> {
       'driving_flag' => _show((w) => w is DrivingFlagsScreen),
       'dispute_raised' => _show((w) => w is DisputesScreen),
       'left_unpaid' => _show((w) => w is RemittanceScreen),
+      'special_trip_request' => _show((w) => w is SpecialTripsScreen),
       'unconfirmed_trip_start' => _show((w) => w is StartReviewScreen) || _show((w) => w is TripMonitorScreen),
       _ when n.isTripAlert => _show((w) => w is TripMonitorScreen),
       _ => false,

@@ -13,6 +13,7 @@ import 'data/repositories/fleet_repository.dart';
 import 'data/repositories/money_repository.dart';
 import 'data/repositories/oversight_repository.dart';
 import 'data/repositories/policy_repository.dart';
+import 'data/repositories/rental_repository.dart';
 import 'data/repositories/tracking_repository.dart';
 import 'data/repositories/sos_repository.dart';
 import 'data/repositories/schedule_repository.dart';
@@ -74,6 +75,7 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         Provider<MoneyRepository>(create: (_) => MoneyRepository(_api)),
         Provider<OversightRepository>(create: (_) => OversightRepository(_api)),
         Provider<DeviceRepository>(create: (_) => DeviceRepository(_api)),
+        Provider<RentalRepository>(create: (_) => RentalRepository(_api)),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
         ChangeNotifierProvider<Appearance>.value(value: _appearance),
       ],

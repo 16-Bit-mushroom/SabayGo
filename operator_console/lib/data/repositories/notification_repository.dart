@@ -36,6 +36,7 @@ class AppNotification {
         'driving_flag',
         'dispute_raised',
         'left_unpaid',
+        'special_trip_request',
       }.contains(type);
 
   /// Notifications that point at a module worth opening.
