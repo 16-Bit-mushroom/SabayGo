@@ -547,11 +547,28 @@ A flag's decision is its review: upheld → `dismissed`, rejected →
 Manager. New ORM model `DrivingEvent` (Table 30) for R9. Test:
 `test_disputes.sh` (78, in the runner; flags written with SQL). Left
 alone: a disputed line whose seat is cancelled before the lock keeps its
-count until decided (R3's `_drop` keeps it for the decision).
-**Next: R8 retention** (incl. chat images, T41 b; skip trips with an
-open dispute), then R9 driving flags (reuse `geotag`; subtract a
-pickup's `arrived_at`..`left_at` from the stretch time), R10 screens
-(incl. Disputes).
+count until decided (R3's `_drop` keeps it for the decision). Committed
+(`e25fe42`).
+Done: **R8, retention** (15 Oct). No migration. Rules:
+`application/edge/retention.py` (read its docstring), run hourly as the
+`Evidence retention` `PeriodicJob`. Past `retention_days` (from the
+event's or reading's own time): a door event's still is deleted (file,
+URL; `snapshot_deleted_at` stamped, `snapshot_hash` kept, so the chain
+verifies, T36/T39) unless its boarding is `pending` (T37) or its trip has
+an open dispute (T40); a held event's still too (held events are claimed
+within 12 h); raw GPS readings are deleted unless their trip has an open
+dispute or an open driving flag (the flags stay). Chat images go on their
+`retain_until` (T41 b); the message stays. `snapshot()` keeps a deleted
+still deleted on resend and refuses one past the period.
+`GET /door-events/{id}/snapshot` serves the still to the **Terminal
+Manager only** (T38; others never get it or its address). Not covered:
+the rev 468 YOLOv8 audit snapshots in public `/media` (`audits.py`
+`snapshot_url`), retired with the old screens in R10. Test:
+`test_retention.sh` (34, in the runner; runs the job with "now" moved
+31 days ahead, so nothing hashed is backdated).
+**Next: R9 driving flags** (reuse `geotag`; subtract a pickup's
+`arrived_at`..`left_at` from the stretch time; write `DrivingEvent`), then
+R10 screens (incl. Disputes, Boarding Audit with the still).
 
 ---
 

@@ -37,6 +37,7 @@ from app.api.v1 import (
 )
 from app.config import settings
 from app.application.edge.evidence import alert_silent_phones
+from app.application.edge.retention import purge_expired_evidence
 from app.application.operations.guards import sweep_abandoned_holds
 from app.core.db import SessionFactory, engine
 from app.core.exceptions import DomainError
@@ -64,6 +65,9 @@ async def lifespan(app: FastAPI):
         # The phone of a trip under way went silent: alert at once; the
         # Unaudited mark waits for its stored reports (brief 4.4).
         PeriodicJob("Phone silence", 60, lambda: alert_silent_phones(SessionFactory)),
+        # Stills, GPS readings and chat images past their retention period
+        # (brief 4.5); what is under review or dispute stays.
+        PeriodicJob("Evidence retention", 3600, lambda: purge_expired_evidence(SessionFactory)),
     ]
     for job in jobs:
         job.start()

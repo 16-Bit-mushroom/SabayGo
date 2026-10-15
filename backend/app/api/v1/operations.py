@@ -7,11 +7,13 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep, require_roles
 from app.application.edge import chain
 from app.application.edge.checking import ListCheck
+from app.application.messaging.service import STORAGE_DIR
 from app.application.operations.boarding import (
     DepartTripUseCase,
     ManifestUseCase,
@@ -27,7 +29,7 @@ from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
 from app.core.exceptions import NotFoundError
 from app.domain.enums import DepartureSource, Role
-from app.infrastructure.models import Trip, User
+from app.infrastructure.models import PassengerEvent, Trip, User
 
 router = APIRouter(tags=["operations"])
 
@@ -387,6 +389,23 @@ async def explain_unlisted(
         event_id=e.event_id, event_at=e.event_at, resolution_status=e.resolution_status,
         resolution_note=e.resolution_note, has_snapshot=e.snapshot_url is not None,
     )
+
+
+@router.get("/door-events/{event_id}/snapshot",
+            dependencies=[Depends(require_roles(Role.TERMINAL_MANAGER))])
+async def door_event_snapshot(event_id: str, session: SessionDep) -> FileResponse:
+    """The blurred still of a door event. The Terminal Manager only (brief
+    4.5, T38): no other role is ever given a still or its address."""
+    event = await session.get(PassengerEvent, event_id)
+    if event is None:
+        raise NotFoundError("Door event not found.")
+    path = STORAGE_DIR / (event.snapshot_url or "")
+    if event.snapshot_url is None or not path.is_file():
+        raise NotFoundError(
+            "The still is no longer kept: its retention period is over."
+            if event.snapshot_deleted_at else "No still was received for this event."
+        )
+    return FileResponse(path)
 
 
 class MoveIn(BaseModel):

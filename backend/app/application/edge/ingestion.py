@@ -33,6 +33,7 @@ from app.application.edge.evidence import PhoneEvidence
 from app.application.edge.ledger import (
     STARTED, TRIP_REACH, alerted_while_held, trip_for, van_at,
 )
+from app.application.edge.retention import cutoff as retention_cutoff
 from app.application.notifications.service import NotificationService
 from app.application.operations.boarding import DepartTripUseCase
 from app.application.operations.non_passenger import NonPassengerMoves
@@ -288,8 +289,12 @@ class EdgeIngestion:
                                 "event, then the image.")
         if row.snapshot_hash != digest:
             raise ConflictError("This is not the still declared with the event.")
-        if row.snapshot_url is not None:
+        deleted = isinstance(row, PassengerEvent) and row.snapshot_deleted_at is not None
+        if row.snapshot_url is not None or deleted:
+            # Received before; a still retention deleted stays deleted.
             return {"event_id": event_id, "snapshot_hash": digest, "duplicate": True}
+        if row.event_at < await retention_cutoff(self.session):
+            raise ConflictError("This still is past the retention period and is not kept.")
 
         SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
         name = f"{event_id}.{ext}"
