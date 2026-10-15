@@ -377,9 +377,12 @@ Unscheduled-run case became "events stay held, alerted once"),
 passed, 1 failed** (the known `--soon` reschedule cutoff); the
 passenger journey's terminal search no longer assumes the fixture
 departs today, so it passes 37/0 after a plain reset too.
-**The console cannot record a payment yet** (R10), so its Start button is
-refused once a trip has a list: `DEMO_SCRIPT.md` row 9a says to record
-the share through the API first. The old `cash_remittances` flow (Fares &
+Pulled forward from R10 (it blocked Start in the console): the Trips
+page's Start and departure panel shows the share's state, the Cashier's
+**Record A2Z's share** (line by line; before departure on the trip, after
+a Left Unpaid on the van's statement) and the Terminal Manager's **Lift
+payment block**. `DEMO_SCRIPT.md` row 9a records it as cashier@ in a
+private window. The Remittance screen itself is still R10. The old `cash_remittances` flow (Fares &
 Cash) is the rev 514 model; retire it with the screens (R10). Seed note:
 LIVE-BOARD's leg-1 list is now 5.
 **Next: R3b** — special-trip requests (app + counter walk-in, fee,

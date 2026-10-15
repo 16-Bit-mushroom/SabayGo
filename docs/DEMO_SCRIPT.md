@@ -37,7 +37,7 @@ dataset from `db/seed/002_demo_dataset.sql`.
 | 7 | Conductor | Assigned trips → Manifest | Passenger shows **AT TERMINAL** | |
 | 8 | Conductor | Scan | Scan the QR → **valid** | Scan it again → **already boarded**. This is the anti-fraud beat |
 | 9 | Conductor | Walk-in | Log a cash passenger 1 → 4 | Cash is *in hand*, not missing — the office sees the difference |
-| 9a | Laptop | Trips → First Trip → **Start trip** | Started; warning *no phone is checked out*, trip marked **Unaudited** | The office starts the trip, not the Dispatcher; scanning never waited for it. Rev 468: who started it is on the record. **Rev 603: Start is refused until the Cashier records the 15 % share. The console has no payment screen until R10, so record it first as cashier@ (`POST /trips/{id}/payment`, as `scripts/demo_rehearsal.sh` step 3 does)** |
+| 9a | Laptop, private window as `cashier@` | Trips → First Trip → **Record A2Z's share** → **Start trip** | Share shown line by line, recorded; then Started, warning *no phone is checked out*, trip marked **Unaudited** | Rev 603: Start waits for A2Z's 15 %, handed over by the Dispatcher and recorded by the Cashier. The manager's window has no record button: separation of duties. The office starts the trip, not the Dispatcher, and who started it is on the record. A private window because the console keeps one sign-in per browser |
 | 10 | Conductor | Audit | Trigger the camera | Visual vs manifest. Variance > 0 flags the trip and notifies the office |
 | 11 | Laptop | Console → bell | Variance alert → Passenger Count Checks | Same row, same transaction as the audit log |
 | 12 | Laptop | Audits → **History** | Yesterday's resolved / ignored / failed | The failed one: the node returned 502 rather than invent a count |

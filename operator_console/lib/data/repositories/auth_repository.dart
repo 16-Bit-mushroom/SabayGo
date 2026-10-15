@@ -26,6 +26,10 @@ enum UserRole {
   /// Decides what is owed, sets rules, validates records. The Cashier
   /// records payments and does none of these (separation of duties).
   bool get isManager => this == UserRole.terminalManager || this == UserRole.admin;
+
+  /// Records A2Z's share. The Terminal Manager does not (separation of
+  /// duties); the server's guard is the same.
+  bool get isCashier => this == UserRole.cashier || this == UserRole.admin;
 }
 
 class AuthSession {

@@ -89,6 +89,7 @@ class TripBoardEntry {
     required this.unauditedReason,
     required this.departureSource,
     required this.changeNote,
+    required this.paymentStatus,
     required this.seatCapacity,
     required this.booked,
     required this.checkedIn,
@@ -122,6 +123,8 @@ class TripBoardEntry {
   final String? unauditedReason;
   final String? departureSource; // confirmed | detected
   final String? changeNote;
+  /// A2Z's 15 % (brief 2.1): unpaid | paid | overridden | left_unpaid.
+  final String paymentStatus;
 
   bool get isAssigned => vanId != null && dispatcherId != null;
   bool get awaitsReview => startReviewStatus == 'pending';
@@ -153,6 +156,7 @@ class TripBoardEntry {
         unauditedReason: j['unaudited_reason'] as String?,
         departureSource: j['departure_source'] as String?,
         changeNote: j['change_note'] as String?,
+        paymentStatus: j['payment_status'] as String,
         seatCapacity: j['seat_capacity'] as int,
         booked: j['booked'] as int,
         checkedIn: j['checked_in'] as int,
@@ -334,4 +338,85 @@ class DispatchRepository {
 
   Future<void> voidTrip(String tripId, {required String reason}) =>
       _api.post('/trips/$tripId/void', body: {'reason': reason});
+
+  // ------------------------------------------------------- A2Z's share
+  // The Cashier records the 15 % the Dispatcher hands over; Start waits
+  // for it (brief 2.1). The Terminal Manager may lift the block, with a
+  // reason, but records no payment.
+
+  /// The share does not carry the trip's status; the board's is passed in.
+  Future<TripShare> share(String tripId, {required String tripStatus}) async => TripShare.fromJson(
+        await _api.get('/trips/$tripId/share') as Map<String, dynamic>,
+        beforeDeparture: tripStatus == 'scheduled' || tripStatus == 'boarding',
+      );
+
+  /// Before departure the payment is the trip's; after, it goes on the
+  /// van's statement, where a trip that left unpaid is still owed.
+  Future<void> recordPayment(TripShare share, {required String amount, String? reference}) {
+    final body = {'amount': amount, if (reference != null && reference.isNotEmpty) 'reference': reference};
+    return share.beforeDeparture
+        ? _api.post('/trips/${share.tripId}/payment', body: body)
+        : _api.post('/statements/${share.remittanceId}/payments', body: body);
+  }
+
+  Future<void> overridePayment(String tripId, {required String note}) =>
+      _api.post('/trips/$tripId/payment-override', body: {'note': note});
+}
+
+/// A trip's share (GET /trips/{id}/share). `amountDue` is the van's
+/// undisputed balance for the day: this trip's share plus anything the van
+/// still owes, which is what the Cashier should receive now.
+class TripShare {
+  const TripShare({
+    required this.tripId,
+    required this.paymentStatus,
+    required this.remittanceId,
+    required this.amountDue,
+    required this.disputed,
+    required this.lines,
+    required this.beforeDeparture,
+  });
+
+  final String tripId;
+  final String paymentStatus;
+  final String? remittanceId;
+  final double amountDue;
+  final double disputed;
+  final List<ShareLine> lines;
+  final bool beforeDeparture;
+
+  factory TripShare.fromJson(Map<String, dynamic> j, {required bool beforeDeparture}) => TripShare(
+        tripId: j['trip_id'] as String,
+        paymentStatus: j['payment_status'] as String,
+        remittanceId: j['remittance_id'] as String?,
+        amountDue: double.parse(j['amount_due'].toString()),
+        disputed: double.parse(j['disputed'].toString()),
+        lines: (j['lines'] as List).map((e) => ShareLine.fromJson(e as Map<String, dynamic>)).toList(),
+        beforeDeparture: beforeDeparture,
+      );
+}
+
+/// One fare line: passengers to one drop-off terminal at one fare.
+class ShareLine {
+  const ShareLine({
+    required this.destination,
+    required this.passengerCount,
+    required this.farePerPassenger,
+    required this.shareAmount,
+    required this.isTopUp,
+  });
+
+  final String destination;
+  final int passengerCount;
+  final double farePerPassenger;
+  final double shareAmount;
+  final bool isTopUp;
+
+  factory ShareLine.fromJson(Map<String, dynamic> j) => ShareLine(
+        destination: (j['dest_terminal_name'] ?? 'No drop-off terminal') as String,
+        passengerCount: j['passenger_count'] as int,
+        farePerPassenger: double.parse(j['fare_per_passenger'].toString()),
+        shareAmount: double.parse(j['share_amount'].toString()),
+        isTopUp: j['is_top_up'] as bool,
+      );
 }

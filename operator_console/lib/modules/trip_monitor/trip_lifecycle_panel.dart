@@ -9,14 +9,16 @@ import '../../data/repositories/dispatch_repository.dart';
 import '../../data/repositories/fleet_repository.dart';
 import '../../viewmodels/auth_provider.dart';
 
-/// Assignment, start, departure and the Terminal Manager's changes for one
-/// trip (rev 468, change brief 4.2).
+/// Assignment, A2Z's share, start, departure and the Terminal Manager's
+/// changes for one trip (change brief 2.1, 4.2).
 ///
 /// The rules are the server's: this panel offers what the signed-in role
 /// may do at this point in the trip and says why a button is off, so a
 /// refusal is rare and, when it comes, is the server's own sentence. The
-/// office assigns, starts and departs; only the Terminal Manager reviews
-/// an automatic start, changes a started trip's van or voids a trip.
+/// office assigns, starts and departs; Start waits for the Cashier to
+/// record the 15 % the Dispatcher hands over. Only the Terminal Manager
+/// lifts that block, reviews an automatic start, changes a started trip's
+/// van or voids a trip, and records no payment.
 class TripLifecyclePanel extends StatelessWidget {
   const TripLifecyclePanel({super.key, required this.trip, required this.onChanged});
 
@@ -28,11 +30,18 @@ class TripLifecyclePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = trip;
-    final manager = context.read<AuthProvider>().profile?.role.isManager ?? false;
+    final role = context.read<AuthProvider>().profile?.role;
+    final manager = role?.isManager ?? false;
+    final cashier = role?.isCashier ?? false;
     final text = Theme.of(context).textTheme;
     final scheduled = t.status == 'scheduled';
     final started = const {'boarding', 'departed', 'completed'}.contains(t.status);
     final windowOpen = !DateTime.now().isBefore(t.startOpensAt);
+    final beforeDeparture = scheduled || t.status == 'boarding';
+    // Before departure the share is the trip's; after, a trip that left
+    // unpaid is still owed on the van's statement.
+    final shareOwed = t.vanId != null &&
+        ((beforeDeparture && t.paymentStatus == 'unpaid') || t.paymentStatus == 'left_unpaid');
 
     final facts = <(IconData, String, Color?)>[
       if (t.assignedByName != null)
@@ -62,10 +71,33 @@ class TripLifecyclePanel extends StatelessWidget {
         (Icons.logout, 'Departed: tapped by the office', null)
       else if (t.departureSource == 'dispatcher')
         (Icons.logout, 'Departed: tapped by the Dispatcher', null),
+      if (t.paymentStatus == 'left_unpaid')
+        (Icons.money_off, 'Left before A2Z\'s 15 % was recorded. It is owed on the van\'s statement, '
+            'and the van\'s next assignment waits, until the Cashier records it.', AppColors.danger)
+      else if (t.paymentStatus == 'overridden')
+        (Icons.lock_open, 'Payment block lifted by the Terminal Manager', AppColors.warning)
+      else if (t.paymentStatus == 'paid')
+        (Icons.paid_outlined, 'A2Z\'s 15 % recorded. The passenger list is locked: a cash passenger '
+            'added now is a top-up.', null)
+      else if (beforeDeparture && t.vanId != null)
+        (Icons.payments_outlined, 'A2Z\'s 15 % not recorded yet. Start waits for it once passengers '
+            'are listed.', AppColors.warning),
       if (t.changeNote != null) (Icons.edit_note, t.changeNote!, null),
     ];
 
     final actions = <Widget>[
+      if (cashier && shareOwed)
+        FilledButton.tonalIcon(
+          onPressed: () => _recordShare(context),
+          icon: const Icon(Icons.payments_outlined, size: 18),
+          label: const Text('Record A2Z\'s share'),
+        ),
+      if (manager && beforeDeparture && t.paymentStatus == 'unpaid')
+        OutlinedButton.icon(
+          onPressed: () => _override(context),
+          icon: const Icon(Icons.lock_open, size: 18),
+          label: const Text('Lift payment block'),
+        ),
       if (scheduled) ...[
         OutlinedButton.icon(
           onPressed: () => _assign(context),
@@ -227,6 +259,36 @@ class TripLifecyclePanel extends StatelessWidget {
     );
   }
 
+  Future<void> _recordShare(BuildContext context) async {
+    final dispatch = context.read<DispatchRepository>();
+    final picked = await showDialog<(TripShare, String, String)>(
+      context: context,
+      builder: (_) => _ShareDialog(trip: trip),
+    );
+    if (picked == null || !context.mounted) return;
+    final (share, amount, reference) = picked;
+    await _run(context, () => dispatch.recordPayment(share, amount: amount, reference: reference),
+        share.beforeDeparture ? 'Share recorded. Start is open.' : 'Payment recorded on the van\'s statement.');
+  }
+
+  Future<void> _override(BuildContext context) async {
+    final dispatch = context.read<DispatchRepository>();
+    final picked = await showDialog<(String?, String)>(
+      context: context,
+      builder: (_) => const _ReasonDialog(
+        title: 'Lift the payment block?',
+        intro: 'This trip may then be assigned and started before A2Z\'s share is recorded. The '
+            'share stays owed on the van\'s statement. Your reason is kept with the trip and the '
+            'Cashier is told.',
+        confirmLabel: 'Lift block',
+        reasonRequired: true,
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    await _run(context, () => dispatch.overridePayment(trip.tripId, note: picked.$2),
+        'Payment block lifted for this trip.');
+  }
+
   Future<void> _depart(BuildContext context) async {
     final dispatch = context.read<DispatchRepository>();
     final ok = await showDialog<bool>(
@@ -300,6 +362,134 @@ class TripLifecyclePanel extends StatelessWidget {
     );
     if (picked == null || !context.mounted) return;
     await _run(context, () => dispatch.voidTrip(trip.tripId, reason: picked.$2), 'Trip voided.');
+  }
+}
+
+// ------------------------------------------------------------ A2Z's share
+/// What the Cashier should receive now, line by line, and the amount and
+/// receipt number to record. Pops (share, amount, reference).
+class _ShareDialog extends StatefulWidget {
+  const _ShareDialog({required this.trip});
+  final TripBoardEntry trip;
+
+  @override
+  State<_ShareDialog> createState() => _ShareDialogState();
+}
+
+class _ShareDialogState extends State<_ShareDialog> {
+  static final _peso = NumberFormat.currency(locale: 'en_PH', symbol: '₱');
+  late final Future<TripShare> _load = context
+      .read<DispatchRepository>()
+      .share(widget.trip.tripId, tripStatus: widget.trip.status)
+      .then((s) {
+    _amount.text = s.amountDue.toStringAsFixed(2);
+    return s;
+  });
+  final _amount = TextEditingController();
+  final _reference = TextEditingController();
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _reference.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return FutureBuilder<TripShare>(
+      future: _load,
+      builder: (context, snap) {
+        final share = snap.data;
+        final amount = double.tryParse(_amount.text.trim());
+        final valid = share != null && amount != null && amount > 0 && amount <= share.amountDue + 0.001;
+        return AlertDialog(
+          title: const Text('Record A2Z\'s 15 %'),
+          content: SizedBox(
+            width: 460,
+            child: snap.hasError
+                ? Text(snap.error is ApiException ? (snap.error as ApiException).message : '${snap.error}',
+                    style: TextStyle(color: AppColors.danger))
+                : share == null
+                    ? const LinearProgressIndicator()
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            share.beforeDeparture
+                                ? 'The share ${widget.trip.dispatcherName ?? 'the Dispatcher'} hands over '
+                                    'for ${widget.trip.plateNumber}. Recording it locks the passenger list '
+                                    'and opens Start.'
+                                : 'This trip left without its share recorded. The payment goes on '
+                                    '${widget.trip.plateNumber}\'s statement for the day.',
+                            style: text.bodySmall,
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          for (final l in share.lines)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                              child: Row(children: [
+                                Expanded(
+                                  child: Text(
+                                    '${l.passengerCount} × ${_peso.format(l.farePerPassenger)} to '
+                                    '${l.destination}${l.isTopUp ? ' · top-up' : ''}',
+                                    style: text.bodySmall,
+                                  ),
+                                ),
+                                Text(_peso.format(l.shareAmount), style: text.bodySmall),
+                              ]),
+                            ),
+                          if (share.lines.isEmpty)
+                            Text('No fare lines on this trip.', style: text.bodySmall),
+                          const Divider(),
+                          Row(children: [
+                            Expanded(child: Text('Due now', style: text.titleSmall)),
+                            Text(_peso.format(share.amountDue), style: text.titleSmall),
+                          ]),
+                          Text('Includes anything else the van still owes today.',
+                              style: text.bodySmall?.copyWith(color: AppColors.textMuted)),
+                          if (share.disputed > 0)
+                            Text('${_peso.format(share.disputed)} is under dispute and not due.',
+                                style: text.bodySmall?.copyWith(color: AppColors.warning)),
+                          if (share.amountDue <= 0) ...[
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                                share.beforeDeparture
+                                    ? 'Nothing is due. Start does not wait for a payment.'
+                                    : 'Nothing is due: the van\'s statement is settled.',
+                                style: text.bodySmall),
+                          ] else ...[
+                            const SizedBox(height: AppSpacing.md),
+                            TextField(
+                              controller: _amount,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(labelText: 'Amount received', prefixText: '₱ '),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            TextField(
+                              controller: _reference,
+                              maxLength: 64,
+                              decoration: const InputDecoration(labelText: 'Receipt number (optional)'),
+                            ),
+                          ],
+                        ],
+                      ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: valid
+                  ? () => Navigator.pop<(TripShare, String, String)>(context, (share, amount.toStringAsFixed(2), _reference.text.trim()))
+                  : null,
+              child: const Text('Record payment'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 
