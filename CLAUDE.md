@@ -682,6 +682,31 @@ longer offers reschedule on either seat. Tests: `test_home_pickup.sh`
 85, `test_retention.sh` 35, `test_passenger_journey.sh` 37 after a plain
 reset. `flutter analyze`: 0 errors, 0 warnings.
 
+Done: **R10e, retirements** (15 Oct). Console: **Fares & Cash** and
+**Passenger Count Checks** are gone (`modules/revenue`, `modules/
+ai_audit_queue`, `revenue_` and `audit_repository.dart`), and so are the
+Trips page's rev 468 **Check with phone camera** button and **Camera
+passenger checks** panel. The top strip's third chip is now "Boardings
+to review" (Terminal Manager → Boarding Audit) or "Vans owing the share"
+(Cashier → Van Status Board). App: the Dispatcher's rev 514 "Remit
+cash" screen and its calls are gone. Server, decided by Claude (owner
+delegated 15 Oct): the rev 514 cash-remittance write path is removed
+(`api/v1/remittances.py`, `application/finance/remittance.py`,
+`test_remittance.sh`; the `cash_remittances` table and ORM model stay,
+no migration); the automatic rev 468 door-close and GPS-node cabin
+captures are removed (`application/audit/auto_trigger.py`,
+`test_auto_audit.py`): they fed only the retired page, and the phone's
+door events are the automatic check now; a rev 468 audit **no longer
+stores a still** in public `/media` (closes the T38 gap R8 left open).
+Kept on purpose: the manual `/audits/*` endpoints the `ai_capture_app`
+uses, `ai_service`, and the read-only `/revenue/*` report and its view
+(no client now; retire with the capture app if wanted). `DEMO_SCRIPT.md`
+steps 10-14 now walk the rev 603 screens. Journey suite **907 passed, 1
+failed** (the known `--soon` reschedule cutoff).
+
+**R10 is done.** Open: the capture app and `ai_service` are rev 468
+leftovers (manual counts only); `/revenue/*` has no client.
+
 **Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
 The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
 (Passenger, Dispatcher) and `operator_console/` (Terminal Manager,

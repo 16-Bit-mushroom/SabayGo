@@ -10,14 +10,13 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.audit import auto_trigger
 from app.application.booking.home_pickup import HomePickups
 from app.application.edge.checking import ListCheck
 from app.application.finance.statement import Statements
 from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
-from app.domain.enums import AuditTrigger, BookingStatus, DepartureSource, Role, TripStatus
+from app.domain.enums import BookingStatus, DepartureSource, Role, TripStatus
 from app.infrastructure.models import BoardingScan
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import Trip
@@ -324,17 +323,6 @@ class DepartTripUseCase:
         await self.session.commit()
 
         log.info("Trip %s departed; %d no-shows recorded.", trip_id, len(no_shows))
-
-        # 2.3.5's door-closure trigger. Boarding is shut, the no-shows are
-        # released, so the manifest for leg 1 is final and this is the
-        # moment a cabin count means something. Detached: the crew is not
-        # made to wait at the door for a camera, and a camera that is down
-        # must not turn a completed departure into an error.
-        auto_trigger.schedule(
-            trip_id=trip_id,
-            leg_sequence=1,  # departing stop 1 puts the van on leg 1
-            trigger=AuditTrigger.DOOR_CLOSE,
-        )
 
         return {
             "trip_id": trip_id,

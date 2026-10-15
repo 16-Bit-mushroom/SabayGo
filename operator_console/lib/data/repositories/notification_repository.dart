@@ -39,7 +39,7 @@ class AppNotification {
       }.contains(type);
 
   /// Notifications that point at a module worth opening.
-  bool get isActionable => isVarianceAlert || isSosAlert || isTripAlert || hasOwnPage;
+  bool get isActionable => isSosAlert || isTripAlert || hasOwnPage;
 
   AppNotification copyWith({bool? isRead}) => AppNotification(
         notificationId: notificationId,

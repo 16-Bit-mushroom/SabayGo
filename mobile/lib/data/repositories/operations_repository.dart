@@ -482,54 +482,6 @@ class WalkInResult {
       );
 }
 
-class Remittance {
-  const Remittance({
-    required this.tripId,
-    required this.bookingCount,
-    required this.expectedAmount,
-    required this.status,
-    this.remittanceId,
-    this.declaredAmount,
-    this.receivedAmount,
-    this.variance,
-    this.submittedAt,
-    this.notes,
-  });
-
-  final String? remittanceId;
-  final String tripId;
-  final int bookingCount;
-  final double expectedAmount;
-  final double? declaredAmount;
-  final double? receivedAmount;
-  final double? variance;
-  final String status;
-  final DateTime? submittedAt;
-  final String? notes;
-
-  /// A preview has no id; only a submitted handover is a record.
-  bool get isSubmitted => remittanceId != null;
-
-  factory Remittance.fromJson(Map<String, dynamic> j) => Remittance(
-        remittanceId: j['remittance_id'] as String?,
-        tripId: j['trip_id'] as String,
-        bookingCount: j['booking_count'] as int? ?? 0,
-        expectedAmount: double.parse(j['expected_amount'].toString()),
-        declaredAmount: j['declared_amount'] == null
-            ? null
-            : double.parse(j['declared_amount'].toString()),
-        receivedAmount: j['received_amount'] == null
-            ? null
-            : double.parse(j['received_amount'].toString()),
-        variance: j['variance'] == null ? null : double.parse(j['variance'].toString()),
-        status: j['status'] as String,
-        submittedAt: j['submitted_at'] == null
-            ? null
-            : DateTime.parse(j['submitted_at'] as String),
-        notes: j['notes'] as String?,
-      );
-}
-
 /// Everything crew do at the van: scan, log cash passengers, count
 /// heads, open and close boarding, hand over cash.
 class OperationsRepository {
@@ -675,22 +627,4 @@ class OperationsRepository {
 
   Future<void> endMove(String moveId) => _api.post('/non-passenger-moves/$moveId/end');
 
-  /// The cash this crew member is holding for a trip, computed by the
-  /// server from the bookings they logged — never typed in.
-  Future<Remittance> remittancePreview(String tripId) async {
-    final json = await _api.get('/remittances/trips/$tripId/preview');
-    return Remittance.fromJson(json as Map<String, dynamic>);
-  }
-
-  Future<Remittance> submitRemittance({
-    required String tripId,
-    required double declaredAmount,
-    String? notes,
-  }) async {
-    final json = await _api.post('/remittances/trips/$tripId/submit', body: {
-      'declared_amount': declaredAmount.toStringAsFixed(2),
-      if (notes != null && notes.isNotEmpty) 'notes': notes,
-    });
-    return Remittance.fromJson(json as Map<String, dynamic>);
-  }
 }

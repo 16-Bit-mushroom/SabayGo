@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../modules/ai_audit_queue/screens/audit_dashboard_screen.dart';
 import '../../modules/boarding_audit/boarding_audit_screen.dart';
 import '../../modules/disputes/disputes_screen.dart';
 import '../../modules/driving_flags/driving_flags_screen.dart';
@@ -12,7 +11,6 @@ import '../../modules/trip_dispatcher/screens/dispatch_board_screen.dart';
 import '../../modules/fleet_management/screens/fleet_roster_screen.dart';
 import '../../modules/schedule_management/screens/schedule_screen.dart';
 import '../../modules/policy_editor/screens/policy_editor_screen.dart';
-import '../../modules/revenue/screens/revenue_screen.dart';
 import '../../modules/messaging/screens/messages_screen.dart';
 import '../../modules/live_map/screens/fleet_map_screen.dart';
 import '../../modules/emergency/screens/sos_console_screen.dart';
@@ -86,9 +84,6 @@ class _OperatorShellState extends State<OperatorShell> {
     _Module('Boarding Audit', Icons.how_to_reg_outlined, Icons.how_to_reg, BoardingAuditScreen(),
         managerOnly: true),
     _Module('Driving Flags', Icons.speed_outlined, Icons.speed, DrivingFlagsScreen()),
-    _Module('Fares & Cash', Icons.payments_outlined, Icons.payments, RevenueScreen()),
-    _Module('Passenger Count Checks', Icons.fact_check_outlined, Icons.fact_check,
-        AuditDashboardScreen(), managerOnly: true),
     // Member Records opens the group: the Cashier sees it, so the heading
     // must not sit on an entry the Cashier is not shown.
     _Module('Member Records', Icons.airport_shuttle_outlined, Icons.airport_shuttle,
@@ -128,14 +123,14 @@ class _OperatorShellState extends State<OperatorShell> {
       'left_unpaid' => _show((w) => w is RemittanceScreen),
       'unconfirmed_trip_start' => _show((w) => w is StartReviewScreen) || _show((w) => w is TripMonitorScreen),
       _ when n.isTripAlert => _show((w) => w is TripMonitorScreen),
-      _ => _show((w) => w is AuditDashboardScreen),
+      _ => false,
     };
   }
 
   void _openToday(TodayTarget target) => switch (target) {
         TodayTarget.fleet => _show((w) => w is FleetMapScreen),
         TodayTarget.trips => _show((w) => w is TripMonitorScreen),
-        TodayTarget.checks => _show((w) => w is AuditDashboardScreen),
+        TodayTarget.review => _show((w) => w is BoardingAuditScreen) || _show((w) => w is VanBoardScreen),
         TodayTarget.emergencies => _show((w) => w is SosConsoleScreen),
       };
 

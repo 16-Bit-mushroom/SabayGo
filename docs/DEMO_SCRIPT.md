@@ -38,11 +38,11 @@ dataset from `db/seed/002_demo_dataset.sql`.
 | 8 | Conductor | Scan | Scan the QR → **valid** | Scan it again → **already boarded**. This is the anti-fraud beat |
 | 9 | Conductor | Walk-in | Log a cash passenger 1 → 4 | Cash is *in hand*, not missing — the office sees the difference |
 | 9a | Laptop, private window as `cashier@` | Trips → First Trip → **Record A2Z's share** → **Start trip** | Share shown line by line, recorded; then Started, warning *no phone is checked out*, trip marked **Unaudited** | Rev 603: Start waits for A2Z's 15 %, handed over by the Dispatcher and recorded by the Cashier. The manager's window has no record button: separation of duties. The office starts the trip, not the Dispatcher, and who started it is on the record. A private window because the console keeps one sign-in per browser |
-| 10 | Conductor | Audit | Trigger the camera | Visual vs manifest. Variance > 0 flags the trip and notifies the office |
-| 11 | Laptop | Console → bell | Variance alert → Passenger Count Checks | Same row, same transaction as the audit log |
-| 12 | Laptop | Audits → **History** | Yesterday's resolved / ignored / failed | The failed one: the node returned 502 rather than invent a count |
-| 13 | Laptop | Revenue | Last 3 days; cash in hand ₱790 vs unreconciled ₱0 | One conductor has not remitted yet — that is a pocket, not a leak |
-| 14 | Laptop | Revenue → **Export** | Download the .xlsx, open it | Totals row; the office keeps its books in Excel |
+| 10 | Dispatcher | Trip dashboard | Camera count aboard against listed; the crew switch; **Depart** | The phone's door count against the list. More aboard than listed stops Depart until each boarding is listed (with a destination) or given a reason. Without the edge phone the count is 0: fewer aboard is a no-show, nothing to do |
+| 11 | Laptop, `manager@` | **Boarding Audit** | Unlisted boardings with the Dispatcher's fix or reason, capacity alerts with their place, the hash chain | Only the Terminal Manager sees the blurred stills; a changed record breaks the chain. To fill this page without a phone, run `tests/integration/test_door_check.sh` on a reset database first |
+| 12 | Laptop, `cashier@` | **Remittance** | Each van's statement: paid through the app (verified) and in cash (declared), A2Z's 15 %, paid | No estimated income: the lines are the passenger list. A line can be disputed until it is paid |
+| 13 | Laptop, `manager@` | **Disputes**, **Driving Flags** | Decide a dispute; review or dismiss a flag | Only the Terminal Manager decides. A flag is for review, not proof |
+| 14 | Laptop | **Van Status Board** | Vans travelling, on site, out of service; who still owes | From trip status and GPS already stored; no extra data entry |
 
 Stop there. Fifteen steps is twelve minutes at a comfortable pace.
 

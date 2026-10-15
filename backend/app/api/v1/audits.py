@@ -47,9 +47,9 @@ class TriggerAuditRequest(BaseModel):
     # Narrowed from a free string to the one value this endpoint can mean.
     # A call here is a person asking, so the row is `manual`; a caller able
     # to send `gps_node` could label its own audit as the systematic check
-    # it is the subject of. Automatic provenance is the server's to write
-    # -- see AuditTrigger and application/audit/auto_trigger.py. Existing
-    # clients all send "manual", so this rejects nothing in use today.
+    # it is the subject of. The automatic door-close and GPS-node captures
+    # were retired with Passenger Count Checks (rev 603 R10e): the in-van
+    # phone's door events are the automatic check now.
     trigger_type: Literal["manual"] = "manual"
 
 

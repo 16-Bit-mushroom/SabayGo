@@ -7,10 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/network/api_exception.dart';
-import '../../../data/repositories/audit_repository.dart';
 import '../../../data/repositories/dispatch_repository.dart';
-import '../../ai_audit_queue/audit_reading_card.dart';
-import '../../ai_audit_queue/phone_capture.dart';
 import '../trip_lifecycle_panel.dart';
 
 /// The office's view of every trip on a day, as each Dispatcher sees it.
@@ -34,7 +31,6 @@ class TripMonitorScreen extends StatefulWidget {
 
 class _TripMonitorScreenState extends State<TripMonitorScreen> {
   late final DispatchRepository _dispatch = context.read<DispatchRepository>();
-  late final AuditRepository _auditRepo = context.read<AuditRepository>();
 
   /// Boarding and departures change minute to minute; the Dispatcher is
   /// scanning while the office watches.
@@ -44,7 +40,6 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
   List<TripBoardEntry>? _trips;
   String? _selectedId;
   TripManifest? _manifest;
-  List<PendingAudit>? _tripAudits;
   Map<int, String> _stopNames = const {};
   String? _error;
   Timer? _timer;
@@ -114,23 +109,12 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       if (!mounted) return;
       setState(() => _error = e.message);
     }
-    // Separately, so a check list that fails to load never hides the
-    // passenger list the Dispatcher is working from.
-    try {
-      final audits = await _auditRepo.forTrip(id);
-      if (!mounted || _selectedId != id) return;
-      setState(() => _tripAudits = audits);
-    } on ApiException {
-      if (!mounted || _selectedId != id) return;
-      setState(() => _tripAudits = const []);
-    }
   }
 
   void _select(String id) {
     setState(() {
       _selectedId = id;
       _manifest = null;
-      _tripAudits = null;
       _stopNames = const {};
     });
     _loadManifest(withStops: true);
@@ -142,7 +126,6 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       _trips = null;
       _selectedId = null;
       _manifest = null;
-      _tripAudits = null;
       _stopNames = const {};
     });
     _load();
@@ -156,9 +139,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       final detail = _TripDetail(
         trip: _trips?.where((t) => t.tripId == _selectedId).firstOrNull,
         manifest: _manifest,
-        audits: _tripAudits,
         stopNames: _stopNames,
-        onCaptureFinished: _loadManifest,
         onLifecycleChanged: _load,
       );
 
@@ -302,16 +283,12 @@ class _TripDetail extends StatelessWidget {
   const _TripDetail({
     required this.trip,
     required this.manifest,
-    required this.audits,
     required this.stopNames,
-    required this.onCaptureFinished,
     required this.onLifecycleChanged,
   });
   final TripBoardEntry? trip;
   final TripManifest? manifest;
-  final List<PendingAudit>? audits;
   final Map<int, String> stopNames;
-  final VoidCallback onCaptureFinished;
   final VoidCallback onLifecycleChanged;
 
   String _stop(int seq) => stopNames[seq] ?? 'Stop $seq';
@@ -326,7 +303,7 @@ class _TripDetail extends StatelessWidget {
         child: EmptyState(
           icon: Icons.touch_app_outlined,
           title: 'Pick a trip',
-          hint: 'Choose a trip on the left to see its passengers, crew and camera checks.',
+          hint: 'Choose a trip on the left to see its passengers, crew, start and departure.',
         ),
       );
     }
@@ -366,15 +343,6 @@ class _TripDetail extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  // Keyed by trip: selecting another trip gets a fresh button,
-                  // while a capture already in flight still reports its result.
-                  PhoneCaptureButton(
-                    key: ValueKey(t.tripId),
-                    tripId: t.tripId,
-                    tripStatus: t.status,
-                    onFinished: onCaptureFinished,
                   ),
                 ],
               ),
@@ -433,9 +401,6 @@ class _TripDetail extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
-        // Keyed by trip: a section picked on one trip does not carry over.
-        _ChecksPanel(key: ValueKey(t.tripId), audits: audits, stop: _stop),
         const SizedBox(height: AppSpacing.lg),
         Panel(
           title: m == null ? 'Passenger list' : 'Passenger list (${m.passengers.length})',
@@ -507,170 +472,6 @@ class _SeatsPanel extends StatelessWidget {
               child: Text('${trip.noShow} no-show', style: text.bodySmall),
             ),
         ],
-      ),
-    );
-  }
-}
-
-/// The trip's camera headcount checks, newest first, each with what it
-/// means -- so the office reads a phone capture's result here instead of
-/// leaving for Passenger Count Checks.
-///
-/// A trip is checked once per section and again on request, so the list
-/// interleaves sections; the dropdown narrows it to one. It offers only
-/// the sections that have a check, with how many each has.
-class _ChecksPanel extends StatefulWidget {
-  const _ChecksPanel({super.key, required this.audits, required this.stop});
-  final List<PendingAudit>? audits;
-  final String Function(int) stop;
-
-  @override
-  State<_ChecksPanel> createState() => _ChecksPanelState();
-}
-
-class _ChecksPanelState extends State<_ChecksPanel> {
-  /// The newest few. Passenger Count Checks keeps the full trail.
-  static const _shown = 3;
-
-  /// Null: every section.
-  int? _section;
-
-  String _sectionName(int leg) =>
-      'Section $leg: ${widget.stop(leg)} → ${widget.stop(leg + 1)}';
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final all = widget.audits;
-
-    // Sections that have a check, in route order, with their counts.
-    final counts = <int, int>{};
-    for (final a in all ?? const <PendingAudit>[]) {
-      counts[a.legSequence] = (counts[a.legSequence] ?? 0) + 1;
-    }
-    final sections = counts.keys.toList()..sort();
-    // A refresh can drop the picked section's last check; fall back to all.
-    final section = counts.containsKey(_section) ? _section : null;
-    final a = section == null ? all : all?.where((x) => x.legSequence == section).toList();
-
-    return Panel(
-      title: 'Camera passenger checks',
-      icon: Icons.fact_check_outlined,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // One section has nothing to separate.
-          if (sections.length > 1) ...[
-            _SectionPicker(
-              value: section,
-              total: all!.length,
-              options: [for (final leg in sections) (leg, _sectionName(leg), counts[leg]!)],
-              onChanged: (v) => setState(() => _section = v),
-            ),
-            const SizedBox(width: AppSpacing.md),
-          ],
-          Text('YOLOv8', style: text.labelMedium),
-        ],
-      ),
-      child: a == null
-          ? const Padding(
-              padding: EdgeInsets.all(AppSpacing.md),
-              child: LinearProgressIndicator(),
-            )
-          : a.isEmpty
-              ? Text(
-                  'No camera check on this trip yet. One is made when the van departs, '
-                  'when it leaves a stop, or when you press "Check with phone camera".',
-                  style: text.bodySmall,
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final (i, audit) in a.take(_shown).indexed) ...[
-                      if (i > 0) const SizedBox(height: AppSpacing.lg),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              [
-                                _sectionName(audit.legSequence),
-                                DateFormat.jm().format(audit.capturedAt),
-                                audit.triggerLabel,
-                              ].join(' · '),
-                              style: text.bodySmall,
-                            ),
-                          ),
-                          auditOutcomeBadge(audit.resolutionStatus),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Camera counted ${audit.visualCount} · passenger list has '
-                        '${audit.bookedCount}',
-                        style: text.bodyMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      AuditReadingCard(audit: audit),
-                    ],
-                    if (a.length > _shown)
-                      Padding(
-                        padding: const EdgeInsets.only(top: AppSpacing.md),
-                        child: Text(
-                          '${a.length - _shown} earlier check(s) '
-                          '${section == null ? 'on this trip' : 'for this section'} are in '
-                          'Passenger Count Checks.',
-                          style: text.bodySmall,
-                        ),
-                      ),
-                  ],
-                ),
-    );
-  }
-}
-
-/// "All sections" or one section, each with its number of checks.
-class _SectionPicker extends StatelessWidget {
-  const _SectionPicker({
-    required this.value,
-    required this.total,
-    required this.options,
-    required this.onChanged,
-  });
-
-  final int? value;
-  final int total;
-
-  /// Section number, its name, and how many checks it has.
-  final List<(int, String, int)> options;
-  final ValueChanged<int?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget label(String s) => ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 300),
-          child: Text(s, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-        );
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int?>(
-          value: value,
-          isDense: true,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          dropdownColor: AppColors.surfaceSunken,
-          icon: Icon(Icons.filter_list, size: 18, color: AppColors.textMuted),
-          style: TextStyle(color: AppColors.textPrimary),
-          onChanged: onChanged,
-          items: [
-            DropdownMenuItem<int?>(value: null, child: label('All sections ($total)')),
-            for (final (leg, name, n) in options)
-              DropdownMenuItem<int?>(value: leg, child: label('$name ($n)')),
-          ],
-        ),
       ),
     );
   }

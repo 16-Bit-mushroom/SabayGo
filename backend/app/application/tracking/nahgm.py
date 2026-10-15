@@ -33,13 +33,12 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.audit import auto_trigger
 from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
 from app.application.tracking.geometry import haversine_m, snap_to_route
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ, localize
-from app.domain.enums import AuditTrigger, TripStatus
+from app.domain.enums import TripStatus
 from app.infrastructure.models import (
     RouteStop,
     RouteStretch,
@@ -147,11 +146,6 @@ class TrackingService:
         stops = await self._route_stops(trip.route_id)
         nearest_seq, nearest_dist = self._match_to_node(latitude, longitude, stops)
 
-        # Read before the insert: the node-departure trigger below is a
-        # transition between two consecutive reports, so it needs the one
-        # that came before this.
-        previous = await self._latest_ping(trip_id)
-
         when = recorded_at or datetime.now(APP_TZ)
         if when.tzinfo is not None:
             when = when.astimezone(APP_TZ).replace(tzinfo=None)
@@ -162,17 +156,6 @@ class TrackingService:
             recorded_at=when, nearest_seq=nearest_seq, nearest_dist=nearest_dist,
         ))
         await self.session.commit()
-
-        # 2.3.5's GPS-node trigger. The van has pulled out of a terminal's
-        # geofence, so the cabin for the leg it just entered is settled and
-        # a headcount there is comparable with the manifest. Detached: a
-        # position report must never be rejected because a camera is down,
-        # or the track would grow holes wherever the AI node hiccuped.
-        leg = await self._leg_just_entered(previous, nearest_seq, nearest_dist, stops)
-        if leg is not None:
-            auto_trigger.schedule(
-                trip_id=trip_id, leg_sequence=leg, trigger=AuditTrigger.GPS_NODE
-            )
 
         if trip.van_id is not None:
             await NonPassengerMoves(self.session).on_reading(trip.van_id, latitude, longitude, when)
@@ -311,64 +294,6 @@ class TrackingService:
         return out
 
     # ------------------------------------------------------------------
-    async def _latest_ping(self, trip_id: str) -> TripLocationPing | None:
-        result = await self.session.execute(
-            select(TripLocationPing)
-            .where(TripLocationPing.trip_id == trip_id)
-            .order_by(TripLocationPing.recorded_at.desc())
-            .limit(1)
-        )
-        return result.scalars().first()
-
-    async def _leg_just_entered(
-        self,
-        previous: TripLocationPing | None,
-        nearest_seq: int | None,
-        nearest_dist: float | None,
-        stops: list[tuple[RouteStop, Terminal]],
-    ) -> int | None:
-        """The leg the van has just pulled onto, or None if nothing changed.
-
-        A node departure is a transition, not a state: the previous report
-        sat inside a terminal's geofence and this one does not. Everything
-        else -- still parked at the node, already out on the road, the
-        first report of the trip -- is not an event, which is what keeps a
-        10-second ping interval from firing ten audits a minute.
-
-        Leg k runs from stop k to stop k+1, so leaving stop k puts the van
-        on leg k and that is the leg whose manifest the count belongs to.
-
-        The radius is the terminal's own check-in geofence. "Is the vehicle
-        still at this terminal" and "is this passenger at this terminal"
-        are the same question about the same compound; a second radius for
-        it would only drift away from the first.
-        """
-        if previous is None or previous.nearest_stop_sequence is None:
-            return None
-        if previous.distance_to_stop_m is None:
-            return None
-
-        was_at = previous.nearest_stop_sequence
-        radius = await self._node_radius(was_at, stops)
-        if float(previous.distance_to_stop_m) > radius:
-            return None  # already between nodes when it last reported
-
-        still_inside = (
-            nearest_seq == was_at
-            and nearest_dist is not None
-            and nearest_dist <= radius
-        )
-        if still_inside:
-            return None
-
-        # The final stop closes the route. Leaving its fence is the van
-        # going home, not starting a section, and there is no leg N to
-        # count passengers on.
-        if was_at >= max(rs.stop_sequence for rs, _ in stops):
-            return None
-
-        return was_at
-
     async def _node_radius(
         self, stop_sequence: int, stops: list[tuple[RouteStop, Terminal]]
     ) -> float:

@@ -27,7 +27,6 @@ from app.api.v1 import (
     home_pickups,
     operations,
     payments,
-    remittances,
     roster,
     sos,
     special_trips,
@@ -130,7 +129,6 @@ app.include_router(roster.router, prefix="/api/v1")
 app.include_router(devices.router, prefix="/api/v1")
 app.include_router(edge.router, prefix="/api/v1")
 app.include_router(config_router.router, prefix="/api/v1")
-app.include_router(remittances.router, prefix="/api/v1")
 app.include_router(tracking.router, prefix="/api/v1")
 app.include_router(sos.router, prefix="/api/v1")
 app.include_router(statements.router, prefix="/api/v1")

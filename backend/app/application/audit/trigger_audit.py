@@ -18,12 +18,10 @@ meaningless.
 
 from __future__ import annotations
 
-import base64
 import logging
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +37,6 @@ from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
 
-MEDIA_ROOT = Path(__file__).resolve().parents[3] / "media" / "audits"
 
 
 @dataclass(frozen=True)
@@ -75,8 +72,8 @@ class TriggerAuditUseCase:
         *,
         trip_id: str,
         leg_sequence: int,
-        # None when no person asked -- an automatic door-close or GPS-node
-        # trigger. See application/audit/auto_trigger.py.
+        # None when no person asked. The automatic triggers that sent it
+        # were retired in rev 603 R10e; old rows keep their provenance.
         triggered_by_user_id: str | None,
         trigger_type: str = "manual",
     ) -> AuditResult:
@@ -162,7 +159,11 @@ class TriggerAuditUseCase:
         threshold = await self.policies.get_int("variance_alert_threshold")
         alert = abs(variance) >= threshold
 
-        snapshot_url = self._store_snapshot(trip_id, capture.snapshot_b64)
+        # No still is kept (rev 603, brief 4.5, T38): the stills of this
+        # rev 468 check were served from the public /media folder. The
+        # counts are the audit; the evidence stills are the edge phone's,
+        # shown to the Terminal Manager alone.
+        snapshot_url = None
 
         audit_id = str(uuid.uuid4())
         self.session.add(
@@ -238,28 +239,6 @@ class TriggerAuditUseCase:
             next_step=reading.next_step,
             caution=reading.caution,
         )
-
-    @staticmethod
-    def _store_snapshot(trip_id: str, b64: str) -> str | None:
-        """Write the blurred snapshot to disk and return its served path.
-
-        Local filesystem is a prototype choice -- object storage with
-        signed URLs and a retention policy is the production answer, and
-        that belongs in Limitations. The image is already face-blurred by
-        the AI node before it ever reaches this process.
-        """
-        if not b64:
-            return None
-        try:
-            MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-            name = f"{trip_id}_{app_tz.now():%Y%m%d%H%M%S}_{uuid.uuid4().hex[:6]}.jpg"
-            (MEDIA_ROOT / name).write_bytes(base64.b64decode(b64))
-            return f"/media/audits/{name}"
-        except (OSError, ValueError) as exc:
-            # A snapshot that fails to save must not lose the counts --
-            # the numbers are the audit; the image is corroboration.
-            log.error("Could not store audit snapshot: %s", exc)
-            return None
 
 
 class ResolveAuditUseCase:

@@ -39,7 +39,7 @@ CT=$(j "['access_token']" < /tmp/resp.json)
 
 hdr "CASHIER — 2. What the counter needs"
 
-for ep in "GET /revenue/summary" "GET /fleet/vans" "GET /config/trips" "GET /remittances/outstanding"; do
+for ep in "GET /revenue/summary" "GET /fleet/vans" "GET /config/trips" "GET /statements"; do
   m=${ep%% *}; p=${ep#* }
   S=$(code "$m" "$p" "" "$CT")
   [ "$S" = "200" ] && ok "$p readable" || bad "$p gave $S"
