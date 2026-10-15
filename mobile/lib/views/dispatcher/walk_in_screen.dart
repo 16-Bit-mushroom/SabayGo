@@ -7,14 +7,14 @@ import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/offline/walk_in_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
-import '../../viewmodels/shift_viewmodel.dart';
 
-/// Record a cash passenger boarding at a terminal stop.
+/// Record a cash passenger boarding at the starting terminal.
 ///
-/// There is no roadside mode (rev 468): boarding is allowed only at a
-/// terminal, and the fare is always the approved one. A passenger flagged
-/// down between terminals is left to the van's camera, which records an
-/// unrecorded boarding for the Terminal Manager to review.
+/// Every passenger boards at the trip's first stop (rev 603, brief 2.4),
+/// and the fare is always the approved one; the list closes at departure.
+/// With [forEventId] the screen fixes the list for a boarding the camera
+/// counted that matched no ticket or cash entry: it is sent at once, not
+/// queued, because the server matches it to that boarding.
 ///
 /// Laid out as a till, for a queue at the van door (3 Oct):
 ///
@@ -31,9 +31,10 @@ import '../../viewmodels/shift_viewmodel.dart';
 ///   clears the destination and keeps the screen; a run of walk-ins no
 ///   longer means backing out and re-opening it each time.
 class WalkInScreen extends StatefulWidget {
-  const WalkInScreen({super.key, required this.trip});
+  const WalkInScreen({super.key, required this.trip, this.forEventId});
 
   final CrewTrip trip;
+  final String? forEventId;
 
   @override
   State<WalkInScreen> createState() => _WalkInScreenState();
@@ -59,9 +60,8 @@ class _WalkInScreenState extends State<WalkInScreen> {
   void initState() {
     super.initState();
     _sync = context.read<WalkInSyncService>();
-    _boarding = context.read<ShiftViewModel>().currentStop;
+    _boarding = widget.trip.boardingStop;
     final last = _lastStop;
-    if (_boarding >= last) _boarding = last - 1;
     // Most walk-ins ride to the end of the line; preselect it so the
     // common case is one tap (Log), and any other is two.
     _alighting = last > _boarding ? last : null;
@@ -121,14 +121,25 @@ class _WalkInScreenState extends State<WalkInScreen> {
     if (!_form.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      final submission = await _sync.submitOrQueue(
-        tripId: widget.trip.tripId,
-        boardingStop: _boarding,
-        alightingStop: _alighting!,
-        name: _name.text.trim(),
-        phone: _phone.text.trim(),
-        wantsReceipt: _wantsReceipt,
-      );
+      final forEvent = widget.forEventId;
+      final submission = forEvent == null
+          ? await _sync.submitOrQueue(
+              tripId: widget.trip.tripId,
+              boardingStop: _boarding,
+              alightingStop: _alighting!,
+              name: _name.text.trim(),
+              phone: _phone.text.trim(),
+              wantsReceipt: _wantsReceipt,
+            )
+          : WalkInSubmission.submitted(await OperationsRepository(context.read<ApiClient>()).walkIn(
+              tripId: widget.trip.tripId,
+              boardingStop: _boarding,
+              alightingStop: _alighting!,
+              name: _name.text.trim(),
+              phone: _phone.text.trim(),
+              wantsReceipt: _wantsReceipt,
+              forEventId: forEvent,
+            ));
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       _logged++;
@@ -148,7 +159,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
         ),
       );
       if (!mounted) return;
-      if (next == true) {
+      if (next == true && forEvent == null) {
         _nextPassenger();
       } else {
         Navigator.pop(context);
@@ -168,12 +179,11 @@ class _WalkInScreenState extends State<WalkInScreen> {
   @override
   Widget build(BuildContext context) {
     final stops = [...widget.trip.stops]..sort((a, b) => a.stopSequence.compareTo(b.stopSequence));
-    final boardable = stops.where((s) => s.stopSequence < _lastStop).toList();
     final destinations = stops.where((s) => s.stopSequence > _boarding).toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Walk-in passenger'),
+        title: Text(widget.forEventId == null ? 'Walk-in passenger' : 'Add to the list'),
         actions: [
           if (_logged > 0)
             Padding(
@@ -197,34 +207,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.xxl),
           children: [
-            const _Heading('Boarding at'),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                for (final s in boardable)
-                  ChoiceChip(
-                    label: Text(s.terminalName),
-                    selected: _boarding == s.stopSequence,
-                    showCheckmark: false,
-                    labelStyle: TextStyle(
-                      color: _boarding == s.stopSequence ? Colors.white : AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    selectedColor: AppColors.primary,
-                    backgroundColor: AppColors.surfaceRaised,
-                    side: BorderSide(
-                        color: _boarding == s.stopSequence ? AppColors.primary : AppColors.border),
-                    onSelected: (_) => setState(() {
-                      _boarding = s.stopSequence;
-                      if (_alighting != null && _alighting! <= _boarding) {
-                        _alighting = _lastStop > _boarding ? _lastStop : null;
-                      }
-                    }),
-                  ),
-              ],
-            ),
-
+            _Heading('Boarding at ${widget.trip.stopName(_boarding)}'),
             const SizedBox(height: AppSpacing.xl),
             const _Heading('Getting off at'),
             Container(

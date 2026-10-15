@@ -642,6 +642,28 @@ is not on PATH: use `$HOME/flutter/bin/flutter`**, or `analyze | grep`
 hides "command not found". Tests: `test_disputes.sh` 80,
 `test_office_journey.sh` 49 (policy history).
 
+Done: **R10c, the Dispatcher app** (15 Oct). The trip screen
+(`mobile/lib/views/dispatcher/trip_manifest_screen.dart`) is the
+dashboard; panels in `dashboard_panels.dart`: the camera's count aboard
+against listed with **Add to list** (walk-in `for_event_id`, sent at
+once, never queued) or **Reason** per unlisted boarding, the **crew**
+switch, **Depart** (once started; warns when the van would leave
+unpaid), **Not a passenger trip** (reason, End, ends itself back at a
+terminal), home pickups (activate, at the pin, boarded / no-show, view
+and confirm the screenshot), the rental's cash fee, **A2Z's share** to
+hand to the Cashier with the operator's **dispute per line**, and
+driving flags with **Dispute** (decided 15 Oct: the Dispatcher records
+disputes in the app). The operator shows as name + licence beside the
+plate. **"Van is at" is gone**: `ShiftViewModel.currentStop` removed,
+scans and walk-ins use `CrewTrip.boardingStop` (stop 1), walk-ins only
+before departure. "Remit cash" (rev 514) left the dashboard; its screen
+file goes in R10e. Server: `GET /trips/assigned` adds `operator_name`,
+`operator_licence`, `payment_status`, `crew_aboard`, `rental`;
+`GET /non-passenger-moves/open`. Mobile `ApiClient.getBytes` / `upload`.
+Tests: `test_trip_lifecycle.sh` 133, `test_special_trips.sh` 71,
+`test_dispatcher_journey.sh` 24. `flutter analyze`: 0 errors, 0
+warnings.
+
 **Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
 The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
 (Passenger, Dispatcher) and `operator_console/` (Terminal Manager,

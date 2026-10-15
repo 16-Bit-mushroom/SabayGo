@@ -71,7 +71,7 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
     }
     if (trip.isDeparted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('That trip has departed. Log walk-ins at later terminals from its manifest.'),
+        content: Text('That trip has departed: boarding closed at its starting terminal.'),
         behavior: SnackBarBehavior.floating,
       ));
       return;
@@ -80,7 +80,7 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
       MaterialPageRoute(
         builder: (_) => ChangeNotifierProvider.value(
           value: _shift,
-          child: QRScannerScreen(trip: trip, stopSequence: _shift.currentStop),
+          child: QRScannerScreen(trip: trip, stopSequence: trip.boardingStop),
         ),
       ),
     );

@@ -445,6 +445,16 @@ async def start_move(
     return MoveOut.model_validate(move, from_attributes=True)
 
 
+@router.get("/non-passenger-moves/open", response_model=MoveOut | None)
+async def open_move(
+    session: SessionDep, user: Annotated[User, Depends(DISPATCHER)],
+) -> MoveOut | None:
+    """The open 'Not a passenger trip' of the van this Dispatcher has the
+    phone of, or null."""
+    move = await NonPassengerMoves(session).mine(user)
+    return None if move is None else MoveOut.model_validate(move, from_attributes=True)
+
+
 @router.post("/non-passenger-moves/{move_id}/end", response_model=MoveOut)
 async def end_move(
     move_id: str, session: SessionDep, user: Annotated[User, Depends(DISPATCHER)],

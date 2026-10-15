@@ -55,10 +55,7 @@ class NonPassengerMoves:
         note = (note or "").strip() or None
         if reason == "other" and note is None:
             raise ConflictError("Say what the move is for.")
-        checkout = (await self.session.execute(
-            select(DeviceCheckout).where(DeviceCheckout.dispatcher_id == by.user_id,
-                                         DeviceCheckout.returned_at.is_(None))
-        )).scalars().first()
+        checkout = await self._checkout(by)
         if checkout is None:
             raise ConflictError(
                 "No phone is checked out with you, so no van is yours to mark. "
@@ -92,6 +89,18 @@ class NonPassengerMoves:
         move.ended_at = _now()
         await self.session.commit()
         return move
+
+    async def mine(self, by: User) -> NonPassengerMove | None:
+        """The open move of the van whose phone is checked out with this
+        Dispatcher, if any."""
+        checkout = await self._checkout(by)
+        return None if checkout is None else await self.open_for(checkout.van_id)
+
+    async def _checkout(self, by: User) -> DeviceCheckout | None:
+        return (await self.session.execute(
+            select(DeviceCheckout).where(DeviceCheckout.dispatcher_id == by.user_id,
+                                         DeviceCheckout.returned_at.is_(None))
+        )).scalars().first()
 
     async def open_for(self, van_id: str) -> NonPassengerMove | None:
         return (await self.session.execute(

@@ -14,7 +14,15 @@ from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError, PolicyViolationError
 from app.domain.enums import Role, TripStatus
 from app.domain.value_objects import Segment
-from app.infrastructure.models import FareMatrix, Route, RouteStop, Terminal, Trip
+from app.infrastructure.models import (
+    FareMatrix,
+    Operator,
+    Route,
+    RouteStop,
+    SpecialTripRequest,
+    Terminal,
+    Trip,
+)
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -227,6 +235,19 @@ async def search_trips(
     return out
 
 
+class RentalOut(BaseModel):
+    """The rental a special trip carries out (brief 2.5): what the
+    Dispatcher needs to collect a cash fee."""
+    request_id: str
+    customer_name: str | None
+    customer_contact: str | None
+    pickup_address: str
+    destination_address: str
+    passenger_count: int
+    rental_fee: Decimal | None
+    payment_status: str
+
+
 class AssignedTrip(BaseModel):
     trip_id: str
     trip_label: str | None
@@ -237,6 +258,13 @@ class AssignedTrip(BaseModel):
     plate_number: str | None
     seat_capacity: int
     stops: list[StopOut]
+    # The operator, shown as a name and licence beside the plate (brief 9):
+    # copied onto the trip at its start, the van's operator until then.
+    operator_name: str | None
+    operator_licence: str | None
+    payment_status: str
+    crew_aboard: bool
+    rental: RentalOut | None
 
 
 @router.get(
@@ -280,6 +308,19 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
                 StopOut.from_row(rs, t)
             )
 
+    operators = {o.operator_id: o for o in (await session.execute(
+        select(Operator).where(Operator.operator_id.in_({t.van.operator_id for t in trips if t.van}))
+    )).scalars()} if trips else {}
+    rentals = {r.trip_id: r for r in (await session.execute(
+        select(SpecialTripRequest).where(SpecialTripRequest.trip_id.in_([t.trip_id for t in trips]))
+    )).scalars()} if trips else {}
+
+    def operator(t: Trip) -> tuple[str | None, str | None]:
+        if t.driver_name:
+            return t.driver_name, t.driver_license_no
+        op = operators.get(t.van.operator_id) if t.van else None
+        return (op.full_name, op.license_number) if op else (None, None)
+
     return [
         AssignedTrip(
             trip_id=t.trip_id,
@@ -288,9 +329,15 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
             service_date=t.service_date,
             departure_datetime=t.departure_datetime,
             status=t.status,
-            plate_number=t.van.plate_number if t.van else None,
+            plate_number=t.van_plate_number or (t.van.plate_number if t.van else None),
             seat_capacity=t.seat_capacity,
             stops=stops_by_route.get(t.route_id, []),
+            operator_name=operator(t)[0],
+            operator_licence=operator(t)[1],
+            payment_status=t.payment_status,
+            crew_aboard=bool(t.crew_aboard),
+            rental=RentalOut.model_validate(rentals[t.trip_id], from_attributes=True)
+            if t.trip_id in rentals else None,
         )
         for t in trips
     ]

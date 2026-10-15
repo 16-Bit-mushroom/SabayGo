@@ -311,14 +311,25 @@ is "$(walkin $LIVE "$D5T" 2)" 201 "dispatcher5 lists a cash passenger: a boardin
 code POST /devices '{"device_model":"realme 5G lifecycle 2"}' "$OT" >/dev/null
 PHONE2=$(field device_id)
 code POST /devices/$PHONE2/checkout '{"van_id":"VAN-0004","dispatcher_id":"USER-DISPATCHER-0005"}' "$CT" >/dev/null
+is "$(code GET /non-passenger-moves/open "" "$D5T")/$(cat /tmp/resp.json)" "200/null" "no move open: the app offers the button"
 is "$(code POST /non-passenger-moves '{"reason":"other"}' "$D5T")" 409 "'Other' needs a note"
 is "$(code POST /non-passenger-moves '{"reason":"errand"}' "$D5T")" 201 "T17 dispatcher5 presses Not a passenger trip (Errand)"
 MOVE=$(field move_id)
+is "$(code GET /non-passenger-moves/open "" "$D5T")/$(field move_id)/$(field reason)" "200/$MOVE/errand" \
+   "the app reads the open move back, to show End"
 is "$(code POST /non-passenger-moves '{"reason":"errand"}' "$D5T")" 409 "one open move per van"
 out3
 is "$(board $LIVE status)" scheduled "T17 the van leaves on the errand: nothing starts"
 ping $LIVE "$LAT" "$LON" >/dev/null
 is "$(code POST /non-passenger-moves/$MOVE/end "" "$D5T")" 409 "back inside the terminal zone, the move has ended"
+is "$(code GET /non-passenger-moves/open "" "$D5T" >/dev/null; cat /tmp/resp.json)" null "and none is open"
+code GET /trips/assigned "" "$D5T" >/dev/null
+python3 -c "
+import json; t = next(x for x in json.load(open('/tmp/resp.json')) if x['trip_id'] == '$LIVE')
+assert t['operator_name'] and t['operator_licence'] and t['plate_number'], t
+assert t['payment_status'] in ('unpaid', 'paid', 'overridden', 'left_unpaid') and t['crew_aboard'] is False and t['rental'] is None
+" && ok "the Dispatcher's trip names the operator (name, licence) and the plate, its share and crew state" \
+  || bad "assigned trip: $(head -c 400 /tmp/resp.json)"
 
 ping $LIVE "$FARLAT" "$LON" >/dev/null
 is "$(board $LIVE status)" scheduled "T13 a single stray reading departs nothing"

@@ -138,6 +138,9 @@ is "$(code POST /trips/$TW/start "" "$CT")" 409 "Start is refused while the fee 
 field detail | grep -q "rental fee" && ok "and says the fee comes first" || bad "detail: $(field detail)"
 is "$(code POST /trips/$TW/payment-override '{"note":"Customer pays later"}' "$OT")" 200 "an override lifts the 15 % block"
 is "$(code POST /trips/$TW/start "" "$CT")" 409 "but not the fee: Start still waits"
+code GET /trips/assigned "" "$D3T" >/dev/null
+is "$(python3 -c "import json;t=next(x for x in json.load(open('/tmp/st.json')) if x['trip_id']=='$TW');r=t['rental'];print(r['request_id']=='$RW', r['rental_fee'], r['payment_status'])")" \
+   "True 2000.00 unpaid" "dispatcher3's app shows the rental, its ₱2,000 fee, unpaid"
 is "$(code POST /special-trips/$RW/cash "" "$D2T")" 404 "another Dispatcher cannot log its fee"
 is "$(code POST /special-trips/$RW/cash "" "$D3T")" 200 "dispatcher3 logs the ₱2,000 received in cash"
 is "$(field payment_status)" paid "the fee is paid"
