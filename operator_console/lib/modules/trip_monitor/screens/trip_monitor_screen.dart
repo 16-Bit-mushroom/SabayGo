@@ -172,7 +172,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
               description: 'Every trip on the chosen day, as its Dispatcher sees it. Pick a '
                   'trip to see who is aboard. Updates every ${_refreshEvery.inSeconds} seconds.',
               actions: [
-                _DayPicker(day: _day, onShift: _shiftDay),
+                DayPicker(day: _day, onShift: _shiftDay),
                 RefreshButton(onPressed: _load),
               ],
             ),
@@ -203,42 +203,6 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
         ),
       );
     });
-  }
-}
-
-class _DayPicker extends StatelessWidget {
-  const _DayPicker({required this.day, required this.onShift});
-  final DateTime day;
-  final ValueChanged<int> onShift;
-
-  @override
-  Widget build(BuildContext context) {
-    final today = DateUtils.isSameDay(day, DateTime.now());
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Previous day',
-            onPressed: () => onShift(-1),
-            icon: const Icon(Icons.chevron_left),
-          ),
-          Text(
-            today ? 'Today, ${DateFormat.MMMd().format(day)}' : DateFormat.yMMMEd().format(day),
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          IconButton(
-            tooltip: 'Next day',
-            onPressed: () => onShift(1),
-            icon: const Icon(Icons.chevron_right),
-          ),
-        ],
-      ),
-    );
   }
 }
 

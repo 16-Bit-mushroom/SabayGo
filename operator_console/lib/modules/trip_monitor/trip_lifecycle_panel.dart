@@ -191,20 +191,9 @@ class TripLifecyclePanel extends StatelessWidget {
   /// Runs one call, reports the result through the app-wide messenger and
   /// refreshes the board. A refusal is shown in the server's own words.
   Future<bool> _run(BuildContext context, Future<void> Function() call, String done) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await call();
-      messenger.showSnackBar(SnackBar(content: Text(done), behavior: SnackBarBehavior.floating));
-      onChanged();
-      return true;
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(e.message),
-        backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-      ));
-      return false;
-    }
+    final ok = await runAction(context, call, done);
+    if (ok) onChanged();
+    return ok;
   }
 
   Future<void> _assign(BuildContext context) async {

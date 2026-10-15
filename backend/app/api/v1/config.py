@@ -54,6 +54,7 @@ class PolicyOut(BaseModel):
     # In force since; who set it (NULL for values set before 021).
     effective_from: dt.datetime
     updated_by: str | None
+    updated_by_name: str | None = None
     updated_at: dt.datetime
 
 
@@ -61,8 +62,17 @@ class PolicyIn(BaseModel):
     policy_value: str
 
 
-def _policy_out(p: CooperativePolicy) -> PolicyOut:
-    return PolicyOut(**{c: getattr(p, c) for c in PolicyOut.model_fields})
+def _policy_out(p: CooperativePolicy, names: dict[str, str] | None = None) -> PolicyOut:
+    return PolicyOut(**{c: getattr(p, c) for c in PolicyOut.model_fields if hasattr(p, c)},
+                     updated_by_name=(names or {}).get(p.updated_by))
+
+
+async def _policies_out(session, rows: list[CooperativePolicy]) -> list[PolicyOut]:
+    ids = {p.updated_by for p in rows} - {None}
+    names = {s.user_id: f"{s.first_name} {s.last_name}" for s in (await session.execute(
+        select(StaffProfile).where(StaffProfile.user_id.in_(ids))
+    )).scalars()} if ids else {}
+    return [_policy_out(p, names) for p in rows]
 
 
 @router.get("/policies", response_model=list[PolicyOut],
@@ -74,14 +84,14 @@ async def list_policies(session: SessionDep) -> list[PolicyOut]:
     deployment -- reschedule cutoff, advance-booking cap, geofence radius,
     hold TTL, variance threshold, start window, remittance rate.
     """
-    return [_policy_out(p) for p in await PolicyRepository(session).current_rows()]
+    return await _policies_out(session, await PolicyRepository(session).current_rows())
 
 
 @router.get("/policies/{policy_key}/history", response_model=list[PolicyOut],
             dependencies=[Depends(OFFICE)])
 async def policy_history(policy_key: str, session: SessionDep) -> list[PolicyOut]:
     """Every value the key has held, newest first, with who set it."""
-    return [_policy_out(p) for p in await PolicyRepository(session).history(policy_key)]
+    return await _policies_out(session, await PolicyRepository(session).history(policy_key))
 
 
 @router.put("/policies/{policy_key}", response_model=PolicyOut,
@@ -102,7 +112,7 @@ async def update_policy(
 
     # Existing trips are unaffected: seat capacity, advance cap and
     # reschedule cutoff are snapshotted onto each trip at generation time.
-    return _policy_out(policy)
+    return (await _policies_out(session, [policy]))[0]
 
 
 # ===================================================================

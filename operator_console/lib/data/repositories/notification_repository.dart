@@ -27,8 +27,19 @@ class AppNotification {
   /// unconfirmed or missing start, an unaudited trip, an expired licence.
   bool get isTripAlert => relatedEntityType == 'trip';
 
+  /// Rev 603 alerts with a page of their own (brief 3): the capacity
+  /// alert, a departure with more aboard than listed, a driving flag, a
+  /// dispute, a trip that left unpaid.
+  bool get hasOwnPage => const {
+        'capacity_alert',
+        'departed_more_than_listed',
+        'driving_flag',
+        'dispute_raised',
+        'left_unpaid',
+      }.contains(type);
+
   /// Notifications that point at a module worth opening.
-  bool get isActionable => isVarianceAlert || isSosAlert || isTripAlert;
+  bool get isActionable => isVarianceAlert || isSosAlert || isTripAlert || hasOwnPage;
 
   AppNotification copyWith({bool? isRead}) => AppNotification(
         notificationId: notificationId,

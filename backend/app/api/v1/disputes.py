@@ -18,10 +18,19 @@ from sqlalchemy import select
 
 from app.api.v1.deps import MANAGER, SessionDep, require_roles
 from app.application.finance.disputes import Disputes
+from app.application.identity.naming import display_name
+from app.application.notifications.service import trip_label
 from app.application.operations.guards import assert_assigned_to_trip
 from app.core.exceptions import InvalidInputError
 from app.domain.enums import Role
-from app.infrastructure.models import Dispute, User
+from app.infrastructure.models import (
+    Dispute,
+    DrivingEvent,
+    RemittanceLine,
+    Terminal,
+    Trip,
+    User,
+)
 
 router = APIRouter(prefix="/disputes", tags=["disputes"])
 
@@ -76,22 +85,66 @@ class DisputeOut(BaseModel):
     decided_by: str | None
     decided_at: dt.datetime | None
     decision_note: str | None
+    # For the screen: the trip and van, and the contested item in words.
+    trip_label: str
+    plate_number: str | None
+    item: str
+    raised_by_name: str
+    decided_by_name: str | None
 
-    model_config = {"from_attributes": True}
+
+async def _out(session, rows: list[Dispute]) -> list[DisputeOut]:
+    if not rows:
+        return []
+    trips = {t.trip_id: t for t in (await session.execute(
+        select(Trip).where(Trip.trip_id.in_({d.trip_id for d in rows}))
+    )).scalars()}
+    lines = {l.line_id: (l, name) for l, name in (await session.execute(
+        select(RemittanceLine, Terminal.terminal_name)
+        .outerjoin(Terminal, Terminal.terminal_id == RemittanceLine.dest_terminal_id)
+        .where(RemittanceLine.line_id.in_({d.line_id for d in rows} - {None}))
+    )).all()}
+    flags = {f.driving_event_id: f for f in (await session.execute(
+        select(DrivingEvent).where(
+            DrivingEvent.driving_event_id.in_({d.driving_event_id for d in rows} - {None}))
+    )).scalars()}
+    people = {u.user_id: display_name(u) for u in (await session.execute(
+        select(User).where(User.user_id.in_({d.raised_by for d in rows} | {d.decided_by for d in rows}))
+    )).scalars()}
+    out = []
+    for d in rows:
+        trip = trips[d.trip_id]
+        if d.line_id is not None:
+            line, dest = lines[d.line_id]
+            item = (f"{line.passenger_count} × ₱{line.fare_per_passenger:,.2f} to "
+                    f"{dest or 'no drop-off terminal'}{' (top-up)' if line.is_top_up else ''}")
+        else:
+            flag = flags[d.driving_event_id]
+            item = f"{flag.flag_type.replace('_', ' ').capitalize()} at {flag.start_at:%H:%M}"
+        fields = {c: getattr(d, c) for c in DisputeOut.model_fields if hasattr(Dispute, c)}
+        out.append(DisputeOut(
+            **fields, trip_label=trip_label(trip),
+            plate_number=trip.van_plate_number or (trip.van.plate_number if trip.van else None),
+            item=item, raised_by_name=people.get(d.raised_by, ""),
+            decided_by_name=people.get(d.decided_by),
+        ))
+    return out
 
 
 @router.post("", response_model=DisputeOut, status_code=201)
 async def record_dispute(
     payload: DisputeIn, session: SessionDep, user: Annotated[User, Depends(RECORDS)],
-) -> Dispute:
+) -> DisputeOut:
     """Record the operator's dispute of a fare line (before the payment)
     or a driving flag."""
     disputes = Disputes(session)
     if payload.subject == "fare_line":
-        return await disputes.raise_on_line(
+        dispute = await disputes.raise_on_line(
             payload.line_id, by=user, statement=payload.operator_statement)
-    return await disputes.raise_on_flag(
-        payload.driving_event_id, by=user, statement=payload.operator_statement)
+    else:
+        dispute = await disputes.raise_on_flag(
+            payload.driving_event_id, by=user, statement=payload.operator_statement)
+    return (await _out(session, [dispute]))[0]
 
 
 @router.get("", response_model=list[DisputeOut])
@@ -99,7 +152,7 @@ async def list_disputes(
     session: SessionDep, user: Annotated[User, Depends(READS)],
     status: Literal["open", "resolved", "withdrawn"] | None = None,
     trip_id: str | None = None, remittance_id: str | None = None,
-) -> list[Dispute]:
+) -> list[DisputeOut]:
     """Disputes, newest first. A Dispatcher sees their own trip's."""
     if user.role == Role.DISPATCHER.value:
         if trip_id is None:
@@ -112,26 +165,28 @@ async def list_disputes(
         query = query.where(Dispute.trip_id == trip_id)
     if remittance_id is not None:
         query = query.where(Dispute.remittance_id == remittance_id)
-    return list((await session.execute(query)).scalars().all())
+    return await _out(session, list((await session.execute(query)).scalars().all()))
 
 
 @router.post("/{dispute_id}/withdraw", response_model=DisputeOut)
 async def withdraw_dispute(
     dispute_id: str, payload: WithdrawIn, session: SessionDep,
     user: Annotated[User, Depends(RECORDS)],
-) -> Dispute:
+) -> DisputeOut:
     """The operator drops the dispute; the share is due again."""
-    return await Disputes(session).withdraw(dispute_id, by=user, note=payload.note)
+    dispute = await Disputes(session).withdraw(dispute_id, by=user, note=payload.note)
+    return (await _out(session, [dispute]))[0]
 
 
 @router.post("/{dispute_id}/decide", response_model=DisputeOut)
 async def decide_dispute(
     dispute_id: str, payload: DecisionIn, session: SessionDep,
     user: Annotated[User, Depends(MANAGER)],
-) -> Dispute:
+) -> DisputeOut:
     """The Terminal Manager decides: upheld, rejected or adjusted, with
     the reason."""
-    return await Disputes(session).decide(
+    dispute = await Disputes(session).decide(
         dispute_id, by=user, outcome=payload.outcome, note=payload.note,
         adjusted_amount=payload.adjusted_amount,
     )
+    return (await _out(session, [dispute]))[0]

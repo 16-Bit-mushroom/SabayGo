@@ -126,6 +126,10 @@ S=$(code GET /config/policies "" "$OT")
 S=$(code PUT /config/policies/variance_alert_threshold '{"policy_value":"2"}' "$OT")
 [ "$S" = "200" ] && ok "variance threshold set to 2" || bad "policy update gave $S"
 code PUT /config/policies/variance_alert_threshold '{"policy_value":"1"}' "$OT" >/dev/null
+S=$(code GET /config/policies/variance_alert_threshold/history "" "$CT")
+python3 -c "import json;h=json.load(open('/tmp/resp.json'));assert [p['policy_value'] for p in h[:2]]==['1','2'] and h[0]['updated_by_name']=='Maria Santos'" \
+  && ok "the history keeps each value, newest first, with who set it (the Cashier may read it)" \
+  || bad "policy history gave $S: $(head -c 300 /tmp/resp.json)"
 
 S=$(code PUT /config/policies/does_not_exist '{"policy_value":"x"}' "$OT")
 [ "$S" = "404" ] && ok "unknown policy key rejected (404)" || bad "bad key gave $S"

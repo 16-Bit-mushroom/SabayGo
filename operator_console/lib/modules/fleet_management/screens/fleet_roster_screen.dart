@@ -7,7 +7,14 @@ import '../../../data/repositories/fleet_repository.dart';
 import '../../../viewmodels/auth_provider.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
+import '../roster_transfers.dart';
+import '../van_photos.dart';
 
+/// Member Records (brief 8, was Vans & Crew): the binder as three lists --
+/// operators, vans and staff -- with each record's validation. Only a
+/// validated van and Dispatcher can be assigned to a trip; the Terminal
+/// Manager validates, and not a record they imported. Import and export
+/// (Terminal Manager and Cashier) are logged.
 class FleetRosterScreen extends StatefulWidget {
   const FleetRosterScreen({super.key});
 
@@ -24,16 +31,20 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
 
   List<Van>? _vans;
   List<StaffMember>? _crew;
+  List<OperatorRecord>? _operators;
+  String _list = 'vans'; // operators | vans | staff
   List<RouteSummary> _routes = [];
   String? _error;
   bool _loading = true;
   final _vansScroll = ScrollController();
   final _crewScroll = ScrollController();
+  final _operatorsScroll = ScrollController();
 
   @override
   void dispose() {
     _vansScroll.dispose();
     _crewScroll.dispose();
+    _operatorsScroll.dispose();
     super.dispose();
   }
 
@@ -53,12 +64,14 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
         _fleet.listVans(),
         _fleet.listCrew(),
         _dispatch.listRoutes(),
+        _fleet.listOperators(),
       ]);
       if (!mounted) return;
       setState(() {
         _vans = results[0] as List<Van>;
         _crew = results[1] as List<StaffMember>;
         _routes = results[2] as List<RouteSummary>;
+        _operators = results[3] as List<OperatorRecord>;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -97,6 +110,48 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     } on ApiException catch (e) {
       _showSnack(e.message, isError: true);
     }
+  }
+
+  Future<void> _validate(String kind, String id, String name, String status) async {
+    try {
+      await _fleet.validate(kind, id, status);
+      _showSnack('$name: ${_validationWord(status)}.');
+      await _load();
+    } on ApiException catch (e) {
+      _showSnack(e.message, isError: true);
+    }
+  }
+
+  Future<void> _openAddOperatorDialog() async {
+    final created = await showDialog<OperatorRecord>(
+      context: context,
+      builder: (_) => _AddOperatorDialog(fleet: _fleet),
+    );
+    if (created != null) {
+      _showSnack('${created.fullName} added, Pending until validated.');
+      await _load();
+    }
+  }
+
+  Future<void> _openPhotos(Van van) async {
+    final changed = await showDialog<bool>(context: context, builder: (_) => VanPhotosDialog(van: van));
+    if (changed == true) await _load();
+  }
+
+  void _showOperatorDetail(OperatorRecord op) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _DetailDialog(title: op.fullName, rows: [
+        ('Licence', op.licenseNumber),
+        ('Licence expires', op.licenseExpiry == null
+            ? '—'
+            : '${op.licenseExpiry!.toIso8601String().substring(0, 10)}${op.licenseExpired ? ' (EXPIRED)' : ''}'),
+        ('Contact', op.contactNumber.isEmpty ? '—' : op.contactNumber),
+        ('Van', op.plateNumber ?? 'None yet'),
+        ('Record', _validationWord(op.validationStatus)),
+        if (op.importBatchId != null) ('Imported', 'Yes, in a batch'),
+      ]),
+    );
   }
 
   Future<void> _openAddVanDialog() async {
@@ -148,39 +203,79 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               PageHeader(
-                title: 'Vans & Crew',
-                description: 'A2Z\'s vans, and the staff who dispatch them and keep the office. '
-                    'Click a row for details; use the ⋮ button to change a status.',
-                actions: [RefreshButton(onPressed: _load, busy: _loading)],
+                title: 'Member Records',
+                technicalNote: 'Operators · Vans · Dispatchers',
+                description: 'A2Z\'s roster: the operators who own and drive the vans, the vans, and '
+                    'the staff. Only a validated van and Dispatcher can be assigned to a trip.',
+                actions: [
+                  RosterTransfers(onImported: _load),
+                  RefreshButton(onPressed: _load, busy: _loading),
+                ],
               ),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'operators', label: Text('Operators (${_operators?.length ?? 0})')),
+                  ButtonSegment(value: 'vans', label: Text('Vans (${_vans?.length ?? 0})')),
+                  ButtonSegment(value: 'staff', label: Text('Staff (${_crew?.length ?? 0})')),
+                ],
+                selected: {_list},
+                onSelectionChanged: (s) => setState(() => _list = s.first),
+              ),
+              const SizedBox(height: AppSpacing.lg),
               Expanded(
-                child: _loading
+                child: _loading && _vans == null
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
                         ? LoadError(message: _error!, onRetry: _load)
-                        : isDesktop
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: _buildVansTable()),
-                                  const SizedBox(width: 24),
-                                  Expanded(child: _buildStaffTable()),
-                                ],
-                              )
-                            : SingleChildScrollView(
-                                child: Column(
-                                  children: [
-                                    _buildVansTable(),
-                                    const SizedBox(height: 24),
-                                    _buildStaffTable(),
-                                  ],
-                                ),
-                              ),
+                        : switch (_list) {
+                            'operators' => _buildOperatorsTable(),
+                            'vans' => _buildVansTable(),
+                            _ => _buildStaffTable(),
+                          },
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildOperatorsTable() {
+    final ops = _operators ?? [];
+    return _RosterCard(
+      title: 'Operators',
+      count: ops.length,
+      icon: Icons.person_outline,
+      addLabel: 'Add operator',
+      onAdd: _canEdit ? _openAddOperatorDialog : null,
+      emptyMessage: 'No operators yet. Add one, or import the binder.',
+      scroll: _operatorsScroll,
+      columns: const [
+        ('Name', 24, false),
+        ('Licence', 22, false),
+        ('Van', 12, false),
+        ('Record', 14, false),
+      ],
+      rows: [
+        for (final op in ops)
+          _RosterRow(
+            semanticLabel: '${op.fullName}, ${_validationWord(op.validationStatus)}. Opens operator details.',
+            onTap: () => _showOperatorDetail(op),
+            cells: [
+              Text(op.fullName,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              Text('${op.licenseNumber}${op.licenseExpired ? '  · expired' : ''}',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: op.licenseExpired ? AppColors.danger : AppColors.textPrimary)),
+              Text(op.plateNumber ?? '—', style: _figures),
+              _validationBadge(op.validationStatus),
+            ],
+            trailing: _canEdit
+                ? _menu([..._validationItems()], (v) => _validate('operators', op.operatorId, op.fullName, v))
+                : const SizedBox.shrink(),
+          ),
+      ],
     );
   }
 
@@ -195,10 +290,11 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
       emptyMessage: 'No vans yet. Add the first one with "Add van".',
       scroll: _vansScroll,
       columns: const [
-        ('Plate number', 16, false),
-        ('Make and model', 24, false),
-        ('Seats', 8, true),
-        ('Status', 16, false),
+        ('Plate number', 14, false),
+        ('Operator', 20, false),
+        ('Photos', 8, true),
+        ('Status', 14, false),
+        ('Record', 14, false),
       ],
       rows: [
         for (final van in vans)
@@ -208,15 +304,31 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
             cells: [
               Text(van.plateNumber,
                   style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-              Text(
-                [van.brand, van.model].where((s) => s != null && s.isNotEmpty).join(' '),
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: AppColors.textPrimary),
-              ),
-              Text('${van.seatCapacity}', style: _figures),
+              Text(van.operatorName ?? '—',
+                  overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.textPrimary)),
+              Text('${van.photos.length}/4',
+                  style: _figures.copyWith(color: van.hasAllPhotos ? null : AppColors.warning)),
               _statusBadge(van.operationalStatus, _vanStatus(van.operationalStatus)),
+              _validationBadge(van.validationStatus),
             ],
-            trailing: _canEdit ? _buildVanStatusMenu(van) : const SizedBox.shrink(),
+            trailing: _menu([
+              const PopupMenuItem(value: 'photos', child: Text('Photographs…')),
+              if (_canEdit) ...[
+                const PopupMenuDivider(),
+                for (final s in const ['active', 'maintenance', 'inactive'])
+                  PopupMenuItem(value: 'status:$s', child: Text('Mark ${_vanStatus(s).toLowerCase()}')),
+                const PopupMenuDivider(),
+                ..._validationItems(),
+              ],
+            ], (v) {
+              if (v == 'photos') {
+                _openPhotos(van);
+              } else if (v.startsWith('status:')) {
+                _setVanStatus(van, v.substring(7));
+              } else {
+                _validate('vans', van.vanId, van.plateNumber, v);
+              }
+            }),
           ),
       ],
     );
@@ -234,9 +346,10 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
       scroll: _crewScroll,
       columns: const [
         ('Name', 24, false),
-        ('Role', 18, false),
-        ('Phone', 16, false),
+        ('Role', 16, false),
+        ('Phone', 14, false),
         ('Status', 14, false),
+        ('Record', 14, false),
       ],
       rows: [
         for (final staff in crew)
@@ -252,8 +365,23 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
                   overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.textPrimary)),
               Text(staff.phoneNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
               _statusBadge(staff.employmentStatus, _crewStatus(staff.employmentStatus)),
+              // Only a Dispatcher's record is validated (brief 3).
+              staff.role == 'dispatcher'
+                  ? _validationBadge(staff.validationStatus)
+                  : Text('—', style: TextStyle(color: AppColors.textMuted)),
             ],
-            trailing: _canEdit ? _buildCrewStatusMenu(staff) : const SizedBox.shrink(),
+            trailing: _canEdit
+                ? _menu([
+                    for (final s in const ['active', 'suspended', 'inactive'])
+                      PopupMenuItem(value: 'status:$s', child: Text('Mark ${_crewStatus(s).toLowerCase()}')),
+                    if (staff.role == 'dispatcher') ...[
+                      const PopupMenuDivider(),
+                      ..._validationItems(),
+                    ],
+                  ], (v) => v.startsWith('status:')
+                      ? _setCrewStatus(staff, v.substring(7))
+                      : _validate('crew', staff.userId, staff.fullName, v))
+                : const SizedBox.shrink(),
           ),
       ],
     );
@@ -290,29 +418,40 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
         _ => s,
       };
 
-  Widget _buildVanStatusMenu(Van van) {
+  Widget _menu(List<PopupMenuEntry<String>> items, ValueChanged<String> onSelected) {
     return PopupMenuButton<String>(
-      tooltip: 'Change status',
+      tooltip: 'Change',
       icon: Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
-      onSelected: (status) => _setVanStatus(van, status),
-      itemBuilder: (_) => [
-        for (final s in const ['active', 'maintenance', 'inactive'])
-          PopupMenuItem(value: s, child: Text(_vanStatus(s))),
-      ],
+      onSelected: onSelected,
+      itemBuilder: (_) => items,
     );
   }
 
-  Widget _buildCrewStatusMenu(StaffMember staff) {
-    return PopupMenuButton<String>(
-      tooltip: 'Change status',
-      icon: Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
-      onSelected: (status) => _setCrewStatus(staff, status),
-      itemBuilder: (_) => [
-        for (final s in const ['active', 'suspended', 'inactive'])
-          PopupMenuItem(value: s, child: Text(_crewStatus(s))),
-      ],
-    );
-  }
+  /// The Terminal Manager's decision on a record (brief 3). A record they
+  /// imported themselves is refused by the server.
+  static List<PopupMenuEntry<String>> _validationItems() => const [
+        PopupMenuItem(value: 'validated', child: Text('Validate')),
+        PopupMenuItem(value: 'rejected', child: Text('Reject')),
+        PopupMenuItem(value: 'suspended', child: Text('Suspend')),
+        PopupMenuItem(value: 'pending', child: Text('Back to pending')),
+      ];
+
+  static String _validationWord(String s) => switch (s) {
+        'validated' => 'Validated',
+        'rejected' => 'Rejected',
+        'suspended' => 'Suspended',
+        _ => 'Pending',
+      };
+
+  static Widget _validationBadge(String s) => StatusBadge(
+        _validationWord(s),
+        tone: switch (s) {
+          'validated' => Tone.success,
+          'rejected' => Tone.danger,
+          'suspended' => Tone.neutral,
+          _ => Tone.warning,
+        },
+      );
 
   /// Three states, three tones, each with its word on the chip: in service,
   /// temporarily out (maintenance, suspended), and retired.
@@ -1048,6 +1187,9 @@ class _VanDetailDialog extends StatelessWidget {
     return _DetailDialog(
       title: van.plateNumber,
       rows: [
+        ('Operator', van.operatorName ?? '—'),
+        ('Record', _FleetRosterScreenState._validationWord(van.validationStatus)),
+        ('Photographs', '${van.photos.length} of 4${van.hasAllPhotos ? '' : ' (all four needed to validate)'}'),
         ('Brand / Model', brandModel.isEmpty ? '—' : brandModel),
         ('Color', van.color ?? '—'),
         ('Seat capacity', van.seatCapacity.toString()),

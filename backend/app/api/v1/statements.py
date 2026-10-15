@@ -18,11 +18,20 @@ from sqlalchemy import select
 
 from app.api.v1.deps import CASHIER, OFFICE, SessionDep, require_roles
 from app.application.finance.statement import BEFORE_DEPARTURE, Statements
+from app.application.identity.naming import display_name
 from app.application.operations.guards import assert_assigned_to_trip
 from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError
 from app.domain.enums import Role
-from app.infrastructure.models import Remittance, RemittanceLine, Terminal, Trip, User, Van
+from app.infrastructure.models import (
+    Operator,
+    Remittance,
+    RemittanceLine,
+    Terminal,
+    Trip,
+    User,
+    Van,
+)
 
 router = APIRouter(tags=["statements"])
 
@@ -41,6 +50,8 @@ class LineOut(BaseModel):
     gross_fare: Decimal
     share_amount: Decimal
     is_top_up: bool
+    # The trip's departure, so a statement reads trip by trip.
+    trip_departure: dt.datetime
 
 
 class ShareOut(BaseModel):
@@ -75,6 +86,9 @@ class StatementOut(BaseModel):
     settlement_ref: str | None
     recorded_by: str | None
     handed_over_by: str | None
+    operator_name: str
+    recorded_by_name: str | None
+    handed_over_by_name: str | None
     lines: list[LineOut]
 
 
@@ -87,17 +101,18 @@ class PaymentIn(BaseModel):
 
 async def _lines(session, condition) -> list[LineOut]:
     rows = (await session.execute(
-        select(RemittanceLine, Terminal.terminal_name)
+        select(RemittanceLine, Terminal.terminal_name, Trip.departure_datetime)
         .outerjoin(Terminal, Terminal.terminal_id == RemittanceLine.dest_terminal_id)
-        .where(condition).order_by(RemittanceLine.created_at)
+        .join(Trip, Trip.trip_id == RemittanceLine.trip_id)
+        .where(condition).order_by(Trip.departure_datetime, RemittanceLine.created_at)
     )).all()
     return [LineOut(
         line_id=line.line_id, trip_id=line.trip_id,
         dest_terminal_id=line.dest_terminal_id, dest_terminal_name=name,
         income_group=line.income_group, fare_per_passenger=line.fare_per_passenger,
         passenger_count=line.passenger_count, gross_fare=line.gross_fare,
-        share_amount=line.share_amount, is_top_up=line.is_top_up,
-    ) for line, name in rows]
+        share_amount=line.share_amount, is_top_up=line.is_top_up, trip_departure=departs,
+    ) for line, name, departs in rows]
 
 
 async def _share(session, trip: Trip, statement: Remittance | None) -> ShareOut:
@@ -126,8 +141,16 @@ async def _statement(session, statement: Remittance) -> StatementOut:
         disputed=await money.disputed(statement), status=statement.status,
         settled_at=statement.settled_at, settlement_ref=statement.settlement_ref,
         recorded_by=statement.recorded_by, handed_over_by=statement.handed_over_by,
+        operator_name=(await session.get(Operator, statement.operator_id)).full_name,
+        recorded_by_name=await _name(session, statement.recorded_by),
+        handed_over_by_name=await _name(session, statement.handed_over_by),
         lines=await _lines(session, RemittanceLine.remittance_id == statement.remittance_id),
     )
+
+
+async def _name(session, user_id: str | None) -> str | None:
+    user = await session.get(User, user_id) if user_id else None
+    return display_name(user) if user else None
 
 
 async def _trip(session, trip_id: str) -> Trip:

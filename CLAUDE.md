@@ -613,6 +613,35 @@ new `test_van_board.sh` (28, in the runner). Decided by Claude (owner
 delegated 15 Oct): the Dispatcher records disputes **in the app**, on
 their own trip's lines and flags; **Emergencies stays** as built.
 
+Done: **R10b, the console** (15 Oct). New pages (`operator_console/lib/
+modules/`): **Remittance** (statements by van and trip, Cashier records
+the payment with who handed it over, dispute a line), **Disputes**
+(open / decided / withdrawn; the Terminal Manager decides, upheld /
+rejected / adjusted), **Boarding Audit** (Terminal Manager; the still
+opens through `getBytes`), **Driving Flags** (review, dismiss, record the
+operator's dispute), **Review Starts** (the day's trips needing a look,
+with the Trips page's `TripLifecyclePanel` beside them), **Van Status
+Board** (15 s refresh), **Phones** (add with the token shown once, new
+token, retire, check out after the setup check, return). Vans & Crew is
+now **Member Records** (operators / vans / staff, validation menus, the
+four van photos, import with preview, export CSV/PDF and the LTFRB list,
+the transfer log); Rules & Settings has the rev 603 keys in plain words,
+each key's history, "not set" shown as off, and **speed limits by
+route**. Shared: `core/design/components/actions.dart` (`runAction`,
+`askText`, `DayPicker`, `FactLine`, `peso`), `ApiClient.upload`
+(multipart), `core/util/pick_file.dart`. Repositories: `money_`,
+`oversight_`, `device_repository.dart`. Small server additions for the
+screens: disputes carry `trip_label`, `plate_number`, `item`,
+`raised_by_name`, `decided_by_name`; statements carry `operator_name`,
+the recorder's and hander's names and each line's `trip_departure`;
+policies carry `updated_by_name`. Alerts open their page (capacity →
+Boarding Audit, flag → Driving Flags, dispute → Disputes, left unpaid →
+Remittance). Fares & Cash and Passenger Count Checks still show (R10e).
+`flutter analyze`: 0 errors, 0 warnings. **In Claude's bash, `flutter`
+is not on PATH: use `$HOME/flutter/bin/flutter`**, or `analyze | grep`
+hides "command not found". Tests: `test_disputes.sh` 80,
+`test_office_journey.sh` 49 (policy history).
+
 **Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
 The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
 (Passenger, Dispatcher) and `operator_console/` (Terminal Manager,

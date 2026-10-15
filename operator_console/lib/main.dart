@@ -8,8 +8,11 @@ import 'core/network/api_client.dart';
 import 'core/storage/token_storage.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository.dart';
+import 'data/repositories/device_repository.dart';
 import 'data/repositories/dispatch_repository.dart';
 import 'data/repositories/fleet_repository.dart';
+import 'data/repositories/money_repository.dart';
+import 'data/repositories/oversight_repository.dart';
 import 'data/repositories/policy_repository.dart';
 import 'data/repositories/revenue_repository.dart';
 import 'data/repositories/tracking_repository.dart';
@@ -72,6 +75,9 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         Provider<RevenueRepository>(create: (_) => RevenueRepository(_api)),
         Provider<TrackingRepository>(create: (_) => TrackingRepository(_api)),
         Provider<SosRepository>(create: (_) => SosRepository(_api)),
+        Provider<MoneyRepository>(create: (_) => MoneyRepository(_api)),
+        Provider<OversightRepository>(create: (_) => OversightRepository(_api)),
+        Provider<DeviceRepository>(create: (_) => DeviceRepository(_api)),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
         ChangeNotifierProvider<Appearance>.value(value: _appearance),
       ],

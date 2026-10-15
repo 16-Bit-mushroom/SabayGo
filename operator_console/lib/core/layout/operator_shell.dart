@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../modules/ai_audit_queue/screens/audit_dashboard_screen.dart';
+import '../../modules/boarding_audit/boarding_audit_screen.dart';
+import '../../modules/disputes/disputes_screen.dart';
+import '../../modules/driving_flags/driving_flags_screen.dart';
+import '../../modules/phones/phones_screen.dart';
+import '../../modules/remittance/remittance_screen.dart';
+import '../../modules/start_review/start_review_screen.dart';
+import '../../modules/van_board/van_board_screen.dart';
 import '../../modules/trip_dispatcher/screens/dispatch_board_screen.dart';
 import '../../modules/fleet_management/screens/fleet_roster_screen.dart';
 import '../../modules/schedule_management/screens/schedule_screen.dart';
@@ -66,19 +73,27 @@ class _OperatorShellState extends State<OperatorShell> {
     _Module('Overview', Icons.map_outlined, Icons.map, FleetMapScreen(), group: 'Today'),
     _Module('Trips', Icons.departure_board_outlined, Icons.departure_board,
         TripMonitorScreen()),
+    _Module('Van Status Board', Icons.view_list_outlined, Icons.view_list, VanBoardScreen()),
+    _Module('Review Starts', Icons.rule_outlined, Icons.rule, StartReviewScreen(), managerOnly: true),
     _Module('Special Trips', Icons.alt_route_outlined, Icons.alt_route,
         DispatchBoardScreen(), managerOnly: true),
     _Module('Emergencies (SOS)', Icons.emergency_outlined, Icons.emergency,
         SosConsoleScreen(), urgent: true),
     _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, MessagesScreen()),
-    _Module('Fares & Cash', Icons.payments_outlined, Icons.payments, RevenueScreen(),
+    _Module('Remittance', Icons.receipt_long_outlined, Icons.receipt_long, RemittanceScreen(),
         group: 'Money & checks'),
+    _Module('Disputes', Icons.gavel_outlined, Icons.gavel, DisputesScreen()),
+    _Module('Boarding Audit', Icons.how_to_reg_outlined, Icons.how_to_reg, BoardingAuditScreen(),
+        managerOnly: true),
+    _Module('Driving Flags', Icons.speed_outlined, Icons.speed, DrivingFlagsScreen()),
+    _Module('Fares & Cash', Icons.payments_outlined, Icons.payments, RevenueScreen()),
     _Module('Passenger Count Checks', Icons.fact_check_outlined, Icons.fact_check,
         AuditDashboardScreen(), managerOnly: true),
-    // Vans & Crew opens the group: the Cashier sees it, so the heading
+    // Member Records opens the group: the Cashier sees it, so the heading
     // must not sit on an entry the Cashier is not shown.
-    _Module('Vans & Crew', Icons.airport_shuttle_outlined, Icons.airport_shuttle,
+    _Module('Member Records', Icons.airport_shuttle_outlined, Icons.airport_shuttle,
         FleetRosterScreen(), group: 'Setup'),
+    _Module('Phones', Icons.phone_android_outlined, Icons.phone_android, PhonesScreen()),
     _Module('Timetable', Icons.calendar_month_outlined, Icons.calendar_month,
         ScheduleScreen(), managerOnly: true),
     _Module('Rules & Settings', Icons.tune_outlined, Icons.tune, PolicyEditorScreen(),
@@ -93,17 +108,29 @@ class _OperatorShellState extends State<OperatorShell> {
     return [for (final m in _modules) if (isManager || !m.managerOnly) m];
   }
 
-  /// Looked up by screen type rather than written out as an index.
-  void _show(bool Function(Widget) test) {
+  /// Looked up by screen type rather than written out as an index. False
+  /// when this person is not shown that page.
+  bool _show(bool Function(Widget) test) {
     final index = _visible.indexWhere((m) => test(m.screen));
     if (index >= 0) setState(() => _selectedIndex = index);
+    return index >= 0;
   }
 
-  void _openFor(AppNotification n) => n.isSosAlert
-      ? _show((w) => w is SosConsoleScreen)
-      : n.isTripAlert
-          ? _show((w) => w is TripMonitorScreen)
-          : _show((w) => w is AuditDashboardScreen);
+  /// The page an alert is about; the next one this person may open when
+  /// that page is the Terminal Manager's.
+  void _openFor(AppNotification n) {
+    final _ = switch (n.type) {
+      'sos_alert' => _show((w) => w is SosConsoleScreen),
+      'capacity_alert' => _show((w) => w is BoardingAuditScreen) || _show((w) => w is VanBoardScreen),
+      'departed_more_than_listed' => _show((w) => w is BoardingAuditScreen),
+      'driving_flag' => _show((w) => w is DrivingFlagsScreen),
+      'dispute_raised' => _show((w) => w is DisputesScreen),
+      'left_unpaid' => _show((w) => w is RemittanceScreen),
+      'unconfirmed_trip_start' => _show((w) => w is StartReviewScreen) || _show((w) => w is TripMonitorScreen),
+      _ when n.isTripAlert => _show((w) => w is TripMonitorScreen),
+      _ => _show((w) => w is AuditDashboardScreen),
+    };
+  }
 
   void _openToday(TodayTarget target) => switch (target) {
         TodayTarget.fleet => _show((w) => w is FleetMapScreen),

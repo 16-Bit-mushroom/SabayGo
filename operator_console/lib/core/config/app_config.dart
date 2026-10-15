@@ -12,4 +12,7 @@ class AppConfig {
   );
 
   static const Duration requestTimeout = Duration(seconds: 10);
+
+  /// Where the server serves `/media` (a van's photographs).
+  static String get serverRoot => apiBaseUrl.replaceFirst(RegExp(r'/api/v1/?$'), '');
 }

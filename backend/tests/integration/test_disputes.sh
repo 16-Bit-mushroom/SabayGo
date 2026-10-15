@@ -92,6 +92,11 @@ is "$(dispute "$DT" fare_line "$A" "That seat was my nephew. He rode free.")" 20
 DA=$(field "['dispute_id']")
 is "$(field "['subject']")/$(field "['amount_disputed']")/$(field "['status']")/$(field "['raised_by_role']")" \
    "fare_line/$SA/open/dispatcher" "Fare_Line, AmountDisputed = the line's share (P$SA), open, by the Dispatcher"
+python3 -c "
+import json; d = json.load(open('/tmp/dp.json'))
+assert d['item'].startswith('1 × ₱') and ' to ' in d['item'], d['item']
+assert d['trip_label'] and d['plate_number'] and d['raised_by_name'] and d['decided_by_name'] is None
+" && ok "it reads for the screen: the trip, the van, the line in words, who recorded it" || bad "words: $(cat /tmp/dp.json)"
 is "$(dispute "$CT" fare_line "$A" "Again")" 409 "one line carries one dispute"
 is "$(share $TRIP1 disputed)/$(field "['amount_due']")" "$SA/$(sub "$DUE0" "$SA")" \
    "the disputed share is shown apart and left out of the amount due"
@@ -110,6 +115,12 @@ DUE=$(share $TRIP1 amount_due)
 is "$(pay $TRIP1 "$DUE")" 200 "T9 the operator pays the undisputed part (P$DUE)"
 is "$(field "['payment_status']")/$(field "['amount_due']")/$(field "['disputed']")" "paid/0.00/$SA" \
    "paid, nothing due, P$SA waits"
+code GET "/statements?date=$(date +%F)" "" "$CT" >/dev/null
+python3 -c "
+import json; s = [x for x in json.load(open('/tmp/dp.json')) if x['recorded_by_name']]
+assert s and s[0]['operator_name'] and all(l['trip_departure'] for l in s[0]['lines'])
+" && ok "the van's statement names the operator and who recorded the payment, line by trip" || bad "statement words"
+code GET "/trips/$TRIP1/share" "" "$CT" >/dev/null
 OTHER=$(python3 -c "import json;print([l['line_id'] for l in json.load(open('/tmp/dp.json'))['lines'] if l['line_id']!='$A'][0])")
 is "$(dispute "$CT" fare_line "$OTHER" "Wrong fare")" 409 "T11 a line cannot be disputed after the payment is recorded"
 field "['detail']" | grep -q "not after" && ok "and the Cashier is told why" || bad "detail: $(field "['detail']")"
