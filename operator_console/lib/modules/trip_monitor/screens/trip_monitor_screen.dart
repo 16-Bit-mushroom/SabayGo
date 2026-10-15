@@ -354,8 +354,16 @@ class _TripDetail extends StatelessWidget {
                   children: [
                     Expanded(
                       child: StatTile(
-                          label: 'Aboard', value: '${m.boarded}', color: AppColors.success),
+                          label: 'Aboard', value: '${m.boarded}', color: AppColors.success,
+                          caption: 'scanned or listed'),
                     ),
+                    if (t.doorAboard != null) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: StatTile(label: 'Camera count', value: '${t.doorAboard}',
+                            caption: 'from the phone at the door'),
+                      ),
+                    ],
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: StatTile(

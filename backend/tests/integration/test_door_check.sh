@@ -245,6 +245,9 @@ is "$(audit "f\"{t['operator_name'] is not None}/{t['plate_number']}/{t['dispatc
    "the operator, the van and the Dispatcher"
 is "$(audit "t['unlisted'][0]['has_snapshot']")" False "no still was sent, and none is pretended"
 is "$(audit "t" "$(date -d yesterday +%F)")" NONE "another day's audit does not show it"
+code GET "/config/trips?date=$(date +%F)" "" "$CT" >/dev/null
+is "$(python3 -c "import json;t=next(x for x in json.load(open('/tmp/dc.json')) if x['trip_id']=='$TRIP');print(t['door_aboard'], t['phone_silent'], t['phone_last_report_at'])")" \
+   "0 True None" "Trip Monitoring: the camera's count (0, everyone off) and the phone out with the van, silent (no report yet)"
 
 code POST /devices/$PHONE/return '{}' "$CT" >/dev/null
 printf '\n%d passed, %d failed\n' "$P" "$F"

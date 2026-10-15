@@ -553,7 +553,9 @@ class _VanCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: _AboardTile(
-                      aboard: t?.boarded,
+                      // The camera's door count when the phone has one
+                      // (Passenger_Events, brief 9), else scanned tickets.
+                      aboard: t?.doorAboard ?? t?.boarded,
                       seats: t?.seatCapacity,
                     ),
                   ),

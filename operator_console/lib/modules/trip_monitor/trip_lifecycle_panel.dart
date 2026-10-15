@@ -82,6 +82,13 @@ class TripLifecyclePanel extends StatelessWidget {
       else if (beforeDeparture && t.vanId != null)
         (Icons.payments_outlined, 'A2Z\'s 15 % not recorded yet. Start waits for it once passengers '
             'are listed.', AppColors.warning),
+      if (t.phoneSilent == true && t.status != 'completed')
+        (Icons.wifi_off, t.phoneLastReportAt == null
+            ? 'The phone out with the van has not reported yet.'
+            : 'The phone is silent: last report at ${_time.format(t.phoneLastReportAt!)}.', AppColors.danger)
+      else if (t.phoneSilent == false)
+        (Icons.phone_android, 'Phone reporting: last at ${_time.format(t.phoneLastReportAt!)}'
+            '${t.phoneBatteryPct != null ? ', battery ${t.phoneBatteryPct} %' : ''}', null),
       if (t.changeNote != null) (Icons.edit_note, t.changeNote!, null),
     ];
 

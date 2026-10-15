@@ -726,6 +726,15 @@ review` uses it for a route-less trip. Rules & Settings names it.
 stretch); the sample-trip unit test and `test_driving_flags.sh` (49)
 still pass.
 
+Done: **Trip Monitoring additions** (15 Oct, brief §9 "the phone's last
+report"). `GET /config/trips` adds `door_aboard` (the camera's count,
+less the crew; None with no events) and the phone out with the van
+(`phone_last_report_at`, `phone_battery_pct`, `phone_silent`; None with
+no phone out). The Trips page shows a **Camera count** tile and the
+phone's state in the Start and departure panel; the Overview map's
+"aboard" uses the camera count when there is one. `test_door_check.sh`
+65.
+
 **R10 is done.** Open: the capture app and `ai_service` are rev 468
 leftovers (manual counts only); `/revenue/*` has no client.
 

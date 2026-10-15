@@ -27,8 +27,11 @@ from app.core.timezone import APP_TZ
 from app.infrastructure.models import (
     Booking,
     CooperativePolicy,
+    DeviceCheckout,
+    EdgeDevice,
     FareMatrix,
     Operator,
+    PassengerEvent,
     Route,
     RouteStop,
     RouteStretch,
@@ -586,6 +589,14 @@ class TripBoardOut(BaseModel):
     checked_in: int
     boarded: int
     no_show: int
+    # The camera's door count aboard (boardings less alightings, less the
+    # Dispatcher as crew); None when the phone has counted nothing.
+    door_aboard: int | None = None
+    # The phone out with the van (brief 9, Trip Monitoring); None when no
+    # phone is checked out with it.
+    phone_last_report_at: dt.datetime | None = None
+    phone_battery_pct: int | None = None
+    phone_silent: bool | None = None
 
 
 @router.get("/trips", response_model=list[TripBoardOut], dependencies=[Depends(OFFICE)])
@@ -641,9 +652,24 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
     } if operator_ids else {}
 
     opens = dt.timedelta(minutes=await PolicyRepository(session).get_int("start_opens_minutes"))
+    doors = dict((await session.execute(
+        select(PassengerEvent.trip_id,
+               func.sum(case((PassengerEvent.event_type == "board", 1), else_=-1)))
+        .where(PassengerEvent.trip_id.in_(ids)).group_by(PassengerEvent.trip_id)
+    )).all())
+    phones = {van_id: device for van_id, device in (await session.execute(
+        select(DeviceCheckout.van_id, EdgeDevice)
+        .join(EdgeDevice, EdgeDevice.device_id == DeviceCheckout.device_id)
+        .where(DeviceCheckout.returned_at.is_(None),
+               DeviceCheckout.van_id.in_({t.van_id for t in trips} - {None}))
+    )).all()}
+    gap = dt.timedelta(seconds=await PolicyRepository(session).get_int("heartbeat_gap_seconds"))
+    now = dt.datetime.now(APP_TZ).replace(tzinfo=None)
     out = []
     for t in trips:
         c = counts.get(t.trip_id)
+        phone = phones.get(t.van_id)
+        door = doors.get(t.trip_id)
         out.append(TripBoardOut(
             trip_id=t.trip_id,
             trip_label=t.trip_label,
@@ -672,5 +698,10 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
             checked_in=int(c.checked_in or 0) if c else 0,
             boarded=int(c.boarded or 0) if c else 0,
             no_show=int(c.no_show or 0) if c else 0,
+            door_aboard=None if door is None else max(0, int(door) - (1 if t.crew_aboard else 0)),
+            phone_last_report_at=phone.last_heartbeat_at if phone else None,
+            phone_battery_pct=phone.battery_pct if phone else None,
+            phone_silent=None if phone is None else (
+                phone.last_heartbeat_at is None or now - phone.last_heartbeat_at > gap),
         ))
     return out

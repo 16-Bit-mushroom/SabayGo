@@ -55,6 +55,10 @@ class TripBoardEntry {
     required this.checkedIn,
     required this.boarded,
     required this.noShow,
+    this.doorAboard,
+    this.phoneLastReportAt,
+    this.phoneBatteryPct,
+    this.phoneSilent,
   });
 
   final String tripId;
@@ -93,6 +97,13 @@ class TripBoardEntry {
   final int checkedIn;
   final int boarded;
   final int noShow;
+  /// The camera's door count aboard; null when the phone counted nothing.
+  final int? doorAboard;
+  /// The phone out with the van (Trip Monitoring, brief 9); `phoneSilent`
+  /// is null when no phone is checked out with it.
+  final DateTime? phoneLastReportAt;
+  final int? phoneBatteryPct;
+  final bool? phoneSilent;
 
   factory TripBoardEntry.fromJson(Map<String, dynamic> j) => TripBoardEntry(
         tripId: j['trip_id'] as String,
@@ -122,6 +133,11 @@ class TripBoardEntry {
         checkedIn: j['checked_in'] as int,
         boarded: j['boarded'] as int,
         noShow: j['no_show'] as int,
+        doorAboard: j['door_aboard'] as int?,
+        phoneLastReportAt:
+            j['phone_last_report_at'] == null ? null : DateTime.parse(j['phone_last_report_at'] as String),
+        phoneBatteryPct: j['phone_battery_pct'] as int?,
+        phoneSilent: j['phone_silent'] as bool?,
       );
 }
 
