@@ -715,6 +715,17 @@ repository's `TripBoardRow`, `todaysTrips`, `createSpecialTrip`) is
 gone: brief 2.5 has no van-outside-the-timetable path but a rental;
 `POST /config/trips/special` stays for the tests and seed.
 
+Done: **rental overspeed** (15 Oct, brief 2.5, a gap R9 left: "a
+rental has no route: no flags"). Migration **029** (down script): the
+setting `special_trip_speed_kmh`, shipped **unset** (no value in the
+brief; unset = no rental flagged). `driving.rental_flags` is overspeed
+only, against that one limit (a rental has no stretches or stop zones);
+the overspeed run is shared as `driving._overspeed`. `DrivingFlags.
+review` uses it for a route-less trip. Rules & Settings names it.
+`test_special_trips.sh` 75 (unset: no flag; set to 60: flagged, no
+stretch); the sample-trip unit test and `test_driving_flags.sh` (49)
+still pass.
+
 **R10 is done.** Open: the capture app and `ai_service` are rev 468
 leftovers (manual counts only); `/revenue/*` has no client.
 

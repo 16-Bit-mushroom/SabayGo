@@ -11,10 +11,11 @@ from decimal import Decimal, InvalidOperation
 
 _BOOL_SPELLINGS = {"true", "false", "1", "0", "yes", "no"}
 
-# Values that wait on a site survey or on A2Z (brief 4.2 rule 8, 2.6):
-# empty means "not set", and whatever reads them must then do nothing --
-# no GPS departure, no home pickup offered.
-MAY_BE_UNSET = frozenset({"depart_zone_radius_m", "depart_readings", "home_pickup_max_route_m"})
+# Values that wait on a site survey or on A2Z (brief 4.2 rule 8, 2.5,
+# 2.6): empty means "not set", and whatever reads them must then do
+# nothing -- no GPS departure, no home pickup offered, no rental flagged.
+MAY_BE_UNSET = frozenset({"depart_zone_radius_m", "depart_readings", "home_pickup_max_route_m",
+                          "special_trip_speed_kmh"})
 
 # Inclusive bounds. Every other number must not be negative: no policy
 # has a meaningful negative value.
@@ -32,6 +33,7 @@ _BOUNDS: dict[str, tuple[Decimal, Decimal | None]] = {
     "overspeed_seconds": (Decimal(1), None),
     "stop_seconds": (Decimal(1), None),
     "expected_speed_kmh": (Decimal(1), None),
+    "special_trip_speed_kmh": (Decimal(1), None),
 }
 
 

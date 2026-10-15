@@ -286,6 +286,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     'slow_tolerance_pct': ('A stretch is slow beyond its expected time by', 'Driving flags'),
     'expected_speed_kmh': ('Average speed behind each stretch\'s expected time', 'Driving flags'),
     'standstill_kmh': ('At or below this speed the van is standing still', 'Driving flags'),
+    'special_trip_speed_kmh': ('Speed limit for a special trip (no route of its own)', 'Driving flags'),
     'retention_days': ('Days blurred stills and GPS logs are kept', 'Evidence and privacy'),
     'chat_image_max_kb': ('Largest payment screenshot accepted', 'Evidence and privacy'),
     'chat_image_retention_days': ('Days payment screenshots are kept', 'Evidence and privacy'),

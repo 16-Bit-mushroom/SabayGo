@@ -186,6 +186,27 @@ is "$(code POST /special-trips/$R1/cash "" "$D2T")" 409 "nor logged again in cas
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "6. A request closes with its trip"
 is "$(code POST /trips/$TW/depart "" "$D3T")" 200 "dispatcher3 departs"
+# A rental has no route: overspeed only, against the default limit (2.5).
+code POST /devices '{"device_model":"realme rental"}' "$OT" >/dev/null
+DEV=$(field device_id); TOK=$(field device_token)
+code POST /devices/$DEV/checkout '{"van_id":"VAN-0006","dispatcher_id":"USER-DISPATCHER-0003"}' "$CT" >/dev/null
+sql "UPDATE device_checkouts SET checked_out_at = NOW() - INTERVAL 5 MINUTE WHERE device_id = '$DEV'"
+fixes() {  # fixes FROM_S: seven readings 5 s apart at 90 km/h, FROM_S seconds from now
+  python3 -c "
+import datetime as d, json, sys
+t = d.datetime.now(); f = int(sys.argv[1])
+print(json.dumps({'fixes': [{'recorded_at': (t + d.timedelta(seconds=f + 5 * i)).isoformat(),
+  'latitude': 7.05 + 0.001 * i, 'longitude': 125.6, 'speed_kph': 90} for i in range(7)]}))" "$1"
+}
+rflags() { sql "SELECT CONCAT_WS('/', flag_type, IFNULL(stretch_no, '-'), limit_kmh, max_speed_kmh) FROM driving_events WHERE trip_id = '$TW'"; }
+curl -s -o /dev/null -X POST "$API/edge/fixes" -H "X-Device-Token: $TOK" -H "Content-Type: application/json" -d "$(fixes 1)"
+is "$(rflags)" "" "90 km/h for 30 s: no flag while special_trip_speed_kmh is unset"
+is "$(code PUT /config/policies/special_trip_speed_kmh '{"policy_value":"60"}' "$CT")" 403 "only the Terminal Manager sets it"
+is "$(code PUT /config/policies/special_trip_speed_kmh '{"policy_value":"60"}' "$OT")" 200 "the Terminal Manager sets 60 km/h"
+curl -s -o /dev/null -X POST "$API/edge/fixes" -H "X-Device-Token: $TOK" -H "Content-Type: application/json" -d "$(fixes 40)"
+is "$(rflags | sort -u | tr '\n' ' ')" "overspeed/-/60.0/90.0 " "now overspeed is flagged: no stretch, the 60 km/h default"
+code PUT /config/policies/special_trip_speed_kmh '{"policy_value":""}' "$OT" >/dev/null
+code POST /devices/$DEV/return '{}' "$CT" >/dev/null
 is "$(code POST /trips/$TW/arrive "" "$D3T")" 200 "and taps Arrived"
 is "$(sql "SELECT status FROM special_trip_requests WHERE request_id = '$RW'")" completed "the walk-in request is completed"
 is "$(code POST /trips/$RT1/void '{"reason":"Customer called off the trip"}' "$OT")" 200 "the manager voids the app rental"

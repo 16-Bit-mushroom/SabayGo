@@ -26,6 +26,10 @@ nothing is known about what happened in it. A stretch time is wall-clock
 and does not need the gap filled. A reading with no speed takes the
 speed from the distance to the reading before it.
 
+A special trip (a rental) has no route: no stretches, no stop zones.
+Only overspeed applies to it, against one limit (`rental_flags`, brief
+2.5).
+
 A run still under way when the readings end is reported with no end
 (`end` None) once it already qualifies; a short stop still under way is
 not reported yet. Flags are keyed by kind and start, so a later
@@ -114,6 +118,7 @@ def _overlap(a0: datetime, a1: datetime, b0: datetime, b1: datetime) -> float:
 
 
 def _points(readings: Sequence[Reading], stops: Sequence[Stop]) -> list[_Point]:
+    """Each reading with its speed, and, on a route, its stretch and zone."""
     line = [(s.seq, s.lat, s.lon) for s in stops]
     out: list[_Point] = []
     prev: Reading | None = None
@@ -123,11 +128,14 @@ def _points(readings: Sequence[Reading], stops: Sequence[Stop]) -> list[_Point]:
             dt = _seconds(prev.at, r.at) if prev else 0.0
             speed = (haversine_m(prev.lat, prev.lon, r.lat, r.lon) / dt * 3.6
                      if prev and dt > 0 else (out[-1].speed if out else 0.0))
-        snap = snap_to_route(r.lat, r.lon, line)
-        dists = [(haversine_m(r.lat, r.lon, s.lat, s.lon), s) for s in stops]
-        near_m, near = min(dists, key=lambda d: d[0])
-        out.append(_Point(r, speed, snap.stretch if snap else None,
-                          near.seq if near_m <= near.radius_m else None, near_m))
+        if stops:
+            snap = snap_to_route(r.lat, r.lon, line)
+            near_m, near = min(((haversine_m(r.lat, r.lon, s.lat, s.lon), s) for s in stops),
+                               key=lambda d: d[0])
+            out.append(_Point(r, speed, snap.stretch if snap else None,
+                              near.seq if near_m <= near.radius_m else None, near_m))
+        else:
+            out.append(_Point(r, speed, None, None, float("inf")))
         prev = r
     return out
 
@@ -152,6 +160,37 @@ def _runs(points: list[_Point], test, gap_s: int) -> list[tuple[list[_Point], _P
     return runs
 
 
+def _overspeed(points: list[_Point], limit_of, rules: Rules) -> list[Flag]:
+    """Runs above the limit (`limit_of(point)`, None for none) lasting
+    `overspeed_s` or more."""
+    last_at = points[-1].r.at
+    out = []
+
+    def over(p: _Point) -> bool:
+        limit = limit_of(p)
+        return limit is not None and p.speed > limit
+
+    for run, _ in _runs(points, over, rules.gap_s):
+        first, last = run[0], run[-1]
+        if _seconds(first.r.at, last.r.at) < rules.overspeed_s:
+            continue
+        ongoing = last.r.at == last_at
+        out.append(Flag(
+            "overspeed", first.r.at, None if ongoing else last.r.at, first.r.lat, first.r.lon,
+            stretch_no=first.stretch, max_speed_kmh=round(max(p.speed for p in run), 1),
+            limit_kmh=limit_of(first), duration_s=round(_seconds(first.r.at, last.r.at)),
+        ))
+    return out
+
+
+def rental_flags(readings: Sequence[Reading], limit_kmh: float, rules: Rules) -> list[Flag]:
+    """A special trip's flags: overspeed against its one limit (brief 2.5)."""
+    if not readings:
+        return []
+    points = _points(sorted(readings, key=lambda r: r.at), [])
+    return _overspeed(points, lambda p: limit_kmh, rules)
+
+
 def flags(readings: Sequence[Reading], stops: Sequence[Stop],
           stretches: Sequence[Stretch], waits: Sequence[Wait], rules: Rules) -> list[Flag]:
     """Every driving flag in a trip's readings, in time order."""
@@ -163,21 +202,8 @@ def flags(readings: Sequence[Reading], stops: Sequence[Stop],
     out: list[Flag] = []
 
     # Overspeed: above the limit of the stretch the van is on.
-    def over(p: _Point) -> bool:
-        s = by_no.get(p.stretch)
-        return s is not None and p.speed > s.limit_kmh
-
-    for run, _ in _runs(points, over, rules.gap_s):
-        first, last = run[0], run[-1]
-        if _seconds(first.r.at, last.r.at) < rules.overspeed_s:
-            continue
-        ongoing = last.r.at == last_at
-        out.append(Flag(
-            "overspeed", first.r.at, None if ongoing else last.r.at, first.r.lat, first.r.lon,
-            stretch_no=first.stretch, max_speed_kmh=round(max(p.speed for p in run), 1),
-            limit_kmh=by_no[first.stretch].limit_kmh,
-            duration_s=round(_seconds(first.r.at, last.r.at)),
-        ))
+    out += _overspeed(points, lambda p: by_no[p.stretch].limit_kmh if p.stretch in by_no else None,
+                      rules)
 
     # Stops away from every stop zone.
     for run, ended_by in _runs(points, lambda p: p.speed <= rules.standstill_kmh, rules.gap_s):

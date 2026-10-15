@@ -9,7 +9,9 @@ Run after each batch of readings of a trip on the road (departed) or
 done (completed), so a phone uploading late, after the trip completed,
 still has its readings counted. The readings are taken from the
 departure on, with the one just before it, so the first stretch is
-timed from the starting terminal's zone. A rental has no route: no flags.
+timed from the starting terminal's zone. A rental has no route: only
+overspeed, against `special_trip_speed_kmh` (brief 2.5), and none while
+that is unset.
 
 Each run recomputes from every reading and reconciles by kind and start:
   - a new flag is stored with its general place (`TrackingService.geotag`)
@@ -79,14 +81,19 @@ class DrivingFlags:
         """Recompute the trip's flags and store them. Commits. Returns the
         flags that are new."""
         trip = await self.session.get(Trip, trip_id)
-        if trip is None or trip.route_id is None or trip.status not in ON_THE_ROAD \
-                or trip.departed_at is None:
+        if trip is None or trip.status not in ON_THE_ROAD or trip.departed_at is None:
             return []
-        found = driving.flags(
-            await self._readings(trip), await self._stops(trip.route_id),
-            await self._stretches(trip.route_id), await self._waits(trip),
-            await self._rules(),
-        )
+        if trip.route_id is None:
+            limit = await PolicyRepository(self.session).get_optional_int("special_trip_speed_kmh")
+            if limit is None:
+                return []
+            found = driving.rental_flags(await self._readings(trip), limit, await self._rules())
+        else:
+            found = driving.flags(
+                await self._readings(trip), await self._stops(trip.route_id),
+                await self._stretches(trip.route_id), await self._waits(trip),
+                await self._rules(),
+            )
         stored = {(e.flag_type, e.start_at): e for e in (await self.session.execute(
             select(DrivingEvent).where(DrivingEvent.trip_id == trip_id)
         )).scalars()}
