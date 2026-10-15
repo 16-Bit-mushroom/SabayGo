@@ -21,7 +21,8 @@ from app.application.scheduling.generate_trips import (
     CreateSpecialTripUseCase,
     GenerateDailyTripsUseCase,
 )
-from app.core.exceptions import ConflictError, NotFoundError
+from app.application.tracking.geometry import haversine_m
+from app.core.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.core.timezone import APP_TZ
 from app.infrastructure.models import (
     Booking,
@@ -30,6 +31,7 @@ from app.infrastructure.models import (
     Operator,
     Route,
     RouteStop,
+    RouteStretch,
     ScheduleTemplate,
     StaffProfile,
     Terminal,
@@ -323,6 +325,94 @@ async def list_fares(route_id: str, session: SessionDep) -> list[dict]:
         }
         for f in result.scalars()
     ]
+
+
+class StretchesIn(BaseModel):
+    """A2Z's speed limit for each stretch in route order, and one stop-zone
+    radius for the route's stops (brief 6.3; 100 m in the sample)."""
+    speed_limits_kmh: list[int] = Field(min_length=1)
+    stop_zone_radius_m: int = Field(default=100, ge=1, le=2000)
+
+
+class StretchOut(BaseModel):
+    stretch_no: int
+    from_stop: str
+    to_stop: str
+    from_distance_m: Decimal
+    length_m: Decimal
+    speed_limit_kmh: int
+    stop_zone_radius_m: int
+    expected_time_s: int
+
+
+async def _stretches(session, route_id: str) -> list[StretchOut]:
+    names = dict((await session.execute(
+        select(RouteStop.stop_sequence, Terminal.terminal_name)
+        .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
+        .where(RouteStop.route_id == route_id)
+    )).all())
+    rows = (await session.execute(
+        select(RouteStretch).where(RouteStretch.route_id == route_id)
+        .order_by(RouteStretch.stretch_no)
+    )).scalars()
+    return [StretchOut(
+        stretch_no=s.stretch_no, from_stop=names[s.stretch_no], to_stop=names[s.stretch_no + 1],
+        from_distance_m=s.from_distance_m, length_m=s.length_m,
+        speed_limit_kmh=s.speed_limit_kmh, stop_zone_radius_m=s.stop_zone_radius_m,
+        expected_time_s=s.expected_time_s,
+    ) for s in rows]
+
+
+@router.get("/routes/{route_id}/stretches", response_model=list[StretchOut],
+            dependencies=[Depends(OFFICE)])
+async def list_stretches(route_id: str, session: SessionDep) -> list[StretchOut]:
+    """The route's stretches as NAHGM measures them. Empty until the
+    Terminal Manager sets the speed limits: no overspeed or slow-stretch
+    flag is raised on a route without them."""
+    return await _stretches(session, route_id)
+
+
+@router.put("/routes/{route_id}/stretches", response_model=list[StretchOut],
+            dependencies=[Depends(MANAGER)])
+async def set_stretches(
+    route_id: str, payload: StretchesIn, session: SessionDep,
+) -> list[StretchOut]:
+    """Set the speed limits. Lengths are measured stop to stop along the
+    straight route line, as NAHGM snaps to it; each expected time is
+    (length - the stop zone at each end) / `expected_speed_kmh` in force
+    now, and stays with the stretch until it is saved again."""
+    stops = (await session.execute(
+        select(RouteStop.stop_sequence, Terminal.latitude, Terminal.longitude)
+        .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
+        .where(RouteStop.route_id == route_id).order_by(RouteStop.stop_sequence)
+    )).all()
+    if len(stops) < 2:
+        raise NotFoundError("Route not found, or it has fewer than two stops.")
+    if len(payload.speed_limits_kmh) != len(stops) - 1:
+        raise InvalidInputError(
+            f"The route has {len(stops) - 1} stretches: give one speed limit for each.")
+    if any(not 1 <= limit <= 200 for limit in payload.speed_limits_kmh):
+        raise InvalidInputError("A speed limit is between 1 and 200 km/h.")
+    speed = await PolicyRepository(session).get_int("expected_speed_kmh")
+    radius = payload.stop_zone_radius_m
+
+    existing = {s.stretch_no: s for s in (await session.execute(
+        select(RouteStretch).where(RouteStretch.route_id == route_id)
+    )).scalars()}
+    travelled = 0.0
+    for (seq, alat, alon), (_, blat, blon), limit in zip(stops, stops[1:], payload.speed_limits_kmh):
+        length = haversine_m(float(alat), float(alon), float(blat), float(blon))
+        row = existing.get(seq) or RouteStretch(stretch_id=str(uuid.uuid4()), route_id=route_id,
+                                                stretch_no=seq)
+        row.from_distance_m = Decimal(f"{travelled:.2f}")
+        row.length_m = Decimal(f"{length:.2f}")
+        row.speed_limit_kmh = limit
+        row.stop_zone_radius_m = radius
+        row.expected_time_s = max(0, round((length - 2 * radius) / (speed / 3.6)))
+        session.add(row)
+        travelled += length
+    await session.commit()
+    return await _stretches(session, route_id)
 
 
 # ===================================================================

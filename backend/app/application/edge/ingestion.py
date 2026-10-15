@@ -38,6 +38,7 @@ from app.application.notifications.service import NotificationService
 from app.application.operations.boarding import DepartTripUseCase
 from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
+from app.application.tracking.flags import DrivingFlags
 from app.application.tracking.nahgm import TrackingService
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, InvalidInputError, NotFoundError
@@ -314,6 +315,7 @@ class EdgeIngestion:
         self._check_clock([f.recorded_at for f in fixes])
         tracking = TrackingService(self.session)
         counts = {"recorded": 0, "held": 0, "ignored": 0}
+        on_trips: set[str] = set()
         for f in sorted(fixes, key=lambda f: f.recorded_at):
             van_id = await van_at(self.session, self.device.device_id, f.recorded_at)
             if van_id is None:
@@ -329,15 +331,35 @@ class EdgeIngestion:
                 counts["held"] += 1
                 await self._detect_departure(van_id, f, tracking)
                 continue
-            if trip.status in (TripStatus.COMPLETED.value, TripStatus.CANCELLED.value):
+            late = (trip.status == TripStatus.COMPLETED.value and trip.completed_at is not None
+                    and f.recorded_at <= trip.completed_at)
+            if trip.status in (TripStatus.COMPLETED.value, TripStatus.CANCELLED.value) \
+                    and not late:
                 counts["ignored"] += 1
                 continue
-            await tracking.record_ping(
-                trip_id=trip.trip_id, latitude=f.latitude, longitude=f.longitude,
-                accuracy_m=f.accuracy_m, speed_kph=f.speed_kph,
-                heading_deg=f.heading_deg, recorded_at=f.recorded_at,
-            )
+            if late:
+                # Uploaded after the alightings completed the trip.
+                await tracking.file_late_reading(
+                    trip, latitude=f.latitude, longitude=f.longitude,
+                    accuracy_m=f.accuracy_m, speed_kph=f.speed_kph,
+                    heading_deg=f.heading_deg, recorded_at=f.recorded_at,
+                )
+            else:
+                await tracking.record_ping(
+                    trip_id=trip.trip_id, latitude=f.latitude, longitude=f.longitude,
+                    accuracy_m=f.accuracy_m, speed_kph=f.speed_kph,
+                    heading_deg=f.heading_deg, recorded_at=f.recorded_at,
+                )
             counts["recorded"] += 1
+            on_trips.add(trip.trip_id)
+        # The readings are stored; a flag that fails is logged, never
+        # returned to the phone, which would only resend them.
+        for trip_id in on_trips:
+            try:
+                await DrivingFlags(self.session).review(trip_id)
+            except Exception:
+                await self.session.rollback()
+                log.exception("Driving flags failed for trip %s.", trip_id)
         return counts
 
     async def _detect_departure(self, van_id: str, fix: Fix,

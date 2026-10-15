@@ -29,6 +29,9 @@ _BOUNDS: dict[str, tuple[Decimal, Decimal | None]] = {
     "home_pickup_max_route_m": (Decimal(1), None),
     "chat_image_max_kb": (Decimal(1), None),
     "chat_image_retention_days": (Decimal(1), None),
+    "overspeed_seconds": (Decimal(1), None),
+    "stop_seconds": (Decimal(1), None),
+    "expected_speed_kmh": (Decimal(1), None),
 }
 
 

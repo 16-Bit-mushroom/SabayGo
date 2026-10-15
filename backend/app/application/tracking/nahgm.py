@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
@@ -42,6 +42,7 @@ from app.core.timezone import APP_TZ, localize
 from app.domain.enums import AuditTrigger, TripStatus
 from app.infrastructure.models import (
     RouteStop,
+    RouteStretch,
     Terminal,
     Trip,
     TripLocationPing,
@@ -100,6 +101,25 @@ class Geotag:
     general: str | None = None
 
 
+def _reading(
+    *, trip_id: str | None, van_id: str | None, latitude: float, longitude: float,
+    accuracy_m: float | None, speed_kph: float | None, heading_deg: float | None,
+    recorded_at: datetime, nearest_seq: int | None = None, nearest_dist: float | None = None,
+) -> TripLocationPing:
+    def dec(value: float | None) -> Decimal | None:
+        return None if value is None else Decimal(str(round(value, 2)))
+
+    return TripLocationPing(
+        trip_id=trip_id, van_id=van_id,
+        latitude=Decimal(str(round(latitude, 6))),
+        longitude=Decimal(str(round(longitude, 6))),
+        accuracy_m=dec(accuracy_m), speed_kph=dec(speed_kph), heading_deg=dec(heading_deg),
+        nearest_stop_sequence=nearest_seq, distance_to_stop_m=dec(nearest_dist),
+        recorded_at=recorded_at,
+        received_at=datetime.now(APP_TZ).replace(tzinfo=None),
+    )
+
+
 class TrackingService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -136,33 +156,11 @@ class TrackingService:
         if when.tzinfo is not None:
             when = when.astimezone(APP_TZ).replace(tzinfo=None)
 
-        self.session.add(
-            TripLocationPing(
-                trip_id=trip_id,
-                van_id=trip.van_id,
-                latitude=Decimal(str(round(latitude, 6))),
-                longitude=Decimal(str(round(longitude, 6))),
-                accuracy_m=(
-                    Decimal(str(round(accuracy_m, 2))) if accuracy_m is not None else None
-                ),
-                speed_kph=(
-                    Decimal(str(round(speed_kph, 2))) if speed_kph is not None else None
-                ),
-                heading_deg=(
-                    Decimal(str(round(heading_deg, 2)))
-                    if heading_deg is not None
-                    else None
-                ),
-                nearest_stop_sequence=nearest_seq,
-                distance_to_stop_m=(
-                    Decimal(str(round(nearest_dist, 2)))
-                    if nearest_dist is not None
-                    else None
-                ),
-                recorded_at=when,
-                received_at=datetime.now(APP_TZ).replace(tzinfo=None),
-            )
-        )
+        self.session.add(_reading(
+            trip_id=trip_id, van_id=trip.van_id, latitude=latitude, longitude=longitude,
+            accuracy_m=accuracy_m, speed_kph=speed_kph, heading_deg=heading_deg,
+            recorded_at=when, nearest_seq=nearest_seq, nearest_dist=nearest_dist,
+        ))
         await self.session.commit()
 
         # 2.3.5's GPS-node trigger. The van has pulled out of a terminal's
@@ -374,12 +372,28 @@ class TrackingService:
     async def _node_radius(
         self, stop_sequence: int, stops: list[tuple[RouteStop, Terminal]]
     ) -> float:
-        terminal = next(
-            (t for rs, t in stops if rs.stop_sequence == stop_sequence), None
-        )
-        if terminal is not None and terminal.geofence_radius_m:
-            return float(terminal.geofence_radius_m)
-        return float(await self.policies.get_int("default_geofence_radius_m"))
+        return (await self.stop_zones(stops))[stop_sequence]
+
+    async def stop_zones(self, stops: list[tuple[RouteStop, Terminal]]) -> dict[int, float]:
+        """Each stop's zone radius (brief 6.3): the route's stop zone once
+        its stretches are set, else the terminal's geofence, else the
+        default geofence."""
+        if not stops:
+            return {}
+        route_zone = await self.session.scalar(
+            select(func.max(RouteStretch.stop_zone_radius_m))
+            .where(RouteStretch.route_id == stops[0][0].route_id))
+        default: float | None = None
+        zones: dict[int, float] = {}
+        for rs, t in stops:
+            if route_zone:
+                zones[rs.stop_sequence] = float(route_zone)
+            elif t.geofence_radius_m:
+                zones[rs.stop_sequence] = float(t.geofence_radius_m)
+            else:
+                default = default or float(await self.policies.get_int("default_geofence_radius_m"))
+                zones[rs.stop_sequence] = default
+        return zones
 
     async def hold_reading(
         self, *, van_id: str, latitude: float, longitude: float,
@@ -389,19 +403,30 @@ class TrackingService:
         """A reading from a van with no trip at its time: kept against the
         van (025) so a departure can still be counted, and moved to the
         trip that claims it (`edge.ledger.release_held`)."""
-        def dec(value: float | None) -> Decimal | None:
-            return None if value is None else Decimal(str(round(value, 2)))
-
-        self.session.add(TripLocationPing(
-            trip_id=None, van_id=van_id,
-            latitude=Decimal(str(round(latitude, 6))),
-            longitude=Decimal(str(round(longitude, 6))),
-            accuracy_m=dec(accuracy_m), speed_kph=dec(speed_kph), heading_deg=dec(heading_deg),
+        self.session.add(_reading(
+            trip_id=None, van_id=van_id, latitude=latitude, longitude=longitude,
+            accuracy_m=accuracy_m, speed_kph=speed_kph, heading_deg=heading_deg,
             recorded_at=recorded_at,
-            received_at=datetime.now(APP_TZ).replace(tzinfo=None),
         ))
         await self.session.flush()
         await NonPassengerMoves(self.session).on_reading(van_id, latitude, longitude, recorded_at)
+        await self.session.commit()
+
+    async def file_late_reading(
+        self, trip: Trip, *, latitude: float, longitude: float, accuracy_m: float | None,
+        speed_kph: float | None, heading_deg: float | None, recorded_at: datetime,
+    ) -> None:
+        """A reading from during a trip that has since completed: a phone
+        offline on the road uploads it after the alightings ended the
+        trip. History only: nothing live (departure, capacity) runs on it,
+        but the trip's driving flags count it."""
+        stops = await self._route_stops(trip.route_id) if trip.route_id else []
+        nearest_seq, nearest_dist = self._match_to_node(latitude, longitude, stops)
+        self.session.add(_reading(
+            trip_id=trip.trip_id, van_id=trip.van_id, latitude=latitude, longitude=longitude,
+            accuracy_m=accuracy_m, speed_kph=speed_kph, heading_deg=heading_deg,
+            recorded_at=recorded_at, nearest_seq=nearest_seq, nearest_dist=nearest_dist,
+        ))
         await self.session.commit()
 
     async def left_zone(

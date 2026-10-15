@@ -259,6 +259,23 @@ else
   ./tests/integration/test_retention.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 603 R9: driving flags -- the rules on the paper's sample trip
+# (pure), then the pipeline from the phone's GPS readings.
+{
+  echo
+  echo "==================================================================="
+  echo "  DRIVING FLAGS (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  python tests/test_driving_flags.py 2>&1 | strip_ansi >> "$REPORT"
+  ./tests/integration/test_driving_flags.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  python tests/test_driving_flags.py 2>&1 | tee >(strip_ansi >> "$REPORT")
+  ./tests/integration/test_driving_flags.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
 from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 
 from app.api.v1.deps import SessionDep, require_roles
+from app.application.tracking.flags import DrivingFlags
 from app.application.tracking.nahgm import TrackingService
 from app.config import settings
 from app.core.exceptions import AuthenticationError
 from app.domain.enums import Role
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
@@ -84,7 +88,7 @@ async def record_ping(
     the edge computer, a crew handset, or the replay simulator used for
     demonstration. Where the reading came from is not the API's concern.
     """
-    return await TrackingService(session).record_ping(
+    stored = await TrackingService(session).record_ping(
         trip_id=trip_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
@@ -93,6 +97,13 @@ async def record_ping(
         heading_deg=payload.heading_deg,
         recorded_at=payload.recorded_at,
     )
+    # Brief 6.4; the reading is kept whatever happens here.
+    try:
+        await DrivingFlags(session).review(trip_id)
+    except Exception:
+        await session.rollback()
+        log.exception("Driving flags failed for trip %s.", trip_id)
+    return stored
 
 
 @router.get("/trips/{trip_id}/position", response_model=PositionOut)
