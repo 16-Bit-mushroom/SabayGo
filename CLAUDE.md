@@ -522,10 +522,36 @@ enum has no such kind); the pickup's proof fields are the record. The
 proof paths lock trip then pickup (Depart's order) and the pair's
 bookings (a concurrent webhook waits). Not built: a reject for a bad
 screenshot (the relative sends another; unconfirmed seats lapse at
-departure). `test_home_pickup.sh` **84**.
-**Next: R7, disputes (brief 2.1).**
-Then R8 retention (incl. chat images, T41 b), R9 driving flags (reuse `geotag`; subtract
-a pickup's `arrived_at`..`left_at` from the stretch time), R10 screens.
+departure). `test_home_pickup.sh` **84**. Committed as one commit
+(`0f44c8a`).
+Done: **R7, disputes** (15 Oct). No migration. Rules:
+`application/finance/disputes.py` (read its docstring); API
+`api/v1/disputes.py`: `POST /disputes` (subject + `line_id` or
+`driving_event_id`, the operator's words; the trip's Dispatcher, the
+Cashier or the Terminal Manager), `GET /disputes?status=&trip_id=&remittance_id=`
+(a Dispatcher names their own trip), `.../{id}/withdraw` (recorders),
+`.../{id}/decide` (Terminal Manager: upheld / rejected / adjusted +
+amount, note required, final). A fare line is disputable until a payment
+is recorded on its statement after the line was written (so a top-up
+until its own payment); a driving flag after the trip too, while the
+trip has GPS readings; one standing dispute per item (a withdrawn one
+does not block). Money, in `statement.py`: an open dispute's share waits
+(left out of `due`, so it blocks neither Start nor assignment); upheld
+takes the line out of V/D and owed; adjusted makes its share the
+Terminal Manager's amount, fares kept; rejected / withdrawn make it due
+again, and a trip not yet departed goes back to `unpaid`. A contested
+line is frozen (`_mirror` no longer changes it; same-kind seats go on a
+new line), and a van change moves the trip's disputes with its lines.
+A flag's decision is its review: upheld → `dismissed`, rejected →
+`reviewed`; a flag cannot be adjusted. 'Dispute Raised' to the Terminal
+Manager. New ORM model `DrivingEvent` (Table 30) for R9. Test:
+`test_disputes.sh` (78, in the runner; flags written with SQL). Left
+alone: a disputed line whose seat is cancelled before the lock keeps its
+count until decided (R3's `_drop` keeps it for the decision).
+**Next: R8 retention** (incl. chat images, T41 b; skip trips with an
+open dispute), then R9 driving flags (reuse `geotag`; subtract a
+pickup's `arrived_at`..`left_at` from the stretch time), R10 screens
+(incl. Disputes).
 
 ---
 

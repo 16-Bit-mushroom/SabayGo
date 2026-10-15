@@ -32,6 +32,13 @@ lines whenever they change, so its totals cannot drift from them:
     dispute waits: the undisputed balance leaves it out.
 Payments are recorded against a statement and add up in settled_amount.
 
+A decided dispute (`application/finance/disputes.py`) changes its line's
+count here: upheld, the line leaves the statement (fares and share);
+adjusted, its share is the Terminal Manager's amount and its fares stay;
+rejected or withdrawn, nothing changes and the share is due again. A
+contested line is frozen as it was contested: the list no longer changes
+it, and seats of the same kind added later go on a line of their own.
+
 Two blocks read the undisputed balance (brief 2.1): Start waits for the
 trip's statement to reach 0, and a van with any balance is refused its
 next assignment. The Terminal Manager's override on a trip lifts both
@@ -48,7 +55,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,11 +172,17 @@ class Statements:
         statement = await self.statement_for(trip.van_id, trip.service_date)
         touched = {statement.remittance_id}
 
-        # The van changed: the lines follow the trip.
+        # The van changed: the lines follow the trip, and so do the
+        # disputes, which are about the trip's items.
         for line in lines:
             if line.remittance_id != statement.remittance_id:
                 touched.add(line.remittance_id)
                 line.remittance_id = statement.remittance_id
+        if len(touched) > 1:
+            await self.session.execute(
+                update(Dispute).where(Dispute.trip_id == trip.trip_id)
+                .values(remittance_id=statement.remittance_id)
+            )
 
         if trip.status == TripStatus.CANCELLED.value:
             # A voided trip owes nothing; recompute leaves its lines out.
@@ -188,9 +201,18 @@ class Statements:
 
     async def _mirror(self, trip: Trip, statement: Remittance,
                       lines: list[RemittanceLine]) -> None:
-        """Before the lock: the lines are the list."""
+        """Before the lock: the lines are the list. A contested line
+        stays as it was contested; the rest of the list fills the others."""
         want = await self.listed(trip)
         origin = (await self._terminals(trip)).get(1) if want else None
+        contested = await self._contested(lines)
+        for line in lines:
+            key = self._key(line)
+            if line.line_id in contested and key in want:
+                want[key] -= line.passenger_count
+                if want[key] <= 0:
+                    del want[key]
+        lines = [line for line in lines if line.line_id not in contested]
         have: dict[LineKey, RemittanceLine] = {}
         stale: list[RemittanceLine] = []
         for line in lines:
@@ -250,14 +272,21 @@ class Statements:
         line.gross_fare = line.fare_per_passenger * count
         line.share_amount = share_of(line.gross_fare, rate_pct)
 
+    async def _contested(self, lines: list[RemittanceLine]) -> set[str]:
+        """The lines a dispute names, whatever became of it: its record
+        needs the line as it was contested."""
+        if not lines:
+            return set()
+        return set((await self.session.execute(
+            select(Dispute.line_id).where(Dispute.line_id.in_([line.line_id for line in lines]))
+        )).scalars())
+
     async def _drop(self, lines: list[RemittanceLine]) -> None:
         """Delete lines nobody disputes; a disputed line stays for the
         Terminal Manager's decision."""
+        contested = await self._contested(lines)
         for line in lines:
-            disputed = (await self.session.execute(
-                select(func.count()).select_from(Dispute).where(Dispute.line_id == line.line_id)
-            )).scalar_one()
-            if not disputed:
+            if line.line_id not in contested:
                 await self.session.delete(line)
 
     @staticmethod
@@ -293,15 +322,23 @@ class Statements:
         )).scalar_one_or_none()
 
     async def recompute(self, statement: Remittance) -> None:
+        # A line carries at most one decided dispute (disputes.py).
         rows = (await self.session.execute(
             select(RemittanceLine.income_group, RemittanceLine.gross_fare,
-                   RemittanceLine.share_amount, Trip.start_review_status)
+                   RemittanceLine.share_amount, Trip.start_review_status,
+                   Dispute.outcome, Dispute.adjusted_amount)
             .join(Trip, Trip.trip_id == RemittanceLine.trip_id)
+            .outerjoin(Dispute, and_(Dispute.line_id == RemittanceLine.line_id,
+                                     Dispute.status == "resolved"))
             .where(RemittanceLine.remittance_id == statement.remittance_id,
                    Trip.status != TripStatus.CANCELLED.value)
         )).all()
         verified = declared = owed = held = ZERO
-        for group, gross, share, review in rows:
+        for group, gross, share, review, outcome, adjusted in rows:
+            if outcome == "upheld":
+                continue
+            if outcome == "adjusted":
+                share = adjusted
             if review == StartReview.PENDING.value:
                 held += share
                 continue
@@ -320,10 +357,15 @@ class Statements:
 
     # ---------------------------------------------------------- balances
     async def disputed(self, statement: Remittance) -> Decimal:
+        """The shares that wait for the Terminal Manager's decision, on
+        lines the statement still counts."""
         return Decimal((await self.session.execute(
-            select(func.coalesce(func.sum(Dispute.amount_disputed), 0)).where(
+            select(func.coalesce(func.sum(Dispute.amount_disputed), 0))
+            .join(Trip, Trip.trip_id == Dispute.trip_id)
+            .where(
                 Dispute.remittance_id == statement.remittance_id,
                 Dispute.subject == "fare_line", Dispute.status == "open",
+                Trip.status != TripStatus.CANCELLED.value,
             )
         )).scalar_one())
 

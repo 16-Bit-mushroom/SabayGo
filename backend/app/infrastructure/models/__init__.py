@@ -17,6 +17,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     SmallInteger,
     String,
@@ -748,6 +749,28 @@ class SpecialTripRequest(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
+class DrivingEvent(Base):
+    """A driving flag computed from the trip's GPS readings (Table 30,
+    brief 6.4). The row stays when retention deletes the readings."""
+
+    __tablename__ = "driving_events"
+
+    driving_event_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    flag_type: Mapped[str] = mapped_column(String(16))
+    start_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    end_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    distance_from_start_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    stretch_no: Mapped[int | None] = mapped_column(SmallInteger)
+    max_speed_kmh: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
+    limit_kmh: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
+    time_ratio: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    nearest_stop_dist_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    duration_s: Mapped[int | None] = mapped_column(Integer)
+    review_status: Mapped[str] = mapped_column(String(16), default="open")
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
 class Dispute(Base):
     """An operator's contest of a fare line or a driving flag (Table 39)."""
 
@@ -758,7 +781,8 @@ class Dispute(Base):
     trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
     subject: Mapped[str] = mapped_column(String(16))
     line_id: Mapped[str | None] = mapped_column(ForeignKey("remittance_lines.line_id"))
-    driving_event_id: Mapped[str | None] = mapped_column(String(36))
+    driving_event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("driving_events.driving_event_id"))
     operator_statement: Mapped[str] = mapped_column(String(500))
     amount_disputed: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
     raised_by_role: Mapped[str] = mapped_column(String(16))
