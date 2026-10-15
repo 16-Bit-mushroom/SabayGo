@@ -116,6 +116,12 @@ class PolicyRepository:
     async def get_int(self, key: str) -> int:
         return int(await self._raw(key))
 
+    async def get_optional_int(self, key: str) -> int | None:
+        """None while the value is unset (`domain.policies.MAY_BE_UNSET`):
+        whatever reads it then does nothing."""
+        raw = (await self._raw(key)).strip()
+        return int(raw) if raw else None
+
     async def get_bool(self, key: str) -> bool:
         return (await self._raw(key)).strip().lower() in _TRUE
 

@@ -21,8 +21,9 @@ from app.application.operations.check_in import (
     UndoCheckInUseCase,
 )
 from app.application.operations.guards import assert_assigned_to_trip
+from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
-from app.domain.enums import Role
+from app.domain.enums import DepartureSource, Role
 from app.infrastructure.models import Trip, User
 
 router = APIRouter(tags=["operations"])
@@ -180,10 +181,11 @@ async def manifest(trip_id: str, session: SessionDep) -> ManifestResponse:
 
 
 # ----------------------------------------------------------- lifecycle
-# Brief 4.2 and the permission table (section 3): the office assigns,
-# starts and departs; only the Terminal Manager reviews an automatic
-# start, changes a started trip's van or voids a trip; the Dispatcher
-# taps Arrived. The rules are in application/operations/trip_lifecycle.py.
+# Brief 4.2 and the permission table (section 3), rev 603: the office
+# assigns and starts; the Dispatcher taps Depart (the office may too) and
+# Arrived; only the Terminal Manager overrides the payment block, reviews
+# an automatic start, changes a started trip's van or voids a trip. The
+# rules are in application/operations/trip_lifecycle.py.
 class TripStateOut(BaseModel):
     trip_id: str
     status: str
@@ -195,6 +197,10 @@ class TripStateOut(BaseModel):
     audit_status: str
     unaudited_reason: str | None
     departure_source: str | None
+    payment_status: str
+    list_locked_at: dt.datetime | None
+    crew_aboard: bool
+    payment_override_note: str | None
     change_note: str | None
     # Shown to whoever started the trip; a start is never refused for these.
     warnings: list[str] = []
@@ -212,6 +218,10 @@ def _state(trip: Trip, warnings: list[str] | None = None) -> TripStateOut:
         audit_status=trip.audit_status,
         unaudited_reason=trip.unaudited_reason,
         departure_source=trip.departure_source,
+        payment_status=trip.payment_status,
+        list_locked_at=trip.list_locked_at,
+        crew_aboard=bool(trip.crew_aboard),
+        payment_override_note=trip.payment_override_note,
         change_note=trip.change_note,
         warnings=warnings or [],
     )
@@ -251,10 +261,85 @@ async def start(
     return _state(outcome.trip, outcome.warnings)
 
 
-@router.post("/trips/{trip_id}/depart", dependencies=[Depends(OFFICE)])
-async def depart(trip_id: str, session: SessionDep) -> dict:
-    """Close boarding. Anyone confirmed but unscanned becomes a no-show."""
-    return await DepartTripUseCase(session).execute(trip_id=trip_id)
+DEPARTS = require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER, Role.CASHIER, Role.ADMIN)
+
+
+@router.post("/trips/{trip_id}/depart")
+async def depart(
+    trip_id: str, session: SessionDep, user: Annotated[User, Depends(DEPARTS)],
+) -> dict:
+    """The Dispatcher taps Depart (or the Cashier or the Terminal Manager).
+    Anyone confirmed but unscanned becomes a no-show; the list locks."""
+    if user.role == Role.DISPATCHER.value:
+        await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
+        source = DepartureSource.DISPATCHER
+    else:
+        source = DepartureSource.STAFF
+    return await DepartTripUseCase(session).execute(trip_id=trip_id, source=source)
+
+
+class OverrideIn(BaseModel):
+    note: str = Field(min_length=3, max_length=255)
+
+
+@router.post("/trips/{trip_id}/payment-override", response_model=TripStateOut)
+async def override_payment(
+    trip_id: str, payload: OverrideIn, session: SessionDep,
+    user: Annotated[User, Depends(MANAGER)],
+) -> TripStateOut:
+    """Lift this trip's payment block (its assignment and its Start) with
+    a written reason. The Terminal Manager only; the share stays owed."""
+    return _state(await TripLifecycle(session).override_payment(trip_id, by=user, note=payload.note))
+
+
+class CrewIn(BaseModel):
+    aboard: bool
+
+
+DISPATCHER = require_roles(Role.DISPATCHER)
+
+
+@router.put("/trips/{trip_id}/crew", response_model=TripStateOut)
+async def set_crew(
+    trip_id: str, payload: CrewIn, session: SessionDep,
+    user: Annotated[User, Depends(DISPATCHER)],
+) -> TripStateOut:
+    """The assigned Dispatcher adds themselves as crew: not a boarding,
+    not counted toward the 14."""
+    return _state(await TripLifecycle(session).set_crew(trip_id, by=user, aboard=payload.aboard))
+
+
+class MoveIn(BaseModel):
+    reason: str
+    note: str | None = Field(default=None, max_length=255)
+
+
+class MoveOut(BaseModel):
+    move_id: str
+    van_id: str
+    trip_id: str | None
+    reason: str
+    reason_note: str | None
+    started_at: dt.datetime
+    ended_at: dt.datetime | None
+
+
+@router.post("/non-passenger-moves", response_model=MoveOut, status_code=201)
+async def start_move(
+    payload: MoveIn, session: SessionDep, user: Annotated[User, Depends(DISPATCHER)],
+) -> MoveOut:
+    """'Not a passenger trip': pressed before the van leaves. Nothing is
+    started or owed, and the GPS fallback holds off, until it ends."""
+    move = await NonPassengerMoves(session).start(by=user, reason=payload.reason, note=payload.note)
+    return MoveOut.model_validate(move, from_attributes=True)
+
+
+@router.post("/non-passenger-moves/{move_id}/end", response_model=MoveOut)
+async def end_move(
+    move_id: str, session: SessionDep, user: Annotated[User, Depends(DISPATCHER)],
+) -> MoveOut:
+    move = await NonPassengerMoves(session).end(move_id, by=user)
+    return MoveOut.model_validate(move, from_attributes=True)
 
 
 @router.post("/trips/{trip_id}/arrive", response_model=TripStateOut,

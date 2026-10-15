@@ -479,6 +479,7 @@ class TripBoardOut(BaseModel):
     audit_status: str
     unaudited_reason: str | None
     departure_source: str | None
+    payment_status: str
     change_note: str | None
     seat_capacity: int
     booked: int
@@ -564,6 +565,7 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
             audit_status=t.audit_status,
             unaudited_reason=t.unaudited_reason,
             departure_source=t.departure_source,
+            payment_status=t.payment_status,
             change_note=t.change_note,
             seat_capacity=t.seat_capacity,
             booked=int(c.booked or 0) if c else 0,

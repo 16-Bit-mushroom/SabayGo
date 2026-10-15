@@ -11,12 +11,14 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
+from app.application.finance.statement import Statements
+from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
-from app.domain.enums import AuditTrigger, BookingStatus, DepartureSource, TripStatus
+from app.domain.enums import AuditTrigger, BookingStatus, DepartureSource, Role, TripStatus
 from app.infrastructure.models import BoardingScan
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import Trip
+from app.infrastructure.models import PassengerEvent, Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 log = logging.getLogger(__name__)
@@ -228,6 +230,18 @@ class DepartTripUseCase:
     first. Only a started
     trip departs; the row lock keeps the two from both releasing the
     no-shows.
+
+    The passenger list locks here if the Cashier's payment did not lock
+    it first, and its fare lines are final (`finance.statement`). A trip
+    whose share was not recorded is 'left_unpaid' and the Terminal
+    Manager and the Cashier are told; the share stays owed on the van's
+    statement, which refuses its next assignment (brief 2.1).
+
+    More people aboard than listed (an unlisted boarding still pending,
+    brief 2.4) stops a person's Depart until the Dispatcher fixes the
+    list or types a reason. The van leaving anyway is not stopped: GPS
+    departs it and 'Departed With More Than Listed' goes to the Terminal
+    Manager.
     """
 
     def __init__(self, session: AsyncSession):
@@ -250,6 +264,18 @@ class DepartTripUseCase:
                 else f"This trip is already {trip.status}."
             )
 
+        unlisted = (await self.session.execute(
+            select(func.count()).select_from(PassengerEvent).where(
+                PassengerEvent.trip_id == trip_id,
+                PassengerEvent.resolution_status == "pending",
+            )
+        )).scalar_one()
+        if unlisted and source is not DepartureSource.GPS:
+            raise ConflictError(
+                f"{unlisted} {'person is' if unlisted == 1 else 'people are'} aboard but not "
+                "on the passenger list. Add them to the list, or type a reason, before Depart."
+            )
+
         now = app_tz.now()
         result = await self.session.execute(
             select(BookingRow).where(
@@ -265,18 +291,36 @@ class DepartTripUseCase:
         for booking in no_shows:
             booking.status = BookingStatus.NO_SHOW.value
             booking.updated_at = now
-            # Release the space so it can be resold further down the route.
-            # The passenger paid and did not travel -- under a no-refund
-            # policy that is their loss -- but the space is physically
-            # empty and someone waiting at the next terminal can use it.
-            # Leaving it reserved would also make the camera check report
-            # fewer bodies than tickets for the rest of the trip.
+            # The seat still counts in A2Z's share: it was paid (brief
+            # 2.1). The space is released because it is empty; nobody
+            # boards after departure (rev 603), so it is never resold.
             await seats.release(booking_id=booking.booking_id)
 
         trip.status = TripStatus.DEPARTED.value
         trip.departed_at = now
         trip.departure_source = source.value
         trip.updated_at = now
+        await self.session.flush()
+
+        unpaid = await Statements(self.session).lock_at_departure(trip)
+        notifications = NotificationService(self.session)
+        if unpaid:
+            await notifications.notify_trip(
+                trip=trip, type="left_unpaid", title="Left unpaid",
+                message=(f"{trip_label(trip)} departed with ₱{unpaid:,.2f} of A2Z's share "
+                         "not recorded. It stays owed; the van's next assignment is refused "
+                         "until it is paid or the Terminal Manager overrides."),
+                roles=(Role.TERMINAL_MANAGER, Role.CASHIER),
+            )
+        if unlisted:
+            await notifications.notify_trip(
+                trip=trip, type="departed_more_than_listed",
+                title="Departed with more aboard than listed",
+                message=(f"{trip_label(trip)} left with {unlisted} more aboard than its "
+                         "passenger list, and the Dispatcher neither fixed the list nor gave a "
+                         "reason. No fare is priced from the camera's count."),
+                roles=(Role.TERMINAL_MANAGER,),
+            )
         await self.session.commit()
 
         log.info("Trip %s departed; %d no-shows recorded.", trip_id, len(no_shows))

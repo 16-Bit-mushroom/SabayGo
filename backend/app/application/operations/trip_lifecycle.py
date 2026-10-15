@@ -1,6 +1,7 @@
-"""Trip lifecycle: assignment, start, review, van change, void, arrival.
+"""Trip lifecycle: assignment, payment block, start, review, van change,
+void, crew, arrival.
 
-Rev 468, change brief section 4. A trip is created from the timetable
+Rev 603, change brief section 4. A trip is created from the timetable
 days ahead with no van and no Dispatcher; the rest of its life is here:
 
     Scheduled --start--> Boarding --depart--> Departed --arrive--> Completed
@@ -10,38 +11,50 @@ days ahead with no van and no Dispatcher; the rest of its life is here:
 Who may do what is the API's guard (brief 3); the rules are here:
 
   assign       Terminal Manager, or the Cashier as backup, at the van's
-               turn. Validated van, operator and Dispatcher only. A
-               Cashier's assignment always works and alerts the Terminal
-               Manager -- there is no duty roster (rule 2).
+               turn. Validated van, operator and Dispatcher only. Refused
+               while the van owes A2Z's share on any statement, unless
+               the Terminal Manager overrode this trip's payment block
+               (rule 2). A Cashier's assignment alerts the Terminal Manager.
+  override     Terminal Manager only, with a written reason: lifts the
+               payment block of this one trip, for its assignment and its
+               Start ([ASSUMED] one override covers both).
   start        Cashier or Terminal Manager, from `start_opens_minutes`
-               before departure, once a van and a Dispatcher are assigned.
+               before departure, once a van and a Dispatcher are assigned
+               and the trip's statement owes nothing -- the Dispatcher
+               handed the 15 % over and the Cashier recorded it
+               (`finance.statement`) -- or after an override (rule 5).
                Copies the operator's name and licence and the plate onto
-               the trip. Warns, never blocks, on an expired licence or a
-               phone that is not with the van (rule 5).
-  fall back    The system starts a trip nobody started when its van
-               leaves the origin stop with a boarding counted (rule 7).
-               There is no grace timer (rev 603). Held for review; no
-               assigned van means 'Trip Not Started'.
-  review       Terminal Manager: confirm or change the van of a held start.
+               the trip; warns, never blocks, on an expired licence or a
+               phone that is not with the van.
+  depart       The Dispatcher, the Cashier or the Terminal Manager:
+               `boarding.DepartTripUseCase`, which also locks the list and
+               marks a trip that left unpaid (rule 7).
+  fall back    The van's GPS leaves the terminal zone (N readings,
+               `tracking.nahgm`) with a boarding counted: the system starts
+               the trip if nobody did, then departs it (rules 8, 9). There
+               is no grace timer. Held for review; with no assigned van,
+               'Trip Not Started'. An open 'Not a passenger trip' move
+               holds it off (rule 10, `non_passenger`).
+  review       Terminal Manager: confirm or change the van of a held
+               start; its fare lines then join the statement (rule 11).
   change van   Terminal Manager only, on a started trip, with a reason.
-  void         Terminal Manager only, with a reason (rule 10).
+  void         Terminal Manager only, with a reason (rule 12).
+  crew         The assigned Dispatcher adds themselves as crew: not a
+               boarding, not counted toward the 14 (2.3).
   arrive       The Dispatcher taps Arrived (4.1).
 
-A started trip is not edited quietly: every start, void and van change
-names who, when and why, and the earlier van and operator go into
-`change_note`. Departure is `boarding.DepartTripUseCase`, which also
-releases the no-shows.
+A started trip is not edited quietly: every start, void, van change and
+override names who, when and why, and the earlier van and operator go
+into `change_note`.
 
 Whether the phone can watch the trip is `edge.evidence`; which trip a
 door event belongs to is `edge.ledger`. Not yet: completion when the
-count aboard falls to 0 (the per-stop counts arrive with matching,
-step 6).
+count aboard falls to 0 (the per-stop counts arrive with matching, R5).
 """
 
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -50,6 +63,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.edge.evidence import PhoneEvidence
 from app.application.edge.ledger import TRIP_REACH, release_held
+from app.application.finance.statement import ZERO, Statements
 from app.application.notifications.service import NotificationService, trip_label
 from app.application.operations.boarding import DepartTripUseCase
 from app.application.scheduling.conflicts import ScheduleConflictChecker
@@ -67,6 +81,7 @@ from app.domain.enums import (
 from app.infrastructure.models import (
     Booking,
     DeviceCheckout,
+    NonPassengerMove,
     Notification,
     Operator,
     PassengerEvent,
@@ -128,7 +143,15 @@ class TripLifecycle:
         self, trip: Trip, *, van_id: str | None, dispatcher_id: str | None, by: User,
     ) -> None:
         if van_id is not None:
-            await self._assignable_van(van_id)
+            van = await self._assignable_van(van_id)
+            if van_id != trip.van_id and trip.payment_override_by is None:
+                owed = await Statements(self.session).van_balance(van_id)
+                if owed > 0:
+                    raise ConflictError(
+                        f"{van.plate_number} still owes ₱{owed:,.2f} of A2Z's share from "
+                        "its last trip. The Cashier records the payment first, or the "
+                        "Terminal Manager overrides with a written reason."
+                    )
         if dispatcher_id is not None:
             await self._assignable_dispatcher(dispatcher_id)
         await self._no_clash(trip, van_id=van_id, dispatcher_id=dispatcher_id)
@@ -141,6 +164,8 @@ class TripLifecycle:
         trip.updated_at = now
         await self.session.flush()
         await self.session.refresh(trip, ["van"])
+        # The listed seats' lines follow the trip to its new van.
+        await Statements(self.session).sync(trip)
 
         if by.role == Role.CASHIER.value:
             await self.notifications.notify_trip(
@@ -176,11 +201,65 @@ class TripLifecycle:
         # Confirming the van: it must still be on the roster and validated.
         await self._assignable_van(trip.van_id)
         await self._assignable_dispatcher(trip.dispatcher_id)
+        # The 15 % before Start (brief 2.1, hard block).
+        if trip.payment_override_by is None:
+            money = Statements(self.session)
+            statement = await money.sync(trip)
+            due = await money.due(statement) if statement is not None else ZERO
+            if due > 0:
+                raise ConflictError(
+                    f"₱{due:,.2f} of A2Z's share is due. The Dispatcher hands it to the "
+                    "Cashier, who records it; or the Terminal Manager overrides with a "
+                    "written reason."
+                )
 
         warnings = await self._begin(trip, mode=StartMode.MANUAL, by=by, now=now)
         await self.session.commit()
         log.info("Trip %s started by %s.", trip_id, by.user_id)
         return StartOutcome(trip=trip, warnings=warnings)
+
+    # ---------------------------------------------------------- override
+    async def override_payment(self, trip_id: str, *, by: User, note: str) -> Trip:
+        """The Terminal Manager lifts this trip's payment block, with a
+        written reason (brief 2.1). The share stays owed."""
+        trip = await self._locked(trip_id)
+        if trip.status not in (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value):
+            raise ConflictError(f"This trip is {trip.status}; there is no block to lift.")
+        note = note.strip()
+        if not note:
+            raise ConflictError("Write the reason for the override.")
+        now = _now()
+        trip.payment_override_by = by.user_id
+        trip.payment_override_at = now
+        trip.payment_override_note = note[:255]
+        if trip.payment_status != "paid":
+            trip.payment_status = "overridden"
+        trip.updated_at = now
+        await self.notifications.notify_trip(
+            trip=trip, type="payment_block_override", title="Payment block overridden",
+            message=f"{await self._name(by.user_id)} let {trip_label(trip)} go ahead without "
+                    f"A2Z's share recorded: {note}",
+            roles=(Role.CASHIER, Role.TERMINAL_MANAGER), skip_user_id=by.user_id,
+        )
+        await self.session.commit()
+        log.info("Trip %s payment block overridden by %s.", trip_id, by.user_id)
+        return trip
+
+    # -------------------------------------------------------------- crew
+    async def set_crew(self, trip_id: str, *, by: User, aboard: bool) -> Trip:
+        """The assigned Dispatcher adds themselves as crew, once (2.3): the
+        door count less the crew is the number aboard."""
+        trip = await self._locked(trip_id)
+        if trip.dispatcher_id != by.user_id:
+            raise ConflictError("Only the Dispatcher assigned to this trip is its crew.")
+        if trip.status in (TripStatus.COMPLETED.value, TripStatus.CANCELLED.value):
+            raise ConflictError(f"This trip is {trip.status}.")
+        trip.crew_aboard = 1 if aboard else 0
+        trip.updated_at = _now()
+        await self.session.commit()
+        log.info("Trip %s: Dispatcher %s %s as crew.", trip_id, by.user_id,
+                 "added" if aboard else "removed")
+        return trip
 
     async def fall_back_start(self, trip_id: str, *, why: str) -> Trip | None:
         """The system starts a trip nobody started (rule 7).
@@ -215,21 +294,19 @@ class TripLifecycle:
         return trip
 
     async def detected_start(
-        self, *, van: Van, origin_terminal_id: str, at: datetime,
-        first_boarding: datetime, dispatcher_id: str,
+        self, *, van: Van, origin_terminal_id: str, at: datetime, dispatcher_id: str,
     ) -> Trip | None:
         """A checked-out phone saw boardings and its van leave a terminal,
         and the van has no trip at that time (rule 7, 'auto_detected').
 
-        The van is given, in order:
-          1. a trip of its route from that terminal still waiting for a
-             van, nearest in time -- the timetable trip nobody assigned;
-          2. otherwise a new trip on its route, 'Unscheduled run', from
-             the first boarding: the van ran outside the timetable.
-        Either way the system starts it, held for the Terminal Manager's
-        review, so the door events have a trip and a person decides what
-        the run was. Returns None, held events untouched and the Terminal
-        Manager alerted, when the van's route cannot be told.
+        The van is given the trip of its route from that terminal still
+        waiting for a van, nearest in time -- the timetable trip nobody
+        assigned. The system starts it, held for the Terminal Manager's
+        review. A van outside the timetable runs a special trip, entered
+        before it leaves (rev 603, 2.5); there is no trip to give it, so
+        with none waiting, or a route that cannot be told, the events
+        stay held and the Terminal Manager is alerted. Returns the trip,
+        or None.
         """
         routes = await self._routes_from(origin_terminal_id, van)
         if len(routes) != 1:
@@ -254,14 +331,19 @@ class TripLifecycle:
                 Trip.departure_datetime >= at - TRIP_REACH,
             )
         )).scalars().all()
-        if waiting:
-            nearest = min(waiting, key=lambda t: abs(t.departure_datetime - at))
-            trip = await self._locked(nearest.trip_id)
-            why = f"no van was assigned, and the phone in {van.plate_number} detected its departure"
-        else:
-            trip = await self._unscheduled_run(route_id, van, first_boarding)
-            why = (f"{van.plate_number} ran outside the timetable; the system created this "
-                   "trip when its phone detected the departure")
+        if not waiting:
+            await self.notifications.notify_staff(
+                type="trip_not_started", title="Trip not started",
+                message=(f"{van.plate_number} left a terminal with passengers aboard, and no "
+                         "trip on its route is waiting for a van. Its door events are held: "
+                         "assign it its trip, or enter the special trip it ran."),
+                roles=(Role.TERMINAL_MANAGER,), entity=("van", van.van_id),
+            )
+            await self.session.commit()
+            return None
+        nearest = min(waiting, key=lambda t: abs(t.departure_datetime - at))
+        trip = await self._locked(nearest.trip_id)
+        why = f"no van was assigned, and the phone in {van.plate_number} detected its departure"
 
         # Assigned by the system, so no assigned_by: the review names the person.
         trip.van_id = van.van_id
@@ -291,42 +373,14 @@ class TripLifecycle:
             return [van.registered_route_id] if van.registered_route_id in starting else []
         return sorted(starting)
 
-    async def _unscheduled_run(self, route_id: str, van: Van, departs: datetime) -> Trip:
-        from app.application.scheduling.generate_trips import GenerateDailyTripsUseCase
-
-        generator = GenerateDailyTripsUseCase(self.session)
-        capacity = await self.policies.get_int("default_seat_capacity")
-        now = _now()
-        trip = Trip(
-            trip_id=str(uuid.uuid4()),
-            template_id=None,
-            route_id=route_id,
-            service_date=departs.date(),
-            departure_datetime=departs,
-            trip_label="Unscheduled run",
-            is_special_trip=True,
-            seat_capacity=capacity,
-            advance_booking_seat_cap=min(
-                await self.policies.get_int("advance_booking_seat_cap"), capacity),
-            reschedule_cutoff_hours=await self.policies.get_int("reschedule_cutoff_hours"),
-            status=TripStatus.SCHEDULED.value,
-            created_at=now,
-            updated_at=now,
-        )
-        self.session.add(trip)
-        await self.session.flush()
-        await generator._materialise_legs_and_seats(
-            trip.trip_id, await generator._route_stops(route_id), departs, capacity
-        )
-        return trip
-
     async def van_left_origin(self, trip_id: str) -> None:
-        """The van's GPS has left the origin stop zone (rules 7 and 9).
+        """The van's GPS has left the terminal zone (rules 8 and 9).
 
         With at least one boarding counted, a trip nobody started is
-        started by the system, and a started trip departs as 'detected'.
-        A boarding is counted from the record (a QR scan or a logged fare)
-        or from the phone (a door event).
+        started by the system, and a started trip departs as 'gps'. A
+        boarding is counted from the record (a QR scan or a logged fare)
+        or from the phone (a door event). An open 'Not a passenger trip'
+        move holds the fallback off (rule 10).
         """
         boarded = (await self.session.execute(
             select(func.count()).select_from(Booking).where(
@@ -342,6 +396,11 @@ class TripLifecycle:
             return
         trip = await self.session.get(Trip, trip_id)
         if trip is None:
+            return
+        if trip.van_id is not None and (await self.session.execute(
+            select(NonPassengerMove.move_id).where(
+                NonPassengerMove.van_id == trip.van_id, NonPassengerMove.ended_at.is_(None))
+        )).first():
             return
         if trip.status == TripStatus.SCHEDULED.value:
             if await self.fall_back_start(trip_id, why="the van left the terminal") is None:
@@ -370,6 +429,9 @@ class TripLifecycle:
         trip.start_reviewed_by = by.user_id
         trip.start_reviewed_at = now
         trip.updated_at = now
+        await self.session.flush()
+        # Its fare lines join the statement: the held share becomes owed.
+        await Statements(self.session).sync(trip)
         await self.session.commit()
         return trip
 
@@ -398,6 +460,7 @@ class TripLifecycle:
         self._mark_changed(trip, by=by, now=now, note=f"Van changed: {reason.strip()}", earlier=earlier)
         await self.session.flush()
         await self.session.refresh(trip, ["van"])
+        await Statements(self.session).sync(trip)
 
     # -------------------------------------------------------------- void
     async def void(self, trip_id: str, *, by: User, reason: str) -> Trip:
@@ -409,6 +472,10 @@ class TripLifecycle:
         trip.status = TripStatus.CANCELLED.value
         trip.cancellation_reason = reason.strip()[:255]
         self._mark_changed(trip, by=by, now=now, note=f"Voided: {reason.strip()}", earlier=earlier)
+        await self.session.flush()
+        # A voided trip owes nothing ([OPEN] a trip paid in advance and
+        # then voided leaves its statement overpaid).
+        await Statements(self.session).sync(trip)
 
         # Bookings stay as they are (no refunds); their holders are told.
         holders = (await self.session.execute(

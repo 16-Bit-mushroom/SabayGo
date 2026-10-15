@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
 from app.application.operations.check_in import haversine_m
+from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ, localize
@@ -160,11 +161,16 @@ class TrackingService:
                 trip_id=trip_id, leg_sequence=leg, trigger=AuditTrigger.GPS_NODE
             )
 
-        # Leaving the origin stop departs the trip, or starts it first if
-        # nobody did (brief 4.2 rules 7 and 9). The report is already
+        if trip.van_id is not None:
+            await NonPassengerMoves(self.session).on_reading(trip.van_id, latitude, longitude, when)
+            await self.session.commit()
+
+        # Leaving the terminal zone departs the trip, or starts it first
+        # if nobody did (brief 4.2 rules 8 and 9). The report is already
         # stored; a failure here is logged, never returned to the unit,
         # which would only resend a ping the track already has.
-        if leg == 1:
+        if trip.status in (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value) and stops \
+                and await self.left_zone(stops[0][1], trip_id=trip_id):
             try:
                 await TripLifecycle(self.session).van_left_origin(trip_id)
             except Exception:
@@ -359,6 +365,55 @@ class TrackingService:
         if terminal is not None and terminal.geofence_radius_m:
             return float(terminal.geofence_radius_m)
         return float(await self.policies.get_int("default_geofence_radius_m"))
+
+    async def hold_reading(
+        self, *, van_id: str, latitude: float, longitude: float,
+        accuracy_m: float | None, speed_kph: float | None, heading_deg: float | None,
+        recorded_at: datetime,
+    ) -> None:
+        """A reading from a van with no trip at its time: kept against the
+        van (025) so a departure can still be counted, and moved to the
+        trip that claims it (`edge.ledger.release_held`)."""
+        def dec(value: float | None) -> Decimal | None:
+            return None if value is None else Decimal(str(round(value, 2)))
+
+        self.session.add(TripLocationPing(
+            trip_id=None, van_id=van_id,
+            latitude=Decimal(str(round(latitude, 6))),
+            longitude=Decimal(str(round(longitude, 6))),
+            accuracy_m=dec(accuracy_m), speed_kph=dec(speed_kph), heading_deg=dec(heading_deg),
+            recorded_at=recorded_at,
+            received_at=datetime.now(APP_TZ).replace(tzinfo=None),
+        ))
+        await self.session.flush()
+        await NonPassengerMoves(self.session).on_reading(van_id, latitude, longitude, recorded_at)
+        await self.session.commit()
+
+    async def left_zone(
+        self, terminal: Terminal, *, trip_id: str | None = None, van_id: str | None = None,
+    ) -> bool:
+        """The departure rule (brief 4.2 rule 8): the last N readings -- of
+        the trip, or the van's held ones -- all outside the terminal zone,
+        and moving. A reading with no speed counts by position alone. A
+        single stray reading departs nothing. While the zone radius or N
+        is unset (a site survey sets them), there is no GPS departure."""
+        radius = await self.policies.get_optional_int("depart_zone_radius_m")
+        readings = await self.policies.get_optional_int("depart_readings")
+        if radius is None or readings is None:
+            return False
+        query = select(TripLocationPing)
+        query = (query.where(TripLocationPing.trip_id == trip_id) if trip_id is not None
+                 else query.where(TripLocationPing.van_id == van_id,
+                                  TripLocationPing.trip_id.is_(None)))
+        last = (await self.session.execute(
+            query.order_by(TripLocationPing.recorded_at.desc()).limit(readings)
+        )).scalars().all()
+        centre = (float(terminal.latitude), float(terminal.longitude))
+        return len(last) == readings and all(
+            haversine_m(float(p.latitude), float(p.longitude), *centre) > radius
+            and (p.speed_kph is None or float(p.speed_kph) >= MIN_MOVING_KPH)
+            for p in last
+        )
 
     async def _route_stops(self, route_id: str) -> list[tuple[RouteStop, Terminal]]:
         result = await self.session.execute(

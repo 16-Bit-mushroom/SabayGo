@@ -30,6 +30,7 @@ from app.application.edge.evidence import PhoneEvidence
 from app.application.edge.ledger import STARTED, TRIP_REACH, trip_for, van_at
 from app.application.notifications.service import NotificationService
 from app.application.operations.boarding import DepartTripUseCase
+from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
 from app.application.tracking.nahgm import TrackingService
 from app.core import timezone as app_tz
@@ -285,20 +286,30 @@ class EdgeIngestion:
     # -------------------------------------------------------------- GPS
     async def fixes(self, fixes: list[Fix]) -> dict:
         """Each reading goes on the trip of the van at its time, through
-        the same NAHGM path as before. A van with no trip whose phone has
-        held boardings and has just left a terminal gets one (rule 7)."""
+        the same NAHGM path as before. A reading of a van with no trip is
+        held against the van (025); when its phone has held boardings and
+        the van has left that terminal's zone, it gets its trip (rule 9)."""
         for f in fixes:
             f.recorded_at = _naive(f.recorded_at)
         self._check_clock([f.recorded_at for f in fixes])
         tracking = TrackingService(self.session)
-        counts = {"recorded": 0, "ignored": 0}
+        counts = {"recorded": 0, "held": 0, "ignored": 0}
         for f in sorted(fixes, key=lambda f: f.recorded_at):
             van_id = await van_at(self.session, self.device.device_id, f.recorded_at)
-            trip = None if van_id is None else await trip_for(self.session, van_id, f.recorded_at)
-            if van_id is not None and trip is None:
-                trip = await self._detect_departure(van_id, f)
-            if trip is None or trip.status in (TripStatus.COMPLETED.value,
-                                               TripStatus.CANCELLED.value):
+            if van_id is None:
+                counts["ignored"] += 1
+                continue
+            trip = await trip_for(self.session, van_id, f.recorded_at)
+            if trip is None:
+                await tracking.hold_reading(
+                    van_id=van_id, latitude=f.latitude, longitude=f.longitude,
+                    accuracy_m=f.accuracy_m, speed_kph=f.speed_kph,
+                    heading_deg=f.heading_deg, recorded_at=f.recorded_at,
+                )
+                counts["held"] += 1
+                await self._detect_departure(van_id, f, tracking)
+                continue
+            if trip.status in (TripStatus.COMPLETED.value, TripStatus.CANCELLED.value):
                 counts["ignored"] += 1
                 continue
             await tracking.record_ping(
@@ -309,9 +320,14 @@ class EdgeIngestion:
             counts["recorded"] += 1
         return counts
 
-    async def _detect_departure(self, van_id: str, fix: Fix) -> Trip | None:
-        """Boardings held at a terminal, then a reading outside it: the van
-        has left with passengers and no trip."""
+    async def _detect_departure(self, van_id: str, fix: Fix,
+                                tracking: TrackingService) -> Trip | None:
+        """Boardings held at a terminal, then the van's held readings
+        outside its zone (the departure rule): the van has left with
+        passengers and no trip. An open 'Not a passenger trip' move holds
+        it off."""
+        if await NonPassengerMoves(self.session).open_for(van_id) is not None:
+            return None
         boards = (await self.session.execute(
             select(HeldDoorEvent).where(
                 HeldDoorEvent.van_id == van_id,
@@ -327,10 +343,9 @@ class EdgeIngestion:
         origin = await self._terminal_at(float(last.latitude), float(last.longitude))
         if origin is None:
             return None
-        terminal, radius = origin
-        if _metres(fix.latitude, fix.longitude,
-                   float(terminal.latitude), float(terminal.longitude)) <= radius:
-            return None  # still at the terminal
+        terminal, _ = origin
+        if not await tracking.left_zone(terminal, van_id=van_id):
+            return None  # still at the terminal, or not N readings out yet
 
         dispatcher_id = (await self.session.execute(
             select(DeviceCheckout.dispatcher_id).where(
@@ -343,7 +358,6 @@ class EdgeIngestion:
             van=await self.session.get(Van, van_id),
             origin_terminal_id=terminal.terminal_id,
             at=fix.recorded_at,
-            first_boarding=boards[0].event_at,
             dispatcher_id=dispatcher_id,
         )
         if trip is not None and trip.status == TripStatus.BOARDING.value:

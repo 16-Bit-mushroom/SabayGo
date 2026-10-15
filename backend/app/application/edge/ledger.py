@@ -21,11 +21,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import TripStatus
-from app.infrastructure.models import DeviceCheckout, HeldDoorEvent, PassengerEvent, Trip
+from app.infrastructure.models import (
+    DeviceCheckout,
+    HeldDoorEvent,
+    PassengerEvent,
+    Trip,
+    TripLocationPing,
+)
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 STARTED = (TripStatus.BOARDING.value, TripStatus.DEPARTED.value, TripStatus.COMPLETED.value)
@@ -108,6 +114,15 @@ async def release_held(session: AsyncSession, trip: Trip, now: datetime) -> int:
             session.add(to_ledger(event, trip.trip_id, now))
             await session.delete(event)
             moved += 1
+    # The van's held GPS readings within reach go with it: the trip's
+    # trail starts where the van left the terminal (025).
+    await session.execute(
+        update(TripLocationPing)
+        .where(TripLocationPing.van_id == trip.van_id,
+               TripLocationPing.trip_id.is_(None),
+               TripLocationPing.recorded_at >= trip.departure_datetime - TRIP_REACH)
+        .values(trip_id=trip.trip_id)
+    )
     if moved:
         await session.flush()
     return moved

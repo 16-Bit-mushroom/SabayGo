@@ -346,6 +346,38 @@ boarding at stop 1 the per-leg count is the per-van count. Test:
 Dispatcher app still offers a "Van is at" stop for walk-ins; the server
 refuses anything but stop 1.
 
+**In progress: R3, lifecycle rework (15 Oct, committed as WIP).** Built:
+`application/finance/statement.py` (read its docstring: fare lines follow
+the list, lock at payment or departure, top-ups, held share, statement
+recomputed from lines, undisputed balance), `api/v1/statements.py`
+(`GET /trips/{id}/share`, `POST /trips/{id}/payment` Cashier only,
+`GET /statements?date=`, `POST /statements/{id}/payments`), Start
+refused while the trip's statement owes, assignment refused while the
+van owes, `POST /trips/{id}/payment-override` (Terminal Manager, note;
+lifts both blocks for that trip), Depart by the assigned Dispatcher or
+the office (`dispatcher`/`staff`), refused while an unlisted boarding is
+pending; departure locks the list and marks `left_unpaid` + alert;
+GPS departure = last N readings outside the terminal zone, moving
+(`TrackingService.left_zone`, off while the two survey settings are
+unset); migration **025** holds a no-trip van's readings (`trip_id`
+NULL) and `release_held` moves them; `PUT /trips/{id}/crew`;
+`non_passenger.py` + `POST /non-passenger-moves`, `.../{id}/end` (ends
+itself when the van is back in a terminal zone); Unscheduled run
+removed; cancel/reschedule refused once the list is locked; seed: all
+boardings at stop 1, every started trip has a paid statement.
+`test_trip_lifecycle.sh` rewritten for T1-T21: **129 passed, 0 failed**.
+**Next, in order:** (1) `test_edge_ingestion.sh` — record the share
+before starts, set `depart_zone_radius_m`/`depart_readings` and send N
+fixes, drop the Unscheduled-run case (12 failing now); (2)
+`test_roadside.sh` — pay before Start; make the legacy stop-2 booking
+with SQL (seed U002 is stop 1 now) (3 failing); (3)
+`test_dispatcher_journey.sh`, `test_notifications.py`,
+`test_auto_audit.py`, `scripts/demo_rehearsal.sh` — pay before Start;
+(4) full `run_all_journeys.sh`; (5) commit R3, then R3b: special-trip
+requests (app + counter walk-in, fee, payment first) and R4. The old
+`cash_remittances` flow (Fares & Cash) is the rev 514 model; retire it
+with the screens (R10). Seed note: LIVE-BOARD's leg-1 list is now 5.
+
 ---
 
 ## What the system does

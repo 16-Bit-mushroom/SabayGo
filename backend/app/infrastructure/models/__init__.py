@@ -669,6 +669,95 @@ class Message(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
+class Remittance(Base):
+    """The van's statement for one service date (brief Table 32).
+
+    The totals are recomputed from the lines (`application.finance.
+    statement`), never edited on their own."""
+
+    __tablename__ = "remittances"
+
+    remittance_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    operator_id: Mapped[str] = mapped_column(ForeignKey("operators.operator_id"))
+    van_id: Mapped[str] = mapped_column(ForeignKey("vans.van_id"))
+    service_date: Mapped[dt.date] = mapped_column(Date)
+    verified_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    declared_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    rate_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    remittance_owed: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    held_share: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    status: Mapped[str] = mapped_column(String(8), default="open")
+    settled_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    settled_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    settlement_ref: Mapped[str | None] = mapped_column(String(255))
+    recorded_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    handed_over_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class RemittanceLine(Base):
+    """Seats of one trip to one drop-off terminal, at one fare, in one
+    income group (brief Table 35, 2.2)."""
+
+    __tablename__ = "remittance_lines"
+
+    line_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    remittance_id: Mapped[str] = mapped_column(ForeignKey("remittances.remittance_id"))
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    origin_terminal_id: Mapped[str | None] = mapped_column(ForeignKey("terminals.terminal_id"))
+    dest_terminal_id: Mapped[str | None] = mapped_column(ForeignKey("terminals.terminal_id"))
+    request_id: Mapped[str | None] = mapped_column(String(36))
+    income_group: Mapped[str] = mapped_column(String(8))
+    fare_per_passenger: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    passenger_count: Mapped[int] = mapped_column(SmallInteger)
+    gross_fare: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    share_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    is_top_up: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
+class Dispute(Base):
+    """An operator's contest of a fare line or a driving flag (Table 39)."""
+
+    __tablename__ = "disputes"
+
+    dispute_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    remittance_id: Mapped[str] = mapped_column(ForeignKey("remittances.remittance_id"))
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    subject: Mapped[str] = mapped_column(String(16))
+    line_id: Mapped[str | None] = mapped_column(ForeignKey("remittance_lines.line_id"))
+    driving_event_id: Mapped[str | None] = mapped_column(String(36))
+    operator_statement: Mapped[str] = mapped_column(String(500))
+    amount_disputed: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    raised_by_role: Mapped[str] = mapped_column(String(16))
+    raised_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    raised_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    outcome: Mapped[str | None] = mapped_column(String(16))
+    adjusted_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    decided_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    decided_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    decision_note: Mapped[str | None] = mapped_column(String(255))
+
+
+class NonPassengerMove(Base):
+    """'Not a passenger trip' (brief Table 40, 4.2 rule 10)."""
+
+    __tablename__ = "non_passenger_moves"
+
+    move_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    van_id: Mapped[str] = mapped_column(ForeignKey("vans.van_id"))
+    device_id: Mapped[str] = mapped_column(ForeignKey("edge_devices.device_id"))
+    dispatcher_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
+    trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
+    reason: Mapped[str] = mapped_column(String(16))
+    reason_note: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    ended_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    auto_started_trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
+
+
 class CashRemittance(Base):
     """End-of-trip cash handover from crew to office.
 
@@ -708,7 +797,8 @@ class TripLocationPing(Base):
     __tablename__ = "trip_location_pings"
 
     ping_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    # NULL while held: the van had no trip at the reading's time (025).
+    trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
     van_id: Mapped[str | None] = mapped_column(ForeignKey("vans.van_id"))
     latitude: Mapped[Decimal] = mapped_column(Numeric(8, 6))
     longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6))
