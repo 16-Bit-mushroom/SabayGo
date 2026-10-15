@@ -66,6 +66,10 @@ class ReserveSeatCommand:
     # itself lives at the API boundary (bookings.py); this only persists
     # the id onto the row it created.
     client_request_id: str | None = None
+    # Home pickup (brief 2.6): the relative's booking of the passenger's
+    # seat. The pickup itself is `booking/home_pickup.py`.
+    booked_for_other: bool = False
+    is_home_pickup_seat: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,21 @@ class ReserveSeatUseCase:
         self.policies = PolicyRepository(session)
 
     async def execute(self, cmd: ReserveSeatCommand) -> ReserveSeatResult:
+        result = await self.reserve(cmd)
+        await self.session.commit()
+        # ---- lock released -------------------------------------------
+
+        log.info(
+            "Reserved space on trip %s, stops %s..%s (booking %s, P%s)",
+            cmd.trip_id, result.boarding_stop, result.alighting_stop,
+            result.booking_id, result.fare_amount,
+        )
+        return result
+
+    async def reserve(self, cmd: ReserveSeatCommand) -> ReserveSeatResult:
+        """Everything but the commit. The caller holds the transaction, and
+        the seat lock with it, until it commits: a home pickup reserves
+        both of its seats in one."""
         segment = Segment.from_starting_terminal(cmd.boarding_stop, cmd.alighting_stop)
         is_cash = cmd.booking_type in CASH_TYPES
 
@@ -152,6 +171,8 @@ class ReserveSeatUseCase:
                 booking_type=booking.booking_type.value,
                 logged_by=cmd.logged_by if is_cash else None,
                 client_request_id=cmd.client_request_id,
+                booked_for_other=cmd.booked_for_other,
+                is_home_pickup_seat=cmd.is_home_pickup_seat,
                 boarding_stop_sequence=segment.boarding_stop,
                 alighting_stop_sequence=segment.alighting_stop,
                 seat_number=slot,
@@ -194,14 +215,6 @@ class ReserveSeatUseCase:
                 )
             )
 
-        await self.session.commit()
-        # ---- lock released -------------------------------------------
-
-        log.info(
-            "Reserved space on trip %s, stops %s..%s (booking %s, P%s)",
-            cmd.trip_id, segment.boarding_stop, segment.alighting_stop,
-            booking.booking_id, fare,
-        )
         return ReserveSeatResult(
             booking_id=booking.booking_id,
             ticket_number=booking.ticket_number,

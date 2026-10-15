@@ -36,9 +36,24 @@ class MessageOut(BaseModel):
     sender_id: str
     sender_role: str
     body: str
+    # A home pickup's payment screenshot (brief 2.6); the image itself is
+    # served by GET /home-pickups/{id}/proof.
+    attachment_type: str | None
+    attachment_size_kb: int | None
+    retain_until: dt.date | None
     is_mine: bool
     read_at: dt.datetime | None
     created_at: dt.datetime
+
+    @classmethod
+    def of(cls, m, *, is_mine: bool) -> MessageOut:
+        return cls(
+            message_id=m.message_id, conversation_id=m.conversation_id,
+            sender_id=m.sender_id, sender_role=m.sender_role, body=m.body,
+            attachment_type=m.attachment_type, attachment_size_kb=m.attachment_size_kb,
+            retain_until=m.retain_until, is_mine=is_mine, read_at=m.read_at,
+            created_at=m.created_at,
+        )
 
 
 class ContactOut(BaseModel):
@@ -111,14 +126,7 @@ async def list_messages(
 ) -> list[MessageOut]:
     svc = MessagingService(session)
     rows = await svc.list_messages(user, conversation_id, before=before, limit=limit)
-    return [
-        MessageOut(
-            message_id=m.message_id, conversation_id=m.conversation_id,
-            sender_id=m.sender_id, sender_role=m.sender_role, body=m.body,
-            is_mine=svc.is_mine(user, m), read_at=m.read_at, created_at=m.created_at,
-        )
-        for m in rows
-    ]
+    return [MessageOut.of(m, is_mine=svc.is_mine(user, m)) for m in rows]
 
 
 @router.post("/{conversation_id}/messages", response_model=MessageOut)
@@ -127,8 +135,4 @@ async def send_message(
 ) -> MessageOut:
     svc = MessagingService(session)
     m = await svc.send_message(user, conversation_id, body.body)
-    return MessageOut(
-        message_id=m.message_id, conversation_id=m.conversation_id,
-        sender_id=m.sender_id, sender_role=m.sender_role, body=m.body,
-        is_mine=True, read_at=m.read_at, created_at=m.created_at,
-    )
+    return MessageOut.of(m, is_mine=True)

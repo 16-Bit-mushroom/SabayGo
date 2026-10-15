@@ -26,7 +26,6 @@ reading. Two consequences:
 from __future__ import annotations
 
 import logging
-import math
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -35,6 +34,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.tracking.geometry import haversine_m
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.enums import BookingStatus
@@ -43,22 +43,6 @@ from app.infrastructure.models import CheckIn, RouteStop, Trip
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
-
-EARTH_RADIUS_M = 6_371_000.0
-
-
-def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in metres.
-
-    Haversine rather than a planar approximation: at Davao's latitude the
-    error from treating degrees as flat is small, but haversine costs
-    nothing and removes a caveat you would otherwise have to defend.
-    """
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
 
 @dataclass(frozen=True)

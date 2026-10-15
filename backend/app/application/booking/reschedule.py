@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.booking.home_pickup import HomePickups, pickup_of
 from app.core.timezone import APP_TZ
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.entities.booking import Booking as BookingEntity
@@ -66,6 +67,10 @@ class RescheduleBookingUseCase:
         old_trip = await self.session.get(Trip, row.trip_id)
         if old_trip is None:
             raise NotFoundError("Original trip not found.")
+        if await pickup_of(self.session, booking_id) is not None:
+            raise PolicyViolationError(
+                "A home pickup stays on its trip: both seats and the pin belong to it."
+            )
 
         # The same journey on another trip is a new boarding (rev 603).
         segment = Segment.from_starting_terminal(
@@ -271,6 +276,7 @@ class CancelBookingUseCase:
 
         # Return the seat-legs to the pool so someone else can book them.
         await self.seats.release(booking_id=booking_id)
+        await HomePickups(self.session).on_cancelled(row)
         await self.session.commit()
 
         log.info("Cancelled booking %s (seat %s released)", booking_id, row.seat_number)

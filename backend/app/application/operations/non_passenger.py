@@ -24,7 +24,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.operations.check_in import haversine_m
+from app.application.tracking.geometry import haversine_m
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import TripStatus

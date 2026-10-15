@@ -472,40 +472,59 @@ upload must match it, and an event that declared none takes no still.
 `GET /trips/{id}/chain` (office) verifies: holds after a still is deleted
 (T39), breaks at the first altered link. `test_edge_ingestion.sh` **85**;
 suite **614 passed, 1 failed** (known).
-**Next: R6, home pickup (brief 2.6; T30-T32, T41).** Not started; the
-plan, worked out 15 Oct from the brief, `assisted_pickups` (024) and the
-existing chat (014, `application/messaging/service.py`):
-- **R6a, booking and the pin.** `POST /bookings/home-pickup` (the
-  relative): two app bookings through `ReserveSeatUseCase` (the relative's
-  and the beneficiary's, both from stop 1; the second gets
-  `booked_for_other` + `is_home_pickup_seat`; if it fails, cancel the
-  first), plus an `assisted_pickups` row. Refused while
-  `home_pickup_max_route_m` is unset, and when the pin is further from the
-  route than that (store `route_distance_m`). The relative pays each
-  booking through the existing `POST /payments/checkout` (both bookings
-  are theirs). **Move the route snapping out of `TrackingService.geotag`
-  into a pure `tracking/geometry.py`** and use it in both places:
-  importing NAHGM from the pickup or scan path makes an import cycle
-  (NAHGM → trip_lifecycle → boarding). Activation: a valid scan of the
-  relative's ticket → `qr_scan`; `POST /home-pickups/{id}/activate` by the
-  trip's Dispatcher → `dispatcher_entry` + who; either only once the
-  beneficiary's seat is paid. On the trip: `.../arrived` (the van at the
-  pin), `.../close` {boarded | no_show} → `left_at`, `closed_early` when
-  inside `home_pickup_wait_minutes`, `closed_by`, and the seat's booking
-  boarded or no-show (still owed). **Two fixes this needs in
-  `boarding.py`:** `DepartTripUseCase` must not turn a home-pickup seat
-  into a no-show and release it at departure (it boards after), and a scan
-  of a home-pickup ticket at the terminal is refused ("boards at the pin").
-- **R6b, screenshot proof.** An image message in the trip chat
-  (`attachment_*`, ≤ `chat_image_max_kb`, sniffed, kept in `storage/`,
-  `retain_until` = today + `chat_image_retention_days`); the relative
-  links it to the pickup (`proof_message_id`); the Dispatcher confirms →
-  both bookings confirmed (V), `proof_confirmed_*`, 'Home Pickup Proof' to
-  the Terminal Manager. **Pending holds expire in 10 min:** have
-  `sweep_abandoned_holds` (`operations/guards.py`) skip a pickup's
-  bookings while a linked proof awaits the Dispatcher, without touching
-  `seat_repository.py`. A retention job for chat images comes with R8.
-Then R7 disputes, R8 retention, R9 driving flags (reuse `geotag`; subtract
+Done: **R6a, home pickup: booking, pin, activation, the stop** (15 Oct).
+No migration. Rules: `application/booking/home_pickup.py` (read its
+docstring); API `api/v1/home_pickups.py`: `POST /home-pickups` (the
+relative, a passenger: trip, drop-off, beneficiary name and contact, pin
++ note), `GET /home-pickups?trip_id=` and `.../{id}/activate`,
+`/arrived`, `/close` {boarded | no_show} (the trip's Dispatcher, or the
+Terminal Manager). Both seats are reserved **in one transaction**:
+`ReserveSeatUseCase.reserve()` is everything but the commit (`execute()`
+= reserve + commit), so the pair is kept whole or not at all. Both from
+stop 1 to one drop-off; the passenger's seat is `booked_for_other` +
+`is_home_pickup_seat`, both owned by the relative, each paid through
+`POST /payments/checkout`. The pin is measured against the route from
+stop 1 to the drop-off; refused while `home_pickup_max_route_m` is unset
+or beyond it. Route snapping and `haversine_m` now live in the pure
+`application/tracking/geometry.py` (`snap_to_route`), used by
+`TrackingService.geotag` and the pickup; `check_in` and `non_passenger`
+import `haversine_m` from there. Activation needs the passenger's seat
+paid: a valid scan of the relative's ticket (`qr_scan`, the scan's
+message says activated or why not) or by hand (`dispatcher_entry` + who).
+`boarding.py`: the passenger's own ticket scans `wrong_stop` ("board at
+the pin"); Depart keeps activated pickups' seats and turns pickups not
+activated into no-shows (the relative did not come, so the van does not
+go). Close inside `home_pickup_wait_minutes` = `closed_early`; a no-show
+seat is released and still owed. Cancelling the relative's seat cancels
+the passenger's and the pickup; cancelling the passenger's seat cancels
+only the pickup; neither seat reschedules (422). Test:
+`test_home_pickup.sh` (56, in the runner); suite **670 passed, 1 failed**
+(known).
+Done: **R6b, the payment screenshot** (15 Oct). No migration. When the
+gateway is down the relative sends `POST /home-pickups/{id}/proof`
+(multipart `image`): an image message in their chat with the trip's
+Dispatcher (opened if new; refused while no Dispatcher is assigned),
+which becomes `proof_message_id` (a later one replaces it until
+confirmed). `MessagingService.add_image` owns chat images: at most
+`chat_image_max_kb` (T41 a), typed from the bytes, kept in
+`storage/chat/` (not `/media`), `retain_until` = today +
+`chat_image_retention_days`; `MessageOut` now carries the attachment
+fields. Images are taken for this proof only (no general image send).
+**Holds:** the screenshot re-holds the pair's unpaid seats **until
+departure** through `SeatRepository`'s own `release`/`allocate_seat`
+(a lapsed hold is taken again, 409 if the van is now full), so neither
+the sweep nor `seat_repository.py` changed. `GET .../proof` serves the
+image to the relative, the trip's Dispatcher and the Terminal Manager.
+`POST .../proof/confirm` is **the trip's Dispatcher only**: the unpaid
+seats become confirmed (app seats, so V), `proof_confirmed_*`, 'Home
+Pickup Proof' to the Terminal Manager. No `payments` row (its provider
+enum has no such kind); the pickup's proof fields are the record. The
+proof paths lock trip then pickup (Depart's order) and the pair's
+bookings (a concurrent webhook waits). Not built: a reject for a bad
+screenshot (the relative sends another; unconfirmed seats lapse at
+departure). `test_home_pickup.sh` **84**.
+**Next: R7, disputes (brief 2.1).**
+Then R8 retention (incl. chat images, T41 b), R9 driving flags (reuse `geotag`; subtract
 a pickup's `arrived_at`..`left_at` from the stretch time), R10 screens.
 
 ---

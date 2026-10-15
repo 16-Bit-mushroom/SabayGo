@@ -26,7 +26,6 @@ application to fixed-route cooperative operations, not the mathematics.
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -35,9 +34,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
-from app.application.operations.check_in import haversine_m
 from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
+from app.application.tracking.geometry import haversine_m, snap_to_route
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ, localize
 from app.domain.enums import AuditTrigger, TripStatus
@@ -452,20 +451,10 @@ class TrackingService:
         if len(stops) < 2:
             return Geotag(latitude, longitude)
 
-        best = None   # (offset_m, stretch, distance_from_start)
-        travelled = 0.0
-        for k in range(len(stops) - 1):
-            a, b = stops[k][1], stops[k + 1][1]
-            ax, ay, bx, by = (float(a.latitude), float(a.longitude),
-                              float(b.latitude), float(b.longitude))
-            length = haversine_m(ax, ay, bx, by)
-            t = _projection(latitude, longitude, ax, ay, bx, by)
-            px, py = ax + t * (bx - ax), ay + t * (by - ay)
-            offset = haversine_m(latitude, longitude, px, py)
-            if best is None or offset < best[0]:
-                best = (offset, stops[k][0].stop_sequence, travelled + t * length)
-            travelled += length
-        _, stretch, from_start = best
+        snap = snap_to_route(latitude, longitude, [
+            (rs.stop_sequence, float(t.latitude), float(t.longitude)) for rs, t in stops
+        ])
+        stretch, from_start = snap.stretch, snap.from_start_m
 
         nearest, near_m = self._match_to_node(latitude, longitude, stops)
         names = {rs.stop_sequence: t.terminal_name for rs, t in stops}
@@ -600,15 +589,3 @@ class TrackingService:
             )
         return etas
 
-
-def _projection(lat: float, lon: float, alat: float, alon: float,
-                blat: float, blon: float) -> float:
-    """Where a point falls along the stretch a->b, 0..1, in a local flat
-    frame (metres scale alike on both axes at this latitude)."""
-    k = math.cos(math.radians((alat + blat) / 2))
-    dx, dy = (blon - alon) * k, blat - alat
-    span = dx * dx + dy * dy
-    if span == 0:
-        return 0.0
-    t = ((lon - alon) * k * dx + (lat - alat) * dy) / span
-    return min(1.0, max(0.0, t))

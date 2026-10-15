@@ -789,6 +789,37 @@ class NonPassengerMove(Base):
     auto_started_trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
 
 
+class AssistedPickup(Base):
+    """A home pickup (brief 2.6, Table 41): the passenger's seat, the
+    relative's seat, the pin, and the stop at it."""
+
+    __tablename__ = "assisted_pickups"
+
+    pickup_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.booking_id"))
+    relative_booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.booking_id"))
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
+    pickup_latitude: Mapped[Decimal] = mapped_column(Numeric(8, 6))
+    pickup_longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    pickup_note: Mapped[str | None] = mapped_column(String(255))
+    route_distance_m: Mapped[int] = mapped_column()
+    beneficiary_name: Mapped[str] = mapped_column(String(150))
+    beneficiary_contact: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(16), default="requested")
+    activation_mode: Mapped[str | None] = mapped_column(String(16))
+    activated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    activated_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    proof_message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.message_id"))
+    proof_confirmed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    proof_confirmed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    arrived_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    left_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    closed_early: Mapped[bool] = mapped_column(Boolean, default=False)
+    closed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
 class CashRemittance(Base):
     """End-of-trip cash handover from crew to office.
 

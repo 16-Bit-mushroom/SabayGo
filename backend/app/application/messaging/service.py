@@ -16,18 +16,34 @@ non-office party in that case.
 `messages.sender_role` is denormalized (same shape as
 `notifications.audience`) so "unread by the other side" doesn't need a
 join to `users` for every row.
+
+Images (rev 603, brief 2.6) are taken for one purpose only: a home
+pickup's payment screenshot, sent through `booking/home_pickup.py`. Each
+is at most `chat_image_max_kb`, typed from its bytes, kept in
+`storage/chat` (never the public media folder: a payment screenshot shows
+personal details) and due for deletion on `retain_until`; the message row
+stays.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import math
 import uuid
+from pathlib import Path
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import timezone as app_tz
-from app.core.exceptions import NotFoundError, PermissionDeniedError, PolicyViolationError
+from app.core.exceptions import (
+    InvalidInputError,
+    NotFoundError,
+    PermissionDeniedError,
+    PolicyViolationError,
+)
+from app.core.images import sniff_image_ext
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.application.identity.naming import display_name as _display_name
 from app.domain.enums import BookingStatus, Role, TripStatus
 from app.infrastructure.models import Booking, Conversation, Message, Route, Trip, User
@@ -66,6 +82,7 @@ class ContactRow:
 
 OFFICE_ROLES = (Role.TERMINAL_MANAGER.value, Role.CASHIER.value, Role.ADMIN.value)
 OFFICE_NAME = "A2Z Office"
+STORAGE_DIR = Path(__file__).resolve().parents[3] / "storage"
 
 
 class MessagingService:
@@ -288,6 +305,46 @@ class MessagingService:
         await self.session.commit()
         await self.session.refresh(msg)
         return msg
+
+    async def add_image(
+        self, conv: Conversation, sender: User, data: bytes, body: str,
+    ) -> Message:
+        """An image message. Not committed: the caller links it to what it
+        proves and commits. Refused above `chat_image_max_kb` (T41 a)."""
+        policies = PolicyRepository(self.session)
+        limit_kb = await policies.get_int("chat_image_max_kb")
+        if len(data) > limit_kb * 1024:
+            raise PolicyViolationError(f"The image is larger than {limit_kb:,} KB.")
+        ext = sniff_image_ext(data)
+        if ext is None:
+            raise InvalidInputError("Send a JPEG, PNG or WebP image.")
+        keep_days = await policies.get_int("chat_image_retention_days")
+        now = app_tz.now()
+        msg = Message(
+            message_id=str(uuid.uuid4()),
+            conversation_id=conv.conversation_id,
+            sender_id=sender.user_id,
+            sender_role=sender.role,
+            body=body[:1000],
+            attachment_type="image",
+            attachment_size_kb=math.ceil(len(data) / 1024),
+            retain_until=now.date() + dt.timedelta(days=keep_days),
+            created_at=now,
+        )
+        msg.attachment_url = f"chat/{msg.message_id}.{ext}"
+        conv.last_message_at = now
+        self.session.add(msg)
+        path = STORAGE_DIR / msg.attachment_url
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return msg
+
+    @staticmethod
+    def attachment_path(msg: Message) -> Path:
+        path = STORAGE_DIR / (msg.attachment_url or "")
+        if msg.attachment_url is None or not path.is_file():
+            raise NotFoundError("The image is no longer kept: its retention period is over.")
+        return path
 
     # ------------------------------------------------------------------
     # Who can this user start a conversation with

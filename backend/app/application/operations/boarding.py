@@ -11,6 +11,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
+from app.application.booking.home_pickup import HomePickups
 from app.application.edge.checking import ListCheck
 from app.application.finance.statement import Statements
 from app.application.notifications.service import NotificationService, trip_label
@@ -136,6 +137,11 @@ class ScanTicketUseCase:
             return await record("unpaid", "This booking has not been paid.", False)
         if booking.status == BookingStatus.BOARDED.value:
             return await record("already_boarded", "Already scanned aboard.", False)
+        if booking.is_home_pickup_seat:
+            return await record(
+                "wrong_stop", "This passenger is picked up at home: they board at the pin.",
+                False,
+            )
         if booking.boarding_stop_sequence != stop_sequence:
             return await record(
                 "wrong_stop",
@@ -145,10 +151,12 @@ class ScanTicketUseCase:
 
         booking.status = BookingStatus.BOARDED.value
         booking.updated_at = now
+        # A relative's ticket activates their home pickup (brief 2.6).
+        pickup = await HomePickups(self.session).activate_by_scan(booking)
         return await record(
             "valid",
             f"Valid - stops {booking.boarding_stop_sequence} to "
-            f"{booking.alighting_stop_sequence}.",
+            f"{booking.alighting_stop_sequence}." + (f" {pickup}" if pickup else ""),
             True,
         )
 
@@ -274,12 +282,15 @@ class DepartTripUseCase:
             )
 
         now = app_tz.now()
+        # An activated home pickup's seat boards after the van leaves.
+        boards_later = await HomePickups(self.session).at_departure(trip)
         result = await self.session.execute(
             select(BookingRow).where(
                 BookingRow.trip_id == trip_id,
                 BookingRow.status.in_(
                     [BookingStatus.CONFIRMED.value, BookingStatus.CHECKED_IN.value]
                 ),
+                BookingRow.booking_id.notin_(boards_later),
             )
         )
         no_shows = list(result.scalars().all())
