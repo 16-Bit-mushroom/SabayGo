@@ -426,9 +426,28 @@ not counted). Not done: events already on a trip whose van is taken off
 it before Start stay there (the brief is silent). `test_edge_ingestion.sh`
 **76**; journey suite **553 passed, 1 failed** (the known `--soon`
 reschedule cutoff).
-**Next: R5** — checking: pre-departure list match, unlisted fix or
-reason, capacity alert with general location, hash chain (genesis =
-SHA-256 of `"sabaygo:" + trip_id`), completion when aboard reaches 0.
+Done: **R5a, door events against the list** (15 Oct). Rules:
+`application/edge/checking.py` (read its docstring). A boarding before
+departure is matched by time (±`match_window_seconds`) to a valid QR scan
+or a cash entry, each used once, nearest first: `matched_qr` /
+`matched_log`, else `unlisted` + `pending`. Recomputed from stored rows on
+every check, so arrival order does not matter; the Dispatcher's fixes and
+reasons are kept. **Depart is gated on the count, not the events:**
+aboard (boards − alights before departure − crew) against listed (paid
+seats, home-pickup seats only once boarded) + explained. Fix = walk-in
+with `for_event_id` (→ `listed`, the booking named; migration **026**
+widened `chk_event_booking_only_if_matched` for it, with down script);
+reason = `POST /door-events/{id}/explain`. `GET /trips/{id}/door-check`
+is the Dispatcher's screen (rechecks on read). 'Departed With More Than
+Listed' once per trip, at departure or when an offline phone's late
+upload shows it. After departure nothing is matched or priced.
+Test: `test_door_check.sh` (40, in the runner); suite **593 passed, 1
+failed** (known). **The Dispatcher app has no screen for this yet
+(R10):** until it does, a phone counting more than listed blocks a
+person's Depart and only the GPS departs the van.
+**Next: R5b** — capacity alert above 14 with the general location, and
+completion when aboard reaches 0. Then R5c, the hash chain (genesis =
+SHA-256 of `"sabaygo:" + trip_id`).
 
 ---
 

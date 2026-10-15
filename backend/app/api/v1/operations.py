@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep, require_roles
+from app.application.edge.checking import ListCheck
 from app.application.operations.boarding import (
     DepartTripUseCase,
     ManifestUseCase,
@@ -307,6 +308,63 @@ async def set_crew(
     """The assigned Dispatcher adds themselves as crew: not a boarding,
     not counted toward the 14."""
     return _state(await TripLifecycle(session).set_crew(trip_id, by=user, aboard=payload.aboard))
+
+
+# ------------------------------------------------- aboard against listed
+class UnlistedOut(BaseModel):
+    event_id: str
+    event_at: dt.datetime
+    resolution_status: str
+    resolution_note: str | None
+    has_snapshot: bool
+
+
+class DoorCheckOut(BaseModel):
+    """The Dispatcher's before-departure screen (brief 2.4, 6.1)."""
+    aboard: int
+    listed: int
+    explained: int
+    excess: int
+    crew_aboard: bool
+    unlisted: list[UnlistedOut]
+
+
+@router.get("/trips/{trip_id}/door-check", response_model=DoorCheckOut)
+async def door_check(
+    trip_id: str, session: SessionDep, user: Annotated[User, Depends(CREW)],
+) -> DoorCheckOut:
+    """The camera's count aboard against the passenger list. More aboard
+    than listed: list each person with a destination, or type a reason,
+    before Depart. Fewer: no-shows, nothing to do."""
+    trip = await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
+    check = await ListCheck(session).recheck(trip)
+    await session.commit()
+    return DoorCheckOut(
+        aboard=check.aboard, listed=check.listed, explained=check.explained,
+        excess=check.excess, crew_aboard=check.crew_aboard,
+        unlisted=[UnlistedOut(
+            event_id=e.event_id, event_at=e.event_at, resolution_status=e.resolution_status,
+            resolution_note=e.resolution_note, has_snapshot=e.snapshot_url is not None,
+        ) for e in check.unlisted],
+    )
+
+
+class ExplainIn(BaseModel):
+    note: str = Field(min_length=3, max_length=255)
+
+
+@router.post("/door-events/{event_id}/explain", response_model=UnlistedOut)
+async def explain_unlisted(
+    event_id: str, payload: ExplainIn, session: SessionDep,
+    user: Annotated[User, Depends(CREW)],
+) -> UnlistedOut:
+    """A reason for a boarding that is not on the list, kept with who and
+    when. To list the person instead, log the walk-in with `for_event_id`."""
+    e = await ListCheck(session).explain(event_id, by=user, note=payload.note.strip())
+    return UnlistedOut(
+        event_id=e.event_id, event_at=e.event_at, resolution_status=e.resolution_status,
+        resolution_note=e.resolution_note, has_snapshot=e.snapshot_url is not None,
+    )
 
 
 class MoveIn(BaseModel):

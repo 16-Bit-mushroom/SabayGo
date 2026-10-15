@@ -19,6 +19,7 @@ from app.application.booking.reserve_seat import (
     ReserveSeatCommand,
     ReserveSeatUseCase,
 )
+from app.application.edge.checking import ListCheck
 from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError, PolicyViolationError
 from app.domain.enums import BookingType, Role
@@ -54,6 +55,9 @@ class WalkInRequest(BaseModel):
     # recognised by this id and returns the original booking instead of
     # creating a second one.
     client_request_id: str | None = None
+    # The unlisted boarding this person was (brief 2.4): the Dispatcher
+    # fixes the list before Depart.
+    for_event_id: str | None = None
 
 
 class BookingResponse(BaseModel):
@@ -158,6 +162,11 @@ async def log_walk_in(
                 qr_payload=row.qr_payload,
             )
 
+    checks = ListCheck(session)
+    if payload.for_event_id is not None:
+        event = await checks.pending_event(payload.for_event_id, by=user)
+        if event.trip_id != payload.trip_id:
+            raise NotFoundError("Door event not found.")
     result = await ReserveSeatUseCase(session).execute(
         ReserveSeatCommand(
             trip_id=payload.trip_id,
@@ -171,6 +180,8 @@ async def log_walk_in(
             client_request_id=payload.client_request_id,
         )
     )
+    if payload.for_event_id is not None:
+        await checks.mark_listed(payload.for_event_id, booking_id=result.booking_id, by=user)
     return BookingResponse(
         booking_id=result.booking_id,
         ticket_number=result.ticket_number,

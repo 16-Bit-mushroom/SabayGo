@@ -26,6 +26,7 @@ from pathlib import Path
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.edge.checking import ListCheck
 from app.application.edge.evidence import PhoneEvidence
 from app.application.edge.ledger import (
     STARTED, TRIP_REACH, alerted_while_held, trip_for, van_at,
@@ -196,6 +197,7 @@ class EdgeIngestion:
         self._check_clock([e.event_at for e in events])
         counts = {"stored": 0, "held": 0, "duplicates": 0, "ignored": 0}
         held_vans: set[str] = set()
+        trips: dict[str, Trip] = {}
         seen: set[str] = set()
         now = app_tz.now().replace(tzinfo=None)
         for e in sorted(events, key=lambda e: e.event_at):
@@ -221,6 +223,7 @@ class EdgeIngestion:
             if trip is not None:
                 self.session.add(PassengerEvent(**fields, trip_id=trip.trip_id,
                                                 created_at=now))
+                trips[trip.trip_id] = trip
                 counts["stored"] += 1
             else:
                 self.session.add(HeldDoorEvent(**fields, van_id=van_id, received_at=now))
@@ -230,6 +233,13 @@ class EdgeIngestion:
 
         for van_id in held_vans:
             await self._alert_held(van_id)
+        # Phase 3: each trip's boardings against its list. A phone that was
+        # offline may show only now that the van left with more aboard.
+        checks = ListCheck(self.session)
+        for trip in trips.values():
+            check = await checks.recheck(trip)
+            if trip.status in (TripStatus.DEPARTED.value, TripStatus.COMPLETED.value):
+                await checks.alert_if_left_with_more(trip, check)
         await self.session.commit()
         return counts
 

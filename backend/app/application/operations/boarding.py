@@ -11,6 +11,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.audit import auto_trigger
+from app.application.edge.checking import ListCheck
 from app.application.finance.statement import Statements
 from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
@@ -18,7 +19,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import AuditTrigger, BookingStatus, DepartureSource, Role, TripStatus
 from app.infrastructure.models import BoardingScan
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import PassengerEvent, Trip
+from app.infrastructure.models import Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 log = logging.getLogger(__name__)
@@ -237,11 +238,10 @@ class DepartTripUseCase:
     Manager and the Cashier are told; the share stays owed on the van's
     statement, which refuses its next assignment (brief 2.1).
 
-    More people aboard than listed (an unlisted boarding still pending,
-    brief 2.4) stops a person's Depart until the Dispatcher fixes the
-    list or types a reason. The van leaving anyway is not stopped: GPS
-    departs it and 'Departed With More Than Listed' goes to the Terminal
-    Manager.
+    More people aboard than listed (brief 2.4, `edge.checking`) stops a
+    person's Depart until the Dispatcher fixes the list or types a
+    reason. The van leaving anyway is not stopped: GPS departs it and
+    'Departed With More Than Listed' goes to the Terminal Manager.
     """
 
     def __init__(self, session: AsyncSession):
@@ -264,15 +264,12 @@ class DepartTripUseCase:
                 else f"This trip is already {trip.status}."
             )
 
-        unlisted = (await self.session.execute(
-            select(func.count()).select_from(PassengerEvent).where(
-                PassengerEvent.trip_id == trip_id,
-                PassengerEvent.resolution_status == "pending",
-            )
-        )).scalar_one()
-        if unlisted and source is not DepartureSource.GPS:
+        check = await ListCheck(self.session).recheck(trip)
+        if check.excess and source is not DepartureSource.GPS:
+            await self.session.commit()   # the matching stays for the Dispatcher's screen
             raise ConflictError(
-                f"{unlisted} {'person is' if unlisted == 1 else 'people are'} aboard but not "
+                f"{check.aboard} aboard and {check.listed} listed: "
+                f"{check.excess} more {'person' if check.excess == 1 else 'people'} aboard than "
                 "on the passenger list. Add them to the list, or type a reason, before Depart."
             )
 
@@ -312,15 +309,7 @@ class DepartTripUseCase:
                          "until it is paid or the Terminal Manager overrides."),
                 roles=(Role.TERMINAL_MANAGER, Role.CASHIER),
             )
-        if unlisted:
-            await notifications.notify_trip(
-                trip=trip, type="departed_more_than_listed",
-                title="Departed with more aboard than listed",
-                message=(f"{trip_label(trip)} left with {unlisted} more aboard than its "
-                         "passenger list, and the Dispatcher neither fixed the list nor gave a "
-                         "reason. No fare is priced from the camera's count."),
-                roles=(Role.TERMINAL_MANAGER,),
-            )
+        await ListCheck(self.session).alert_if_left_with_more(trip, check)
         await self.session.commit()
 
         log.info("Trip %s departed; %d no-shows recorded.", trip_id, len(no_shows))
