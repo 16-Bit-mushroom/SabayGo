@@ -20,6 +20,17 @@ code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
   curl "${a[@]}"; }
 login() { curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d "{\"email\":\"$1@sabaygo.dev\",\"password\":\"sabaygo123\"}" | j "['access_token']"; }
+sql() {
+  (cd "$(dirname "$0")/../.." && venv/bin/python -c "
+import asyncio, sys
+from sqlalchemy import text
+from app.core.db import engine
+async def m():
+    async with engine.begin() as c:
+        await c.execute(text(sys.argv[1]))
+    await engine.dispose()
+asyncio.run(m())" "$1")
+}
 total() { code GET "/trips/$TRIP/manifest" "" "$DT" >/dev/null; j "['total_bookings']" < /tmp/r.json; }
 
 DT=$(login dispatcher); CT=$(login cashier); AT=$(login ana)
@@ -57,8 +68,11 @@ is "$S" 201 "a booking from stop 1 is taken"
 grep -q seat_number /tmp/r.json && bad "reserve still returns seat_number" || ok "reserve has no seat number"
 BID=$(j "['booking_id']" < /tmp/r.json)
 python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1
+# A booking from before the rule; the seed's are all stop 1 now.
+sql "UPDATE bookings SET boarding_stop_sequence = 2 WHERE booking_id = 'BKG-A2Z-U002'"
 is "$(code POST /bookings/BKG-A2Z-U002/reschedule '{"new_trip_id":"TRIP-A2Z-TAG-D1-0900"}' "$AT")" 422 \
    "a stored stop-2 booking cannot be moved to another trip"
+sql "UPDATE bookings SET boarding_stop_sequence = 1 WHERE booking_id = 'BKG-A2Z-U002'"
 
 hdr "the Dispatcher lists cash passengers at stop 1"
 BEFORE=$(total)
@@ -75,10 +89,13 @@ FARE=$(j "['fare_amount']" < /tmp/r.json)
 grep -q fare_is_manual /tmp/r.json && bad "response still reports fare_is_manual" || ok "no manual-fare flag"
 
 hdr "nothing is listed after departure"
-code POST "/trips/$TRIP/start" "" "$CT" >/dev/null
+code GET "/trips/$TRIP/share" "" "$CT" >/dev/null
+is "$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$(j "['amount_due']" < /tmp/r.json)\",\"reference\":\"OR-$STAMP\"}" "$CT")" 200 \
+   "the cashier records the share"
+is "$(code POST "/trips/$TRIP/start" "" "$CT")" 200 "the trip is started"
 is "$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$DT")" 201 \
    "listed while the trip boards"
-code POST "/trips/$TRIP/depart" "" "$CT" >/dev/null
+is "$(code POST "/trips/$TRIP/depart" "" "$CT")" 200 "the trip departs"
 is "$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$DT")" 409 \
    "a cash passenger after departure is refused"
 is "$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")" 409 \

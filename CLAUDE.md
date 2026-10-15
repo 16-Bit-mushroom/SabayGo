@@ -346,7 +346,7 @@ boarding at stop 1 the per-leg count is the per-van count. Test:
 Dispatcher app still offers a "Van is at" stop for walk-ins; the server
 refuses anything but stop 1.
 
-**In progress: R3, lifecycle rework (15 Oct, committed as WIP).** Built:
+Done: **R3, lifecycle rework** (15 Oct). Built:
 `application/finance/statement.py` (read its docstring: fare lines follow
 the list, lock at payment or departure, top-ups, held share, statement
 recomputed from lines, undisputed balance), `api/v1/statements.py`
@@ -365,18 +365,25 @@ NULL) and `release_held` moves them; `PUT /trips/{id}/crew`;
 itself when the van is back in a terminal zone); Unscheduled run
 removed; cancel/reschedule refused once the list is locked; seed: all
 boardings at stop 1, every started trip has a paid statement.
-`test_trip_lifecycle.sh` rewritten for T1-T21: **129 passed, 0 failed**.
-**Next, in order:** (1) `test_edge_ingestion.sh` — record the share
-before starts, set `depart_zone_radius_m`/`depart_readings` and send N
-fixes, drop the Unscheduled-run case (12 failing now); (2)
-`test_roadside.sh` — pay before Start; make the legacy stop-2 booking
-with SQL (seed U002 is stop 1 now) (3 failing); (3)
+`test_trip_lifecycle.sh` rewritten for T1-T21 (129 checks). A van that
+leaves with held boardings and no trip waiting gets one 'Trip not
+started · van left' alert while its events wait (`ledger.alerted_while_held`),
+not one per GPS fix. Tests moved to rev 603: `test_edge_ingestion.sh`
+(68; pays before Start, sets the zone settings and sends N fixes, the
+Unscheduled-run case became "events stay held, alerted once"),
+`test_roadside.sh` (24; the legacy stop-2 booking is made with SQL),
 `test_dispatcher_journey.sh`, `test_notifications.py`,
-`test_auto_audit.py`, `scripts/demo_rehearsal.sh` — pay before Start;
-(4) full `run_all_journeys.sh`; (5) commit R3, then R3b: special-trip
-requests (app + counter walk-in, fee, payment first) and R4. The old
-`cash_remittances` flow (Fares & Cash) is the rev 514 model; retire it
-with the screens (R10). Seed note: LIVE-BOARD's leg-1 list is now 5.
+`scripts/demo_rehearsal.sh` (pay before Start). Journey suite **475
+passed, 1 failed** (the known `--soon` reschedule cutoff); the
+passenger journey's terminal search no longer assumes the fixture
+departs today, so it passes 37/0 after a plain reset too.
+**The console cannot record a payment yet** (R10), so its Start button is
+refused once a trip has a list: `DEMO_SCRIPT.md` row 9a says to record
+the share through the API first. The old `cash_remittances` flow (Fares &
+Cash) is the rev 514 model; retire it with the screens (R10). Seed note:
+LIVE-BOARD's leg-1 list is now 5.
+**Next: R3b** — special-trip requests (app + counter walk-in, fee,
+payment first) — then R4.
 
 ---
 

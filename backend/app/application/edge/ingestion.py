@@ -27,7 +27,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.edge.evidence import PhoneEvidence
-from app.application.edge.ledger import STARTED, TRIP_REACH, trip_for, van_at
+from app.application.edge.ledger import (
+    STARTED, TRIP_REACH, alerted_while_held, trip_for, van_at,
+)
 from app.application.notifications.service import NotificationService
 from app.application.operations.boarding import DepartTripUseCase
 from app.application.operations.non_passenger import NonPassengerMoves
@@ -42,7 +44,6 @@ from app.infrastructure.models import (
     DeviceHeartbeat,
     EdgeDevice,
     HeldDoorEvent,
-    Notification,
     PassengerEvent,
     Terminal,
     Trip,
@@ -234,18 +235,7 @@ class EdgeIngestion:
 
     async def _alert_held(self, van_id: str) -> None:
         """'Trip Not Started' (rule 12), once while the van's events wait."""
-        oldest = (await self.session.execute(
-            select(HeldDoorEvent.received_at).where(HeldDoorEvent.van_id == van_id)
-            .order_by(HeldDoorEvent.received_at).limit(1)
-        )).scalar_one()
-        already = (await self.session.execute(
-            select(Notification.notification_id).where(
-                Notification.type == "trip_not_started",
-                Notification.related_entity_id == van_id,
-                Notification.created_at >= oldest,
-            ).limit(1)
-        )).first()
-        if already:
+        if await alerted_while_held(self.session, van_id, "Trip not started"):
             return
         van = await self.session.get(Van, van_id)
         await NotificationService(self.session).notify_staff(

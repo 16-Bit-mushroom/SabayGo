@@ -28,6 +28,7 @@ from app.domain.enums import TripStatus
 from app.infrastructure.models import (
     DeviceCheckout,
     HeldDoorEvent,
+    Notification,
     PassengerEvent,
     Trip,
     TripLocationPing,
@@ -126,3 +127,23 @@ async def release_held(session: AsyncSession, trip: Trip, now: datetime) -> int:
     if moved:
         await session.flush()
     return moved
+
+
+async def alerted_while_held(session: AsyncSession, van_id: str, title: str) -> bool:
+    """Whether a 'Trip Not Started' with this title went out about the van
+    since its oldest held event: each alert is raised once while the
+    van's events wait, not on every upload."""
+    oldest = (await session.execute(
+        select(HeldDoorEvent.received_at).where(HeldDoorEvent.van_id == van_id)
+        .order_by(HeldDoorEvent.received_at).limit(1)
+    )).scalar_one_or_none()
+    if oldest is None:
+        return False
+    return (await session.execute(
+        select(Notification.notification_id).where(
+            Notification.type == "trip_not_started",
+            Notification.related_entity_id == van_id,
+            Notification.title == title,
+            Notification.created_at >= oldest,
+        ).limit(1)
+    )).first() is not None

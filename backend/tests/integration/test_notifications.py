@@ -54,8 +54,12 @@ async def main() -> int:
         tokens = {role: await login(client, email) for role, email in ACCOUNTS.items()}
         auth = {role: {"Authorization": f"Bearer {t}"} for role, t in tokens.items()}
 
-        # Trip must be in progress for an audit to apply. The office starts
-        # it (rev 468).
+        # Trip must be in progress for an audit to apply. The Cashier
+        # records the share, then starts it (rev 603, brief 2.1).
+        due = (await client.get(f"{API}/trips/{TRIP}/share", headers=auth["cashier"])).json()["amount_due"]
+        if float(due) > 0:
+            await client.post(f"{API}/trips/{TRIP}/payment", headers=auth["cashier"],
+                              json={"amount": due, "reference": "OR-NOTIFY"})
         await client.post(f"{API}/trips/{TRIP}/start", headers=auth["cashier"])
 
         before = {

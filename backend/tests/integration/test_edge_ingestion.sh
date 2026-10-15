@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rev 468 step 5: what the edge phone sends (change brief 4.2 rules 7,
-# 11, 12; 4.4; 5.3).
+# Rev 468 step 5, rev 603 rules: what the edge phone sends (change
+# brief 4.2 rules 7-12; 4.4; 5.3).
 #
 #   ./db/reset-dev.sh --soon && ./tests/integration/test_edge_ingestion.sh
 #
@@ -96,6 +96,21 @@ board() {
 notes() {  # notes TOKEN TYPE ENTITY_ID
   code GET "/notifications?limit=100" "" "$1" >/dev/null
   python3 -c "import json;print(sum(1 for n in json.load(open('/tmp/resp.json'))['items'] if n['type']=='$2' and n['related_entity_id']=='$3'))"
+}
+# The Cashier records a trip's whole share: pay TRIP_ID
+pay() {
+  code GET "/trips/$1/share" "" "$CT" >/dev/null
+  code POST "/trips/$1/payment" "{\"amount\":\"$(field amount_due)\",\"reference\":\"OR-$RANDOM\"}" "$CT"
+}
+# The departure rule's site settings (empty = unset): zone RADIUS_M N
+zone() {
+  code PUT /config/policies/depart_zone_radius_m "{\"policy_value\":\"$1\"}" "$OT" >/dev/null
+  code PUT /config/policies/depart_readings "{\"policy_value\":\"$2\"}" "$OT" >/dev/null
+}
+# The manager's 'Trip Not Started' alerts about the van left with no trip
+van_left() {
+  code GET "/notifications?limit=100" "" "$OT" >/dev/null
+  python3 -c "import json;print(sum(1 for n in json.load(open('/tmp/resp.json'))['items'] if n['type']=='trip_not_started' and n['related_entity_id']=='$1' and 'van left' in n['title']))"
 }
 events_on() { sql "SELECT COUNT(*) FROM passenger_events WHERE trip_id = '$1'"; }
 # Move a started trip and its phone's reports back in time by MIN minutes.
@@ -217,6 +232,7 @@ edge POST /edge/events "$(event "$E3" alight 1)" "$TC" >/dev/null
 is "$(notes "$OT" trip_not_started VAN-0004)" 1 "raised once while its events wait"
 sql "UPDATE trips SET departure_datetime = NOW() + INTERVAL 10 MINUTE WHERE trip_id = '$LIVE'"
 edge POST /edge/heartbeats "$(reports 0 0 1)" "$TC" >/dev/null
+is "$(pay $LIVE)" 200 "the cashier records its share"
 is "$(code POST /trips/$LIVE/start "" "$CT")" 200 "its trip is started"
 is "$(events_on $LIVE)/$(sql "SELECT COUNT(*) FROM held_door_events WHERE van_id = 'VAN-0004'")" "2/0" \
    "the held events move onto it, matched by time"
@@ -231,12 +247,13 @@ GAP_AT=$(sql "SELECT TIMESTAMPDIFF(MINUTE, unaudited_at, NOW()) FROM trips WHERE
   || bad "unaudited_at is $GAP_AT min ago"
 
 # ╔═══════════════════════════════════════════════════════════════╗
-hdr "7. GPS from the phone (rules 9, 11)"
+hdr "7. GPS from the phone (rules 8, 9, 11)"
+zone 300 3
 is "$(edge POST /edge/fixes "$(fix 2 "$ELAT" "$ELON")" "$TA")" 200 "a reading at the terminal"
 is "$(field recorded)" 1 "goes on ABC-1234's trip"
-edge POST /edge/fixes "$(fix 3 "$FAR" "$ELON")" "$TA" >/dev/null
+for S in 3 4 5; do edge POST /edge/fixes "$(fix $S "$FAR" "$ELON")" "$TA" >/dev/null; done
 is "$(board $TRIP1 status)/$(board $TRIP1 departure_source)" departed/gps \
-   "leaving the terminal with a boarding counted departs the trip: Detected"
+   "N readings outside the zone with a boarding counted: departed, GPS"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "8. A van with no trip leaves with passengers (rule 7, 4.6; T6)"
@@ -251,8 +268,10 @@ E4=$(uuid)
 edge POST /edge/events "$(event "$E4" board 0 "$ELAT" "$ELON")" "$TD" >/dev/null
 is "$(field held)" 1 "LCT-9042 has no trip: its boarding is held"
 edge POST /edge/fixes "$(fix 1 "$ELAT" "$ELON")" "$TD" >/dev/null
-is "$(field ignored)" 1 "still at the terminal: nothing happens"
+is "$(field held)/$(board $S6 van_id)" 1/None "still at the terminal: the reading is held, nothing starts"
 edge POST /edge/fixes "$(fix 2 "$FAR" "$ELON")" "$TD" >/dev/null
+is "$(board $S6 van_id)" None "a single reading out of the zone starts nothing"
+for S in 3 4; do edge POST /edge/fixes "$(fix $S "$FAR" "$ELON")" "$TD" >/dev/null; done
 is "$(board $S6 van_id)/$(board $S6 start_mode)" "VAN-0006/auto_detected" \
    "T6 it leaves: the Mati trip waiting for a van gets it, Auto_Detected"
 is "$(board $S6 start_review_status)/$(board $S6 status)/$(board $S6 departure_source)" pending/departed/gps \
@@ -267,16 +286,16 @@ is "$(board $S6 audit_status)/$(board $S6 unaudited_reason)" unaudited/lost_en_r
    "the phone fell silent and the trip ended first: Lost_En_Route, final"
 
 E5=$(uuid)
-edge POST /edge/events "$(event "$E5" board 3 "$ELAT" "$ELON")" "$TD" >/dev/null
+edge POST /edge/events "$(event "$E5" board 5 "$ELAT" "$ELON")" "$TD" >/dev/null
 is "$(field held)" 1 "a new boarding after that trip ended is held"
-edge POST /edge/fixes "$(fix 4 "$ELAT" "$ELON")" "$TD" >/dev/null
-edge POST /edge/fixes "$(fix 5 "$FAR" "$ELON")" "$TD" >/dev/null
-RUN=$(sql "SELECT trip_id FROM trips WHERE van_id = 'VAN-0006' AND trip_label = 'Unscheduled run'")
-[ -n "$RUN" ] && ok "no trip waits on its route: the system creates an 'Unscheduled run'" || bad "no run created"
-is "$(board $RUN start_mode)/$(board $RUN start_review_status)/$(board $RUN status)" auto_detected/pending/departed \
-   "started Auto_Detected, held for review, departed"
-is "$(sql "SELECT route_id FROM trips WHERE trip_id = '$RUN'")" "$MATI" "on the van's own route"
-is "$(events_on $RUN)" 1 "its boarding is on it"
+edge POST /edge/fixes "$(fix 6 "$ELAT" "$ELON")" "$TD" >/dev/null
+for S in 7 8 9; do edge POST /edge/fixes "$(fix $S "$FAR" "$ELON")" "$TD" >/dev/null; done
+is "$(sql "SELECT COUNT(*) FROM trips WHERE van_id = 'VAN-0006' AND status IN ('boarding', 'departed')")" 0 \
+   "it leaves again, and no trip on its route waits: no trip is invented (2.5)"
+is "$(sql "SELECT COUNT(*) FROM held_door_events WHERE van_id = 'VAN-0006'")" 1 "its boarding stays held"
+is "$(van_left VAN-0006)" 1 "'Trip Not Started' tells the manager the van left with passengers and no trip"
+edge POST /edge/fixes "$(fix 10 "$FAR" "$ELON")" "$TD" >/dev/null
+is "$(van_left VAN-0006)" 1 "once while its events wait, not on every reading"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "9. A retired phone uploads nothing"
@@ -285,6 +304,7 @@ code POST /devices/$IDB/retire "" "$OT" >/dev/null
 is "$(edge GET /edge/session "" "$TB")" 401 "its token stops working"
 
 for P in A C D; do eval "code POST /devices/\$ID$P/return '{}' \"\$CT\" >/dev/null"; done
+zone "" ""
 
 printf '\n%d passed, %d failed\n' "$PASS_N" "$FAIL_N"
 [ "$FAIL_N" -eq 0 ]

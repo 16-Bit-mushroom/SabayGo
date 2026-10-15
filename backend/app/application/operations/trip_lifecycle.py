@@ -62,7 +62,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.edge.evidence import PhoneEvidence
-from app.application.edge.ledger import TRIP_REACH, release_held
+from app.application.edge.ledger import TRIP_REACH, alerted_while_held, release_held
 from app.application.finance.statement import ZERO, Statements
 from app.application.notifications.service import NotificationService, trip_label
 from app.application.operations.boarding import DepartTripUseCase
@@ -99,6 +99,7 @@ log = logging.getLogger(__name__)
 STARTED = (TripStatus.BOARDING.value, TripStatus.DEPARTED.value,
            TripStatus.COMPLETED.value)
 OFFICE = (Role.TERMINAL_MANAGER, Role.CASHIER)
+VAN_LEFT = "Trip not started · van left"
 
 
 @dataclass
@@ -310,14 +311,9 @@ class TripLifecycle:
         """
         routes = await self._routes_from(origin_terminal_id, van)
         if len(routes) != 1:
-            await self.notifications.notify_staff(
-                type="trip_not_started", title="Trip not started",
-                message=(f"{van.plate_number} left a terminal with passengers aboard and no "
-                         "trip, and the system cannot tell its route. Its door events are "
-                         "held: create and start its trip."),
-                roles=(Role.TERMINAL_MANAGER,), entity=("van", van.van_id),
-            )
-            await self.session.commit()
+            await self._van_left_without_trip(
+                van, "and the system cannot tell its route. Its door events are held: "
+                     "create and start its trip.")
             return None
         route_id = routes[0]
 
@@ -332,14 +328,9 @@ class TripLifecycle:
             )
         )).scalars().all()
         if not waiting:
-            await self.notifications.notify_staff(
-                type="trip_not_started", title="Trip not started",
-                message=(f"{van.plate_number} left a terminal with passengers aboard, and no "
-                         "trip on its route is waiting for a van. Its door events are held: "
-                         "assign it its trip, or enter the special trip it ran."),
-                roles=(Role.TERMINAL_MANAGER,), entity=("van", van.van_id),
-            )
-            await self.session.commit()
+            await self._van_left_without_trip(
+                van, "and none on its route is waiting for a van. Its door events are "
+                     "held: assign it its trip, or enter the special trip it ran.")
             return None
         nearest = min(waiting, key=lambda t: abs(t.departure_datetime - at))
         trip = await self._locked(nearest.trip_id)
@@ -359,6 +350,18 @@ class TripLifecycle:
         await self.session.commit()
         log.info("Trip %s started from %s's detected departure.", trip.trip_id, van.plate_number)
         return trip
+
+    async def _van_left_without_trip(self, van: Van, why: str) -> None:
+        """'Trip Not Started' about the van, once while its events wait:
+        every fix after it left would otherwise raise it again."""
+        if not await alerted_while_held(self.session, van.van_id, VAN_LEFT):
+            await self.notifications.notify_staff(
+                type="trip_not_started", title=VAN_LEFT,
+                message=f"{van.plate_number} left a terminal with passengers aboard and no trip, "
+                        + why,
+                roles=(Role.TERMINAL_MANAGER,), entity=("van", van.van_id),
+            )
+        await self.session.commit()
 
     async def _routes_from(self, terminal_id: str, van: Van) -> list[str]:
         """The van's own route, when it starts at this terminal; with no

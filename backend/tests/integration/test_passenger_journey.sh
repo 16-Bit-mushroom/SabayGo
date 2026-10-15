@@ -79,9 +79,12 @@ S=$(code "GET" "/trips/search?boarding_stop=1&alighting_stop=4")
 DUP=$(code GET /trips/terminals >/dev/null; python3 -c "import json;ids=[t['terminal_id'] for t in json.load(open('/tmp/resp.json'))];print(len(ids)-len(set(ids)))")
 [ "$DUP" = "0" ] && ok "terminal picker has no duplicates" || bad "$DUP duplicate terminals in picker"
 
-TODAY=$(date +%F)
-S=$(code "GET" "/trips/search?origin_terminal_id=TERM-ECOLAND-000001&destination_terminal_id=TERM-COTABATO-00001&service_date=$TODAY")
-N=$(python3 -c "import json;d=json.load(open('/tmp/resp.json'));print(len(d) if isinstance(d,list) else -1)")
+# The fixture departs today after a --soon reset, tomorrow after a plain one.
+for TODAY in $(date +%F) $(date -d tomorrow +%F); do
+  S=$(code "GET" "/trips/search?origin_terminal_id=TERM-ECOLAND-000001&destination_terminal_id=TERM-COTABATO-00001&service_date=$TODAY")
+  N=$(python3 -c "import json;d=json.load(open('/tmp/resp.json'));print(len(d) if isinstance(d,list) else -1)")
+  [ "$N" -ge 1 ] && break
+done
 [ "$S" = "200" ] && [ "$N" -ge 1 ] && ok "search by terminals: $N departure(s) Ecoland -> Cotabato" || bad "terminal search gave $S / $N"
 S=$(code "GET" "/trips/search?origin_terminal_id=TERM-COTABATO-00001&destination_terminal_id=TERM-ECOLAND-000001&service_date=$TODAY")
 N=$(python3 -c "import json;d=json.load(open('/tmp/resp.json'));print(len(d) if isinstance(d,list) else -1)")

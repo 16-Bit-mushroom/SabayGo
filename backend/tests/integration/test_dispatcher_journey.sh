@@ -33,7 +33,8 @@ S=$(code POST /auth/login '{"email":"dispatcher@sabaygo.dev","password":"sabaygo
 [ "$S" = "200" ] && ok "login" || { bad "login gave $S"; exit 1; }
 CT=$(j "['access_token']" < /tmp/resp.json)
 [ "$(j "['role']" < /tmp/resp.json)" = "dispatcher" ] && ok "role is dispatcher" || bad "wrong role"
-# The office starts and departs the trip (rev 468, brief 4.2 rules 5, 9).
+# The office takes the share, starts and departs the trip (rev 603,
+# brief 2.1, 4.2).
 code POST /auth/login '{"email":"cashier@sabaygo.dev","password":"sabaygo123"}' >/dev/null
 OFF=$(j "['access_token']" < /tmp/resp.json)
 
@@ -64,6 +65,9 @@ UNPAID_QR=$(j "['qr_payload']" < /tmp/resp.json)
 # ═══════════════════════════════════════════════ 2. BOARDING
 hdr "2. Boarding"
 
+code GET "/trips/$TRIP/share" "" "$OFF" >/dev/null
+S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$(j "['amount_due']" < /tmp/resp.json)\",\"reference\":\"OR-$STAMP\"}" "$OFF")
+[ "$S" = "200" ] && ok "the cashier records the 15 % share" || bad "payment gave $S"
 S=$(code POST "/trips/$TRIP/start" "" "$OFF")
 [ "$S" = "200" ] && ok "the cashier starts the trip" || bad "start gave $S"
 

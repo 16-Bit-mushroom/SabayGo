@@ -52,6 +52,7 @@ curl -s -o /dev/null -w '%{http_code}' "$API/../../docs" | grep -q 200 && ok "ba
 PT=$(login passenger@sabaygo.dev); [ -n "$PT" ] && ok "passenger@ logs in" || die "passenger@ login failed -- did reset-dev.sh run?"
 CT=$(login dispatcher@sabaygo.dev); [ -n "$CT" ] && ok "dispatcher@ logs in" || die "dispatcher@ login failed"
 OT=$(login manager@sabaygo.dev);    [ -n "$OT" ] && ok "manager@ logs in"    || die "manager@ login failed"
+KT=$(login cashier@sabaygo.dev);    [ -n "$KT" ] && ok "cashier@ logs in"    || die "cashier@ login failed"
 
 TODAY=$(date +%F)
 S=$(code GET "/trips/search?origin_terminal_id=TERM-ECOLAND-000001&destination_terminal_id=TERM-COTABATO-00001&service_date=$TODAY" "" "$PT")
@@ -101,11 +102,16 @@ if [ "$S" = "200" ]; then ok "checked in -- manifest will show AT TERMINAL"
 else warn "check-in refused ($S): $(j "['detail']" < /tmp/resp.json) -- fine to show as the 'too early' rejection, then continue"; fi
 
 # ─────────────────────────────────────────────────────── 3. dispatcher
-step "3. Office starts the trip; Dispatcher scans, logs a walk-in, reads the manifest"
+step "3. Cashier takes the share, office starts the trip; Dispatcher scans, logs a walk-in, reads the manifest"
 S=$(code GET /trips/assigned "" "$CT")
 grep -q "$TRIP" /tmp/resp.json && ok "trip is on dispatcher@'s assigned list" || die "fixture trip not in /trips/assigned for dispatcher@"
 
-# The Cashier or the Terminal Manager starts it (rev 468, brief 4.2).
+# Start waits for A2Z's 15 % share (rev 603, brief 2.1): the Dispatcher
+# hands it over and the Cashier records it. Either office role starts.
+code GET "/trips/$TRIP/share" "" "$KT" >/dev/null
+DUE=$(j "['amount_due']" < /tmp/resp.json)
+S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$DUE\",\"reference\":\"OR-DEMO\"}" "$KT")
+[ "$S" = "200" ] && ok "cashier@ records the share, ₱$DUE -- the passenger list locks" || die "payment gave $S: $(j "['detail']" < /tmp/resp.json)"
 S=$(code POST "/trips/$TRIP/start" "" "$OT")
 [ "$S" = "200" ] && ok "manager@ starts the trip" || die "start gave $S: $(j "['detail']" < /tmp/resp.json)"
 
