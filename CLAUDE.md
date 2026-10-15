@@ -459,8 +459,20 @@ driving flags. After departure, an alighting that leaves nobody aboard
 completes the trip dated by that alighting (`arrive(at=)`), and the
 phone pauses. `test_door_check.sh` **52**; suite **605 passed, 1 failed**
 (known).
-**Next: R5c** — the hash chain (genesis = SHA-256 of
-`"sabaygo:" + trip_id`).
+Done: **R5c, the hash chain** (15 Oct). `application/edge/chain.py`
+(read its docstring). Each event entering the ledger gets the trip's next
+`chain_seq` and `event_hash` = SHA-256 over trip, seq, the phone's own
+fields, `snapshot_hash` and the previous hash; genesis = SHA-256 of
+`"sabaygo:" + trip_id`. Order = order of entry (late uploads append), under
+the trip's row lock; held events are chained when claimed. Server
+readings (match, resolution, geotag) are not hashed, so R5b's geotag no
+longer writes `latitude`/`longitude`. **Phone protocol change:** the
+phone declares the still's SHA-256 as `snapshot_hash` on the event; the
+upload must match it, and an event that declared none takes no still.
+`GET /trips/{id}/chain` (office) verifies: holds after a still is deleted
+(T39), breaks at the first altered link. `test_edge_ingestion.sh` **85**;
+suite **614 passed, 1 failed** (known).
+**Next: R6** — home pickup (brief 2.6) and chat image proof.
 
 ---
 

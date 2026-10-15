@@ -142,6 +142,9 @@ class DoorEventIn(BaseModel):
     occupancy_after: int | None = Field(default=None, ge=0, le=255)
     # The tracker's id within the trip; not a passenger identity (5.2).
     track_id: int | None = Field(default=None, ge=0)
+    # SHA-256 of the blurred still, when there is one: it is chained with
+    # the event, and the image uploaded later must match it.
+    snapshot_hash: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
 
 
 class DoorEventBatch(BaseModel):

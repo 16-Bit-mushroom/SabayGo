@@ -80,8 +80,8 @@ class Ride:
             longitude=None if event.longitude is None else float(event.longitude),
         )
         if tag is not None:
-            event.latitude = event.latitude if event.latitude is not None else _dec(tag.latitude, 6)
-            event.longitude = event.longitude if event.longitude is not None else _dec(tag.longitude, 6)
+            # The place, not the phone's fix: latitude and longitude are what
+            # the phone sent, and are chained (`edge.chain`).
             event.distance_from_start_m = _dec(tag.distance_from_start_m, 2)
             event.stretch_no = tag.stretch_no
             event.nearest_stop_sequence = tag.nearest_stop_sequence

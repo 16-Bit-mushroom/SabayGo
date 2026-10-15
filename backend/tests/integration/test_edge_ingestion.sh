@@ -51,13 +51,14 @@ print(json.dumps({'reports': [{'recorded_at': (n + d.timedelta(seconds=x)).isofo
   'camera_ok': True, 'gps_ok': True, 'lens_blocked': lens, 'battery_pct': 80,
   'battery_temp_c': 36.5, 'charging': True} for x in range(f, t + 1, s)]}))" "$@"
 }
-# One door event: event ID TYPE OFFSET_S [LAT LON]
+# One door event: event ID TYPE OFFSET_S [LAT LON [STILL_SHA256]]
 event() {
   python3 -c "
 import datetime as d, json, sys
 e = {'event_id': sys.argv[1], 'event_type': sys.argv[2],
      'event_at': (d.datetime.now() + d.timedelta(seconds=int(sys.argv[3]))).isoformat()}
 if len(sys.argv) > 5: e.update(latitude=float(sys.argv[4]), longitude=float(sys.argv[5]))
+if len(sys.argv) > 6: e['snapshot_hash'] = sys.argv[6]
 print(json.dumps({'events': [e]}))" "$@"
 }
 # One GPS reading: fix OFFSET_S LAT LON
@@ -173,23 +174,27 @@ code POST /devices/$IDB/checkout '{"van_id":"VAN-0002","dispatcher_id":"USER-DIS
 edge GET /edge/session "" "$TA" >/dev/null
 is "$(field plate_number)" ABC-1234 "after check-out the phone shows its van's plate"
 is "$(field counting)/$(field trip_id)" "True/$TRIP1" "rule 13 the van is assigned a trip: the phone counts for it"
+printf '\xff\xd8\xff\xe0snapshot-one' > "$SNAP/one.jpg"; printf '\xff\xd8\xff\xe0snapshot-two' > "$SNAP/two.jpg"
+printf 'not an image' > "$SNAP/bad.txt"
+ONE=$(sha256sum "$SNAP/one.jpg" | cut -d' ' -f1)
 E1=$(uuid)
-is "$(edge POST /edge/events "$(event "$E1" board 0 "$ELAT" "$ELON")" "$TA")" 200 "a boarding is uploaded"
+is "$(edge POST /edge/events "$(event "$E1" board 0 "$ELAT" "$ELON" "$ONE")" "$TA")" 200 \
+   "a boarding is uploaded, declaring its still's SHA-256"
 is "$(field stored)" 1 "T25a it goes on the trip the van is assigned to, before Start"
 is "$(sql "SELECT trip_id FROM passenger_events WHERE event_id = '$E1'")" $TRIP1 "the trip of ABC-1234"
 edge POST /edge/events "$(event "$E1" board 0)" "$TA" >/dev/null
 is "$(field duplicates)" 1 "sent again after a dropped connection: not stored twice"
 
-printf '\xff\xd8\xff\xe0snapshot-one' > "$SNAP/one.jpg"; printf '\xff\xd8\xff\xe0snapshot-two' > "$SNAP/two.jpg"
-printf 'not an image' > "$SNAP/bad.txt"
 up() { curl -s -o /tmp/resp.json -w "%{http_code}" -X PUT "$API/edge/events/$1/snapshot" -H "X-Device-Token: $2" -F "image=@$3"; }
 is "$(up "$E1" "$TA" "$SNAP/one.jpg")" 200 "the blurred still is stored"
-H=$(field snapshot_hash)
-is "$(sql "SELECT snapshot_hash FROM passenger_events WHERE event_id = '$E1'")" "$H" "with its SHA-256 on the event"
+is "$(field snapshot_hash)" "$ONE" "it is the still the event declared"
 is "$(sql "SELECT snapshot_url FROM passenger_events WHERE event_id = '$E1'" | cut -c1-10)" "snapshots/" \
    "kept in storage/, not the public media folder"
 is "$(up "$E1" "$TA" "$SNAP/one.jpg")/$(field duplicate)" 200/True "the same still again is accepted as a repeat"
-is "$(up "$E1" "$TA" "$SNAP/two.jpg")" 409 "evidence is never replaced"
+is "$(up "$E1" "$TA" "$SNAP/two.jpg")" 409 "another image is refused: evidence is never replaced"
+E1B=$(uuid)
+edge POST /edge/events "$(event "$E1B" alight 0)" "$TA" >/dev/null
+is "$(up "$E1B" "$TA" "$SNAP/one.jpg")" 409 "an event that declared no still takes none"
 is "$(up "$E1" "$TA" "$SNAP/bad.txt")" 422 "only an image is accepted"
 is "$(up "$E1" "$TB" "$SNAP/one.jpg")" 404 "a phone cannot attach a still to another phone's event"
 
@@ -313,7 +318,23 @@ edge POST /edge/fixes "$(fix 10 "$FAR" "$ELON")" "$TD" >/dev/null
 is "$(van_left VAN-0006)" 1 "once while its events wait, not on every reading"
 
 # ╔═══════════════════════════════════════════════════════════════╗
-hdr "9. A retired phone uploads nothing"
+hdr "9. The hash chain (6.2; T39)"
+chain() { code GET /trips/$1/chain "" "$OT" >/dev/null; printf '%s/%s' "$(field verified)" "$(field broken_at)"; }
+is "$(chain $TRIP1)" True/None "ABC-1234's trip: every link holds"
+is "$(field events)/$(field unchained)" "$(events_on $TRIP1)/0" "every event is chained"
+is "$(sql "SELECT chain_seq FROM passenger_events WHERE event_id = '$E1'")" 1 "its first boarding is link 1"
+is "$(code GET /trips/$TRIP1/chain "" "$D3T")" 403 "a Dispatcher does not verify chains"
+is "$(chain $LIVE)/$(field events)" True/None/3 "NBC-7788's trip: the held events were chained as they were claimed"
+sql "UPDATE passenger_events SET snapshot_url = NULL, snapshot_deleted_at = NOW() WHERE event_id = '$E1'"
+rm -f "$BACKEND/storage/snapshots/$E1".*
+is "$(chain $TRIP1)" True/None "T39 the still deleted under retention: the chain still verifies, by its hash"
+sql "UPDATE passenger_events SET event_at = event_at + INTERVAL 1 SECOND WHERE event_id = '$E1'"
+is "$(chain $TRIP1)" False/1 "an event changed afterwards breaks its link"
+sql "UPDATE passenger_events SET event_at = event_at - INTERVAL 1 SECOND WHERE event_id = '$E1'"
+is "$(chain $TRIP1)" True/None "put back, it holds again"
+
+# ╔═══════════════════════════════════════════════════════════════╗
+hdr "10. A retired phone uploads nothing"
 code POST /devices/$IDB/return '{}' "$CT" >/dev/null
 code POST /devices/$IDB/retire "" "$OT" >/dev/null
 is "$(edge GET /edge/session "" "$TB")" 401 "its token stops working"

@@ -26,6 +26,7 @@ from pathlib import Path
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.edge import chain
 from app.application.edge.capacity import Ride
 from app.application.edge.checking import ListCheck
 from app.application.edge.evidence import PhoneEvidence
@@ -97,6 +98,9 @@ class DoorEvent:
     longitude: float | None = None
     occupancy_after: int | None = None
     track_id: int | None = None
+    # SHA-256 of the blurred still the phone will upload: chained now,
+    # checked against the upload later.
+    snapshot_hash: str | None = None
 
 
 @dataclass
@@ -199,6 +203,7 @@ class EdgeIngestion:
         counts = {"stored": 0, "held": 0, "duplicates": 0, "ignored": 0}
         held_vans: set[str] = set()
         trips: dict[str, Trip] = {}
+        ledger: list[PassengerEvent] = []
         seen: set[str] = set()
         now = app_tz.now().replace(tzinfo=None)
         for e in sorted(events, key=lambda e: e.event_at):
@@ -219,11 +224,13 @@ class EdgeIngestion:
                 latitude=None if e.latitude is None else Decimal(str(round(e.latitude, 6))),
                 longitude=None if e.longitude is None else Decimal(str(round(e.longitude, 6))),
                 occupancy_after=e.occupancy_after, track_id=e.track_id,
+                snapshot_hash=e.snapshot_hash,
             )
             trip = await trip_for(self.session, van_id, e.event_at)
             if trip is not None:
-                self.session.add(PassengerEvent(**fields, trip_id=trip.trip_id,
-                                                created_at=now))
+                row = PassengerEvent(**fields, trip_id=trip.trip_id, created_at=now)
+                self.session.add(row)
+                ledger.append(row)
                 trips[trip.trip_id] = trip
                 counts["stored"] += 1
             else:
@@ -232,6 +239,7 @@ class EdgeIngestion:
                 held_vans.add(van_id)
             await self.session.flush()
 
+        await chain.append(self.session, ledger)
         for van_id in held_vans:
             await self._alert_held(van_id)
         # Phase 3: each trip's boardings against its list. A phone that was
@@ -261,8 +269,10 @@ class EdgeIngestion:
 
     # --------------------------------------------------------- snapshots
     async def snapshot(self, event_id: str, data: bytes) -> dict:
-        """The blurred still of one event. Evidence is never replaced: the
-        same bytes again are accepted, different bytes are refused."""
+        """The blurred still of one event: the image whose SHA-256 the
+        phone declared with the event, and so chained (`edge.chain`).
+        Evidence is never replaced: the same bytes again are accepted,
+        other bytes are refused."""
         row = await self.session.get(PassengerEvent, event_id) \
             or await self.session.get(HeldDoorEvent, event_id)
         if row is None or row.device_id != self.device.device_id:
@@ -273,16 +283,18 @@ class EdgeIngestion:
         if ext is None:
             raise InvalidInputError("The snapshot must be a JPEG, PNG or WebP image.")
         digest = hashlib.sha256(data).hexdigest()
-        if row.snapshot_hash is not None:
-            if row.snapshot_hash != digest:
-                raise ConflictError("This event already has a different snapshot.")
+        if row.snapshot_hash is None:
+            raise ConflictError("This event declared no still. Send its SHA-256 with the "
+                                "event, then the image.")
+        if row.snapshot_hash != digest:
+            raise ConflictError("This is not the still declared with the event.")
+        if row.snapshot_url is not None:
             return {"event_id": event_id, "snapshot_hash": digest, "duplicate": True}
 
         SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
         name = f"{event_id}.{ext}"
         (SNAPSHOT_DIR / name).write_bytes(data)
         row.snapshot_url = f"snapshots/{name}"
-        row.snapshot_hash = digest
         await self.session.commit()
         return {"event_id": event_id, "snapshot_hash": digest, "duplicate": False}
 

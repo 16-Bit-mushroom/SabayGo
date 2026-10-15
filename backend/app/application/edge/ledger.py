@@ -30,6 +30,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.edge import chain
 from app.domain.enums import TripStatus
 from app.infrastructure.models import (
     DeviceCheckout,
@@ -114,13 +115,14 @@ async def release_held(session: AsyncSession, trip: Trip, now: datetime) -> int:
         select(HeldDoorEvent).where(HeldDoorEvent.van_id == trip.van_id)
         .order_by(HeldDoorEvent.event_at)
     )).scalars().all()
-    moved = 0
+    moved: list[PassengerEvent] = []
     for event in held:
         owner = await trip_for(session, trip.van_id, event.event_at)
         if owner is not None and owner.trip_id == trip.trip_id:
-            session.add(to_ledger(event, trip.trip_id, now))
+            row = to_ledger(event, trip.trip_id, now)
+            session.add(row)
             await session.delete(event)
-            moved += 1
+            moved.append(row)
     # The van's held GPS readings within reach go with it: the trip's
     # trail starts where the van left the terminal (025).
     await session.execute(
@@ -132,7 +134,8 @@ async def release_held(session: AsyncSession, trip: Trip, now: datetime) -> int:
     )
     if moved:
         await session.flush()
-    return moved
+        await chain.append(session, moved)
+    return len(moved)
 
 
 async def alerted_while_held(session: AsyncSession, van_id: str, title: str) -> bool:

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep, require_roles
+from app.application.edge import chain
 from app.application.edge.checking import ListCheck
 from app.application.operations.boarding import (
     DepartTripUseCase,
@@ -24,6 +25,7 @@ from app.application.operations.check_in import (
 from app.application.operations.guards import assert_assigned_to_trip
 from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
+from app.core.exceptions import NotFoundError
 from app.domain.enums import DepartureSource, Role
 from app.infrastructure.models import Trip, User
 
@@ -347,6 +349,26 @@ async def door_check(
             resolution_note=e.resolution_note, has_snapshot=e.snapshot_url is not None,
         ) for e in check.unlisted],
     )
+
+
+class ChainOut(BaseModel):
+    trip_id: str
+    events: int
+    verified: bool
+    broken_at: int | None
+    unchained: int
+
+
+@router.get("/trips/{trip_id}/chain", response_model=ChainOut, dependencies=[Depends(OFFICE)])
+async def verify_chain(trip_id: str, session: SessionDep) -> ChainOut:
+    """Recompute the trip's door-event hash chain (brief 6.2). A changed,
+    removed or reordered event shows as the first link that does not
+    hold; a still deleted under retention does not break it (T39)."""
+    if await session.get(Trip, trip_id) is None:
+        raise NotFoundError("Trip not found.")
+    check = await chain.verify(session, trip_id)
+    return ChainOut(trip_id=trip_id, events=check.events, verified=check.verified,
+                    broken_at=check.broken_at, unchained=check.unchained)
 
 
 class ExplainIn(BaseModel):
