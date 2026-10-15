@@ -26,6 +26,7 @@ from pathlib import Path
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.edge.capacity import Ride
 from app.application.edge.checking import ListCheck
 from app.application.edge.evidence import PhoneEvidence
 from app.application.edge.ledger import (
@@ -240,6 +241,8 @@ class EdgeIngestion:
             check = await checks.recheck(trip)
             if trip.status in (TripStatus.DEPARTED.value, TripStatus.COMPLETED.value):
                 await checks.alert_if_left_with_more(trip, check)
+            # Phase 4: held to 14; complete when nobody is left aboard.
+            await Ride(self.session).follow(trip)
         await self.session.commit()
         return counts
 

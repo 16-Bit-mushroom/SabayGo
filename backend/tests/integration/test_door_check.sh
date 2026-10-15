@@ -28,8 +28,9 @@ code() {
   curl "${a[@]}"
 }
 edge() {
-  curl -s -o /tmp/dc.json -w "%{http_code}" -X "$1" "$API$2" -H "X-Device-Token: $TOK" \
-       -H "Content-Type: application/json" -d "$3"
+  local a=(-s -o /tmp/dc.json -w "%{http_code}" -X "$1" "$API$2" -H "X-Device-Token: $TOK")
+  [ -n "${3:-}" ] && a+=(-H "Content-Type: application/json" -d "$3")
+  curl "${a[@]}"
 }
 login() {
   code POST /auth/login "{\"email\":\"$1@sabaygo.dev\",\"password\":\"sabaygo123\"}" >/dev/null
@@ -63,6 +64,7 @@ notes() {
   code GET "/notifications?limit=100" "" "$OT" >/dev/null
   python3 -c "import json;print(sum(1 for n in json.load(open('/tmp/dc.json'))['items'] if n['type']=='$1' and n['related_entity_id']=='$TRIP'))"
 }
+board_status() { sql "SELECT status FROM trips WHERE trip_id = '$TRIP'"; }
 walkin() { code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":3${1:+,\"for_event_id\":\"$1\"}}" "${2:-$DT}"; }
 
 OT=$(login manager); CT=$(login cashier); DT=$(login dispatcher); D2T=$(login dispatcher2)
@@ -157,6 +159,61 @@ is "$(notes departed_more_than_listed)" 1 "T24 'Departed With More Than Listed' 
 LATE3=$(uuid); send "$LATE3" -1780
 is "$(notes departed_more_than_listed)" 1 "once per trip"
 is "$(code POST /door-events/$LATE/explain '{"note":"too late"}' "$DT")" 409 "after departure it is no longer resolved"
+
+# ╔═══════════════════════════════════════════════════════════════╗
+hdr "7. The van held to 14 (2.3; T25)"
+# many TYPE COUNT FROM_S [LAT LON]: COUNT door events a second apart
+many() {
+  python3 -c "
+import datetime as d, json, sys, uuid
+t, n, f = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+ev = [{'event_id': str(uuid.uuid4()), 'event_type': t,
+       'event_at': (d.datetime.now() + d.timedelta(seconds=f + i)).isoformat()} for i in range(n)]
+if len(sys.argv) > 5: ev[-1].update(latitude=float(sys.argv[4]), longitude=float(sys.argv[5]))
+print(json.dumps({'events': ev}))" "$@"
+}
+aboard() { sql "SELECT SUM(IF(event_type = 'board', 1, -1)) - 1 FROM passenger_events WHERE trip_id = '$TRIP'"; }
+caps() {  # caps TOKEN: the capacity alerts this person has about the trip, one message per line
+  code GET "/notifications?limit=100" "" "$1" >/dev/null
+  python3 -c "import json;[print(n['message']) for n in json.load(open('/tmp/dc.json'))['items'] if n['type']=='capacity_alert' and '$TRIP_LABEL' in n['message']]"
+}
+code GET /trips/$TRIP/stops "" "$OT" >/dev/null
+read -r S2 S3 MLAT MLON LAT3 LON3 < <(python3 -c "
+import json;s=json.load(open('/tmp/dc.json'));a,b=s[1],s[2]
+print(a['terminal_name'].replace(' ','_'),b['terminal_name'].replace(' ','_'),(a['latitude']+b['latitude'])/2,(a['longitude']+b['longitude'])/2,b['latitude'],b['longitude'])")
+S2=${S2//_/ }; S3=${S3//_/ }
+TRIP_LABEL=$(sql "SELECT plate_number FROM vans WHERE van_id = 'VAN-0001'")
+FILL=$(( 14 - $(aboard) ))
+edge POST /edge/events "$(many board $FILL 6)" >/dev/null
+is "$(aboard)/$(caps "$OT" | wc -l)" 14/0 "14 aboard: no alert"
+edge POST /edge/events "$(many board 1 30 "$MLAT" "$MLON")" >/dev/null
+is "$(aboard)" 15 "a 15th boards between $S2 and $S3"
+caps "$OT" | grep -q "15 aboard.*between $S2 and $S3" && ok "T25 'Capacity Alert' with the time and the place: between $S2 and $S3" \
+  || bad "alert: $(caps "$OT")"
+is "$(caps "$CT" | wc -l)/$(caps "$DT" | wc -l)" 1/1 "to the Cashier and the Dispatcher too"
+is "$(sql "SELECT CONCAT(stretch_no, '/', nearest_stop_sequence IS NOT NULL, '/', distance_from_start_m > 0) FROM passenger_events WHERE trip_id = '$TRIP' ORDER BY event_at DESC LIMIT 1")" 2/1/1 \
+   "the event is geotagged: stretch 2, nearest stop, distance from the start"
+edge POST /edge/events "$(many board 1 31)" >/dev/null
+is "$(aboard)/$(caps "$OT" | wc -l)" 16/1 "still above 14: no second alert"
+edge POST /edge/events "$(many alight 2 32)" >/dev/null
+edge POST /edge/fixes "{\"fixes\":[{\"recorded_at\":\"$(date -d '+35 sec' '+%Y-%m-%dT%H:%M:%S')\",\"latitude\":$LAT3,\"longitude\":$LON3},{\"recorded_at\":\"$(date -d '+39 sec' '+%Y-%m-%dT%H:%M:%S')\",\"latitude\":$LAT3,\"longitude\":$LON3}]}" >/dev/null
+edge POST /edge/events "$(many board 1 37)" >/dev/null
+is "$(aboard)" 15 "two step out, one boards: 15 again"
+caps "$OT" | grep -q "15 aboard.*at $S3" && ok "a new crossing, a new alert: placed from the GPS readings, at $S3" \
+  || bad "second alert: $(caps "$OT")"
+
+# ╔═══════════════════════════════════════════════════════════════╗
+hdr "8. Nobody left aboard (4.1; T47)"
+edge POST /edge/events "$(many alight 13 40)" >/dev/null
+is "$(aboard)/$(board_status)" 2/departed "T47 two still aboard: the trip stays open"
+edge POST /edge/events "$(many alight 2 60)" >/dev/null
+is "$(board_status)" completed "the last one steps out: Completed"
+is "$(sql "SELECT TIMESTAMPDIFF(SECOND, NOW(), completed_at) BETWEEN 55 AND 65 FROM trips WHERE trip_id = '$TRIP'")" 1 \
+   "dated by that alighting"
+# This test dates its events up to a minute ahead; once that minute is past:
+sql "UPDATE trips SET completed_at = NOW() - INTERVAL 1 SECOND WHERE trip_id = '$TRIP'"
+edge GET /edge/session >/dev/null
+is "$(field counting)" False "and once it has passed, the phone pauses"
 
 code POST /devices/$PHONE/return '{}' "$CT" >/dev/null
 printf '\n%d passed, %d failed\n' "$P" "$F"

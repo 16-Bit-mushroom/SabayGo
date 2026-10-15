@@ -26,6 +26,7 @@ application to fixed-route cooperative operations, not the mathematics.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -83,6 +84,21 @@ class VanPosition:
     is_stale: bool
     seconds_since_report: int
     etas: list[StopEta]
+
+
+@dataclass(frozen=True)
+class Geotag:
+    """Where the van was at a moment, on its route (brief 6.3): for each
+    capacity alert, driving flag and departure."""
+    latitude: float
+    longitude: float
+    distance_from_start_m: float | None = None
+    stretch_no: int | None = None            # leg k: stop k -> stop k+1
+    nearest_stop_sequence: int | None = None
+    nearest_stop_dist_m: float | None = None
+    # Shown generally: "at Toril" inside a stop zone, else "between Toril
+    # and Sta. Cruz", so repeats at one place show.
+    general: str | None = None
 
 
 class TrackingService:
@@ -415,6 +431,74 @@ class TrackingService:
             for p in last
         )
 
+    # ----------------------------------------------------------- geotag
+    async def geotag(
+        self, trip: Trip, at: datetime, *, latitude: float | None = None,
+        longitude: float | None = None,
+    ) -> Geotag | None:
+        """The van's place at `at`: the event's own fix, else interpolated
+        between the trip's readings on either side of it; snapped to the
+        nearest stretch of the route, drawn straight stop to stop as the
+        maps draw it. None with no position at all. A rental has no route,
+        so no stretch."""
+        if latitude is None or longitude is None:
+            point = await self._position_at(trip.trip_id, at)
+            if point is None:
+                return None
+            latitude, longitude = point
+        if trip.route_id is None:
+            return Geotag(latitude, longitude)
+        stops = await self._route_stops(trip.route_id)
+        if len(stops) < 2:
+            return Geotag(latitude, longitude)
+
+        best = None   # (offset_m, stretch, distance_from_start)
+        travelled = 0.0
+        for k in range(len(stops) - 1):
+            a, b = stops[k][1], stops[k + 1][1]
+            ax, ay, bx, by = (float(a.latitude), float(a.longitude),
+                              float(b.latitude), float(b.longitude))
+            length = haversine_m(ax, ay, bx, by)
+            t = _projection(latitude, longitude, ax, ay, bx, by)
+            px, py = ax + t * (bx - ax), ay + t * (by - ay)
+            offset = haversine_m(latitude, longitude, px, py)
+            if best is None or offset < best[0]:
+                best = (offset, stops[k][0].stop_sequence, travelled + t * length)
+            travelled += length
+        _, stretch, from_start = best
+
+        nearest, near_m = self._match_to_node(latitude, longitude, stops)
+        names = {rs.stop_sequence: t.terminal_name for rs, t in stops}
+        if near_m <= await self._node_radius(nearest, stops):
+            general = f"at {names[nearest]}"
+        else:
+            general = f"between {names[stretch]} and {names[stretch + 1]}"
+        return Geotag(latitude, longitude, round(from_start, 2), stretch, nearest,
+                      round(near_m, 2), general)
+
+    async def _position_at(self, trip_id: str, at: datetime) -> tuple[float, float] | None:
+        """Linear between the readings either side of `at`; the nearer one
+        alone when only one side exists."""
+        before = (await self.session.execute(
+            select(TripLocationPing).where(TripLocationPing.trip_id == trip_id,
+                                           TripLocationPing.recorded_at <= at)
+            .order_by(TripLocationPing.recorded_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        after = (await self.session.execute(
+            select(TripLocationPing).where(TripLocationPing.trip_id == trip_id,
+                                           TripLocationPing.recorded_at > at)
+            .order_by(TripLocationPing.recorded_at).limit(1)
+        )).scalar_one_or_none()
+        if before is None and after is None:
+            return None
+        if before is None or after is None:
+            p = before or after
+            return float(p.latitude), float(p.longitude)
+        span = (after.recorded_at - before.recorded_at).total_seconds()
+        f = (at - before.recorded_at).total_seconds() / span if span else 0.0
+        return (float(before.latitude) + f * (float(after.latitude) - float(before.latitude)),
+                float(before.longitude) + f * (float(after.longitude) - float(before.longitude)))
+
     async def _route_stops(self, route_id: str) -> list[tuple[RouteStop, Terminal]]:
         result = await self.session.execute(
             select(RouteStop, Terminal)
@@ -515,3 +599,16 @@ class TrackingService:
                 )
             )
         return etas
+
+
+def _projection(lat: float, lon: float, alat: float, alon: float,
+                blat: float, blon: float) -> float:
+    """Where a point falls along the stretch a->b, 0..1, in a local flat
+    frame (metres scale alike on both axes at this latitude)."""
+    k = math.cos(math.radians((alat + blat) / 2))
+    dx, dy = (blon - alon) * k, blat - alat
+    span = dx * dx + dy * dy
+    if span == 0:
+        return 0.0
+    t = ((lon - alon) * k * dx + (lat - alat) * dy) / span
+    return min(1.0, max(0.0, t))

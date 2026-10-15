@@ -445,9 +445,22 @@ Test: `test_door_check.sh` (40, in the runner); suite **593 passed, 1
 failed** (known). **The Dispatcher app has no screen for this yet
 (R10):** until it does, a phone counting more than listed blocks a
 person's Depart and only the GPS departs the van.
-**Next: R5b** — capacity alert above 14 with the general location, and
-completion when aboard reaches 0. Then R5c, the hash chain (genesis =
-SHA-256 of `"sabaygo:" + trip_id`).
+Done: **R5b, capacity and completion** (15 Oct). `application/edge/
+capacity.py` (`Ride.follow`, run after each upload batch; kept out of
+`checking.py`, which NAHGM's import chain reaches). Aboard = boards −
+alights in time order − crew. Each rise above `seat_capacity` alerts the
+Terminal Manager, the Cashier and the trip's Dispatcher once per crossing
+(entity = the crossing event), with the time and the place.
+`TrackingService.geotag` (brief 6.3): the event's fix, else interpolated
+between the trip's readings either side, snapped to the nearest straight
+stretch; "at Stop" inside a stop zone, else "between A and B"; stored on
+the event (stretch, nearest stop, distance from start). Ready for R9's
+driving flags. After departure, an alighting that leaves nobody aboard
+completes the trip dated by that alighting (`arrive(at=)`), and the
+phone pauses. `test_door_check.sh` **52**; suite **605 passed, 1 failed**
+(known).
+**Next: R5c** — the hash chain (genesis = SHA-256 of
+`"sabaygo:" + trip_id`).
 
 ---
 

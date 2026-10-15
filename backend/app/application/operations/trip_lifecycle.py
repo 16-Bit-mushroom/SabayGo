@@ -44,15 +44,15 @@ Who may do what is the API's guard (brief 3); the rules are here:
                request closes with its trip (`special_trips`).
   crew         The assigned Dispatcher adds themselves as crew: not a
                boarding, not counted toward the 14 (2.3).
-  arrive       The Dispatcher taps Arrived (4.1).
+  arrive       The Dispatcher taps Arrived, or the phone counts nobody
+               left aboard after departure (`edge.capacity`) (4.1).
 
 A started trip is not edited quietly: every start, void, van change and
 override names who, when and why, and the earlier van and operator go
 into `change_note`.
 
 Whether the phone can watch the trip is `edge.evidence`; which trip a
-door event belongs to is `edge.ledger`. Not yet: completion when the
-count aboard falls to 0 (the per-stop counts arrive with matching, R5).
+door event belongs to is `edge.ledger`.
 """
 
 from __future__ import annotations
@@ -519,14 +519,16 @@ class TripLifecycle:
         return trip
 
     # ------------------------------------------------------------ arrive
-    async def arrive(self, trip_id: str) -> Trip:
-        """The Dispatcher taps Arrived: the trip is completed (4.1)."""
+    async def arrive(self, trip_id: str, *, at: datetime | None = None) -> Trip:
+        """The Dispatcher taps Arrived, or the phone counts nobody left
+        aboard (`at`, the last alighting): the trip is completed and the
+        phone pauses (4.1, T47)."""
         trip = await self._locked(trip_id)
         if trip.status != TripStatus.DEPARTED.value:
             raise ConflictError(f"Only a trip on the road can arrive; this one is {trip.status}.")
         now = _now()
         trip.status = TripStatus.COMPLETED.value
-        trip.completed_at = now
+        trip.completed_at = at or now
         trip.updated_at = now
         await close_rental(self.session, trip)
         await self.session.flush()
