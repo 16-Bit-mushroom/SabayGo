@@ -120,6 +120,15 @@ is "$(sql "SELECT CONCAT_WS('/', booked_for_other, is_home_pickup_seat, status) 
    "the relative's own seat"
 is "$(sql "SELECT COUNT(DISTINCT passenger_user_id) * 10 + COUNT(DISTINCT seat_number) FROM bookings WHERE booking_id IN ('$ARB', '$ASB')")" 12 \
    "both are the relative's, on two different spaces"
+code GET /bookings/mine "" "$PT" >/dev/null
+is "$(python3 -c "
+import json; b = {x['booking_id']: x for x in json.load(open('/tmp/hp.json'))}
+r, p = b['$ARB'], b['$ASB']
+print(r['home_pickup']['pickup_id'] == p['home_pickup']['pickup_id'] == '$A',
+      r['home_pickup']['is_passenger_seat'], p['home_pickup']['is_passenger_seat'],
+      p['home_pickup']['beneficiary_name'], r['can_reschedule'], p['can_reschedule'])")" \
+   "True False True Lola Remedios False False" \
+   "the relative's app shows both seats as the pickup's, which is the passenger's, and offers no reschedule"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "2. Paying and activation (T31 a, T32)"

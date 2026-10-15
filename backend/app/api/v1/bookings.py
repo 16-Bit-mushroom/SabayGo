@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
@@ -24,7 +24,7 @@ from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError, PolicyViolationError
 from app.domain.enums import BookingType, Role
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import RouteStop, Terminal, Trip
+from app.infrastructure.models import AssistedPickup, RouteStop, Terminal, Trip
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
 from app.domain.value_objects import Segment
@@ -223,6 +223,17 @@ class RescheduleResponse(BaseModel):
     qr_payload: str | None
 
 
+class HomePickupRef(BaseModel):
+    pickup_id: str
+    beneficiary_name: str
+    # True on the passenger's seat (boards at the pin), false on the
+    # relative's own seat (boards at the terminal).
+    is_passenger_seat: bool
+    status: str
+    proof_sent: bool
+    proof_confirmed: bool
+
+
 class MyBookingOut(BaseModel):
     booking_id: str
     ticket_number: str
@@ -243,6 +254,8 @@ class MyBookingOut(BaseModel):
     # check-in there opens. The app shows these; the server enforces them.
     boarding_due_at: datetime
     checkin_opens_at: datetime
+    # Set when the booking is one of a home pickup's pair (brief 2.6).
+    home_pickup: HomePickupRef | None = None
 
 
 async def _render_bookings(
@@ -280,6 +293,20 @@ async def _render_bookings(
     now = app_tz.now()
     active = {"pending", "confirmed", "checked_in"}
     out: list[MyBookingOut] = []
+    ids = [b.booking_id for b, _ in rows]
+    pickups: dict[str, HomePickupRef] = {}
+    if ids:
+        for p in (await session.execute(
+            select(AssistedPickup).where(or_(AssistedPickup.booking_id.in_(ids),
+                                             AssistedPickup.relative_booking_id.in_(ids)))
+        )).scalars():
+            for booking_id, passenger in ((p.booking_id, True), (p.relative_booking_id, False)):
+                pickups[booking_id] = HomePickupRef(
+                    pickup_id=p.pickup_id, beneficiary_name=p.beneficiary_name,
+                    is_passenger_seat=passenger, status=p.status,
+                    proof_sent=p.proof_message_id is not None,
+                    proof_confirmed=p.proof_confirmed_at is not None,
+                )
 
     for booking, trip in rows:
         departure = app_tz.localize(trip.departure_datetime)
@@ -307,10 +334,13 @@ async def _render_bookings(
                 fare_amount=booking.fare_amount,
                 status=booking.status,
                 qr_payload=booking.qr_payload,
-                can_reschedule=booking.status in active and now < deadline,
+                # Neither seat of a home pickup moves to another trip.
+                can_reschedule=booking.status in active and now < deadline
+                and booking.booking_id not in pickups,
                 reschedule_deadline=deadline,
                 boarding_due_at=boarding_due_at,
                 checkin_opens_at=boarding_due_at - checkin_window,
+                home_pickup=pickups.get(booking.booking_id),
             )
         )
     return out

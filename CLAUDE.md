@@ -664,6 +664,24 @@ Tests: `test_trip_lifecycle.sh` 133, `test_special_trips.sh` 71,
 `test_dispatcher_journey.sh` 24. `flutter analyze`: 0 errors, 0
 warnings.
 
+Done: **R10d, the Passenger app** (15 Oct). **Request a Special Trip**
+(`views/special_trips/`, "Rent a van" in the Home app bar): request
+(when, pickup, destination, 1-14), follow, withdraw before approval, pay
+the agreed fee through the gateway. **Book for Someone Else**
+(`views/home_pickup/`, a button on the booking sheet when 2 spaces are
+left): name, contact, a pin on the OpenStreetMap map (tap or "Here")
+with a note, both seats reserved, then pay each seat or **send a payment
+screenshot** (`image_picker`, new dependency, offline from the pub
+cache); the Trips tab's next-trip card shows the pickup and can send a
+screenshot later. **Camera notice** on the booking sheet
+(`camera_notice.dart`), its period read from A2Z's settings. Server:
+`GET /trips/privacy-notice` (signed-in; retention days, chat image limit
+and retention, the privacy-contact placeholder); `/bookings/mine` adds
+`home_pickup` (pickup id, beneficiary, which seat, proof state) and no
+longer offers reschedule on either seat. Tests: `test_home_pickup.sh`
+85, `test_retention.sh` 35, `test_passenger_journey.sh` 37 after a plain
+reset. `flutter analyze`: 0 errors, 0 warnings.
+
 **Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
 The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
 (Passenger, Dispatcher) and `operator_console/` (Terminal Manager,

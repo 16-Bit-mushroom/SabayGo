@@ -23,6 +23,7 @@ from app.infrastructure.models import (
     Terminal,
     Trip,
 )
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -77,6 +78,27 @@ class TerminalOut(BaseModel):
     # older client; a terminal has no single sequence once it sits on more
     # than one route, so new clients search by terminal_id instead.
     stop_sequence: int
+
+
+class PrivacyNoticeOut(BaseModel):
+    """What the booking screen tells a passenger about the camera (brief
+    4.5, 11): read from A2Z's settings, so the notice states the period in
+    force."""
+    retention_days: int | None
+    chat_image_retention_days: int
+    chat_image_max_kb: int
+    # Until A2Z names its data privacy contact (brief 4.5).
+    privacy_contact: str = "[name and position to be supplied by A2Z]"
+
+
+@router.get("/privacy-notice", response_model=PrivacyNoticeOut)
+async def privacy_notice(session: SessionDep, user: CurrentUser) -> PrivacyNoticeOut:
+    policies = PolicyRepository(session)
+    return PrivacyNoticeOut(
+        retention_days=await policies.get_optional_int("retention_days"),
+        chat_image_retention_days=await policies.get_int("chat_image_retention_days"),
+        chat_image_max_kb=await policies.get_int("chat_image_max_kb"),
+    )
 
 
 @router.get("/terminals", response_model=list[TerminalOut])

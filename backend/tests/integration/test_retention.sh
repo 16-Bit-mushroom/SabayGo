@@ -77,6 +77,9 @@ OT=$(login manager); CT=$(login cashier); DT=$(login dispatcher); PT=$(login pas
 [ -n "$OT" ] && [ -n "$CT" ] && [ -n "$DT" ] && [ -n "$PT" ] && ok "signed in" || { bad "login"; exit 1; }
 is "$(sql "SELECT policy_value FROM cooperative_policies WHERE policy_key = 'retention_days' ORDER BY effective_from DESC LIMIT 1")" 30 \
    "RetentionDays is 30 (assumed)"
+code GET /trips/privacy-notice "" "$PT" >/dev/null
+is "$(python3 -c "import json;d=json.load(open('/tmp/rt.json'));print(d['retention_days'], d['chat_image_retention_days'], d['chat_image_max_kb'], '[name' in d['privacy_contact'])")" \
+   "30 30 10240 True" "the booking screen's camera notice reads the period in force, and the contact placeholder"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "1. Evidence: stills, GPS readings, a flag, a dispute, chat images"

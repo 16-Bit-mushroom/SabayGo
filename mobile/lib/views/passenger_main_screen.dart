@@ -7,6 +7,7 @@ import 'messages/conversations_screen.dart';
 import 'notifications/notifications_screen.dart';
 import 'profile/profile_screen.dart';
 import 'reservations/reservations_screen.dart';
+import 'special_trips/special_trips_screen.dart';
 
 /// The passenger's shell: five places to be, and the bar that moves between
 /// them.
@@ -52,6 +53,16 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
         title: _index == 0
             ? const BrandLogo(height: BrandLogoSize.bar)
             : Text(_destinations[_index].title),
+        actions: [
+          if (_index == 0)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const SpecialTripsScreen()),
+              ),
+              icon: const Icon(Icons.airport_shuttle_outlined),
+              label: const Text('Rent a van'),
+            ),
+        ],
       ),
       body: IndexedStack(
         index: _index,
