@@ -22,6 +22,12 @@ Overspeed and slow stretches need the route's stretches (speed limits,
 expected times); until the Terminal Manager sets them only stops are
 flagged. Each flag ties to a person only through the operator name,
 licence and plate copied onto the trip at the start.
+
+The Terminal Manager reviews an open flag (`review`): 'reviewed' (it
+stands, looked at) or 'dismissed' (with a note), each with who and when.
+A flag the operator disputes is reviewed by the dispute's decision
+instead (`finance/disputes.py`); an en-route stop is recorded, not
+flagged, so there is nothing to review.
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ from app.application.notifications.service import NotificationService, trip_labe
 from app.application.tracking import driving
 from app.application.tracking.nahgm import TrackingService
 from app.core import timezone as app_tz
+from app.core.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.domain.enums import Role, TripStatus
 from app.infrastructure.models import (
     AssistedPickup,
@@ -45,6 +52,7 @@ from app.infrastructure.models import (
     RouteStretch,
     Trip,
     TripLocationPing,
+    User,
 )
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
@@ -119,6 +127,30 @@ class DrivingFlags:
         if new:
             log.info("Trip %s: %d new driving flags.", trip_id, len(new))
         return [row for row, _ in new]
+
+    async def mark(self, driving_event_id: str, *, by: User, status: str,
+                   note: str | None) -> DrivingEvent:
+        """The Terminal Manager's review of an open flag. Commits."""
+        flag = await self.session.get(DrivingEvent, driving_event_id, with_for_update=True)
+        if flag is None:
+            raise NotFoundError("Driving flag not found.")
+        if flag.flag_type not in WORDS:
+            raise ConflictError("An en-route stop is recorded, not flagged: there is "
+                                "nothing to review.")
+        if flag.review_status != "open":
+            raise ConflictError(f"This flag was already {flag.review_status}.")
+        if await self.session.scalar(select(exists().where(
+                Dispute.driving_event_id == driving_event_id, Dispute.status == "open"))):
+            raise ConflictError("The operator disputes this flag: deciding the dispute "
+                                "reviews it.")
+        if status == "dismissed" and not note:
+            raise InvalidInputError("Say why the flag is dismissed.")
+        flag.review_status = status
+        flag.reviewed_by, flag.reviewed_at = by.user_id, app_tz.now().replace(tzinfo=None)
+        flag.review_note = note
+        await self.session.commit()
+        log.info("Driving flag %s %s by %s.", driving_event_id, status, by.user_id)
+        return flag
 
     # ------------------------------------------------------------ inputs
     async def _readings(self, trip: Trip) -> list[driving.Reading]:

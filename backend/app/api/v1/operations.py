@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep, require_roles
 from app.application.edge import chain
+from app.application.edge.boarding_audit import BoardingAudit, TripAudit
 from app.application.edge.checking import ListCheck
 from app.application.messaging.service import STORAGE_DIR
 from app.application.operations.boarding import (
@@ -27,6 +28,7 @@ from app.application.operations.check_in import (
 from app.application.operations.guards import assert_assigned_to_trip
 from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
+from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError
 from app.domain.enums import DepartureSource, Role
 from app.infrastructure.models import PassengerEvent, Trip, User
@@ -371,6 +373,16 @@ async def verify_chain(trip_id: str, session: SessionDep) -> ChainOut:
     check = await chain.verify(session, trip_id)
     return ChainOut(trip_id=trip_id, events=check.events, verified=check.verified,
                     broken_at=check.broken_at, unchained=check.unchained)
+
+
+@router.get("/boarding-audit", response_model=list[TripAudit], dependencies=[Depends(MANAGER)])
+async def boarding_audit(session: SessionDep, date: dt.date | None = None) -> list[TripAudit]:
+    """The day's trips with door events to review (brief 9, Boarding
+    Audit): unlisted boardings before departure with the Dispatcher's fix
+    or reason, capacity alerts with their general place, departures with
+    more aboard than listed, and each trip's hash chain. The Terminal
+    Manager only, as the stills are."""
+    return await BoardingAudit(session).day(date or app_tz.now().date())
 
 
 class ExplainIn(BaseModel):

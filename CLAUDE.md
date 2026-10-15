@@ -589,6 +589,30 @@ now filed on it (`file_late_reading`, no live hooks) instead of ignored,
 so a phone offline on the road still has its driving counted. Test:
 `test_driving_flags.sh` (27) + the unit test, both in the runner.
 
+Done: **R10a, the server gaps** (15 Oct). Migration **028** (down
+script): `driving_events.reviewed_by`, `reviewed_at`, `review_note`.
+`GET /driving-flags?status=&trip_id=&date=` (office; a Dispatcher names
+their own trip) lists flags with the operator copied at start, the
+stretch in words and the standing dispute; `POST /driving-flags/{id}/
+review` {reviewed | dismissed (note required)}, Terminal Manager, open
+flags only, refused while disputed (the dispute's decision now fills the
+same three columns) and for en-route stops. `GET /boarding-audit?date=`
+(Terminal Manager; `application/edge/boarding_audit.py`): per trip with
+something to review, unlisted boardings before departure (fix with the
+destination, or reason, or pending; still kept or not), capacity alerts
+(from the alert notifications, aboard recounted, place in words),
+'Departed With More Than Listed' and the chain check; `crew_aboard` says
+when one unmatched boarding is the Dispatcher's. `GET /fleet/vans/board`
+(office; `application/operations/van_board.py`): travelling > out of
+service > on site > not on a trip, aboard (door count, None without a
+phone), last position, and `owes` (`van_balance`). Shared on the way:
+`capacity.aboard_after` (the running count, used by `Ride.follow`) and
+`TrackingService.place` (a stored geotag in words, used by `geotag`).
+Tests: `test_driving_flags.sh` §7 (49), `test_door_check.sh` §9 (64),
+new `test_van_board.sh` (28, in the runner). Decided by Claude (owner
+delegated 15 Oct): the Dispatcher records disputes **in the app**, on
+their own trip's lines and flags; **Emergencies stays** as built.
+
 **Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
 The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
 (Passenger, Dispatcher) and `operator_console/` (Terminal Manager,
@@ -609,12 +633,7 @@ Record A2Z's share, Lift payment block), the add-van dialog.
 | Phones, Member Records | `api/v1/devices.py`, `api/v1/fleet.py`, `api/v1/roster.py` |
 | Rules and Settings | policies + history (`config.py`), `GET/PUT /config/routes/{id}/stretches` (speed limits) |
 
-Gaps to build server-side first, small: **no endpoint lists or reviews
-driving flags** (the Terminal Manager's `reviewed` / `dismissed`, brief
-6.4; disputes already decide them); no cross-trip list of unlisted
-boardings and capacity alerts for Boarding Audit; no Van Status Board
-query (vans out, vans whose last trip still owes). Retire with the new
-screens: Fares & Cash (`cash_remittances`, rev 514) and Passenger Count
+The server gaps are closed (R10a, below). Retire with the new screens: Fares & Cash (`cash_remittances`, rev 514) and Passenger Count
 Checks (rev 468 YOLOv8 audits, whose snapshots sit in public `/media`,
 against T38). The Dispatcher app still offers a "Van is at" stop for
 walk-ins (R2: only stop 1 is accepted). Open in the brief: where the

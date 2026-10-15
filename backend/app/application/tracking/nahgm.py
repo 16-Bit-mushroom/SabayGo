@@ -482,13 +482,31 @@ class TrackingService:
         stretch, from_start = snap.stretch, snap.from_start_m
 
         nearest, near_m = self._match_to_node(latitude, longitude, stops)
-        names = {rs.stop_sequence: t.terminal_name for rs, t in stops}
-        if near_m <= await self._node_radius(nearest, stops):
-            general = f"at {names[nearest]}"
-        else:
-            general = f"between {names[stretch]} and {names[stretch + 1]}"
         return Geotag(latitude, longitude, round(from_start, 2), stretch, nearest,
-                      round(near_m, 2), general)
+                      round(near_m, 2), await self._general(stops, stretch, nearest, near_m))
+
+    async def place(
+        self, route_id: str | None, stretch_no: int | None,
+        nearest_stop: int | None = None, nearest_m: float | None = None,
+    ) -> str | None:
+        """A stored geotag in words, as `geotag` gave it: "at Toril" inside
+        the stop's zone, else "between Toril and Sta. Cruz"."""
+        if route_id is None or stretch_no is None:
+            return None
+        stops = await self._route_stops(route_id)
+        if stretch_no + 1 > len(stops):
+            return None
+        return await self._general(stops, stretch_no, nearest_stop, nearest_m)
+
+    async def _general(
+        self, stops: list[tuple[RouteStop, Terminal]], stretch: int,
+        nearest: int | None, near_m: float | None,
+    ) -> str:
+        names = {rs.stop_sequence: t.terminal_name for rs, t in stops}
+        if nearest is not None and near_m is not None \
+                and near_m <= await self._node_radius(nearest, stops):
+            return f"at {names[nearest]}"
+        return f"between {names[stretch]} and {names[stretch + 1]}"
 
     async def _position_at(self, trip_id: str, at: datetime) -> tuple[float, float] | None:
         """Linear between the readings either side of `at`; the nearer one

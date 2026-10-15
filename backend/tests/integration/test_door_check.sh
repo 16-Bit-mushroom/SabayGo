@@ -215,6 +215,37 @@ sql "UPDATE trips SET completed_at = NOW() - INTERVAL 1 SECOND WHERE trip_id = '
 edge GET /edge/session >/dev/null
 is "$(field counting)" False "and once it has passed, the phone pauses"
 
+# ╔═══════════════════════════════════════════════════════════════╗
+hdr "9. The Terminal Manager's Boarding Audit (brief 9)"
+audit() {  # audit EXPR [DATE] -> EXPR evaluated on this trip's row (t), or NONE
+  code GET "/boarding-audit${2:+?date=$2}" "" "$OT" >/dev/null
+  python3 -c "
+import json, sys
+t = next((x for x in json.load(open('/tmp/dc.json')) if x['trip_id'] == '$TRIP'), None)
+print('NONE' if t is None else eval(sys.argv[1]))" "$1"
+}
+is "$(code GET /boarding-audit "" "$CT")/$(code GET /boarding-audit "" "$DT")" 403/403 \
+   "the Terminal Manager's alone: not the Cashier, not the Dispatcher"
+is "$(audit "'/'.join(u['resolution_status'] for u in t['unlisted'])")" "pending/pending/pending/explained/listed/pending" \
+   "every unlisted boarding before departure, in time order: 3 uploaded late, 1 reason, 1 fix, the crew"
+is "$(audit "t['crew_aboard']")" True "the Dispatcher marked themselves crew: the last boarding is theirs"
+is "$(audit "[u for u in t['unlisted'] if u['event_id']=='$U1'][0]['listed_destination']")" "$S3" \
+   "the fix names the person's destination: $S3"
+is "$(audit "[u for u in t['unlisted'] if u['event_id']=='$U2'][0]['resolution_note']")" "Operator's son, rides free to Toril" \
+   "the reason is kept"
+[ "$(audit "[u for u in t['unlisted'] if u['event_id']=='$U2'][0]['resolved_by']")" != None ] \
+  && ok "with the Dispatcher who gave it" || bad "resolved_by"
+is "$(audit "' | '.join(f\"{c['aboard']} of {c['seat_capacity']} {c['place']}\" for c in t['capacity_alerts'])")" \
+   "15 of 14 between $S2 and $S3 | 15 of 14 at $S3" "both capacity alerts, with the number aboard and the general place"
+audit "t['departed_with_more']" | grep -q "more aboard than its passenger list" \
+  && ok "the departure with more aboard than listed" || bad "departed: $(audit "t['departed_with_more']")"
+is "$(audit "f\"{t['chain_verified']}/{t['chain_events']}\"")" "True/$(sql "SELECT COUNT(*) FROM passenger_events WHERE trip_id = '$TRIP'")" \
+   "the hash chain holds over every event"
+is "$(audit "f\"{t['operator_name'] is not None}/{t['plate_number']}/{t['dispatcher_name'] is not None}\"")" "True/$TRIP_LABEL/True" \
+   "the operator, the van and the Dispatcher"
+is "$(audit "t['unlisted'][0]['has_snapshot']")" False "no still was sent, and none is pretended"
+is "$(audit "t" "$(date -d yesterday +%F)")" NONE "another day's audit does not show it"
+
 code POST /devices/$PHONE/return '{}' "$CT" >/dev/null
 printf '\n%d passed, %d failed\n' "$P" "$F"
 [ "$F" -eq 0 ]

@@ -33,6 +33,16 @@ from app.domain.enums import Role, TripStatus
 from app.infrastructure.models import Notification, PassengerEvent, Trip
 
 
+def aboard_after(events: list[PassengerEvent], *, crew: int) -> list[tuple[PassengerEvent, int]]:
+    """Each event, in time order, with the number aboard after it: every
+    boarding less every alighting so far, less the crew."""
+    running, out = 0, []
+    for e in events:
+        running += 1 if e.event_type == "board" else -1
+        out.append((e, max(0, running - crew)))
+    return out
+
+
 class Ride:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -47,22 +57,20 @@ class Ride:
         )).scalars().all())
         if not events:
             return
-        crew = 1 if trip.crew_aboard else 0
-        running, above = 0, False
-        for e in events:
-            running += 1 if e.event_type == "board" else -1
-            aboard = max(0, running - crew)
+        counted = aboard_after(events, crew=1 if trip.crew_aboard else 0)
+        above = False
+        for e, aboard in counted:
             if aboard > trip.seat_capacity and not above:
                 await self._alert(trip, e, aboard)
             above = aboard > trip.seat_capacity
 
-        last = events[-1]
+        last, aboard = counted[-1]
         departed = trip.departed_at
         if departed is not None and departed.tzinfo is not None:
             departed = departed.astimezone(app_tz.APP_TZ).replace(tzinfo=None)
         if (trip.status == TripStatus.DEPARTED.value and departed is not None
                 and last.event_type == "alight" and last.event_at >= departed
-                and max(0, running - crew) == 0):
+                and aboard == 0):
             await TripLifecycle(self.session).arrive(trip.trip_id, at=last.event_at)
 
     async def _alert(self, trip: Trip, event: PassengerEvent, aboard: int) -> None:

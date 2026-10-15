@@ -163,5 +163,54 @@ AFTER=$(python3 -c "import datetime as d,json;print(json.dumps({'fixes':[{'recor
 upload "$AFTER" >/dev/null
 is "$(field "['recorded']")" 0 "a reading from after the arrival does not"
 
+# ╔═══════════════════════════════════════════════════════════════╗
+hdr "7. The Terminal Manager's list and review (6.4)"
+# flags KEYS [QUERY] -> one line per flag of the trip, the keys joined by '/'
+flags() {
+  code GET "/driving-flags?trip_id=$TRIP${2:-}" "" "$OT" >/dev/null
+  python3 -c "
+import json, sys
+for f in json.load(open('/tmp/df.json')): print('/'.join(str(f[k]) for k in sys.argv[1].split(',')))" "$1"
+}
+is "$(code GET "/driving-flags?trip_id=$TRIP" "" "$CT")" 200 "the Cashier reads them, to record a dispute"
+is "$(python3 -c "import json;print(len(json.load(open('/tmp/df.json'))))")" \
+   "$(sql "SELECT COUNT(*) FROM driving_events WHERE trip_id = '$TRIP'")" "every flag of the trip"
+is "$(code GET /driving-flags "" "$DT")" 422 "a Dispatcher names the trip"
+is "$(code GET "/driving-flags?trip_id=$TRIP" "" "$DT")" 200 "their own trip's"
+is "$(code GET /driving-flags "" "$(login passenger)")" 403 "not a passenger"
+OP=$(sql "SELECT CONCAT_WS('/', driver_name, driver_license_no, van_plate_number) FROM trips WHERE trip_id = '$TRIP'")
+is "$(flags operator_name,operator_licence,plate_number | sort -u)" "$OP" "each names the operator and van copied at the start: $OP"
+flags flag_type,stretch_no,place | grep -q "^overspeed/1/between Ecoland Terminal and " \
+  && ok "the overspeed is placed on its stretch, generally" || bad "place: $(flags flag_type,stretch_no,place)"
+is "$(flags flag_type,flagged | grep en_route_stop | sort -u)" "en_route_stop/False" "the en-route stop is listed as recorded, not flagged"
+is "$(flags driving_event_id,dispute_status | grep FLAG-GHOST-3)" "FLAG-GHOST-3/open" "the disputed flag shows its dispute"
+
+OVER=$(flag overspeed "driving_event_id" | grep -v FLAG-GHOST | head -n 1)
+ENR=$(flag en_route_stop "driving_event_id")
+is "$(code POST /driving-flags/$STOP/review '{"status":"reviewed"}' "$CT")" 403 "the Cashier cannot review"
+is "$(code POST /driving-flags/FLAG-GHOST-3/review '{"status":"dismissed","note":"x"}' "$OT")" 409 \
+   "a disputed flag is reviewed by deciding its dispute"
+is "$(code POST /driving-flags/$ENR/review '{"status":"reviewed"}' "$OT")" 409 "an en-route stop has nothing to review"
+is "$(code POST /driving-flags/$OVER/review '{"status":"dismissed"}' "$OT")" 422 "dismissing needs a reason"
+is "$(code POST /driving-flags/$STOP/review '{"status":"reviewed","note":"Called the operator."}' "$OT")" 200 \
+   "the Terminal Manager marks the stop reviewed"
+is "$(field "['review_status']")/$(field "['reviewed_by']")/$(field "['review_note']")" "reviewed/Maria Santos/Called the operator." \
+   "with who and the note"
+[ "$(field "['reviewed_at']")" != None ] && ok "and when" || bad "reviewed_at"
+is "$(code POST /driving-flags/$STOP/review '{"status":"dismissed","note":"changed my mind"}' "$OT")" 409 \
+   "a reviewed flag is not reviewed again"
+is "$(code POST /driving-flags/$OVER/review '{"status":"dismissed","note":"Ambulance behind, gave way."}' "$OT")" 200 \
+   "an overspeed dismissed, with the reason"
+is "$(flags driving_event_id "\&status=open" | grep -cE "^($STOP|$OVER)$")" 0 "neither is open any more"
+upload "$(drive '[["drive",5,50]]')" >/dev/null
+is "$(sql "SELECT COUNT(*) FROM driving_events WHERE driving_event_id IN ('$STOP', '$OVER')")" 2 "and new readings delete neither"
+
+DIS=$(sql "SELECT dispute_id FROM disputes WHERE driving_event_id = 'FLAG-GHOST-3' AND status = 'open'")
+code POST /disputes/$DIS/decide '{"outcome":"rejected","note":"No truck in the readings."}' "$OT" >/dev/null
+is "$(flags driving_event_id,review_status,reviewed_by,review_note | grep FLAG-GHOST-3)" \
+   "FLAG-GHOST-3/reviewed/Maria Santos/Dispute rejected: No truck in the readings." \
+   "deciding the dispute reviews the flag, with who and why"
+is "$(flags driving_event_id "\&date=$(date -d yesterday +%F)" | wc -l)" 0 "by service date: none yesterday"
+
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$P" "$F"
 [ "$F" -eq 0 ]

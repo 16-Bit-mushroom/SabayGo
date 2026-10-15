@@ -18,6 +18,7 @@ from app.api.v1 import (
     bookings,
     devices,
     disputes,
+    driving_flags,
     edge,
     messaging,
     notifications,
@@ -134,6 +135,7 @@ app.include_router(tracking.router, prefix="/api/v1")
 app.include_router(sos.router, prefix="/api/v1")
 app.include_router(statements.router, prefix="/api/v1")
 app.include_router(disputes.router, prefix="/api/v1")
+app.include_router(driving_flags.router, prefix="/api/v1")
 app.include_router(special_trips.router, prefix="/api/v1")
 app.include_router(home_pickups.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")

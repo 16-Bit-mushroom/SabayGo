@@ -785,6 +785,9 @@ class DrivingEvent(Base):
     nearest_stop_dist_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     duration_s: Mapped[int | None] = mapped_column(Integer)
     review_status: Mapped[str] = mapped_column(String(16), default="open")
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    reviewed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    review_note: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 

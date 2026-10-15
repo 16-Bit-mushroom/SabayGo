@@ -196,6 +196,8 @@ class Disputes:
         if dispute.subject == "driving_flag":
             flag = await self.session.get(DrivingEvent, dispute.driving_event_id)
             flag.review_status = "dismissed" if outcome == "upheld" else "reviewed"
+            flag.reviewed_by, flag.reviewed_at = by.user_id, dispute.decided_at
+            flag.review_note = f"Dispute {outcome}: {note}"[:255]
         await self._settle(dispute, trip, account)
         await self.session.commit()
         log.info("Dispute %s %s by %s.", dispute_id, outcome, by.user_id)

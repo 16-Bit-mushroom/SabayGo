@@ -22,6 +22,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import or_, select
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep
+from app.application.operations.van_board import VanBoard, VanState
 from app.core.db import commit_or_conflict
 from app.core.exceptions import (
     ConflictError,
@@ -396,6 +397,14 @@ async def _check_van_refs(
             f"{op.full_name} already has van {other}: one van per operator."
         )
     return op
+
+
+@router.get("/vans/board", response_model=list[VanState], dependencies=[Depends(OFFICE)])
+async def van_board(session: SessionDep) -> list[VanState]:
+    """The Van Status Board (brief 8): each van travelling, out of
+    service, on site or not on a trip, with what it still owes of A2Z's
+    share."""
+    return await VanBoard(session).now()
 
 
 @router.get("/vans", response_model=list[VanOut], dependencies=[Depends(OFFICE)])
