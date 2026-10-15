@@ -54,8 +54,8 @@ class SandboxCheckoutClient:
     async def create_checkout(
         self,
         *,
-        booking_id: str,
-        ticket_number: str,
+        reference: str,
+        metadata: dict[str, str],
         amount: Decimal,
         description: str,
         success_url: str,
@@ -76,7 +76,7 @@ class SandboxCheckoutClient:
 
     @staticmethod
     def signed_paid_event(
-        *, checkout_session_id: str, booking_id: str, ticket_number: str, amount: Decimal
+        *, checkout_session_id: str, reference: str, metadata: dict[str, str], amount: Decimal
     ) -> tuple[bytes, str]:
         """A `checkout_session.payment.paid` event and its Paymongo-Signature
         header, built the way PayMongo builds them. No payment method is
@@ -93,12 +93,9 @@ class SandboxCheckoutClient:
                         "id": checkout_session_id,
                         "type": "checkout_session",
                         "attributes": {
-                            "reference_number": ticket_number,
+                            "reference_number": reference,
                             "amount": int((amount * 100).to_integral_value()),
-                            "metadata": {
-                                "booking_id": booking_id,
-                                "ticket_number": ticket_number,
-                            },
+                            "metadata": metadata,
                         },
                     },
                 },

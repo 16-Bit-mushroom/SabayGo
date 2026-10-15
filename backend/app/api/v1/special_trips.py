@@ -1,7 +1,8 @@
 """Special trips: a whole van rented from a chosen pickup (rev 603, change
 brief 2.5). The rules are `application/operations/special_trips.py`.
 
-The passenger asks and may withdraw before approval; the office (the
+The passenger asks, may withdraw before approval, and pays the fee
+through the gateway once approved; the office (the
 Terminal Manager or the Cashier) enters counter requests, approves with
 the agreed fee, or rejects; the trip's Dispatcher logs a cash fee. The
 van and the Dispatcher are assigned through `PUT /trips/{id}/assignment`.
@@ -13,14 +14,16 @@ import datetime as dt
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.v1.deps import OFFICE, SessionDep, require_roles
+from app.application.booking.payments import StartCheckoutUseCase
 from app.application.operations.special_trips import Place, SpecialTrips
 from app.core import timezone as app_tz
 from app.domain.enums import Role
+from app.infrastructure.clients.sandbox_checkout import checkout_client
 from app.infrastructure.models import SpecialTripRequest, User
 
 router = APIRouter(prefix="/special-trips", tags=["special-trips"])
@@ -117,6 +120,26 @@ async def withdraw_special_trip(
     request_id: str, session: SessionDep, user: Annotated[User, Depends(PASSENGER)],
 ) -> RequestOut:
     return RequestOut.of(await SpecialTrips(session).withdraw(request_id, by=user))
+
+
+class CheckoutOut(BaseModel):
+    checkout_url: str
+    amount: Decimal
+
+
+@router.post("/{request_id}/checkout", response_model=CheckoutOut, status_code=201)
+async def pay_rental_fee(
+    request_id: str, session: SessionDep, user: Annotated[User, Depends(PASSENGER)],
+    request: Request,
+) -> CheckoutOut:
+    """The renter pays the agreed fee through the gateway. Only the
+    verified webhook marks it paid, as for a ticket."""
+    checkout = checkout_client(
+        lambda cs_id: str(request.url_for("sandbox_checkout_page", checkout_session_id=cs_id))
+    )
+    result = await StartCheckoutUseCase(session, checkout).for_rental(
+        request_id=request_id, passenger_user_id=user.user_id)
+    return CheckoutOut(checkout_url=result.checkout_url, amount=result.amount)
 
 
 @router.get("", response_model=list[RequestOut], dependencies=[Depends(OFFICE)])

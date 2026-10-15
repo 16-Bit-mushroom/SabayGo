@@ -35,6 +35,7 @@ whether a van that declines keeps its queue place; both are A2Z's to say.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -53,6 +54,7 @@ from app.infrastructure.models import SpecialTripRequest, Trip, User
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 ENTITY = "special_trip_request"
+log = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -252,6 +254,40 @@ class SpecialTrips:
         await Statements(self.session).sync(trip)
         await self.session.commit()
         return request
+
+    async def settle_gateway(self, request_id: str, *, reference: str,
+                             paid: bool) -> dict[str, str]:
+        """A verified webhook for a rental's checkout (verified income, V).
+        Reached only after the signature check (`booking.payments`); a
+        repeat changes nothing."""
+        request = (await self.session.execute(
+            select(SpecialTripRequest).where(SpecialTripRequest.request_id == request_id)
+            .with_for_update()
+        )).scalar_one_or_none()
+        if request is None:
+            log.error("Webhook for unknown special trip request %s", request_id)
+            return {"status": "ignored", "reason": "unknown request"}
+        if not paid:
+            log.info("Gateway payment failed for request %s; still unpaid.", request_id)
+            return {"status": "failed", "request_id": request_id}
+        if request.payment_status == "paid":
+            if request.payment_reference != reference:
+                log.warning("Request %s was already paid (%s) and was paid again through the "
+                            "gateway (%s).", request_id, request.payment_reference or "cash",
+                            reference)
+            return {"status": "duplicate", "request_id": request_id}
+        if request.status != "approved":
+            log.warning("Fee for request %s arrived while it was %s.", request_id, request.status)
+        request.payment_status = "paid"
+        request.payment_reference = reference
+        request.updated_at = _now()
+        await self.session.flush()
+        trip = await self.session.get(Trip, request.trip_id) if request.trip_id else None
+        if trip is not None:
+            await Statements(self.session).sync(trip)
+        await self.session.commit()
+        log.info("Rental fee of request %s paid through the gateway (%s).", request_id, reference)
+        return {"status": "confirmed", "request_id": request_id}
 
     # ------------------------------------------------------------ helpers
     async def _locked(self, request_id: str) -> SpecialTripRequest:

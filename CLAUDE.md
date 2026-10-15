@@ -400,10 +400,23 @@ line (`request_id`, no drop-off; D for cash), so the 15 % block applies;
 request closes with its trip (void → cancelled, arrive → completed).
 `NotificationService.notify_passenger` for a passenger alert with no
 trip. A rental's length is unknown, so the clash check counts only the
-45-min turnaround. Test: `test_special_trips.sh` (57, in the runner).
-**Next: R3b-2** — the fee through the gateway: migration 026 lets
-`payments` carry a `request_id`, checkout for an approved request, the
-verified webhook marks it paid (V). Then R4.
+45-min turnaround. Test: `test_special_trips.sh` (in the runner).
+
+Done: **R3b-2, rental fee through the gateway** (15 Oct). No migration:
+Table 34 keeps a rental's payment on the request (`payment_status`,
+`payment_reference` = the checkout session, NULL for cash), and MySQL
+forbids a CHECK on `payments.booking_id` (ON DELETE CASCADE).
+`POST /special-trips/{id}/checkout` (the renter, approved and unpaid,
+before departure). Checkout clients take `reference` + `metadata`
+(`booking_id` or `request_id`); `SettlePaymentUseCase` hands a
+`request_id` event to `SpecialTrips.settle_gateway` after the same
+signature check, idempotent on the request's state. The sandbox page
+finds either kind. A paid fee is a verified (V) line. Rental fees are not
+in `payments`, so the rev 514 revenue view leaves them out; statements
+are the record. `test_special_trips.sh` **70 passed** (forged unsigned
+webhook refused, sandbox pay, no double line).
+**Next: R4** — edge events go to the trip the van is assigned to,
+started or not, and the session tells the phone to pause.
 
 ---
 

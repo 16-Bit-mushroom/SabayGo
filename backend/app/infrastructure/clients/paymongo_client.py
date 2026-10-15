@@ -50,14 +50,18 @@ class PayMongoClient:
     async def create_checkout(
         self,
         *,
-        booking_id: str,
-        ticket_number: str,
+        reference: str,
+        metadata: dict[str, str],
         amount: Decimal,
         description: str,
         success_url: str,
         cancel_url: str,
     ) -> dict[str, Any]:
         """Create a Checkout Session. Returns {id, checkout_url}.
+
+        `reference` is what the payer sees (a ticket number, a rental);
+        `metadata` names what is being paid for -- `booking_id` or
+        `request_id` -- and comes back in the webhook.
 
         PayMongo works in centavos, so a 500.00 fare is sent as 50000.
         Getting this wrong charges 100x or 1/100x, and the sandbox will
@@ -80,17 +84,14 @@ class PayMongoClient:
                         }
                     ],
                     "payment_method_types": ["gcash", "paymaya", "card"],
-                    "description": f"SabayGo ticket {ticket_number}",
-                    "reference_number": ticket_number,
+                    "description": f"SabayGo {reference}",
+                    "reference_number": reference,
                     "success_url": success_url,
                     "cancel_url": cancel_url,
                     # Echoed back in the webhook -- this is how the handler
-                    # knows which booking a payment belongs to without
-                    # trusting anything the client sent.
-                    "metadata": {
-                        "booking_id": booking_id,
-                        "ticket_number": ticket_number,
-                    },
+                    # knows what a payment belongs to without trusting
+                    # anything the client sent.
+                    "metadata": metadata,
                 }
             }
         }
