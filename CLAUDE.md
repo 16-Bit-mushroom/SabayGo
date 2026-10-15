@@ -565,10 +565,60 @@ Manager only** (T38; others never get it or its address). Not covered:
 the rev 468 YOLOv8 audit snapshots in public `/media` (`audits.py`
 `snapshot_url`), retired with the old screens in R10. Test:
 `test_retention.sh` (34, in the runner; runs the job with "now" moved
-31 days ahead, so nothing hashed is backdated).
-**Next: R9 driving flags** (reuse `geotag`; subtract a pickup's
-`arrived_at`..`left_at` from the stretch time; write `DrivingEvent`), then
-R10 screens (incl. Disputes, Boarding Audit with the still).
+31 days ahead, so nothing hashed is backdated). Committed (`81e0885`).
+Done: **R9, driving flags** (15 Oct). Migration **027** (down script):
+settings `overspeed_seconds` 10, `stop_seconds` 120, `slow_tolerance_pct`
+25, `expected_speed_kmh` 55, `standstill_kmh` 2. The rules are the pure
+`application/tracking/driving.py` (read its docstring), replayed on the
+paper's sample trip by `tests/test_driving_flags.py` (overspeed 40 s,
+pickup wait not flagged, en-route 34 s recorded, unscheduled 244 s at
+8,830 m, stretches 0.99 / 1.01 / 1.45). `application/tracking/flags.py`
+(`DrivingFlags.review`) recomputes a departed or completed trip's flags
+from its readings after every GPS batch (`/edge/fixes`, and the
+tracking ping), reconciles by kind + start (a stop or run that goes on
+updates its row; a flag no longer found is deleted only while open and
+undisputed), geotags new ones and alerts the Terminal Manager and the
+trip's Dispatcher (not for en-route stops). The silent-phone gap breaks
+an episode. Speed limits per stretch: `GET/PUT
+/config/routes/{id}/stretches` (Terminal Manager; lengths along the
+straight route line, expected time saved with the stretch); without them
+only stops are flagged. Once set, the route's stop zone is NAHGM's stop
+zone everywhere (`TrackingService.stop_zones`, geotag too). **Late
+readings:** a reading dated before a completed trip's `completed_at` is
+now filed on it (`file_late_reading`, no live hooks) instead of ignored,
+so a phone offline on the road still has its driving counted. Test:
+`test_driving_flags.sh` (27) + the unit test, both in the runner.
+
+**Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
+The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
+(Passenger, Dispatcher) and `operator_console/` (Terminal Manager,
+Cashier). Verify with `flutter analyze` and the journey scripts, not a
+device, unless asked. Say **Dispatcher**, never Conductor; show the
+operator only as name + licence + plate on the trip. Already built in
+the console: the Trips page's Start and departure panel (assign, Start,
+Record A2Z's share, Lift payment block), the add-van dialog.
+
+| Screen (brief §9) | Endpoints that exist |
+|---|---|
+| Dispatcher dashboard (app) | `GET /trips/{id}/door-check`, walk-in `for_event_id`, `POST /door-events/{id}/explain`, `PUT /trips/{id}/crew`, `POST .../depart`, `.../arrive`, `POST /non-passenger-moves` + `/{id}/end`, home pickups `activate`/`arrived`/`close`/`proof`/`proof/confirm`, rental `POST /special-trips/{id}/cash`, `GET /trips/{id}/share` |
+| Passenger app | `POST /special-trips`, `GET .../mine`, `.../withdraw`, `.../checkout`; `POST /home-pickups`, `.../proof`; camera notice on the booking screen (brief 4.5) |
+| Start Trip / Review Automatic Starts | `PUT /trips/{id}/assignment`, `.../start`, `.../start-review`, `.../change-van`, `.../void`, `.../payment-override`; trips from `GET /config/trips?date=` |
+| Remittance (replaces Fares & Cash) | `GET /statements?date=`, `POST /statements/{id}/payments`, `POST /trips/{id}/payment` |
+| Disputes | `POST /disputes`, `GET /disputes?status=&trip_id=&remittance_id=`, `.../withdraw`, `.../decide` |
+| Boarding Audit (replaces Passenger Count Checks) | door-check per trip, `GET /door-events/{id}/snapshot` (Terminal Manager only), `GET /trips/{id}/chain` |
+| Phones, Member Records | `api/v1/devices.py`, `api/v1/fleet.py`, `api/v1/roster.py` |
+| Rules and Settings | policies + history (`config.py`), `GET/PUT /config/routes/{id}/stretches` (speed limits) |
+
+Gaps to build server-side first, small: **no endpoint lists or reviews
+driving flags** (the Terminal Manager's `reviewed` / `dismissed`, brief
+6.4; disputes already decide them); no cross-trip list of unlisted
+boardings and capacity alerts for Boarding Audit; no Van Status Board
+query (vans out, vans whose last trip still owes). Retire with the new
+screens: Fares & Cash (`cash_remittances`, rev 514) and Passenger Count
+Checks (rev 468 YOLOv8 audits, whose snapshots sit in public `/media`,
+against T38). The Dispatcher app still offers a "Van is at" stop for
+walk-ins (R2: only stop 1 is accepted). Open in the brief: where the
+Dispatcher records a dispute (app or web), Emergencies kept or dropped.
 
 ---
 
