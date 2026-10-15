@@ -385,8 +385,25 @@ payment block**. `DEMO_SCRIPT.md` row 9a records it as cashier@ in a
 private window. The Remittance screen itself is still R10. The old `cash_remittances` flow (Fares &
 Cash) is the rev 514 model; retire it with the screens (R10). Seed note:
 LIVE-BOARD's leg-1 list is now 5.
-**Next: R3b** — special-trip requests (app + counter walk-in, fee,
-payment first) — then R4.
+Done: **R3b-1, special trips, cash path** (15 Oct). Rules:
+`application/operations/special_trips.py` (read its docstring); API
+`api/v1/special_trips.py`: `POST /special-trips` (passenger, 1-14),
+`GET .../mine`, `POST .../{id}/withdraw` (before approval only); office
+`GET /special-trips?status=`, `POST .../walk-in` (counter customer,
+approved as entered, fee + note), `.../{id}/approve` (fee + note, creates
+the trip: no route, `is_special_trip`, label "Rental · name", no seat
+booking), `.../{id}/reject` (reason, told to the passenger); the trip's
+Dispatcher `POST .../{id}/cash`. Van and Dispatcher via the usual
+`PUT /trips/{id}/assignment` (T52 = re-assign). A paid fee is one fare
+line (`request_id`, no drop-off; D for cash), so the 15 % block applies;
+**Start also waits for the fee itself, and no override lifts that.** The
+request closes with its trip (void → cancelled, arrive → completed).
+`NotificationService.notify_passenger` for a passenger alert with no
+trip. A rental's length is unknown, so the clash check counts only the
+45-min turnaround. Test: `test_special_trips.sh` (57, in the runner).
+**Next: R3b-2** — the fee through the gateway: migration 026 lets
+`payments` carry a `request_id`, checkout for an approved request, the
+verified webhook marks it paid (V). Then R4.
 
 ---
 

@@ -23,6 +23,8 @@ Who may do what is the API's guard (brief 3); the rules are here:
                and the trip's statement owes nothing -- the Dispatcher
                handed the 15 % over and the Cashier recorded it
                (`finance.statement`) -- or after an override (rule 5).
+               A rental (`special_trips`) also waits for its fee, which
+               no override lifts (2.5).
                Copies the operator's name and licence and the plate onto
                the trip; warns, never blocks, on an expired licence or a
                phone that is not with the van.
@@ -38,7 +40,8 @@ Who may do what is the API's guard (brief 3); the rules are here:
   review       Terminal Manager: confirm or change the van of a held
                start; its fare lines then join the statement (rule 11).
   change van   Terminal Manager only, on a started trip, with a reason.
-  void         Terminal Manager only, with a reason (rule 12).
+  void         Terminal Manager only, with a reason (rule 12). A rental's
+               request closes with its trip (`special_trips`).
   crew         The assigned Dispatcher adds themselves as crew: not a
                boarding, not counted toward the 14 (2.3).
   arrive       The Dispatcher taps Arrived (4.1).
@@ -66,6 +69,7 @@ from app.application.edge.ledger import TRIP_REACH, alerted_while_held, release_
 from app.application.finance.statement import ZERO, Statements
 from app.application.notifications.service import NotificationService, trip_label
 from app.application.operations.boarding import DepartTripUseCase
+from app.application.operations.special_trips import close_rental, rental_of
 from app.application.scheduling.conflicts import ScheduleConflictChecker
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
@@ -202,6 +206,13 @@ class TripLifecycle:
         # Confirming the van: it must still be on the roster and validated.
         await self._assignable_van(trip.van_id)
         await self._assignable_dispatcher(trip.dispatcher_id)
+        # A rental's fee comes first (2.5); no override lifts it.
+        rental = await rental_of(self.session, trip.trip_id) if trip.is_special_trip else None
+        if rental is not None and rental.payment_status != "paid":
+            raise ConflictError(
+                f"The rental fee of ₱{rental.rental_fee:,.2f} is not paid. It is paid before "
+                "the van leaves: through the app, or in cash the Dispatcher logs."
+            )
         # The 15 % before Start (brief 2.1, hard block).
         if trip.payment_override_by is None:
             money = Statements(self.session)
@@ -475,6 +486,7 @@ class TripLifecycle:
         trip.status = TripStatus.CANCELLED.value
         trip.cancellation_reason = reason.strip()[:255]
         self._mark_changed(trip, by=by, now=now, note=f"Voided: {reason.strip()}", earlier=earlier)
+        await close_rental(self.session, trip)
         await self.session.flush()
         # A voided trip owes nothing ([OPEN] a trip paid in advance and
         # then voided leaves its statement overpaid).
@@ -492,8 +504,10 @@ class TripLifecycle:
                 ]),
             )
         )).scalars().all()
+        rental = await rental_of(self.session, trip.trip_id) if trip.is_special_trip else None
+        renter = [rental.passenger_user_id] if rental and rental.passenger_user_id else []
         await self.notifications.notify_passengers(
-            trip=trip, user_ids=list(holders), title="Your trip was cancelled",
+            trip=trip, user_ids=list(holders) + renter, title="Your trip was cancelled",
             message=f"The cooperative cancelled {trip_label(trip)}. Please see the "
                     "terminal office about your ticket.",
         )
@@ -511,6 +525,7 @@ class TripLifecycle:
         trip.status = TripStatus.COMPLETED.value
         trip.completed_at = now
         trip.updated_at = now
+        await close_rental(self.session, trip)
         await self.session.flush()
         # A silence still open at the end is final now (4.4).
         await PhoneEvidence(self.session).review_coverage(trip)

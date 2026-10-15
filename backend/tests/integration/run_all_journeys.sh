@@ -188,6 +188,20 @@ else
   ./tests/integration/test_roadside.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 603 R3b: special trips, a whole van rented.
+{
+  echo
+  echo "==================================================================="
+  echo "  SPECIAL TRIPS (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_special_trips.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_special_trips.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────

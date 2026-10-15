@@ -717,6 +717,37 @@ class RemittanceLine(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
+class SpecialTripRequest(Base):
+    """A whole van rented from a chosen pickup (brief 2.5, Table 34): from
+    the app (passenger_user_id) or the counter (customer_name, entered_by)."""
+
+    __tablename__ = "special_trip_requests"
+
+    request_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
+    passenger_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    customer_name: Mapped[str | None] = mapped_column(String(100))
+    customer_contact: Mapped[str | None] = mapped_column(String(20))
+    entered_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    pickup_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    pickup_address: Mapped[str] = mapped_column(String(255))
+    pickup_latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    pickup_longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    destination_address: Mapped[str] = mapped_column(String(255))
+    destination_latitude: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    destination_longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    passenger_count: Mapped[int] = mapped_column(SmallInteger)
+    rental_fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    fee_note: Mapped[str | None] = mapped_column(String(255))
+    payment_status: Mapped[str] = mapped_column(String(8), default="unpaid")
+    payment_reference: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="requested")
+    trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    reviewed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+    updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
+
+
 class Dispute(Base):
     """An operator's contest of a fare line or a driving flag (Table 39)."""
 

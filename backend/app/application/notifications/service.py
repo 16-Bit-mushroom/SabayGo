@@ -249,6 +249,27 @@ class NotificationService:
                 )
             )
 
+    async def notify_passenger(
+        self, *, user_id: str, title: str, message: str, entity: tuple[str, str],
+    ) -> None:
+        """One passenger, about something that is not yet a trip (a
+        special-trip request). Joins the caller's transaction."""
+        self.session.add(
+            Notification(
+                notification_id=str(uuid.uuid4()),
+                user_id=user_id,
+                audience=Role.PASSENGER.value,
+                type="trip_update",
+                title=title[:100],
+                message=message[:500],
+                related_entity_type=entity[0],
+                related_entity_id=entity[1],
+                is_read=False,
+                delivery_status="queued",
+                created_at=app_tz.now(),
+            )
+        )
+
     # ------------------------------------------------------------------
     # Consumers
     # ------------------------------------------------------------------

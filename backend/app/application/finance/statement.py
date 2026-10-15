@@ -9,7 +9,9 @@ the Dispatcher to the Cashier before Start. Equation (2):
 
 V is the seats paid through the gateway (QR tickets), D the cash seats
 the Dispatcher listed. A seat counts whether or not its passenger comes;
-the camera adds nothing. The system records the payment; it never holds
+the camera adds nothing. A special trip's rental fee, once paid, is one
+line of its own (`request_id`, no drop-off terminal): V through the
+gateway, D in cash the Dispatcher logged (2.2, 2.5). The system records the payment; it never holds
 the money.
 
 Fare lines follow the passenger list (`sync`). A line groups a trip's
@@ -59,6 +61,7 @@ from app.infrastructure.models import (
     Remittance,
     RemittanceLine,
     RouteStop,
+    SpecialTripRequest,
     Trip,
     User,
     Van,
@@ -89,9 +92,10 @@ def share_of(gross: Decimal, rate_pct: Decimal) -> Decimal:
 
 @dataclass(frozen=True)
 class LineKey:
-    dest_terminal_id: str
+    dest_terminal_id: str | None    # None on a rental
     fare: Decimal
     group: str          # 'verified' | 'declared'
+    request_id: str | None = None   # a rental fee's request
 
 
 class Statements:
@@ -100,9 +104,19 @@ class Statements:
 
     # ---------------------------------------------------------- the list
     async def listed(self, trip: Trip) -> dict[LineKey, int]:
-        """The trip's paid seats, grouped as fare lines."""
+        """The trip's paid seats, grouped as fare lines; on a rental, its
+        paid fee."""
         if trip.route_id is None:
-            return {}
+            rental = (await self.session.execute(
+                select(SpecialTripRequest).where(
+                    SpecialTripRequest.trip_id == trip.trip_id,
+                    SpecialTripRequest.payment_status == "paid",
+                )
+            )).scalar_one_or_none()
+            if rental is None:
+                return {}
+            group = "verified" if rental.payment_reference else "declared"
+            return {LineKey(None, Decimal(rental.rental_fee), group, rental.request_id): 1}
         terminal_at = await self._terminals(trip)
         rows = (await self.session.execute(
             select(Booking.alighting_stop_sequence, Booking.fare_amount, Booking.booking_type)
@@ -220,6 +234,7 @@ class Statements:
             trip_id=trip.trip_id,
             origin_terminal_id=origin,
             dest_terminal_id=key.dest_terminal_id,
+            request_id=key.request_id,
             income_group=key.group,
             fare_per_passenger=key.fare,
             passenger_count=count,
@@ -247,7 +262,8 @@ class Statements:
 
     @staticmethod
     def _key(line: RemittanceLine) -> LineKey:
-        return LineKey(line.dest_terminal_id, Decimal(line.fare_per_passenger), line.income_group)
+        return LineKey(line.dest_terminal_id, Decimal(line.fare_per_passenger),
+                       line.income_group, line.request_id)
 
     # -------------------------------------------------------- statements
     async def statement_for(self, van_id: str, service_date: date) -> Remittance:
