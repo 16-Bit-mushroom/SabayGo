@@ -143,7 +143,8 @@ grep -q "$TA" /tmp/resp.json && bad "the pool list leaks the token" || ok "the p
 is "$(edge GET /edge/session)" 401 "no token, no upload"
 is "$(edge GET /edge/session "" not-a-token)" 401 "a wrong token is refused"
 is "$(edge GET /edge/session "" "$TA")" 200 "the phone signs in with its token"
-is "$(field status)/$(field van_id)" "in_office/None" "and learns it is in the office, with no van"
+is "$(field status)/$(field van_id)/$(field counting)" "in_office/None/False" \
+   "and learns it is in the office, with no van: it does not count"
 OLD=$TA
 is "$(code POST /devices/$IDA/token "" "$CT")" 403 "only the manager re-issues a token"
 code POST /devices/$IDA/token "" "$OT" >/dev/null; TA=$(field device_token)
@@ -171,9 +172,10 @@ code POST /devices/$IDA/checkout '{"van_id":"VAN-0001","dispatcher_id":"USER-DIS
 code POST /devices/$IDB/checkout '{"van_id":"VAN-0002","dispatcher_id":"USER-DISPATCHER-0002"}' "$CT" >/dev/null
 edge GET /edge/session "" "$TA" >/dev/null
 is "$(field plate_number)" ABC-1234 "after check-out the phone shows its van's plate"
+is "$(field counting)/$(field trip_id)" "True/$TRIP1" "rule 13 the van is assigned a trip: the phone counts for it"
 E1=$(uuid)
 is "$(edge POST /edge/events "$(event "$E1" board 0 "$ELAT" "$ELON")" "$TA")" 200 "a boarding is uploaded"
-is "$(field stored)" 1 "T25a it goes on the van's scheduled trip, inside its start window"
+is "$(field stored)" 1 "T25a it goes on the trip the van is assigned to, before Start"
 is "$(sql "SELECT trip_id FROM passenger_events WHERE event_id = '$E1'")" $TRIP1 "the trip of ABC-1234"
 edge POST /edge/events "$(event "$E1" board 0)" "$TA" >/dev/null
 is "$(field duplicates)" 1 "sent again after a dropped connection: not stored twice"
@@ -221,21 +223,32 @@ is "$(board $TRIP1 audit_status)/$(board $TRIP1 unaudited_reason)" unaudited/len
    "a covered lens is marked at once: Lens_Blocked"
 
 # ╔═══════════════════════════════════════════════════════════════╗
-hdr "6. Events with no trip are held, then claimed (rule 12; T25b, T13)"
+hdr "6. Events with no trip are held, then claimed (rules 13, 14; T25b, T13)"
+is "$(code PUT /trips/$LIVE/assignment '{"dispatcher_id":"USER-DISPATCHER-0005"}' "$OT")" 200 \
+   "NBC-7788 is taken off its trip: it has no assignment"
 code POST /devices/$IDC/checkout '{"van_id":"VAN-0004","dispatcher_id":"USER-DISPATCHER-0005"}' "$CT" >/dev/null
-E2=$(uuid); E3=$(uuid)
+edge GET /edge/session "" "$TC" >/dev/null
+is "$(field counting)/$(field trip_id)" False/None "rule 13 with no assigned trip the phone pauses"
+E2=$(uuid); E3=$(uuid); E6=$(uuid)
 edge POST /edge/events "$(event "$E2" board 0)" "$TC" >/dev/null
-is "$(field held)" 1 "T25b NBC-7788's next trip is 2 h off: the boarding is held"
+is "$(field held)" 1 "T25b a boarding sent anyway is held"
 is "$(sql "SELECT COUNT(*) FROM held_door_events WHERE event_id = '$E2'")" 1 "outside the ledger"
 is "$(notes "$OT" trip_not_started VAN-0004)" 1 "'Trip Not Started' about the van"
 edge POST /edge/events "$(event "$E3" alight 1)" "$TC" >/dev/null
 is "$(notes "$OT" trip_not_started VAN-0004)" 1 "raised once while its events wait"
+is "$(code PUT /trips/$LIVE/assignment '{"van_id":"VAN-0004","dispatcher_id":"USER-DISPATCHER-0005"}' "$OT")" 200 \
+   "the van is assigned its trip, 2 h before departure"
+is "$(events_on $LIVE)/$(sql "SELECT COUNT(*) FROM held_door_events WHERE van_id = 'VAN-0004'")" "2/0" \
+   "rule 14 the held events move onto it at the assignment, matched by time"
+edge GET /edge/session "" "$TC" >/dev/null
+is "$(field counting)/$(field trip_id)" "True/$LIVE" "the phone counts again, for that trip"
+edge POST /edge/events "$(event "$E6" board 2)" "$TC" >/dev/null
+is "$(field stored)" 1 "a boarding 2 h before Start goes straight onto the assigned trip"
 sql "UPDATE trips SET departure_datetime = NOW() + INTERVAL 10 MINUTE WHERE trip_id = '$LIVE'"
 edge POST /edge/heartbeats "$(reports 0 0 1)" "$TC" >/dev/null
 is "$(pay $LIVE)" 200 "the cashier records its share"
 is "$(code POST /trips/$LIVE/start "" "$CT")" 200 "its trip is started"
-is "$(events_on $LIVE)/$(sql "SELECT COUNT(*) FROM held_door_events WHERE van_id = 'VAN-0004'")" "2/0" \
-   "the held events move onto it, matched by time"
+is "$(events_on $LIVE)" 3 "its boardings from before Start are all on it"
 rewind $LIVE 20 "$IDC"
 edge POST /edge/heartbeats "$(reports -1140 -720 60)" "$TC" >/dev/null
 is "$(board $LIVE audit_status)" audited "reports through 12 min ago"
@@ -282,6 +295,8 @@ is "$(notes "$OT" unconfirmed_trip_start $S6)" 1 "'Unconfirmed Trip Start' to th
 
 rewind $S6 10 "$IDD"
 is "$(code POST /trips/$S6/arrive "" "$D3T")" 200 "dispatcher3 taps Arrived"
+edge GET /edge/session "" "$TD" >/dev/null
+is "$(field counting)" False "rule 13 the van has arrived: the phone pauses for the way back"
 is "$(board $S6 audit_status)/$(board $S6 unaudited_reason)" unaudited/lost_en_route \
    "the phone fell silent and the trip ended first: Lost_En_Route, final"
 

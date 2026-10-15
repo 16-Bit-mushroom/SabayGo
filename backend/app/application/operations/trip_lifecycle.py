@@ -171,6 +171,9 @@ class TripLifecycle:
         await self.session.refresh(trip, ["van"])
         # The listed seats' lines follow the trip to its new van.
         await Statements(self.session).sync(trip)
+        # The van's phone counts for this trip from now on; what it
+        # counted while the van had no trip is matched by time (rule 14).
+        await release_held(self.session, trip, now)
 
         if by.role == Role.CASHIER.value:
             await self.notifications.notify_trip(

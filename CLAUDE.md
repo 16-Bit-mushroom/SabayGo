@@ -415,8 +415,20 @@ finds either kind. A paid fee is a verified (V) line. Rental fees are not
 in `payments`, so the rev 514 revenue view leaves them out; statements
 are the record. `test_special_trips.sh` **70 passed** (forged unsigned
 webhook refused, sandbox pay, no double line).
-**Next: R4** — edge events go to the trip the van is assigned to,
-started or not, and the session tells the phone to pause.
+Done: **R4, edge events to the assigned trip** (15 Oct). `ledger.trip_for`
+rule 2 is now the van's assigned trip that has not started (earliest,
+within 12 h either way), no longer "start window open", so boardings
+before Start are kept from the assignment on (rule 14). An assignment
+releases held events, as a start does. `GET /edge/session` returns
+`counting` + `trip_id` from `trip_for(now)`: the phone counts from
+assignment until arrival and pauses otherwise (rule 13; the way back is
+not counted). Not done: events already on a trip whose van is taken off
+it before Start stay there (the brief is silent). `test_edge_ingestion.sh`
+**76**; journey suite **553 passed, 1 failed** (the known `--soon`
+reschedule cutoff).
+**Next: R5** — checking: pre-departure list match, unlisted fix or
+reason, capacity alert with general location, hash chain (genesis =
+SHA-256 of `"sabaygo:" + trip_id`), completion when aboard reaches 0.
 
 ---
 

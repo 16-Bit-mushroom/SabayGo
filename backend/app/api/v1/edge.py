@@ -7,7 +7,8 @@ the phone stores what it sees while offline and sends it on reconnecting;
 sending the same batch again changes nothing.
 
     GET  /edge/session              server time (for the clock), the
-                                    phone's van and Dispatcher, the gap
+                                    phone's van and Dispatcher, the gap,
+                                    and whether to count or pause
     POST /edge/heartbeats           status reports
     POST /edge/events               door events
     PUT  /edge/events/{id}/snapshot the blurred still of one event
@@ -31,6 +32,7 @@ from app.application.edge.ingestion import (
     Fix,
     Report,
 )
+from app.application.edge.ledger import trip_for
 from app.core import timezone as app_tz
 from app.core.exceptions import AuthenticationError
 from app.core.security import hash_device_token
@@ -71,6 +73,10 @@ class SessionOut(BaseModel):
     van_id: str | None
     plate_number: str | None
     dispatcher_name: str | None
+    # Count from the van's assignment until it arrives; pause otherwise,
+    # and ask again (rule 13). The way back is not counted.
+    counting: bool
+    trip_id: str | None
 
 
 @router.get("/session", response_model=SessionOut)
@@ -83,14 +89,18 @@ async def edge_session(session: SessionDep, device: Device) -> SessionOut:
                DeviceCheckout.returned_at.is_(None))
     )).first()
     checkout, plate, first, last = row if row else (None, None, None, None)
+    now = app_tz.now().replace(tzinfo=None)
+    trip = await trip_for(session, checkout.van_id, now) if checkout else None
     return SessionOut(
-        server_time=app_tz.now().replace(tzinfo=None),
+        server_time=now,
         device_id=device.device_id,
         status=device.status,
         heartbeat_gap_seconds=await PolicyRepository(session).get_int("heartbeat_gap_seconds"),
         van_id=checkout.van_id if checkout else None,
         plate_number=plate,
         dispatcher_name=f"{first} {last}" if checkout else None,
+        counting=trip is not None,
+        trip_id=trip.trip_id if trip else None,
     )
 
 

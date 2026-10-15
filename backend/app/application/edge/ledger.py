@@ -7,14 +7,20 @@ at the event's time, then that van's trip at that time:
 
   1. the started trip whose run covers the moment (started at or before
      it, not completed before it) -- the latest such, if two overlap;
-  2. otherwise the van's next trip whose start window (`start_opens_
-     minutes` before departure) was already open, and which had not yet
-     started -- so a late start loses nothing (T2);
+  2. otherwise the trip the van is assigned to that had not yet started,
+     the earliest -- started or not, so the boardings before Start are
+     kept (rev 603, 4.2 rule 14; T2);
   3. otherwise none: the event is held outside the ledger, and moves the
-     moment a trip of that van starts and claims it by the same rule.
+     moment a trip of that van is assigned or started and claims it by
+     the same rule.
 
 By time, never by the trip that happens to be open when the upload
 arrives: a phone that was offline for the whole trip uploads afterwards.
+
+The phone counts from the van's assignment until it arrives, then
+pauses until the next assignment (rule 13): it counts while rule 1 or 2
+names a trip for now (`GET /edge/session`). The way back is the
+operator's and is not counted.
 """
 
 from __future__ import annotations
@@ -33,14 +39,14 @@ from app.infrastructure.models import (
     Trip,
     TripLocationPing,
 )
-from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 STARTED = (TripStatus.BOARDING.value, TripStatus.DEPARTED.value, TripStatus.COMPLETED.value)
 
 # A trip that has not started is still live this long after its departure.
 # Further back it did not run, or ran without the system; it neither
 # claims door events nor is started by the fallback, and stays for the
-# Terminal Manager.
+# Terminal Manager. An assignment claims no further ahead either: a van
+# is assigned at its turn, not for tomorrow.
 TRIP_REACH = timedelta(hours=12)
 
 
@@ -67,12 +73,11 @@ async def trip_for(session: AsyncSession, van_id: str, at: datetime) -> Trip | N
     if running is not None:
         return running
 
-    opens = timedelta(minutes=await PolicyRepository(session).get_int("start_opens_minutes"))
     return (await session.execute(
         select(Trip).where(
             Trip.van_id == van_id,
             Trip.status != TripStatus.CANCELLED.value,
-            Trip.departure_datetime <= at + opens,
+            Trip.departure_datetime <= at + TRIP_REACH,
             Trip.departure_datetime >= at - TRIP_REACH,
             or_(Trip.started_at.is_(None), Trip.started_at > at),
         ).order_by(Trip.departure_datetime).limit(1)
@@ -98,10 +103,11 @@ def to_ledger(held: HeldDoorEvent, trip_id: str, now: datetime) -> PassengerEven
 
 
 async def release_held(session: AsyncSession, trip: Trip, now: datetime) -> int:
-    """Move the van's held events that this trip now claims (rule 12).
+    """Move the van's held events that this trip now claims (rule 14).
 
-    Called when a trip starts, inside its transaction, after the start
-    has been flushed so the claim rule sees it."""
+    Called when a trip is assigned a van or starts, inside its
+    transaction, after the change has been flushed so the claim rule
+    sees it."""
     if trip.van_id is None:
         return 0
     held = (await session.execute(
