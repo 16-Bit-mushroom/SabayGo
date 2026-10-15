@@ -106,15 +106,19 @@ S=$(code POST /bookings/walk-in \
 [ "$S" = "201" ] && ok "anonymous walk-in logged -- status $(j "['status']" < /tmp/resp.json)" \
                  || bad "walk-in gave $S"
 
-S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,
+S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,
   \"alighting_stop\":4,\"name\":\"Maria Santos\",\"phone\":\"09171112222\",
   \"wants_receipt\":true}" "$CT")
 [ "$S" = "201" ] && ok "walk-in with receipt details -- P$(j "['fare_amount']" < /tmp/resp.json)" \
                  || bad "receipt walk-in gave $S"
 
 S=$(code POST /bookings/walk-in \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":3}" "$CT")
+[ "$S" = "201" ] && ok "walk-in to an intermediate terminal (stop 1->3)" || bad "walk-in to stop 3 gave $S"
+
+S=$(code POST /bookings/walk-in \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":3,\"alighting_stop\":4}" "$CT")
-[ "$S" = "201" ] && ok "short-segment walk-in (stop 3->4)" || bad "segment walk-in gave $S"
+[ "$S" = "422" ] && ok "a walk-in from a later terminal is refused (rev 603)" || bad "stop-3 walk-in gave $S"
 
 # ═══════════════════════════════════════════════ 4. MANIFEST
 hdr "4. Manifest"

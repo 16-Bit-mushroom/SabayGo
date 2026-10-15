@@ -37,16 +37,13 @@ log = logging.getLogger(__name__)
 # App bookings close the moment a van starts loading.
 APP_BOOKABLE = {TripStatus.SCHEDULED.value}
 
-# Cash passengers are recorded whenever there is room: at the first
-# terminal while the van is loading, and at a later terminal after it has
-# departed. Blocking either would make the honest path impossible and
-# leave undocumented boarding as the only option -- which is precisely
-# what the camera check exists to detect. Every cash boarding names a
-# terminal stop; a roadside pickup is refused at the API (rev 468).
+# The Dispatcher lists cash passengers at the starting terminal, on the
+# scheduled trip once assigned and while it boards (brief 2.4, rev 603):
+# the list is complete before the van leaves. A pickup after departure is
+# neither listed nor priced; the camera only holds the van to 14.
 CASH_BOOKABLE = {
     TripStatus.SCHEDULED.value,
     TripStatus.BOARDING.value,
-    TripStatus.DEPARTED.value,
 }
 
 CASH_TYPES = {BookingType.WALK_IN, BookingType.DRIVER_ISSUED}
@@ -89,7 +86,7 @@ class ReserveSeatUseCase:
         self.policies = PolicyRepository(session)
 
     async def execute(self, cmd: ReserveSeatCommand) -> ReserveSeatResult:
-        segment = Segment(cmd.boarding_stop, cmd.alighting_stop)
+        segment = Segment.from_starting_terminal(cmd.boarding_stop, cmd.alighting_stop)
         is_cash = cmd.booking_type in CASH_TYPES
 
         trip = await self.session.get(Trip, cmd.trip_id)

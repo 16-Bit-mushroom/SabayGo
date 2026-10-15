@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 
+from app.core.exceptions import PolicyViolationError
+
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-zA-Z]{2,}$")
 
 
@@ -120,10 +122,13 @@ class EmergencyContact:
 class Segment:
     """A boarding/alighting pair along a route's ordered stop sequence.
 
-    This is the value object the whole booking model turns on. A passenger
-    does not occupy "a seat on a trip" -- they occupy one seat across a
-    contiguous span of legs, which is what allows the same physical seat
-    to be sold twice on non-overlapping portions of the same trip.
+    A passenger occupies one space across a contiguous span of legs. Rev
+    603 (brief 2.4): a new journey boards only at the starting terminal,
+    so every leg it spans begins at stop 1 and the busiest stretch is the
+    first -- the per-leg count the allocator keeps is then the per-van
+    count, strictly 14. A new journey is built with
+    `from_starting_terminal`; the plain constructor also rebuilds a stored
+    booking, which may predate the rule.
     """
 
     boarding_stop: int
@@ -134,6 +139,16 @@ class Segment:
             raise ValueError("Stop sequence is 1-based.")
         if self.alighting_stop <= self.boarding_stop:
             raise ValueError("Alighting stop must come after the boarding stop.")
+
+    @classmethod
+    def from_starting_terminal(cls, boarding_stop: int, alighting_stop: int) -> Segment:
+        """A journey a passenger, a relative or the Dispatcher asks for now."""
+        if boarding_stop != 1:
+            raise PolicyViolationError(
+                "Passengers board only at the starting terminal, before the van "
+                "departs. Choose the route's first stop as the boarding point."
+            )
+        return cls(boarding_stop, alighting_stop)
 
     @property
     def leg_range(self) -> tuple[int, int]:

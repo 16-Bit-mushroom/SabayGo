@@ -115,16 +115,16 @@ async def reserve(
 async def log_walk_in(
     payload: WalkInRequest, session: SessionDep, user: CurrentUser
 ) -> BookingResponse:
-    """Record a cash passenger boarding at a terminal stop.
+    """List a cash (pasabay) passenger with their destination.
 
-    Accepted whenever the trip has space, including while the van is
-    loading and, at a later terminal, after it has departed. The fare is
-    the approved terminal-to-terminal fare; the Dispatcher never sets it.
+    Accepted at the starting terminal only, before the van departs (rev
+    603, brief 2.4): on the scheduled trip once the Dispatcher is
+    assigned, and while it boards. The fare is the approved fare to the
+    drop-off terminal; the Dispatcher never sets it.
 
-    A roadside pickup is refused (rev 468). Boarding is allowed only
-    inside a stop zone; a passenger flagged down between terminals is seen
-    by the in-van camera as an unrecorded boarding, priced from the
-    nearest stop and flagged as a side pickup.
+    A roadside pickup is refused. After departure the camera only holds
+    the van to 14; a passenger picked up on the road is neither listed
+    nor priced (a disclosed limitation).
 
     Passenger details are optional; supply them only for a receipt.
 
@@ -136,9 +136,8 @@ async def log_walk_in(
     """
     if payload.is_roadside_pickup:
         raise PolicyViolationError(
-            "A roadside pickup cannot be logged. Boarding is allowed only at "
-            "a terminal stop; the van's camera records a passenger picked up "
-            "on the road, for the Terminal Manager to review."
+            "A roadside pickup cannot be logged. Passengers board only at the "
+            "starting terminal, before the van departs."
         )
     if payload.client_request_id is not None:
         existing = await session.execute(
@@ -188,7 +187,7 @@ async def availability(
     trip_id: str, boarding_stop: int, alighting_stop: int, session: SessionDep
 ) -> AvailabilityResponse:
     """Non-locking availability hint for search results."""
-    segment = Segment(boarding_stop, alighting_stop)
+    segment = Segment.from_starting_terminal(boarding_stop, alighting_stop)
     count = await SeatRepository(session).count_available(
         trip_id=trip_id, segment=segment
     )

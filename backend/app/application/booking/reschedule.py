@@ -67,7 +67,10 @@ class RescheduleBookingUseCase:
         if old_trip is None:
             raise NotFoundError("Original trip not found.")
 
-        segment = Segment(row.boarding_stop_sequence, row.alighting_stop_sequence)
+        # The same journey on another trip is a new boarding (rev 603).
+        segment = Segment.from_starting_terminal(
+            row.boarding_stop_sequence, row.alighting_stop_sequence
+        )
 
         # Rebuild the entity from persistence WITHOUT re-running creation
         # invariants -- this is exactly what reconstitute() exists for.

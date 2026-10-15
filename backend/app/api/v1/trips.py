@@ -102,9 +102,10 @@ async def list_terminals(session: SessionDep) -> list[TerminalOut]:
 async def _segments_between(
     session: SessionDep, origin_terminal_id: str, destination_terminal_id: str
 ) -> dict[str, tuple[int, int]]:
-    """route_id -> (boarding_seq, alighting_seq) for every route that passes
-    the origin before the destination. Empty when no route links them in
-    that direction -- the reverse direction is a different LTFRB route."""
+    """route_id -> (1, alighting_seq) for every route that starts at the
+    origin and passes the destination. Empty when none does: passengers
+    board only at the starting terminal (rev 603), and the reverse
+    direction is a different LTFRB route."""
     rows = await session.execute(
         select(RouteStop.route_id, RouteStop.terminal_id, RouteStop.stop_sequence)
         .join(Route, Route.route_id == RouteStop.route_id)
@@ -119,7 +120,7 @@ async def _segments_between(
     out: dict[str, tuple[int, int]] = {}
     for route_id, seqs in by_route.items():
         a, b = seqs.get(origin_terminal_id), seqs.get(destination_terminal_id)
-        if a is not None and b is not None and a < b:
+        if a == 1 and b is not None and b > 1:
             out[route_id] = (a, b)
     return out
 
@@ -160,7 +161,7 @@ async def search_trips(
         if not segment_by_route:
             return []
     elif boarding_stop is not None and alighting_stop is not None:
-        Segment(boarding_stop, alighting_stop)  # validates the pair
+        Segment.from_starting_terminal(boarding_stop, alighting_stop)  # validates the pair
         segment_by_route = None
     else:
         raise PolicyViolationError(

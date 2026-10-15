@@ -334,6 +334,18 @@ models for the money tables (remittances, lines, disputes, special trip
 requests, Tables 40–41) come with the step that uses them. Rollback
 verified to the exact pre-024 schema.
 
+Done: **R2, boarding at the starting terminal** (15 Oct). The rule is
+`Segment.from_starting_terminal` (`domain/value_objects.py`), used by
+reserve, walk-in, reschedule, search and availability; the plain
+`Segment(...)` still rebuilds a stored booking (cancel), which may
+predate the rule. Search by terminals offers only routes that start at
+the origin. Cash listing closes at departure (`CASH_BOOKABLE` =
+scheduled, boarding). `seat_repository.py` untouched: with every
+boarding at stop 1 the per-leg count is the per-van count. Test:
+`test_roadside.sh` (21 checks, now in the runner). Left for R10: the
+Dispatcher app still offers a "Van is at" stop for walk-ins; the server
+refuses anything but stop 1.
+
 ---
 
 ## What the system does

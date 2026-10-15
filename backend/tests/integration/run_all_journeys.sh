@@ -174,6 +174,20 @@ else
   ./tests/integration/test_edge_ingestion.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 603 R2: boarding only at the starting terminal.
+{
+  echo
+  echo "==================================================================="
+  echo "  BOARDING POINT (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_roadside.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_roadside.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 sleep 1   # let the tee subshells finish flushing before counting
 
 # ── totals ────────────────────────────────────────────────────────────
