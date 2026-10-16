@@ -11,7 +11,6 @@ docker compose up -d
 ./db/reset-dev.sh --soon        # fixture trip departs in 20 min -> check-in window open
 cd backend && source venv/bin/activate && set -a && source .env && set +a
 uvicorn app.main:app --host 0.0.0.0 --port 8000
-cd ai_service && python app.py  # optional -- see "If the camera is off"
 ./scripts/demo_rehearsal.sh     # green all the way down = go
 ```
 
@@ -21,7 +20,7 @@ console as `manager@sabaygo.dev`. Password everywhere `sabaygo123`.
 
 The live loop uses the **Ecoland – Cotabato "First Trip"** because
 `--soon` puts it inside the check-in window. Everything else on screen
-(four routes, yesterday's revenue, the audit history) is the A2Z demo
+(four routes, yesterday's statements and driving flags) is the A2Z demo
 dataset from `db/seed/002_demo_dataset.sql`.
 
 ## The loop, in order
@@ -46,12 +45,13 @@ dataset from `db/seed/002_demo_dataset.sql`.
 
 Stop there. Fifteen steps is twelve minutes at a comfortable pace.
 
-## If the camera is off
+## If no phone is out with the van
 
-Step 10 returns **502**. Do not apologise — that is the design: *"the node
-never fabricates a count. An earlier prototype substituted 1 and displayed
-it as real, which would flag an innocent driver."* Then go to step 12 and
-show yesterday's audits, including the one that failed the same way.
+Step 9a warns *no phone is checked out* and marks the trip **Unaudited**,
+and step 10's camera count stays at 0. Do not apologise — that is the
+design: *"the system never fabricates a count. A trip with no phone
+reporting is marked Unaudited, not counted as zero leakage."* Then go to
+step 11 and show the Boarding Audit from a trip that had a phone.
 
 ## If the webhook simulator fails
 
@@ -62,9 +62,10 @@ want on stage.
 
 ## What not to show
 
-- Reschedule on the `--soon` trip — correctly hidden (6-hour cutoff passed).
-  If asked, reschedule the seeded booking `BKG-A2Z-U001` on tomorrow's
-  Tagum trip instead (`liza@sabaygo.dev`).
+- The reschedule cutoff on the `--soon` trip. `reset-dev.sh` sets both
+  cutoffs to 0 on the fixture trips (so the test suite can reschedule), so
+  the 6-hour rule does not show there. If asked, show it on the seeded
+  booking `BKG-A2Z-U001` on tomorrow's Tagum trip (`liza@sabaygo.dev`).
 - The dev-account chips on the sign-in screen — debug build only.
 - Chat and the live map: not built; say so if asked.
 

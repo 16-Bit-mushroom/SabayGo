@@ -2,11 +2,11 @@
 """
 Run the deployed detector over the manifest and write the Results tables.
 
-The counts come from `inference.count_people`, which is the function the
-Flask service itself calls on every audit. That is deliberate: if this
-harness loaded its own YOLO handle with its own thresholds, the numbers
-printed here would not be the numbers the running system produces, and a
-panel would be right to ask which of the two the paper was describing.
+The counts come from `inference.count_people`, the person rule the in-van
+phone runs (same weights and thresholds; the phone's input is 320 or 416
+px, this harness uses Ultralytics' default 640). That is deliberate: if
+this harness loaded its own YOLO handle with its own thresholds, a panel
+would be right to ask which of the two the paper was describing.
 
 Outputs, all under docs/benchmarks/ alongside the locking experiment:
 
@@ -150,8 +150,8 @@ def header(results: list[dict], rows: list[dict], confs: list[float],
         f"Frames / inferences  : {len(rows)} / {len(results)}",
         f"Cabin framing        : {min_rel_area}",
         "",
-        "Counts come from inference.count_people(), the same function the",
-        "Flask service calls on every audit -- not a second copy of it.",
+        "Counts come from inference.count_people(): the phone's weights and",
+        "thresholds, at 640 px input (the phone runs 320 or 416 px).",
     ]
 
 

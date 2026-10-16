@@ -4,16 +4,15 @@
 # thing that would embarrass you on stage.
 #
 #   register -> login -> search -> book -> pay -> e-ticket -> check-in
-#   -> scan -> board -> manifest -> audit -> revenue
+#   -> scan -> board -> manifest -> camera check -> statements
 #
 # Run it the morning of the demo, after:
 #   ./db/reset-dev.sh --soon          # fixture trip departs in 20 min
 #   uvicorn app.main:app ...          # backend
-#   (optional) ai_service python app.py
 #
 # The live loop runs on the fixture trip (Ecoland - Cotabato, "First
 # Trip") because --soon puts it inside the check-in window. The A2Z demo
-# dataset (routes, yesterday's revenue, audit history) is the backdrop
+# dataset (routes, yesterday's statements, driving flags) is the backdrop
 # the console screens show while you talk.
 #
 # Needs the venv and .env exported (the webhook simulator signs with
@@ -66,14 +65,10 @@ if [ -z "$DEP" ]; then die "fixture trip $TRIP is not bookable today -- run ./db
 elif [ "$DEP" -gt 45 ]; then warn "fixture trip departs in $DEP min -- check-in opens 45 min before; use --soon for the live loop"
 else ok "fixture trip departs in $DEP min (check-in window open)"; fi
 
-S=$(code GET /audits/node-health "" "$CT")
-if [ "$S" = "200" ] && [ "$(j "['reachable']" < /tmp/resp.json)" = "True" ]; then ok "AI node reachable -- audit step will show a real count"
-else warn "AI node offline -- audit step will return 502. Either start ai_service, or say on stage: 'the node never invents a count'"; fi
-
-S=$(code GET /revenue/summary?date_from=$(date -d '-2 days' +%F) "" "$OT")
-T=$(j "['trips']" < /tmp/resp.json)
-[ "${T:-0}" -ge 6 ] && ok "A2Z backdrop present: $T trips in the last three days, ₱$(j "['collected_fare']" < /tmp/resp.json) collected" \
-  || warn "revenue backdrop thin ($T trips) -- 002_demo_dataset.sql may not have loaded"
+S=$(code GET "/statements?date=$(date -d yesterday +%F)" "" "$OT")
+T=$(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))" 2>/dev/null)
+[ "${T:-0}" -ge 1 ] && ok "A2Z backdrop present: $T van statement(s) for yesterday" \
+  || warn "statement backdrop thin (${T:-0} for yesterday) -- 002_demo_dataset.sql may not have loaded"
 
 # ─────────────────────────────────────────────────────── 1. passenger books
 step "1. Passenger: search Ecoland → Cotabato, reserve, pay, e-ticket"
@@ -132,21 +127,18 @@ import json;m=json.load(open('/tmp/resp.json'))
 ps=m.get('passengers',m if isinstance(m,list) else [])
 print(f\"{len(ps)} passengers, {sum(1 for p in ps if p.get('status')=='boarded')} boarded\")")"
 
-# ──────────────────────────────────────────────────────── 4. audit
-step "4. The camera audit"
-S=$(code POST /audits/trigger "{\"trip_id\":\"$TRIP\",\"leg_sequence\":1,\"trigger_type\":\"manual\"}" "$CT")
+# ──────────────────────────────────────────────────────── 4. camera check
+step "4. The camera's count against the list (door events, brief 6.1)"
+S=$(code GET "/trips/$TRIP/door-check" "" "$CT")
 if [ "$S" = "200" ]; then
-  ok "YOLOv8: visual $(j "['visual_count']" < /tmp/resp.json) vs manifest $(j "['booked_count']" < /tmp/resp.json) -- $(j "['resolution_status']" < /tmp/resp.json)"
-elif [ "$S" = "502" ]; then warn "AI node unreachable -> 502. The line: 'it refuses to invent a number'. Yesterday's audits are in the console History tab"
-else warn "audit gave $S: $(j "['detail']" < /tmp/resp.json)"; fi
+  ok "aboard $(j "['aboard']" < /tmp/resp.json) by the camera, listed $(j "['listed']" < /tmp/resp.json), excess $(j "['excess']" < /tmp/resp.json) (aboard stays 0 until a phone out with the van reports)"
+else warn "door check gave $S: $(j "['detail']" < /tmp/resp.json)"; fi
 
 # ──────────────────────────────────────────────────────── 5. office
-step "5. Office console: queue, history, revenue, export"
-S=$(code GET /audits/pending "" "$OT");  ok "audit queue: $(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))") pending (one is yesterday's Digos +2)"
-S=$(code GET /audits/history "" "$OT");  ok "audit history: $(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))") closed -- resolved, ignored, reconciled, failed"
-S=$(code GET "/revenue/summary?date_from=$(date -d '-2 days' +%F)" "" "$OT")
-ok "revenue, last 3 days: collected ₱$(j "['collected_fare']" < /tmp/resp.json), cash in hand ₱$(j "['cash_in_hand']" < /tmp/resp.json), unreconciled ₱$(j "['unreconciled_amount']" < /tmp/resp.json)"
-S=$(curl -s -o /tmp/rehearsal.xlsx -w '%{http_code}' -H "Authorization: Bearer $OT" "$API/revenue/export?date_from=$(date -d '-2 days' +%F)")
-[ "$S" = "200" ] && ok "export: $(du -h /tmp/rehearsal.xlsx | cut -f1) workbook at /tmp/rehearsal.xlsx" || warn "export gave $S"
+step "5. Office console: statements, Boarding Audit"
+S=$(code GET "/statements?date=$(date +%F)" "" "$OT")
+ok "today's statements: $(python3 -c "import json;r=json.load(open('/tmp/resp.json'));print(len(r), 'van(s),', sum(1 for x in r if x['status']=='settled'), 'settled')")"
+S=$(code GET "/boarding-audit?date=$(date +%F)" "" "$OT")
+[ "$S" = "200" ] && ok "Boarding Audit: $(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))") trip(s) with something to review today" || warn "boarding audit gave $S"
 
 printf "\n${G}${B}Rehearsal complete.${N} Reset before the real run: ./db/reset-dev.sh --soon\n"

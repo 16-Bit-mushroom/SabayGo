@@ -1,20 +1,21 @@
 """
-SabayGo AI Node -- the inference core, shared by the service and the
-evaluation harness.
+SabayGo person count -- the reference the evaluation harness measures.
 
-Extracted from app.py so that `eval/evaluate.py` measures *the deployed
-code path* rather than a second copy of it. If the harness loaded its own
-YOLO handle with its own thresholds, the numbers in the Results chapter
-would not be the numbers the running system produces, and that is a fair
-question for a panel to ask.
+The in-van phone (edge_app/) runs these same yolov8n.pt weights, exported
+to TFLite, with this module's person rule: confidence 0.45, NMS IoU 0.50,
+best class must be person. `eval/evaluate.py` counts through
+`count_people` so the Results chapter measures that rule rather than a
+second copy of it. The rev 468 Flask node that also called it is retired
+(16 Oct, brief rev 603).
+
+Input size: Ultralytics' default, 640 px. The phone runs at 320 or 416 px
+(edge benchmark in docs/benchmarks/), so figures measured here describe
+the rule and the weights, not the phone's own input size.
 
 What lives here: configuration, the model handle, the person count, and
 the two image treatments that accompany it (privacy blur, annotation).
-
-What deliberately does NOT live here: the camera, the HTTP layer, and the
-never-fabricate-a-count error handling. Those are app.py's, because they
-are about the service, not about counting. `count_people` lets exceptions
-propagate; app.py decides that a failure is a 500 and never a count.
+`count_people` lets exceptions propagate: a caller that fails to count
+reports an error, never a number.
 """
 
 from __future__ import annotations
@@ -66,9 +67,9 @@ log = logging.getLogger("sabaygo-ai-node.inference")
 #
 # Lazy, not loaded at import. Two reasons: importing this module must not
 # cost seconds for a caller that only wants a constant (degrade.py wants
-# JPEG_QUALITY and nothing else), and app.py configures logging in its own
-# module body -- a load at import time would fire its log lines before any
-# handler existed and they would vanish.
+# JPEG_QUALITY and nothing else), and a caller configures logging first --
+# a load at import time would fire its log lines before any handler
+# existed and they would vanish.
 # --------------------------------------------------------------------------
 _model: YOLO | None = None
 _model_path: str | None = None
@@ -111,8 +112,8 @@ def count_people(frame: np.ndarray,
     Count the people in one frame.
 
     `conf` and `iou` override the configured thresholds. They exist for the
-    evaluation harness's threshold sweep; the service passes neither, so
-    production behaviour is exactly the configured operating point.
+    evaluation harness's threshold sweep; passing neither gives exactly the
+    configured operating point, the one the phone uses.
     """
     model = load_model()
     t0 = time.perf_counter()

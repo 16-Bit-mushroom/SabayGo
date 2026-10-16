@@ -2,7 +2,7 @@
 # Set up SabayGo on a fresh machine. Idempotent -- safe to re-run.
 #
 #   ./setup.sh              database + backend + Flutter clients
-#   ./setup.sh --with-ai    also the Flask/YOLOv8 node (pulls PyTorch, ~6 GB)
+#   ./setup.sh --with-ai    also ai_service/, the YOLOv8 evaluation harness (pulls PyTorch, ~6 GB)
 #   ./setup.sh --keep-db     skip ./db/reset-dev.sh (keeps existing data)
 #
 # What this script will NOT do: install Docker, Python or Flutter. Those
@@ -101,11 +101,6 @@ print(f"  . {path.name}: {key} added")
 PY
 }
 
-read_env() {  # read_env <file> <key> -> value on stdout, empty if absent
-  [ -f "$1" ] || return 0
-  grep -E "^$2=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2- || true
-}
-
 for pair in ".env.example:.env" "backend/.env.example:backend/.env"; do
   src="${pair%%:*}"; dst="${pair##*:}"
   if [ -f "$dst" ]; then
@@ -120,25 +115,6 @@ done
 # jwt_secret is declared min_length=32 in backend/app/config.py, so a blank
 # one fails at import. This is the single most common setup failure.
 set_env_if_blank backend/.env JWT_SECRET "$(gen_hex 32)"
-
-# The AI node key must be identical on both sides or the backend gets a 401.
-AI_KEY="$(read_env backend/.env AI_NODE_API_KEY)"
-if [ -z "$AI_KEY" ]; then
-  AI_KEY="$(gen_hex 16)"
-  set_env_if_blank backend/.env AI_NODE_API_KEY "$AI_KEY"
-fi
-if [ -f ai_service/.env ]; then
-  ok "ai_service/.env present"
-  if [ "$(read_env ai_service/.env AI_NODE_API_KEY)" != "$AI_KEY" ]; then
-    warn "ai_service/.env AI_NODE_API_KEY does not match backend/.env --"
-    warn "  the backend will get 401s from the node. Make them the same."
-  fi
-else
-  printf 'AI_NODE_API_KEY=%s\n' "$AI_KEY" > ai_service/.env
-  ok "ai_service/.env created, key matched to backend/.env"
-fi
-
-set_env_if_blank backend/.env PHONE_CAPTURE_API_KEY "$(gen_hex 16)"
 
 # The development payment sandbox signs its webhooks with this, exactly as
 # PayMongo would. Real PayMongo issues its own secret; paste that over this
@@ -180,7 +156,7 @@ ensure_venv() {
 ensure_venv backend
 
 if [ "$WITH_AI" = 1 ]; then
-  warn "installing the AI node -- ultralytics pulls PyTorch, this is a large download"
+  warn "installing the evaluation harness -- ultralytics pulls PyTorch, this is a large download"
   ensure_venv ai_service
 fi
 
@@ -209,7 +185,6 @@ fi
 # ─────────────────────────────────────────────── 6. flutter packages
 if [ "$HAVE_FLUTTER" = 1 ]; then
   CLIENTS=(mobile operator_console)
-  if [ "$WITH_AI" = 1 ]; then CLIENTS+=(ai_capture_app); fi
   for c in "${CLIENTS[@]}"; do
     say "flutter pub get -- $c"
     if ( cd "$c" && flutter pub get >/dev/null ); then
@@ -236,11 +211,10 @@ cat <<'EOF'
 
   ./run.sh
 
-That starts the database, the backend on 0.0.0.0:8000, the AI node and the
+That starts the database, the backend on 0.0.0.0:8000 and the
 cooperative console (built once, then served on localhost:3001), and
-prints the address handsets should dial. Add
---mobile --capture to also build the two handset apps onto an attached
-device. Ctrl-C stops everything.
+prints the address handsets should dial. Add --mobile to also build the
+passenger/Dispatcher app onto an attached device. Ctrl-C stops everything.
 
 To run one piece at a time instead:
 
@@ -256,7 +230,7 @@ To run one piece at a time instead:
 Sign in as passenger@ / dispatcher@ / manager@ / cashier@sabaygo.dev,
 password sabaygo123.
 
-Conductor screens need a real handset or an emulator -- mobile_scanner
+Dispatcher screens need a real handset or an emulator -- mobile_scanner
 needs a camera and the walk-in queue needs sqflite, which has no web build.
 
 Read docs/SETUP.md for the rest, CLAUDE.md before writing any code.

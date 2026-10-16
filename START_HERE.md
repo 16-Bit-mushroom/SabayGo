@@ -244,7 +244,7 @@ need to explain the domain to it.
 | `CLAUDE.md` | Vocabulary, domain invariants, current state. Read before writing any code. |
 | `docs/UI_REDESIGN.md` | The task you are picking up: what is done, what is left, decisions already made. |
 | `docs/status/2026-09-29-status.html` | Where the whole project stands. Open it in a browser. |
-| `docs/SETUP.md` | Setup in more depth than this page, including the AI node and how to attach a phone. |
+| `docs/SETUP.md` | Setup in more depth than this page, including the evaluation harness and how to attach a phone. |
 | `docs/REMAINING_WORK.md` | Everything else outstanding. |
 
 Two pieces of vocabulary that will save you a wrong assumption. Capacity is

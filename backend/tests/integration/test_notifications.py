@@ -1,8 +1,12 @@
-"""E.1 -- a flagged YOLOv8 variance alerts the Terminal Manager and the Dispatcher, not the Cashier.
+"""E.1 -- an alert reaches the roles it names, not the person who caused it, and
+marking it read is scoped to its owner.
 
-The camera is replaced with a fake capture so the test is repeatable; the
-rest of the path (use case, notification rows, HTTP list/read endpoints)
-is real. Needs the backend on :8000 and a reset dev database.
+The producer is a rev 603 trip alert: the Terminal Manager lifts a trip's
+payment block (brief 2.1), which tells the Cashier. The Terminal Manager
+did it and is not told; the Dispatcher is not an office role and is not
+told either. Until 16 Oct this test drove the rev 468 YOLOv8 variance
+alert through a fake camera; that audit is retired. HTTP only. Needs the
+backend on :8000 and a reset dev database.
 
     python tests/integration/test_notifications.py
 """
@@ -11,16 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-import httpx  # noqa: E402
-
-from app.application.audit.trigger_audit import TriggerAuditUseCase  # noqa: E402
-from app.core.db import SessionFactory  # noqa: E402
-from app.infrastructure.clients.ai_node_client import AiNodeClient, CaptureResult  # noqa: E402
-from app.infrastructure.repositories.policy_repository import PolicyRepository  # noqa: E402
+import httpx
 
 API = "http://127.0.0.1:8000/api/v1"
 TRIP = "TRIP-DEMO-00000001"
@@ -30,9 +26,7 @@ ACCOUNTS = {
     "dispatcher": "dispatcher@sabaygo.dev",
     "cashier": "cashier@sabaygo.dev",
 }
-# Deciding on a camera difference is the Terminal Manager's; the Cashier
-# records payments and is not told (brief 3, separation of duties).
-ALERTED = {"terminal_manager", "dispatcher"}
+ALERTED = {"cashier"}
 
 failures: list[str] = []
 
@@ -54,95 +48,47 @@ async def main() -> int:
         tokens = {role: await login(client, email) for role, email in ACCOUNTS.items()}
         auth = {role: {"Authorization": f"Bearer {t}"} for role, t in tokens.items()}
 
-        # Trip must be in progress for an audit to apply. The Cashier
-        # records the share, then starts it (rev 603, brief 2.1).
-        due = (await client.get(f"{API}/trips/{TRIP}/share", headers=auth["cashier"])).json()["amount_due"]
-        if float(due) > 0:
-            await client.post(f"{API}/trips/{TRIP}/payment", headers=auth["cashier"],
-                              json={"amount": due, "reference": "OR-NOTIFY"})
-        await client.post(f"{API}/trips/{TRIP}/start", headers=auth["cashier"])
+        async def inbox(role: str) -> dict:
+            return (await client.get(f"{API}/notifications", headers=auth[role])).json()
 
-        before = {
-            role: (await client.get(f"{API}/notifications", headers=h)).json()["unread_count"]
-            for role, h in auth.items()
-        }
+        before = {role: (await inbox(role))["unread_count"] for role in auth}
 
-        # --- fake camera: exceed the threshold by exactly one ---------------
-        async with SessionFactory() as s:
-            threshold = await PolicyRepository(s).get_int("variance_alert_threshold")
-            user_id = (await client.get(f"{API}/auth/me", headers=auth["dispatcher"])).json()["user_id"]
+        # --- the producer: lift the payment block on a scheduled trip ------
+        r = await client.post(
+            f"{API}/trips/{TRIP}/payment-override", headers=auth["terminal_manager"],
+            json={"note": "Share brought to the office after the first run"},
+        )
+        check(r.status_code == 200, f"payment block lifted ({r.status_code})")
 
-        from app.application.operations.boarding import ManifestUseCase
-
-        async with SessionFactory() as s:
-            booked = await ManifestUseCase(s).booked_count_on_leg(TRIP, 1)
-
-        async def fake_capture(self):  # noqa: ANN001
-            return CaptureResult(
-                visual_count=booked + threshold,
-                confidence_avg=0.9,
-                model_version="fake-test",
-                conf_threshold=0.5,
-                capture_ms=1,
-                inference_ms=1,
-                total_ms=2,
-                snapshot_b64="",
-            )
-
-        AiNodeClient.capture = fake_capture  # type: ignore[method-assign]
-
-        async with SessionFactory() as s:
-            result = await TriggerAuditUseCase(s).execute(
-                trip_id=TRIP, leg_sequence=1,
-                triggered_by_user_id=user_id, trigger_type="manual",
-            )
-        print(f"== audit {result.audit_id} variance={result.variance:+d} alert={result.alert_raised}")
-        check(result.alert_raised, "variance meets threshold -> alert raised")
-
-        # --- each audience received exactly one new row --------------------
-        for role, h in auth.items():
-            body = (await client.get(f"{API}/notifications", headers=h)).json()
-            mine = [n for n in body["items"] if n["related_entity_id"] == result.audit_id]
+        # --- each audience: one new row, or none ---------------------------
+        rows: dict[str, list[dict]] = {}
+        for role in auth:
+            body = await inbox(role)
+            rows[role] = [n for n in body["items"]
+                          if n["type"] == "payment_block_override" and n["related_entity_id"] == TRIP]
             if role not in ALERTED:
-                check(not mine and body["unread_count"] == before[role], f"{role} not alerted")
+                check(not rows[role] and body["unread_count"] == before[role], f"{role} not alerted")
                 continue
-            check(len(mine) == 1, f"{role} received one variance_alert")
-            if mine:
-                check(mine[0]["type"] == "variance_alert", f"{role} row typed variance_alert")
-                check(not mine[0]["is_read"], f"{role} row unread")
+            check(len(rows[role]) == 1, f"{role} received one payment_block_override")
+            if rows[role]:
+                n = rows[role][0]
+                check(n["related_entity_type"] == "trip", f"{role} row points at the trip")
+                check(not n["is_read"], f"{role} row unread")
             check(body["unread_count"] == before[role] + 1, f"{role} unread_count +1")
 
         # --- mark read is scoped to the caller -----------------------------
-        admin_rows = (await client.get(f"{API}/notifications", headers=auth["terminal_manager"])).json()["items"]
-        nid = next(n["notification_id"] for n in admin_rows if n["related_entity_id"] == result.audit_id)
-        r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["cashier"])
-        check(r.status_code == 404, "cashier cannot mark the Terminal Manager's row read")
-        r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["terminal_manager"])
-        check(r.status_code == 200, "Terminal Manager marks own row read")
-        after = (await client.get(f"{API}/notifications", headers=auth["terminal_manager"])).json()["unread_count"]
-        check(after == before["terminal_manager"], "Terminal Manager unread_count back to baseline")
+        if rows["cashier"]:
+            nid = rows["cashier"][0]["notification_id"]
+            r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["terminal_manager"])
+            check(r.status_code == 404, "Terminal Manager cannot mark the Cashier's row read")
+            r = await client.post(f"{API}/notifications/{nid}/read", headers=auth["cashier"])
+            check(r.status_code == 200, "Cashier marks own row read")
+            check((await inbox("cashier"))["unread_count"] == before["cashier"],
+                  "Cashier unread_count back to baseline")
 
         r = await client.post(f"{API}/notifications/read-all", headers=auth["dispatcher"])
-        check(r.status_code == 200 and r.json()["marked"] >= 1, "dispatcher read-all")
-
-        # --- no alert, no rows ----------------------------------------------
-        async def quiet_capture(self):  # noqa: ANN001
-            return CaptureResult(
-                visual_count=booked, confidence_avg=0.9, model_version="fake-test",
-                conf_threshold=0.5, capture_ms=1, inference_ms=1, total_ms=2, snapshot_b64="",
-            )
-
-        AiNodeClient.capture = quiet_capture  # type: ignore[method-assign]
-        async with SessionFactory() as s:
-            quiet = await TriggerAuditUseCase(s).execute(
-                trip_id=TRIP, leg_sequence=1, triggered_by_user_id=user_id,
-            )
-        body = (await client.get(f"{API}/notifications", headers=auth["terminal_manager"])).json()
-        check(
-            not quiet.alert_raised
-            and not any(n["related_entity_id"] == quiet.audit_id for n in body["items"]),
-            "matching headcount produces no notification",
-        )
+        check(r.status_code == 200, "Dispatcher read-all")
+        check((await inbox("dispatcher"))["unread_count"] == 0, "Dispatcher has nothing unread after read-all")
 
     print(f"\n{'ALL PASSED' if not failures else f'{len(failures)} FAILED'}")
     return 1 if failures else 0

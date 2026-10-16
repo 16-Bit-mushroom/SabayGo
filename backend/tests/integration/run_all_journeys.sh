@@ -48,11 +48,6 @@ strip_ansi() { sed -r 's/\x1B\[[0-9;]*[mGKHfJ]//g'; }
   else
     echo "  STOP  API not running - start: uvicorn app.main:app --reload"
   fi
-  if curl -sf http://127.0.0.1:5000/health >/dev/null 2>&1; then
-    echo "  ok    AI node responding"
-  else
-    echo "  warn  AI node offline - audit steps will report GAP"
-  fi
 } | tee -a "$REPORT"
 
 if grep -q "STOP" "$REPORT"; then
@@ -85,8 +80,8 @@ for journey in passenger dispatcher office; do
   fi
 done
 
-# E.1: flagged variance -> notifications. Python because it swaps the
-# camera for a fake capture; the HTTP side is real.
+# E.1: an alert reaches the roles it names and mark-read is scoped to its
+# owner (a rev 603 trip alert; until 16 Oct the retired YOLOv8 variance).
 {
   echo
   echo "==================================================================="

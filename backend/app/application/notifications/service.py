@@ -4,10 +4,9 @@ Rows in `notifications` are the record; FCM delivery is a later concern
 (the roadmap's Tier 3 decision: an in-app list is enough for testing, so
 `delivery_status` stays 'queued' and `fcm_message_id` stays NULL).
 
-The first producer is the YOLOv8 audit: a flagged variance used to be
-written to `yolov8_audit_logs` and told no one. Now the Terminal Manager
-and the trip's Dispatcher each get a row pointing at the audit, so the console's
-queue is a destination rather than something staff must remember to open.
+Producers add rows to the caller's session without committing, so an
+event and the alerts about it land in one transaction. Each alert points
+at its entity, so the console opens the page that deals with it.
 """
 
 from __future__ import annotations
@@ -47,59 +46,13 @@ class NotificationService:
     # ------------------------------------------------------------------
     # Producers
     # ------------------------------------------------------------------
-    async def notify_variance(
-        self, *, audit_id: str, trip: Trip, leg_sequence: int,
-        visual_count: int, booked_count: int, variance: int,
-    ) -> int:
-        """Alert the Terminal Manager and the trip's Dispatcher about a flagged headcount.
-
-        Adds rows to the session without committing; the caller owns the
-        transaction so the audit log and its alerts land together.
-        Returns the number of recipients.
-        """
-        if variance > 0:
-            headline = f"{variance} more aboard than the passenger list"
-            detail = "Possible unrecorded passengers."
-        else:
-            headline = f"{abs(variance)} fewer aboard than the passenger list"
-            detail = "Someone may have got off early or not been marked a no-show."
-        plate = trip.van.plate_number if trip.van is not None else "unassigned van"
-        route = trip.route.route_name if trip.route is not None else trip.route_id
-        message = (
-            f"{route} · {plate} · section {leg_sequence}: camera counted "
-            f"{visual_count}, passenger list shows {booked_count}. {detail}"
-        )
-
-        recipients = await self._staff(Role.TERMINAL_MANAGER)
-        if trip.dispatcher_id:
-            recipients.append((trip.dispatcher_id, Role.DISPATCHER.value))
-
-        now = app_tz.now()
-        for user_id, audience in recipients:
-            self.session.add(
-                Notification(
-                    notification_id=str(uuid.uuid4()),
-                    user_id=user_id,
-                    audience=audience,
-                    type="variance_alert",
-                    title=f"Headcount variance: {headline}",
-                    message=message[:500],
-                    related_entity_type="audit",
-                    related_entity_id=audit_id,
-                    is_read=False,
-                    delivery_status="queued",
-                    created_at=now,
-                )
-            )
-        return len(recipients)
-
     async def notify_sos(
         self, *, alert, raiser_name: str, raiser_role: str, trip: Trip | None,
         where: str,
     ) -> int:
         """Alert the office, and the crew of the trip it came from.
 
-        Same contract as notify_variance: rows are added to the session and
+        Rows are added to the session and
         the caller owns the transaction, so the alert and the notices that
         it happened land together. The person who raised it is not notified
         of their own emergency.
@@ -196,7 +149,7 @@ class NotificationService:
         """An alert to every active account in `roles`, plus the Dispatchers
         in `also`, about one entity (a trip, a van).
 
-        Same contract as notify_variance: rows join the caller's
+        Rows join the caller's
         transaction. The person whose own action raised the alert sees it
         on screen already and is skipped."""
         recipients = dict(await self._staff(*roles))

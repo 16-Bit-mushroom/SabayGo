@@ -1,0 +1,1304 @@
+===================================================================
+  SabayGo - Role Journey Test Report
+===================================================================
+
+  Generated : 2026-10-16 08:34:05 PST
+  Host      : cachyos-x8664
+  Git       : 1169e7b on redesign-rev468
+  API       : http://127.0.0.1:8000
+
+  Legend
+    PASS  assertion held
+    FAIL  regression - something that worked is now broken
+    GAP   endpoint not built yet (a checklist item, not a defect)
+
+-------------------------------------------------------------------
+
+PREFLIGHT
+  ok    API responding
+
+===================================================================
+  PASSENGER JOURNEY
+===================================================================
+
+── 1. Account ────────────────────────────────
+  PASS  register (201)
+  PASS  duplicate phone rejected (409)
+  PASS  short password rejected (422)
+  PASS  wrong password rejected (401)
+  PASS  login (200)
+  PASS  profile: Journey Tester
+  PASS  unauthenticated request rejected (401)
+
+── 2. Finding a trip ────────────────────────────────
+  PASS  list terminals (10 found)
+  PASS  search trips by sequence (legacy)
+  PASS  terminal picker has no duplicates
+  PASS  search by terminals: 2 departure(s) Ecoland -> Cotabato
+  PASS  reverse direction finds nothing (different LTFRB route)
+  PASS  search with no terminals rejected (422)
+  PASS  view route stops
+  PASS  check availability (14 seats)
+
+── 3. Booking ────────────────────────────────
+  PASS  reserve seat 
+  PASS  reversed segment rejected (422)
+  PASS  list my bookings
+  PASS  booking detail (pending)
+  PASS  unknown booking id -> 404
+
+── 4. Payment ────────────────────────────────
+  PASS  checkout session created
+  PASS  payment confirmed via signed webhook
+  PASS  booking is now confirmed
+
+── 5. Changing plans ────────────────────────────────
+  PASS  rescheduled to another trip
+  PASS  unpaid hold cancelled, space released (13 -> 14)
+  PASS  double cancel rejected (409)
+
+── 6. Travel day ────────────────────────────────
+  PASS  undo before check-in rejected (409)
+  PASS  checked in at the terminal
+  PASS  far check-in rejected (409)
+  PASS  my bookings carry checkin_opens_at / boarding_due_at
+  PASS  check-in undone (confirmed)
+  PASS  double undo rejected (409)
+  PASS  checked in again after undo
+
+── 7. Managing the account ────────────────────────────────
+  PASS  profile updated
+  PASS  password change with a wrong current password refused (409)
+  PASS  password changed
+  PASS  old password no longer signs in (401)
+  PASS  new password signs in
+  PASS  notifications listed
+
+── 8. Passengers cannot act as crew ────────────────────────────────
+  PASS  /scans blocked (403)
+  PASS  /trips/TRIP-DEMO-00000001/manifest blocked (403)
+  PASS  /boarding-audit blocked (403)
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /statements blocked (403)
+
+── 9. Closing the account ────────────────────────────────
+  PASS  close with a wrong password refused (409)
+  PASS  account closed (204)
+  PASS  closed account cannot sign in (401)
+  PASS  closed account's token refused (403)
+
+═══ SUMMARY ═══
+  passed  49
+  failed  0
+  gaps    0
+
+No failures. Gaps are unbuilt endpoints, not broken ones.
+
+===================================================================
+  DISPATCHER JOURNEY
+===================================================================
+
+── 1. Conductor signs in ────────────────────────────────
+  PASS  login
+  PASS  role is dispatcher
+  PASS  profile: Ramon Villanueva
+
+──    (setting up a paid passenger) ────────────────────────────────
+  PASS  passenger booked and paid
+
+── 2. Boarding ────────────────────────────────
+  PASS  the cashier records the 15 % share
+  PASS  the cashier starts the trip
+  PASS  valid ticket accepted
+  PASS  duplicate scan flagged (already_boarded)
+  PASS  unknown QR rejected without raising (wrong_trip)
+  PASS  wrong stop handled (already_boarded)
+  PASS  unpaid ticket refused (unpaid)
+
+── 3. Cash walk-ins ────────────────────────────────
+  PASS  anonymous walk-in logged -- status boarded
+  PASS  walk-in with receipt details -- P500.00
+  PASS  walk-in to an intermediate terminal (stop 1->3)
+  PASS  a walk-in from a later terminal is refused (rev 603)
+
+── 4. Manifest ────────────────────────────────
+        capacity=14  total=5  boarded=4  awaiting=0  unpaid=1
+        1->4  boarded     app
+        1->4  pending     app
+        1->4  boarded     walk-in
+        1->4  boarded     Maria Santos
+        1->3  boarded     walk-in
+  PASS  manifest retrieved
+  PASS  seats still sellable end-to-end: 9
+
+── 5. Departure ────────────────────────────────
+  PASS  departed -- 0 no-show(s) recorded
+  PASS  bookings closed after departure (409)
+
+── 6. A Dispatcher is not the Terminal Manager ────────────────────────────────
+  PASS  /fleet/vans blocked (403)
+  PASS  /config/policies blocked (403)
+  PASS  /statements blocked (403)
+  PASS  /boarding-audit blocked (403)
+  PASS  cannot add vans (403)
+
+═══ SUMMARY ═══
+  passed  24
+  failed  0
+  gaps    0
+
+
+===================================================================
+  OFFICE JOURNEY
+===================================================================
+
+── CASHIER — 1. Sign in ────────────────────────────────
+  PASS  login
+  PASS  role is cashier
+
+── CASHIER — 2. What the counter needs ────────────────────────────────
+  PASS  /fleet/vans/board readable
+  PASS  /fleet/vans readable
+  PASS  /config/trips readable
+  PASS  /statements readable
+
+── CASHIER — 3. Separation of duties ────────────────────────────────
+  PASS  cannot change a rule (403)
+  PASS  cannot add a van (403)
+  PASS  cannot open the Boarding Audit (403)
+  PASS  cannot create staff accounts (403)
+
+── TERMINAL MANAGER — 1. Sign in ────────────────────────────────
+  PASS  login
+  PASS  role is terminal_manager
+
+── TERMINAL MANAGER — 2. Fleet ────────────────────────────────
+  PASS  list vans (7)
+  PASS  operator added to the roster
+  PASS  van added with camera and its operator
+  PASS  van flagged out of service (monitoring only, not a maintenance module)
+  PASS  van returned to service
+
+── TERMINAL MANAGER — 3. Staff ────────────────────────────────
+  PASS  list staff (7)
+  PASS  Dispatcher provisioned
+  PASS  driver account refused (422)
+  PASS  Dispatcher suspended (deactivated, not deleted)
+  PASS  suspended account cannot log in (401)
+
+── TERMINAL MANAGER — 4. Configuration ────────────────────────────────
+  PASS  read all policies
+  PASS  match window set to 90 s
+  PASS  the history keeps each value, newest first, with who set it (the Cashier may read it)
+  PASS  unknown policy key rejected (404)
+  PASS  terminal created
+  PASS  route created -- 1 leg(s), 1 fare pair(s) needed
+  PASS  non-contiguous stop sequence rejected (409)
+  PASS  fare matrix set
+  PASS  reversed fare pair rejected (422)
+
+── TERMINAL MANAGER — 5. Schedules ────────────────────────────────
+  PASS  weekday template created
+  PASS  malformed day mask rejected (422)
+        2026-10-16  created=0  skipped=9
+        2026-10-17  created=1  skipped=8
+        2026-10-18  created=1  skipped=8
+  PASS  trips generated
+  PASS  re-run is idempotent (created=0)
+  PASS  special trip created -- 14 seat-legs
+  PASS  special trip in the past rejected (409)
+
+── TERMINAL MANAGER — 6. Money, checks and who is on what ────────────────────────────────
+  PASS  /statements readable
+  PASS  /boarding-audit readable
+  PASS  /disputes readable
+  PASS  /driving-flags readable
+  PASS  /fleet/vans/board readable
+  PASS  trip board shows van, operator and Dispatcher (8 trips)
+
+═══ SUMMARY ═══
+  passed  43
+  failed  0
+  gaps    0
+
+
+===================================================================
+  NOTIFICATIONS (E.1)
+===================================================================
+  PASS  payment block lifted (200)
+  PASS  terminal_manager not alerted
+  PASS  dispatcher not alerted
+  PASS  cashier received one payment_block_override
+  PASS  cashier row points at the trip
+  PASS  cashier row unread
+  PASS  cashier unread_count +1
+  PASS  Terminal Manager cannot mark the Cashier's row read
+  PASS  Cashier marks own row read
+  PASS  Cashier unread_count back to baseline
+  PASS  Dispatcher read-all
+  PASS  Dispatcher has nothing unread after read-all
+
+ALL PASSED
+
+===================================================================
+  SOS EMERGENCY ALERTS (2.3.5)
+===================================================================
+
+── Dispatcher raises an SOS from the van ─────────────────────
+  PASS  alert recorded (eb4cdaf9-0b11-4726-b5ca-79b4c65e8a63)
+        in-app  : 2 recipient(s)
+        sms     : attempted 2, sent 0, skipped 2
+        told    : Alert recorded. 2 in-app alert(s) sent to the office. SMS could not be delivered -- check the gateway.
+
+── the alert survives a silent SMS channel ─────────────────────
+  PASS  office alerted in-app even with 0 SMS delivered
+
+── a repeat press does not raise a second emergency ─────────────────────
+  PASS  second press returned the open alert, not a new one
+
+── a passenger cannot raise an alert against a trip they are not on ─────────────────────
+  PASS  refused (403): no booking on that trip
+
+── an SOS with no trip is always allowed ─────────────────────
+  PASS  terminal-side alert accepted (e5f77bf3-e32d-4f75-a9b8-51e78c4b87ff)
+
+── crew cannot read the office queue ─────────────────────
+  PASS  queue is office-only (403)
+
+── office sees both alerts, newest first ─────────────────────
+        open         security  passenger  Sarah Kalaw            no location
+        open         medical   dispatcher Ramon Villanueva       https://www.openstreetmap.org/?mlat=7.0731&mlon=125.6128
+  PASS  2 open alert(s) in the queue
+
+── closing an emergency without a note is refused ─────────────────────
+  PASS  a closed emergency must say what happened (409)
+
+── office acknowledges; the raiser is told a human has it ─────────────────────
+  PASS  acknowledged
+        dispatcher inbox: The A2Z office has acknowledged your emergency alert and is responding.
+  PASS  the person who pressed the button was told
+
+── acknowledging twice is refused ─────────────────────
+  PASS  already acknowledged (409)
+
+── office resolves with a note ─────────────────────
+  PASS  resolved
+        resolved  by Maria Santos  -- Ambulance met the van at Panabo. Passenger stable.
+
+── a resolved alert clears the way for the next one ─────────────────────
+  PASS  a new emergency is a new alert once the last is closed
+
+SOS: 13 passed, 0 failed
+
+===================================================================
+  SETTINGS, MEMBER ROSTER AND PHONE POOL (rev 468 step 3)
+===================================================================
+  PASS  manager and cashier signed in
+
+── 1. Settings keep their history (Table 33) ────────────────────────────────
+  PASS  cashier reads the rules
+  PASS  settings keys present (rev 603)
+  PASS  cashier cannot change a rule
+  PASS  a rate above 100 % is refused
+  PASS  retention cannot be unset
+  PASS  zero departure readings is refused
+  PASS  a retention period of 0 days is refused
+  PASS  a negative gap is refused
+  PASS  manager sets the start window to 15
+  PASS  the new value names who set it
+  PASS  history: one new row, newest first; re-saving the same value adds none
+  PASS  the list shows the value in force
+  PASS  unknown key 404
+
+── 2. Operators ────────────────────────────────
+  PASS  cashier cannot add an operator by hand
+  PASS  a malformed licence is refused
+  PASS  a malformed phone number is refused
+  PASS  manager adds an operator
+  PASS  licence kept as printed (R17-92-110917)
+  PASS  a new operator is Pending
+  PASS  the same licence typed with dashes is a duplicate
+  PASS  cashier cannot validate
+  PASS  manager validates the operator
+  PASS  a renewed licence goes back to Pending for re-validation
+  PASS  a required field cannot be blanked
+
+── 3. Vans ────────────────────────────────
+  PASS  a van needs its operator
+  PASS  an unknown route is refused
+  PASS  manager adds a van with its operator
+  PASS  plate kept as RSA-0917
+  PASS  one van per operator
+  PASS  duplicate plate refused
+  PASS  a van cannot be validated without its four photos
+  PASS  a file that is not an image is refused, whatever its name
+  PASS  cashier uploads the fourth photo
+  PASS  photo is served
+  PASS  with four photos the van validates
+  PASS  a replaced photo returns the van to Pending
+  PASS  the van can pass to an operator with no van
+  PASS  van now shows its new operator
+
+── 4. Dispatchers ────────────────────────────────
+  PASS  manager validates a Dispatcher
+  PASS  office staff are not on the roster
+  PASS  crew list shows the validation
+
+── 5. Import with preview ────────────────────────────────
+  PASS  operators CSV template
+  PASS  template header is the import's columns
+  PASS  vans Excel template
+  PASS  template is a real .xlsx
+  PASS  cashier previews an operators file
+  PASS  preview: 2 pass, 4 fail, each with its reason; blank row skipped
+  PASS  a preview saves nothing
+  PASS  cashier confirms the import
+  PASS  logged: 6 rows, 2 accepted, 4 rejected, rejected file linked
+  PASS  two operators saved
+  PASS  imported operators are Pending under their batch
+  PASS  rejected rows download
+  PASS  rejected file: template columns plus a reason, 4 rows
+  PASS  the rejected file uploads again as it is
+  PASS  its rows still fail until corrected
+  PASS  the manager validates what the cashier imported
+  PASS  whoever imported a record cannot validate it themselves
+  PASS  they may still reject it
+  PASS  cashier imports a vans .xlsx
+  PASS  vans: 1 saved; second van for one operator, unknown operator, bad seats/route, bad plate refused
+  PASS  a file missing a required column is refused
+  PASS  a file that is not CSV or .xlsx is refused
+  PASS  Dispatchers are not imported
+
+── 6. Export, logged ────────────────────────────────
+  PASS  cashier exports the LTFRB check list
+  PASS  LTFRB list: plate, CPC, operator, validation and date
+  PASS  our van is on it
+  PASS  operators as PDF
+  PASS  a real PDF
+  PASS  the LTFRB list is vans only
+  PASS  Dispatchers export
+  PASS  vans backup
+  PASS  a backup reads as an import file
+  PASS  and every row is recognised as already on the roster
+  PASS  the log holds the exports with their purpose and format
+  PASS  a Dispatcher cannot read the log
+
+── 7. Phone pool ────────────────────────────────
+  PASS  only the manager adds a phone
+  PASS  manager adds a phone
+  PASS  in the office; silent until the edge app reports
+  PASS  a phone goes out only with a Dispatcher
+  PASS  cashier checks the phone out to a Dispatcher and van
+  PASS  checked out, showing van and Dispatcher, warned it never reported
+  PASS  a phone cannot go out twice
+  PASS  a van cannot have two phones out
+  PASS  a phone that is out cannot be retired
+  PASS  cashier records the return and its condition
+  PASS  back in the office
+  PASS  a phone already in cannot be returned again
+  PASS  the van can take another phone once the first is back
+  PASS  only the manager retires a phone
+  PASS  manager retires the phone
+  PASS  a retired phone cannot go out
+  PASS  retired phones are left off the pool list
+  PASS  but kept on record
+
+95 passed, 0 failed
+
+===================================================================
+  TRIP LIFECYCLE (rev 468 step 4)
+===================================================================
+  PASS  manager, cashier and dispatchers signed in
+
+── 1. The timetable creates trips with no crew (rule 1) ────────────────────────────────
+  PASS  templates carry route, time and days only
+  PASS  manager generates trips days ahead
+  PASS  every generated trip waits with no van and no Dispatcher
+
+── 2. Assignment at the van's turn (rule 2, T24) ────────────────────────────────
+  PASS  a Dispatcher cannot assign
+  PASS  a van that is not validated cannot be picked (rule 6)
+  PASS  nor a Dispatcher who is not validated
+  PASS  manager assigns a validated van and Dispatcher
+  PASS  the board names who assigned
+  PASS  the manager's own assignment raises no alert
+  PASS  a van already on an overlapping trip is refused
+  PASS  T24 the cashier's assignment always works
+  PASS  AssignedBy is the cashier
+  PASS  the manager gets 'Assignment by Cashier'
+  PASS  nor a Dispatcher already on an overlapping trip
+  PASS  an empty assignment is refused
+
+── 3. The list is built before the start (rule 3, T2) ────────────────────────────────
+  PASS  the assigned Dispatcher lists a cash passenger on the scheduled trip
+  PASS  and reads its passenger list
+  PASS  the trip is still scheduled
+  PASS  another Dispatcher cannot read its share
+  PASS  the share has a verified (QR) and a declared (cash) line
+  PASS  T6a a cancellation before the payment is accepted
+  PASS  and takes its share off the amount due (P201.00 -> P150.00)
+
+── 4. The 15 % before Start (brief 2.1, T1, T3, T6, T7) ────────────────────────────────
+  PASS  start is refused before the window opens
+  PASS  and says when it opens
+  PASS  a Dispatcher cannot start a trip
+  PASS  T3 Start is blocked until the share is recorded
+  PASS  and says what is due
+  PASS  the Terminal Manager does not record payments (separation of duties)
+  PASS  nor does the Dispatcher
+  PASS  more than is due is refused
+  PASS  T1 the cashier records the share the Dispatcher handed over
+  PASS  PaymentStatus paid, nothing due
+  PASS  ListLockedAt set
+  PASS  RecordedBy the cashier, HandedOverBy the Dispatcher
+  PASS  T6b after the payment the list is locked: no cancellation
+  PASS  T7 a cash passenger is added after the payment
+  PASS  a top-up line of P27.00, and the trip is unpaid again
+  PASS  Start stays blocked until the top-up is recorded
+  PASS  the cashier records the top-up
+  PASS  a phone goes out with van XYZ-9876 and dispatcher@
+  PASS  T1 cashier starts the trip with the assigned van
+  PASS  StartMode manual
+  PASS  no review needed
+  PASS  T19 no phone with ABC-1234: Unaudited, No_Phone
+  PASS  the starter is warned
+  PASS  T20 warned the Dispatcher's phone is on another van
+  PASS  StartedBy is the cashier
+  PASS  operator name and plate copied onto the trip
+  PASS  manager alerted: Unaudited Trip
+  PASS  the Dispatcher too
+  PASS  the cashier who started it sees it on screen instead
+  PASS  a trip starts once
+
+── 5. The Terminal Manager's override (brief 2.1, T3) ────────────────────────────────
+  PASS  a cash passenger is listed on the second trip
+  PASS  nothing recorded: even the manager's Start is blocked
+  PASS  the cashier cannot override
+  PASS  an override needs a written reason
+  PASS  the manager overrides with a written reason
+  PASS  PaymentStatus overridden
+  PASS  the cashier is told
+  PASS  after the override the cashier starts it
+  PASS  with its phone out, the trip is Audited
+  PASS  and nothing to warn about
+  PASS  special trip S1 assigned a van only
+  PASS  T4 manual start is blocked with no Dispatcher
+
+── 6. The automatic start and its review (rules 9, 11; T14, T16) ────────────────────────────────
+  PASS  T14 the van left: the system starts S1
+  PASS  Auto_Assigned, StartedBy NULL
+  PASS  held for review, off the statement
+  PASS  started with no Dispatcher
+  PASS  'Unconfirmed Trip Start' alert, flagged No Dispatcher
+  PASS  no van assigned: the trip stays open
+  PASS  'Trip Not Started' raised once, not every time
+  PASS  the cashier cannot review a start
+  PASS  changing the van at review needs a reason
+  PASS  manager confirms the van
+  PASS  Reviewed
+  PASS  a start is reviewed once
+
+── 7. Void and change van: the Terminal Manager only (rule 12, T21) ────────────────────────────────
+  PASS  T21 the cashier cannot void
+  PASS  manager voids S1
+  PASS  Status cancelled
+  PASS  who, when and why kept, with the earlier van and operator
+  PASS  a scheduled trip can be voided too
+  PASS  T21 the cashier cannot change a started trip's van
+  PASS  a trip not yet started is changed through its assignment
+  PASS  manager changes the van of the started trip
+  PASS  the new plate is on the trip
+  PASS  the earlier van and operator are in the note
+  PASS  the new operator is copied
+  PASS  its fare lines move to the new van's statement; the payment stays where it was recorded
+
+── 8. Depart, the assignment block, arrive (rules 2, 7; T5, T12) ────────────────────────────────
+  PASS  only the assigned Dispatcher is crew
+  PASS  T26 the Dispatcher adds themselves as crew
+  PASS  CrewAboard set
+  PASS  another Dispatcher cannot tap Depart
+  PASS  a trip that has not started cannot depart
+  PASS  T12 the Dispatcher taps Depart
+  PASS  DepartureSource dispatcher
+  PASS  a trip departs once
+  PASS  on the other trip the cashier taps it
+  PASS  DepartureSource staff
+  PASS  an overridden trip did not leave unpaid
+  PASS  its share stays owed on the van's statement (P75.00)
+  PASS  T5 the van with an unpaid trip is refused its next assignment
+  PASS  and the detail says what it owes
+  PASS  the cashier is refused too
+  PASS  the cashier records the payment on the van's statement
+  PASS  the statement is settled
+  PASS  and the van can be assigned again
+  PASS  another Dispatcher cannot tap Arrived
+  PASS  the Dispatcher taps Arrived
+  PASS  Completed
+  PASS  a completed trip cannot be voided
+
+── 9. GPS departure, Not a passenger trip, Left Unpaid (rules 8-11; T13-T18) ────────────────────────────────
+  PASS  zone radius and N unset: no GPS departure
+  PASS  dispatcher5 lists a cash passenger: a boarding is counted
+  PASS  no move open: the app offers the button
+  PASS  'Other' needs a note
+  PASS  T17 dispatcher5 presses Not a passenger trip (Errand)
+  PASS  the app reads the open move back, to show End
+  PASS  one open move per van
+  PASS  T17 the van leaves on the errand: nothing starts
+  PASS  back inside the terminal zone, the move has ended
+  PASS  and none is open
+  PASS  the Dispatcher's trip names the operator (name, licence) and the plate, its share and crew state
+  PASS  T13 a single stray reading departs nothing
+  PASS  N readings outside the zone: departed, GPS
+  PASS  T15 nobody started it: Auto_Assigned, held for review
+  PASS  nothing was recorded: Left_Unpaid
+  PASS  'Left Unpaid' to the manager and the cashier
+  PASS  the share is held, off the statement: 15 % of P100 + P60 + P60
+  PASS  the held share still refuses the van's next assignment
+  PASS  T16 the manager reviews it
+  PASS  its lines join the statement: held moves into owed
+  PASS  a started trip nobody departed departs when its van leaves
+  PASS  its share was recorded: not Left_Unpaid
+
+133 passed, 0 failed
+
+===================================================================
+  EDGE PHONE INGESTION (rev 468 step 5)
+===================================================================
+  PASS  staff signed in
+
+── 1. Each phone has its own token ────────────────────────────────
+  PASS  adding a phone shows its token once
+  PASS  the pool list never shows it
+  PASS  no token, no upload
+  PASS  a wrong token is refused
+  PASS  the phone signs in with its token
+  PASS  and learns it is in the office, with no van: it does not count
+  PASS  only the manager re-issues a token
+  PASS  a re-issued token revokes the old one
+  PASS  the new one works
+
+── 2. Status reports: stored once, on the server's clock ────────────────────────────────
+  PASS  a report dated 10 min ahead is refused whole
+  PASS  two reports stored
+  PASS  the same batch again stores nothing
+  PASS  the pool shows the phone reporting, battery 80%
+
+── 3. Door events: by the van the phone is in, by time (rules 11, 12) ────────────────────────────────
+  PASS  an event before the check-out has no van: ignored
+  PASS  after check-out the phone shows its van's plate
+  PASS  rule 13 the van is assigned a trip: the phone counts for it
+  PASS  a boarding is uploaded, declaring its still's SHA-256
+  PASS  T25a it goes on the trip the van is assigned to, before Start
+  PASS  the trip of ABC-1234
+  PASS  sent again after a dropped connection: not stored twice
+  PASS  the blurred still is stored
+  PASS  it is the still the event declared
+  PASS  kept in storage/, not the public media folder
+  PASS  the same still again is accepted as a repeat
+  PASS  another image is refused: evidence is never replaced
+  PASS  an event that declared no still takes none
+  PASS  only an image is accepted
+  PASS  a phone cannot attach a still to another phone's event
+
+── 4. The phone at the start (4.4; T12) ────────────────────────────────
+  PASS  cashier starts ABC-1234's trip
+  PASS  its phone is reporting: Audited, no warning
+  PASS  T12 the trip whose phone last reported 5 min ago still starts
+  PASS  Unaudited, Silent_At_Start
+  PASS  and the starter is told why
+  PASS  the manager is alerted
+
+── 5. A silence mid-trip (4.4; T13, T23) ────────────────────────────────
+  PASS  reports through the first ten minutes: still Audited
+  PASS  silent ten minutes: the alert goes out at once
+  PASS  once per silence, not every minute
+  PASS  but the trip is not marked yet
+  PASS  T23 the stored reports cover the gap: it stays Audited
+  PASS  a covered lens is marked at once: Lens_Blocked
+
+── 6. Events with no trip are held, then claimed (rules 13, 14; T25b, T13) ────────────────────────────────
+  PASS  NBC-7788 is taken off its trip: it has no assignment
+  PASS  rule 13 with no assigned trip the phone pauses
+  PASS  T25b a boarding sent anyway is held
+  PASS  outside the ledger
+  PASS  'Trip Not Started' about the van
+  PASS  raised once while its events wait
+  PASS  the van is assigned its trip, 2 h before departure
+  PASS  rule 14 the held events move onto it at the assignment, matched by time
+  PASS  the phone counts again, for that trip
+  PASS  a boarding 2 h before Start goes straight onto the assigned trip
+  PASS  the cashier records its share
+  PASS  its trip is started
+  PASS  its boardings from before Start are all on it
+  PASS  reports through 12 min ago
+  PASS  T13 reconnects, and its stored reports leave a 7-min gap: Lost_En_Route
+  PASS  Unaudited from the start of the gap (12 min ago)
+
+── 7. GPS from the phone (rules 8, 9, 11) ────────────────────────────────
+  PASS  a reading at the terminal
+  PASS  goes on ABC-1234's trip
+  PASS  N readings outside the zone with a boarding counted: departed, GPS
+
+── 8. A van with no trip leaves with passengers (rule 7, 4.6; T6) ────────────────────────────────
+  PASS  LCT-9042 has no trip: its boarding is held
+  PASS  still at the terminal: the reading is held, nothing starts
+  PASS  a single reading out of the zone starts nothing
+  PASS  T6 it leaves: the Mati trip waiting for a van gets it, Auto_Detected
+  PASS  held for review, departed, Detected
+  PASS  the Dispatcher who has the phone is on it
+  PASS  the held boarding is on the trip
+  PASS  'Unconfirmed Trip Start' to the manager
+  PASS  dispatcher3 taps Arrived
+  PASS  rule 13 the van has arrived: the phone pauses for the way back
+  PASS  the phone fell silent and the trip ended first: Lost_En_Route, final
+  PASS  a new boarding after that trip ended is held
+  PASS  it leaves again, and no trip on its route waits: no trip is invented (2.5)
+  PASS  its boarding stays held
+  PASS  'Trip Not Started' tells the manager the van left with passengers and no trip
+  PASS  once while its events wait, not on every reading
+
+── 9. The hash chain (6.2; T39) ────────────────────────────────
+  PASS  ABC-1234's trip: every link holds
+  PASS  every event is chained
+  PASS  its first boarding is link 1
+  PASS  a Dispatcher does not verify chains
+  PASS  NBC-7788's trip: the held events were chained as they were claimed
+  PASS  T39 the still deleted under retention: the chain still verifies, by its hash
+  PASS  an event changed afterwards breaks its link
+  PASS  put back, it holds again
+
+── 10. A retired phone uploads nothing ────────────────────────────────
+  PASS  its token stops working
+
+85 passed, 0 failed
+
+===================================================================
+  BOARDING POINT (rev 603)
+===================================================================
+  PASS  signed in
+
+── search offers the starting terminal only ─────────────────────
+  PASS  from the starting terminal the trip is offered
+  PASS  from a later terminal nothing is offered
+  PASS  the stop-sequence search refuses a later boarding stop
+  PASS  no space is advertised from a later stop
+  PASS  space from stop 1 is advertised
+
+── app bookings board at stop 1 ─────────────────────
+  PASS  a booking from stop 2 is refused
+  PASS  and says why
+  PASS  a booking from stop 1 is taken
+  PASS  reserve has no seat number
+  PASS  a stored stop-2 booking cannot be moved to another trip
+
+── the Dispatcher lists cash passengers at stop 1 ─────────────────────
+  PASS  a cash passenger from stop 2 is refused
+  PASS  a roadside pickup is refused
+  PASS  the refusals wrote no booking
+  PASS  listed on the scheduled trip at the table fare P340.00
+  PASS  no manual-fare flag
+
+── nothing is listed after departure ─────────────────────
+  PASS  the cashier records the share
+  PASS  the trip is started
+  PASS  listed while the trip boards
+  PASS  the trip departs
+  PASS  a cash passenger after departure is refused
+  PASS  and so is an app booking
+
+── the passenger list has no seat numbers or roadside fields ─────────────────────
+  PASS  no seat numbers
+  PASS  no roadside fields
+
+24 passed, 0 failed
+
+===================================================================
+  SPECIAL TRIPS (rev 603)
+===================================================================
+  PASS  signed in
+
+── 1. A passenger asks for the whole van in the app (T50) ─────────────────────
+  PASS  T50 15 passengers is refused: the van seats 14
+  PASS  a pickup time already past is refused
+  PASS  the office does not ask in the app
+  PASS  T50 with 14 the request is stored
+  PASS  from the app: no one entered it, no fee yet
+  PASS  PassengerID is set
+  PASS  'Special Trip Request' to the Terminal Manager and the Cashier
+  PASS  the passenger sees their requests
+
+── 2. The office reviews ─────────────────────
+  PASS  a Dispatcher cannot read the requests
+  PASS  the Cashier reads them
+  PASS  all three are waiting
+  PASS  a fee needs a note on what it is based on
+  PASS  the passenger cannot approve
+  PASS  the Terminal Manager agrees the fee and approves
+  PASS  approved, fee ₱3,500, unpaid
+  PASS  approved once only
+  PASS  its trip: no route, no van yet
+  PASS  IsSpecial = TRUE
+  PASS  the passenger is told the fee
+  PASS  the Cashier rejects one, with a reason
+  PASS  the passenger is told why
+  PASS  another passenger cannot withdraw it
+  PASS  the passenger withdraws one before approval
+  PASS  an approved one is not withdrawn in the app
+
+── 3. A walk-in at the counter (T49) ─────────────────────
+  PASS  a Dispatcher cannot enter one
+  PASS  T49 the Cashier enters it and agrees the fee
+  PASS  PassengerID NULL, CustomerName set, approved as entered
+  PASS  EnteredBy is the Cashier
+  PASS  FeeNote kept
+  PASS  the trip is created with IsSpecial = TRUE
+
+── 4. The operator declines a far trip (T52) ─────────────────────
+  PASS  LCT-9042 and dispatcher2 are assigned at the van's turn
+  PASS  T52 its operator declines: the Cashier assigns NBC-7788
+  PASS  the first assignment is cleared
+  PASS  still a special trip
+
+── 5. Payment first (T51) ─────────────────────
+  PASS  the walk-in gets LCT-9042 and dispatcher3
+  PASS  Start is refused while the fee is unpaid
+  PASS  and says the fee comes first
+  PASS  an override lifts the 15 % block
+  PASS  but not the fee: Start still waits
+  PASS  dispatcher3's app shows the rental, its ₱2,000 fee, unpaid
+  PASS  another Dispatcher cannot log its fee
+  PASS  dispatcher3 logs the ₱2,000 received in cash
+  PASS  the fee is paid
+  PASS  logged once only
+  PASS  T51 one fare line: declared, ₱2,000, share ₱300
+  PASS  the line names its request
+  PASS  D = ₱2,000, RemittanceOwed = ₱300
+
+──    (the override is withdrawn to show the 15 % block too) ─────────────────────
+  PASS  T51 Start is blocked until the Cashier records ₱300
+  PASS  and says ₱300 is due
+  PASS  the Cashier records ₱300
+  PASS  Start
+
+── 5b. The fee through the app: verified (V) ─────────────────────
+  PASS  a rejected request is not paid
+  PASS  another passenger cannot pay it
+  PASS  nor a counter customer's
+  PASS  the renter starts the checkout
+  PASS  for the agreed ₱3,500
+  PASS  an unsigned webhook is refused: still unpaid
+  PASS  paid on the sandbox page: the signed webhook settles it
+  PASS  the fee is paid, with the gateway's reference
+  PASS  one fare line: verified, share ₱525
+  PASS  the page again: nothing to pay
+  PASS  still one line
+  PASS  a paid fee is not checked out again
+  PASS  nor logged again in cash
+
+── 6. A request closes with its trip ─────────────────────
+  PASS  dispatcher3 departs
+  PASS  90 km/h for 30 s: no flag while special_trip_speed_kmh is unset
+  PASS  only the Terminal Manager sets it
+  PASS  the Terminal Manager sets 60 km/h
+  PASS  now overspeed is flagged: no stretch, the 60 km/h default
+  PASS  and taps Arrived
+  PASS  the walk-in request is completed
+  PASS  the manager voids the app rental
+  PASS  its request is cancelled
+  PASS  and the passenger is told
+
+75 passed, 0 failed
+
+===================================================================
+  DOOR CHECK (rev 603)
+===================================================================
+  PASS  signed in
+
+── 1. The list: a QR ticket and a cash entry ─────────────────────
+  PASS  the Dispatcher scans the ticket
+  PASS  and lists a cash passenger
+  PASS  T22 nobody counted aboard yet, 2 listed: fewer aboard is a no-show, nothing to do
+
+── 2. Boardings matched by time (6.1) ─────────────────────
+  PASS  a boarding 30 s after the scan: Matched_QR
+  PASS  a boarding 1 min before the cash entry: Matched_Log
+  PASS  2 aboard, 2 listed
+  PASS  a boarding with no scan or entry within 2 min: Unlisted, pending
+  PASS  3 aboard against 2 listed
+  PASS  the Dispatcher's screen names the boarding
+  PASS  another Dispatcher cannot read it
+
+── 3. More aboard than listed stops Depart (T23) ─────────────────────
+  PASS  share recorded, trip started
+  PASS  T23 Depart is refused
+  PASS  and says 3 aboard, 2 listed
+  PASS  the office's Depart too
+  PASS  a matched boarding needs no fix
+  PASS  the Dispatcher lists the person, with a destination
+  PASS  ResolutionStatus Listed
+  PASS  3 aboard, 3 listed
+  PASS  a seat added after the payment is a top-up (T7)
+  PASS  another boarding nobody listed
+  PASS  a reason needs words
+  PASS  another Dispatcher cannot explain it
+  PASS  the Dispatcher types a reason
+  PASS  ResolutionStatus Explained
+  PASS  with who
+  PASS  nothing left to resolve
+  PASS  a resolved boarding is not resolved twice
+
+── 4. The crew is not a passenger (2.3) ─────────────────────
+  PASS  the Dispatcher climbs in as crew: still 4 aboard
+  PASS  someone steps out before departure: 3 aboard
+
+── 5. Depart, and after ─────────────────────
+  PASS  the Dispatcher departs
+  PASS  the list was right: no alert
+  PASS  T25 a boarding by the road after departure: not matched, not flagged
+  PASS  and the before-departure count is unchanged
+
+── 6. A phone that was offline shows the van left with more (T24) ─────────────────────
+  PASS  a boarding from before departure, uploaded now: Unlisted
+  PASS  the count rules, not the event: 4 aboard = 3 listed + 1 explained, no alert
+  PASS  a second one: 5 aboard
+  PASS  T24 'Departed With More Than Listed' to the Terminal Manager
+  PASS  once per trip
+  PASS  after departure it is no longer resolved
+
+── 7. The van held to 14 (2.3; T25) ─────────────────────
+  PASS  14 aboard: no alert
+  PASS  a 15th boards between Digos City Terminal and Kidapawan City Terminal
+  PASS  T25 'Capacity Alert' with the time and the place: between Digos City Terminal and Kidapawan City Terminal
+  PASS  to the Cashier and the Dispatcher too
+  PASS  the event is geotagged: stretch 2, nearest stop, distance from the start
+  PASS  still above 14: no second alert
+  PASS  two step out, one boards: 15 again
+  PASS  a new crossing, a new alert: placed from the GPS readings, at Kidapawan City Terminal
+
+── 8. Nobody left aboard (4.1; T47) ─────────────────────
+  PASS  T47 two still aboard: the trip stays open
+  PASS  the last one steps out: Completed
+  PASS  dated by that alighting
+  PASS  and once it has passed, the phone pauses
+
+── 9. The Terminal Manager's Boarding Audit (brief 9) ─────────────────────
+  PASS  the Terminal Manager's alone: not the Cashier, not the Dispatcher
+  PASS  every unlisted boarding before departure, in time order: 3 uploaded late, 1 reason, 1 fix, the crew
+  PASS  the Dispatcher marked themselves crew: the last boarding is theirs
+  PASS  the fix names the person's destination: Kidapawan City Terminal
+  PASS  the reason is kept
+  PASS  with the Dispatcher who gave it
+  PASS  both capacity alerts, with the number aboard and the general place
+  PASS  the departure with more aboard than listed
+  PASS  the hash chain holds over every event
+  PASS  the operator, the van and the Dispatcher
+  PASS  no still was sent, and none is pretended
+  PASS  another day's audit does not show it
+  PASS  Trip Monitoring: the camera's count (0, everyone off) and the phone out with the van, silent (no report yet)
+
+65 passed, 0 failed
+
+===================================================================
+  HOME PICKUP (rev 603)
+===================================================================
+  PASS  signed in
+
+── 1. Book for someone else, with a pin (T30) ─────────────────────
+  PASS  not offered while home_pickup_max_route_m is unset
+  PASS  a Dispatcher does not book a home pickup
+  PASS  T30 b a pin 2 km from the route is refused
+  PASS  and neither seat is kept
+  PASS  a drop-off the route does not have is refused
+  PASS  with one space left the pickup is refused
+  PASS  and the relative's seat is not held
+  PASS  T30 a a pin 150 m from the route is accepted automatically
+  PASS  RouteDistanceM is stored (150 m)
+  PASS  Status 'requested'
+  PASS  the passenger's seat: booked for someone else, a home-pickup seat, from stop 1
+  PASS  the relative's own seat
+  PASS  both are the relative's, on two different spaces
+  PASS  the relative's app shows both seats as the pickup's, which is the passenger's, and offers no reschedule
+
+── 2. Paying and activation (T31 a, T32) ─────────────────────
+  PASS  no activation while the passenger's seat is unpaid
+  PASS  the relative's ticket scans valid
+  PASS  and the Dispatcher is told the pickup is not activated
+  PASS  the pickup waits
+  PASS  T31 a the relative checks out the passenger's seat through the gateway
+  PASS  and pays on the sandbox page: the signed webhook settles it
+  PASS  the passenger's seat is paid (V)
+  PASS  the passenger's ticket is refused at the terminal door
+  PASS  they board at the pin
+  PASS  another Dispatcher cannot activate it
+  PASS  T32 b the trip's Dispatcher activates it by hand
+  PASS  ActivationMode 'dispatcher_entry', ActivatedBy the Dispatcher
+  PASS  not twice
+  PASS  a second relative, both seats paid, scans their ticket
+  PASS  the scan says the pickup is activated
+  PASS  T32 a ActivationMode 'qr_scan'
+  PASS  a passenger cannot list the trip's pickups
+  PASS  the Dispatcher lists them
+  PASS  with the passenger's name, the pin's note
+
+── 3. Gateway down: a payment screenshot in the trip chat (T31 b, T41 a) ─────────────────────
+  PASS  nothing to confirm before a screenshot is sent
+  PASS  another passenger cannot send the proof
+  PASS  nor the Dispatcher
+  PASS  T41 a an image over ChatImageMaxKb (10,240 KB) is refused
+  PASS  a file that is not an image is refused
+  PASS  neither becomes the proof
+  PASS  T31 b the relative sends the screenshot
+  PASS  it is the pickup's ProofMessageID
+  PASS  both unpaid seats are taken again and held until departure, not ten minutes
+  PASS  an image message in their chat with the Dispatcher, kept 30 days (RetainUntil)
+  PASS  the Dispatcher has it unread
+  PASS  a second screenshot, before confirmation
+  PASS  replaces the first as the proof
+  PASS  the trip's Dispatcher opens it
+  PASS  the same bytes the relative sent
+  PASS  so do the Terminal Manager and the relative
+  PASS  not another passenger or another Dispatcher
+  PASS  stored in storage/chat, not the public media folder
+  PASS  the Terminal Manager does not confirm it: the Dispatcher confirms to them
+  PASS  nor another Dispatcher
+  PASS  the trip's Dispatcher confirms it
+  PASS  both seats are paid; ProofConfirmedBy the Dispatcher
+  PASS  their spaces are booked, no longer on hold
+  PASS  both seats count in V on the statement
+  PASS  'Home Pickup Proof' to the Terminal Manager
+  PASS  not confirmed twice
+  PASS  no screenshot once both seats are paid
+  PASS  and the pickup can be activated
+
+── 4. Cancelling and moving ─────────────────────
+  PASS  the relative cancels their own seat
+  PASS  the passenger's seat and the pickup go with it
+  PASS  the relative cancels the passenger's seat
+  PASS  the pickup goes; the relative's seat stays theirs
+  PASS  a home-pickup seat is not moved to another trip
+  PASS  nor the relative's
+  PASS  a third pickup is paid but never activated (the relative does not come)
+
+── 5. Departure and the stop at the pin ─────────────────────
+  PASS  the van goes to the pin only after it leaves
+  PASS  share recorded, trip started
+  PASS  the Dispatcher departs
+  PASS  activated pickups' seats are kept: they board after departure
+  PASS  a pickup never activated is a no-show, its seat owed
+  PASS  the stop closes only once the van is at the pin
+  PASS  another Dispatcher cannot mark it
+  PASS  the van is at the pin
+  PASS  Status 'arrived', ArrivedAt set
+  PASS  an outcome other than boarded or no-show is refused
+  PASS  the Dispatcher marks the passenger boarded
+  PASS  inside the 10-minute wait: ClosedEarly, ClosedBy; the seat is boarded
+  PASS  after the wait, the passenger was not found
+  PASS  not an early end; the seat is a no-show and still owed
+  PASS  its space is released
+  PASS  a closed stop is not closed again
+
+85 passed, 0 failed
+
+===================================================================
+  DISPUTES (rev 603)
+===================================================================
+  PASS  manager, cashier, dispatchers and passenger signed in
+
+── 1. The operator disputes a fare line at the counter (T9) ─────────────────────
+  PASS  the Dispatcher lists a cash passenger to stop 2
+  PASS  another trip's Dispatcher cannot record it
+  PASS  nor a passenger
+  PASS  a fare-line dispute names its line
+  PASS  the operator's own words are required
+  PASS  the trip's Dispatcher records the operator's dispute of the cash seat
+  PASS  Fare_Line, AmountDisputed = the line's share (P27.00), open, by the Dispatcher
+  PASS  it reads for the screen: the trip, the van, the line in words, who recorded it
+  PASS  one line carries one dispute
+  PASS  the disputed share is shown apart and left out of the amount due
+  PASS  the Terminal Manager is alerted: Dispute Raised
+  PASS  a second cash passenger to stop 2
+  PASS  goes on a line of its own
+  PASS  the contested line stays as it was contested
+
+── 2. The undisputed part is paid; the line is closed to disputes (T9, T11) ─────────────────────
+  PASS  T9 the operator pays the undisputed part (P27.00)
+  PASS  paid, nothing due, P27.00 waits
+  PASS  the van's statement names the operator and who recorded the payment, line by trip
+  PASS  T11 a line cannot be disputed after the payment is recorded
+  PASS  and the Cashier is told why
+  PASS  a cash passenger is added after the payment
+  PASS  as a top-up line
+  PASS  a top-up can be disputed until it is paid
+  PASS  raised by the Cashier
+  PASS  so nothing is due
+  PASS  T9 Start is allowed: the block checks the undisputed amount only
+
+── 3. Only the Terminal Manager decides (T9 a, b) ─────────────────────
+  PASS  a Cashier who tries to decide is refused
+  PASS  so is a Dispatcher
+  PASS  a decision needs its reason
+  PASS  only an adjusted decision sets an amount
+  PASS  T9 a the Terminal Manager upholds it
+  PASS  DecidedBy and DecisionNote stored
+  PASS  and DecidedAt
+  PASS  the line leaves the amount owed, and its fare the declared income
+  PASS  a decision is final
+  PASS  T9 b the top-up dispute is rejected
+  PASS  its share becomes due, and the trip is unpaid again
+  PASS  the Cashier records it
+  PASS  the statement is settled
+
+── 4. Adjusted and withdrawn (T9 c) ─────────────────────
+  PASS  three cash lines on XYZ-9876's trip
+  PASS  the Terminal Manager records one too
+  PASS  three shares wait
+  PASS  another trip's Dispatcher cannot withdraw it
+  PASS  the operator withdraws one
+  PASS  Withdrawn, no outcome, who recorded it
+  PASS  its share is due again
+  PASS  a withdrawn dispute is not decided
+  PASS  a withdrawn dispute does not block a new one
+  PASS  and the Cashier records its withdrawal
+  PASS  an adjusted share above the disputed one is refused
+  PASS  an adjusted decision names the share due
+  PASS  T9 c adjusted
+  PASS  AdjustedAmount stored
+  PASS  the share due is the adjusted amount; the fares stay
+  PASS  the child's fare is rejected
+  PASS  due: everything but the adjusted part
+  PASS  Start waits for it
+  PASS  the Cashier records it
+  PASS  and Start is allowed
+
+── 5. A driving flag, after the trip (T10) ─────────────────────
+  PASS  only that trip's Dispatcher records it
+  PASS  a dispute names one item
+  PASS  T10 the operator disputes a driving flag after the trip
+  PASS  Driving_Flag, AmountDisputed 0.00
+  PASS  on the van's statement for that day
+  PASS  nothing is withheld: the statement stays settled
+  PASS  one flag carries one dispute
+  PASS  a driving flag cannot be adjusted
+  PASS  the Dispatcher cannot decide it
+  PASS  the Terminal Manager upholds it
+  PASS  the flag is dismissed
+  PASS  the Cashier records another
+  PASS  it is rejected
+  PASS  the flag stands, reviewed
+  PASS  a flag whose trip has no GPS readings kept cannot be disputed
+
+── 6. Reading disputes ─────────────────────
+  PASS  the Dispatcher lists their trip's disputes
+  PASS  both of them
+  PASS  a Dispatcher names the trip
+  PASS  not another Dispatcher's trip
+  PASS  the office filters by trip and status
+  PASS  nothing is left open
+
+80 passed, 0 failed
+
+===================================================================
+  RETENTION (rev 603)
+===================================================================
+  PASS  signed in
+  PASS  RetentionDays is 30 (assumed)
+  PASS  the booking screen's camera notice reads the period in force, and the contact placeholder
+
+── 1. Evidence: stills, GPS readings, a flag, a dispute, chat images ─────────────────────
+  PASS  two unlisted boardings on ABC-1234's trip, each with its still
+  PASS  the Dispatcher explains the first; the second stays pending
+  PASS  a listed boarding on XYZ-9876's trip, with its still
+  PASS  the operator disputes a line on XYZ-9876's trip
+  PASS  GPS readings on both trips, a completed trip with an open flag, and one held
+  PASS  two payment screenshots: one due today, one tomorrow
+
+── 2. Only the Terminal Manager sees a still (T38) ─────────────────────
+  PASS  the Terminal Manager receives it
+  PASS  the very still the phone sent
+  PASS  refused to the Cashier, the Dispatcher and a passenger
+  PASS  the Dispatcher's door check says a still exists, never where
+
+── 3. Today: only what is due goes (T41 b) ─────────────────────
+  PASS  nothing within 30 days is deleted; the screenshot due today is
+  PASS  its message stays, with no attachment
+  PASS  and the file is gone
+  PASS  the one due tomorrow is kept
+
+── 4. 31 days on: what nobody needs goes (T36, T37, T39, T40) ─────────────────────
+  PASS  T36 a reviewed still: file deleted, SnapshotURL NULL, SnapshotDeletedAt set, SnapshotHash kept
+  PASS  T37 an unresolved over-list boarding keeps its still
+  PASS  T40 a trip with an open dispute keeps its still
+  PASS  T40 and its GPS readings
+  PASS  ABC-1234's readings are deleted
+  PASS  a trip with a flag not yet reviewed keeps its readings
+  PASS  a held reading is deleted
+  PASS  and the screenshot due tomorrow
+  PASS  T39 the chain still verifies without the image
+  PASS  the Terminal Manager is told it is no longer kept
+  PASS  because of retention
+  PASS  the phone sending it again changes nothing
+  PASS  the still stays deleted
+
+── 5. Once decided and reviewed, the rest goes ─────────────────────
+  PASS  the two stills and the two readings left are deleted
+  PASS  nothing is left past the period
+  PASS  the driving flag itself stays
+
+── 6. A still sent after its period is not kept ─────────────────────
+  PASS  refused: past the retention period
+  PASS  nothing is written
+
+35 passed, 0 failed
+
+===================================================================
+  DRIVING FLAGS (rev 603)
+===================================================================
+
+The sample trip (brief 12.1)
+  flags: ['overspeed', 'en_route_stop', 'unscheduled_stop', 'slow_stretch']
+  PASS  one overspeed
+  PASS  40 s at 88 km/h against 60, on Ecoland-Toril
+  PASS  the 210 s wait at the declared pin is not flagged, nor recorded as a stop
+  PASS  the 34 s stop is an en-route stop (recorded, not flagged)
+  PASS  the 244 s stop is an unscheduled stop
+  PASS  8,830 m from the nearest stop (8,831 m)
+  PASS  only Sta. Cruz-Digos is slow, 1.45 (1.45)
+  PASS  standing at Sta. Cruz and Digos, inside their zones, is not a stop
+
+Stretch times (tolerance lowered to show every ratio)
+  PASS  Ecoland-Toril 0.99: 17.3 min less 3.5 waiting (0.99)
+  PASS  Toril-Sta. Cruz 1.01 (1.01)
+
+The home-pickup wait
+  PASS  with no declared pickup, the 210 s wait is an unscheduled stop
+  PASS  past the allowed wait (60 s here), the rest counts: 150 s is unscheduled
+
+Readings
+  PASS  with no speed sent, it is taken from the distance travelled
+  PASS  a stop still under way past 120 s is flagged with no end, from the same start
+  PASS  under 120 s, it waits
+  PASS  a gap longer than the silent-phone gap breaks the stop: nothing is known inside it
+
+All passed.
+  PASS  signed in
+
+── 1. A2Z's speed limits, stretch by stretch (brief 6.3) ─────────────────────
+  PASS  none until the Terminal Manager sets them
+  PASS  the Cashier cannot set them
+  PASS  one limit for each stretch
+  PASS  the Terminal Manager sets 60, 80 and 80 km/h, 100 m stop zones
+  PASS  lengths stop to stop, each expected time (length - 2 x 100 m) / 55 km/h
+
+── 2. The trip on the road ─────────────────────
+  PASS  started
+  PASS  and departed
+  PASS  dated 45 minutes back, with its phone
+
+── 3. Overspeed, and a stop still under way ─────────────────────
+  PASS  the phone uploads its readings
+  PASS  all 122 on the trip
+  PASS  Overspeed: 90 km/h against 60 on the first stretch, 15 s
+  PASS  Unscheduled stop: past 120 s away from every stop, still under way
+  PASS  placed on the route, 6420 m from the start
+  PASS  standing in the terminal's zone is no stop
+  PASS  the Terminal Manager and the Dispatcher are alerted, not the Cashier
+  PASS  the alert says where, generally, and that it is for review
+
+── 4. The stop ends; a short stop is recorded, not flagged ─────────────────────
+  PASS  the same flag now has its end: 180 s
+  PASS  En-route stop: 30 s, recorded
+  PASS  and neither alerts again
+
+── 5. A flag no longer found goes, unless someone has looked ─────────────────────
+  PASS  the operator disputes one of them
+  PASS  the open one is deleted; the reviewed and the disputed stay
+
+── 6. Readings uploaded after the trip completed ─────────────────────
+  PASS  the Dispatcher taps Arrived
+  PASS  readings from before the arrival, uploaded late, go on the trip
+  PASS  and their overspeed is flagged
+  PASS  and alerted
+  PASS  a reading from after the arrival does not
+
+── 7. The Terminal Manager's list and review (6.4) ─────────────────────
+  PASS  the Cashier reads them, to record a dispute
+  PASS  every flag of the trip
+  PASS  a Dispatcher names the trip
+  PASS  their own trip's
+  PASS  not a passenger
+  PASS  each names the operator and van copied at the start: Juan Dela Cruz/N01-23-456789/ABC-1234
+  PASS  the overspeed is placed on its stretch, generally
+  PASS  the en-route stop is listed as recorded, not flagged
+  PASS  the disputed flag shows its dispute
+  PASS  the Cashier cannot review
+  PASS  a disputed flag is reviewed by deciding its dispute
+  PASS  an en-route stop has nothing to review
+  PASS  dismissing needs a reason
+  PASS  the Terminal Manager marks the stop reviewed
+  PASS  with who and the note
+  PASS  and when
+  PASS  a reviewed flag is not reviewed again
+  PASS  an overspeed dismissed, with the reason
+  PASS  neither is open any more
+  PASS  and new readings delete neither
+  PASS  deciding the dispute reviews the flag, with who and why
+  PASS  by service date: none yesterday
+
+49 passed, 0 failed
+
+===================================================================
+  VAN STATUS BOARD (rev 603)
+===================================================================
+  PASS  signed in
+
+── 1. Who sees the board ─────────────────────
+  PASS  the Cashier
+  PASS  the Terminal Manager
+  PASS  not the Dispatcher, not a passenger
+  PASS  every van, once
+
+── 2. The four states, from what is stored (brief 8) ─────────────────────
+  PASS  MDK-3310 is travelling: its trip departed
+  PASS  with the Dispatcher, the operator and the route: Bong Sumagang/Ariel Magbanua/Ecoland - Digos City
+  PASS  no phone, no readings: nothing aboard or on the map is invented
+  PASS  LAB-4521 is on site: its trip is boarding
+  PASS  ABC-1234 is on site: assigned to a trip of today
+  PASS  GAK-2205 is out of service
+  PASS  LCT-9042 has no trip today
+  PASS  and nobody owes: every started trip is paid
+
+── 3. Travelling with a phone: aboard and the last position ─────────────────────
+  PASS  a phone checked out with MDK-3310
+  PASS  it counts three boardings and one alighting
+  PASS  and sends a GPS reading
+  PASS  the board shows 2 aboard and the van's last position
+
+── 4. Out of service, but on the road ─────────────────────
+  PASS  XYZ-9876 goes into maintenance
+  PASS  out of service, though a trip of today names it
+  PASS  a van on the road stays travelling until it arrives
+
+── 5. A van that left unpaid owes, until the Cashier records it ─────────────────────
+  PASS  a cash passenger on ABC-1234's trip
+  PASS  the Terminal Manager lifts the payment block (₱51.00 due)
+  PASS  started and departed
+  PASS  travelling, and owes ₱51.00
+  PASS  it arrives
+  PASS  back with no trip, still owing for its last one
+  PASS  the Cashier records the payment
+  PASS  and the van owes nothing
+
+28 passed, 0 failed
+
+===================================================================
+  TOTALS
+===================================================================
+    passed   912
+    failed     0
+    gaps       0
+
+  No regressions. A failure-free run means role boundaries, policy
+  enforcement and state transitions all held.
+

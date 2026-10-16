@@ -271,7 +271,6 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     'tracking_ping_interval_seconds': ('How often a van sends its location', 'Vans and tracking'),
     'tracking_stale_after_seconds': ('Show "No signal" after', 'Vans and tracking'),
     'licence_expiry_warning_days': ('Warn before an operator\'s licence expires', 'Vans and tracking'),
-    'variance_alert_threshold': ('Alert when the camera count is off by', 'Other'),
     'sos_contact_numbers': ('Numbers texted on an emergency (SOS)', 'Safety'),
     'start_opens_minutes': ('When Start opens before departure', 'Trips and payment'),
     'remittance_rate_pct': ('A2Z\'s share of each van\'s fares', 'Trips and payment'),

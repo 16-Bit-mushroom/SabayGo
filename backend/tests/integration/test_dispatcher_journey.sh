@@ -4,7 +4,7 @@
 #   ./tests/integration/test_dispatcher_journey.sh
 #
 # The Dispatcher works the van door: scan tickets, log cash walk-ins,
-# watch the manifest, trigger an audit, close boarding.
+# watch the manifest, close boarding.
 set -uo pipefail
 
 API="http://127.0.0.1:8000/api/v1"
@@ -143,28 +143,8 @@ else bad "manifest gave $S"; fi
 S=$(code "GET" "/bookings/availability?trip_id=$TRIP&boarding_stop=1&alighting_stop=4")
 ok "seats still sellable end-to-end: $(j "['seats_available']" < /tmp/resp.json)"
 
-# ═══════════════════════════════════════════════ 5. AUDIT
-hdr "5. Camera audit"
-
-S=$(code GET /audits/node-health "" "$CT")
-if [ "$S" = "200" ]; then
-  ok "AI node reachable ($(j "['model_version']" < /tmp/resp.json))"
-  S=$(code POST /audits/trigger \
-    "{\"trip_id\":\"$TRIP\",\"leg_sequence\":1,\"trigger_type\":\"manual\"}" "$CT")
-  if [ "$S" = "200" ]; then
-    python3 -c "
-import json;a=json.load(open('/tmp/resp.json'))
-print(f\"        visual={a['visual_count']}  manifest={a['booked_count']}  \"
-      f\"variance={a['variance']:+d}  {a['inference_ms']}ms\")
-print(f\"        {a['message']}\")"
-    ok "audit recorded"
-  else bad "audit gave $S"; fi
-else
-  gap "AI node offline -- start it: cd ai_service && python app.py"
-fi
-
-# ═══════════════════════════════════════════════ 6. DEPARTURE
-hdr "6. Departure"
+# ═══════════════════════════════════════════════ 5. DEPARTURE
+hdr "5. Departure"
 
 S=$(code POST "/trips/$TRIP/depart" "" "$OFF")
 if [ "$S" = "200" ]; then
@@ -175,11 +155,11 @@ S=$(code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")
 [ "$S" = "409" ] && ok "bookings closed after departure (409)" || bad "post-departure booking gave $S"
 
-# ═══════════════════════════════════════════════ 7. BOUNDARIES
-hdr "7. A Dispatcher is not the Terminal Manager"
+# ═══════════════════════════════════════════════ 6. BOUNDARIES
+hdr "6. A Dispatcher is not the Terminal Manager"
 
-for ep in "GET /fleet/vans" "GET /config/policies" "GET /revenue/summary" \
-          "GET /audits/pending"; do
+for ep in "GET /fleet/vans" "GET /config/policies" "GET /statements" \
+          "GET /boarding-audit"; do
   m=${ep%% *}; p=${ep#* }
   S=$(code "$m" "$p" "" "$CT")
   [ "$S" = "403" ] && ok "$p blocked (403)" || bad "$p gave $S, expected 403"

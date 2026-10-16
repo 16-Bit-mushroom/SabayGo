@@ -124,22 +124,15 @@ reuse the same `NotificationService` and appear in it without client work.
 Neither piece of the physical van kit (camera, GPS) blocks development.
 Both are designed to run as an HTTP client against the same production
 endpoints a real kit would hit, so nothing changes on the backend when
-the real hardware shows up — only where the AI node's camera and the GPS
-device point.
+the real hardware shows up — only where the phone and the GPS device
+point.
 
-- **Camera**: `ai_service/app.py` opens `cv2.VideoCapture(AI_NODE_CAMERA_INDEX)`
-  (env var, defaults to `0`). On this dev machine that's the laptop's
-  built-in webcam — confirmed working end to end: `GET /health` reports
-  `camera_index: 0`, `POST /api/audit/capture` returns a real
-  `visual_count` from an actual frame, and `POST /audits/trigger`
-  (backend) returns 200 with a genuine count and a saved snapshot. The
-  backend only calls the AI node's HTTP API and never touches the camera,
-  so it needs no changes when the real kit arrives.
-  **When the kit arrives:** if its camera enumerates as a normal
-  V4L2/USB device, just point `AI_NODE_CAMERA_INDEX` at it. If it's an
-  IP/RTSP camera, `CAMERA_INDEX` currently only parses as `int()` — that
-  will need a small follow-up to accept a URL string (`cv2.VideoCapture`
-  itself already accepts one).
+- **Camera** (rev 603, 16 Oct): the in-van phone is the camera and runs
+  the model itself (`edge_app/`); the rev 468 AI node and its laptop-webcam
+  stand-in are retired. Without a phone, a test plays one over HTTP
+  against `/edge/*`, as `tests/integration/test_edge_ingestion.sh` does:
+  add a phone (`POST /devices`), check it out to a van, then post door
+  events, fixes and heartbeats.
 - **GPS**: `backend/scripts/tracking_simulator.py` posts to the real
   production `POST /tracking/trips/{trip}/ping` endpoint (not a mock
   table) — confirmed end to end: a simulated run against

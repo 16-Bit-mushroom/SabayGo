@@ -5,7 +5,8 @@
 #
 # The Cashier reads what the counter needs and is refused everything that
 # decides what is owed. The Terminal Manager does the rest at the desk:
-# fleet, staff, routes, fares, schedules, policy, audits, revenue.
+# fleet, staff, routes, fares, schedules, policy, and the rev 603 money
+# and checks pages (statements, Boarding Audit, disputes, driving flags).
 set -uo pipefail
 
 API="http://127.0.0.1:8000/api/v1"
@@ -39,7 +40,7 @@ CT=$(j "['access_token']" < /tmp/resp.json)
 
 hdr "CASHIER — 2. What the counter needs"
 
-for ep in "GET /revenue/summary" "GET /fleet/vans" "GET /config/trips" "GET /statements"; do
+for ep in "GET /fleet/vans/board" "GET /fleet/vans" "GET /config/trips" "GET /statements"; do
   m=${ep%% *}; p=${ep#* }
   S=$(code "$m" "$p" "" "$CT")
   [ "$S" = "200" ] && ok "$p readable" || bad "$p gave $S"
@@ -53,8 +54,8 @@ S=$(code PUT /config/policies/cancel_cutoff_hours '{"policy_value":"3"}' "$CT")
 [ "$S" = "403" ] && ok "cannot change a rule (403)" || bad "policy edit gave $S"
 S=$(code POST /fleet/vans '{"plate_number":"CSH-0001","seat_capacity":14}' "$CT")
 [ "$S" = "403" ] && ok "cannot add a van (403)" || bad "add van gave $S"
-S=$(code GET /audits/pending "" "$CT")
-[ "$S" = "403" ] && ok "cannot open the audit decisions (403)" || bad "audit queue gave $S"
+S=$(code GET /boarding-audit "" "$CT")
+[ "$S" = "403" ] && ok "cannot open the Boarding Audit (403)" || bad "boarding audit gave $S"
 S=$(code POST /fleet/crew '{}' "$CT")
 [ "$S" = "403" ] && ok "cannot create staff accounts (403)" || bad "crew create gave $S"
 
@@ -123,11 +124,11 @@ hdr "TERMINAL MANAGER — 4. Configuration"
 S=$(code GET /config/policies "" "$OT")
 [ "$S" = "200" ] && ok "read all policies" || bad "policies gave $S"
 
-S=$(code PUT /config/policies/variance_alert_threshold '{"policy_value":"2"}' "$OT")
-[ "$S" = "200" ] && ok "variance threshold set to 2" || bad "policy update gave $S"
-code PUT /config/policies/variance_alert_threshold '{"policy_value":"1"}' "$OT" >/dev/null
-S=$(code GET /config/policies/variance_alert_threshold/history "" "$CT")
-python3 -c "import json;h=json.load(open('/tmp/resp.json'));assert [p['policy_value'] for p in h[:2]]==['1','2'] and h[0]['updated_by_name']=='Maria Santos'" \
+S=$(code PUT /config/policies/match_window_seconds '{"policy_value":"90"}' "$OT")
+[ "$S" = "200" ] && ok "match window set to 90 s" || bad "policy update gave $S"
+code PUT /config/policies/match_window_seconds '{"policy_value":"120"}' "$OT" >/dev/null
+S=$(code GET /config/policies/match_window_seconds/history "" "$CT")
+python3 -c "import json;h=json.load(open('/tmp/resp.json'));assert [p['policy_value'] for p in h[:2]]==['120','90'] and h[0]['updated_by_name']=='Maria Santos'" \
   && ok "the history keeps each value, newest first, with who set it (the Cashier may read it)" \
   || bad "policy history gave $S: $(head -c 300 /tmp/resp.json)"
 
@@ -200,73 +201,17 @@ S=$(code POST /config/trips/special "{\"route_id\":\"$ROUTE\",
   \"departure_datetime\":\"2020-01-01T08:00:00\"}" "$OT")
 [ "$S" = "409" ] && ok "special trip in the past rejected (409)" || bad "past trip gave $S"
 
-hdr "TERMINAL MANAGER — 6. Audit queue and revenue"
+hdr "TERMINAL MANAGER — 6. Money, checks and who is on what"
 
-S=$(code GET /audits/pending "" "$OT")
-if [ "$S" = "200" ]; then
-  N=$(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))")
-  ok "audit queue: $N pending"
-  if [ "$N" -gt 0 ]; then
-    AID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))[0]['audit_id'])")
-    S=$(code POST "/audits/$AID/resolve" \
-      '{"resolution":"resolved","notes":"Dispatcher logged the walk-in after departure."}' "$OT")
-    [ "$S" = "200" ] && ok "variance dispositioned with a note" || bad "resolve gave $S"
-
-    S=$(code POST "/audits/$AID/resolve" '{"resolution":"ignored","notes":"again"}' "$OT")
-    [ "$S" = "409" ] && ok "double resolve rejected (409)" || bad "double resolve gave $S"
-
-    # G.2 -- the resolved audit must now appear in the history, with the resolver
-    S=$(code GET "/audits/history?status=resolved" "" "$OT")
-    H=$(python3 -c "import json;r=[a for a in json.load(open('/tmp/resp.json')) if a['audit_id']=='$AID'];print(r[0]['resolved_by'] if r and r[0].get('resolution_notes') else '')" 2>/dev/null)
-    [ "$S" = "200" ] && [ -n "$H" ] && ok "audit history shows it resolved by $H" || bad "history gave $S / $H"
-  fi
-else bad "audit queue gave $S"; fi
-
-S=$(code GET /audits/history "" "$OT")
-if [ "$S" = "200" ]; then
-  P=$(python3 -c "import json;print(sum(1 for a in json.load(open('/tmp/resp.json')) if a['resolution_status']=='pending'))")
-  [ "$P" = "0" ] && ok "audit history excludes the pending queue" || bad "history contains $P pending"
-else bad "audit history gave $S"; fi
-S=$(code GET "/audits/history?status=bogus" "" "$OT")
-[ "$S" = "409" ] || [ "$S" = "422" ] && ok "unknown history status rejected ($S)" || bad "bogus status gave $S"
-if [ -z "${AID:-}" ]; then
-  gap "no flagged audit to test empty-note rejection"
-else
-  S=$(code POST "/audits/$AID/resolve" '{"resolution":"resolved","notes":""}' "$OT")
-  if [ "$S" = "422" ] || [ "$S" = "409" ]; then
-    ok "resolution without a note rejected ($S)"
-  else
-    bad "empty note gave $S"
-  fi
-fi
-
-S=$(code GET /revenue/summary "" "$OT")
-if [ "$S" = "200" ]; then
-  python3 -c "
-import json;r=json.load(open('/tmp/resp.json'))
-print(f\"        trips={r['trips']}  bookings={r['total_bookings']}  \"
-      f\"app={r['app_bookings']}  walk-in={r['walkin_bookings']} ({r['walkin_share_pct']}%)\")
-print(f\"        collected=P{r['collected_fare']}  expected=P{r['expected_fare']}  \"
-      f\"unreconciled=P{r['unreconciled_amount']}\")"
-  ok "revenue summary"
-else bad "revenue gave $S"; fi
-
-S=$(code GET /revenue/trips "" "$OT")
-[ "$S" = "200" ] && ok "per-trip reconciliation" || bad "revenue/trips gave $S"
-
-hdr "TERMINAL MANAGER — 7. Gaps"
-
-# G.1 -- spreadsheet export of the reconciliation
-S=$(curl -s -o /tmp/export.csv -w '%{http_code}' -H "Authorization: Bearer $OT" "$API/revenue/export?format=csv")
-if [ "$S" = "200" ] && head -n 1 /tmp/export.csv | grep -q "Date,Departure,Route"; then
-  ok "CSV export ($(($(wc -l < /tmp/export.csv) - 1)) trip rows)"
-else bad "csv export gave $S"; fi
-S=$(curl -s -o /tmp/export.xlsx -w '%{http_code}' -H "Authorization: Bearer $OT" "$API/revenue/export")
-if [ "$S" = "200" ] && python3 -c "import zipfile,sys;z=zipfile.ZipFile('/tmp/export.xlsx');sys.exit(0 if 'xl/workbook.xml' in z.namelist() else 1)"; then
-  ok "XLSX export is a real workbook"
-else bad "xlsx export gave $S"; fi
-S=$(code GET "/revenue/export?format=pdf" "" "$OT")
-[ "$S" = "422" ] && ok "unknown export format rejected (422)" || bad "pdf format gave $S"
+# Readable here; each page's rules have their own test script
+# (test_trip_lifecycle, test_door_check, test_disputes, test_driving_flags,
+# test_van_board).
+for ep in "GET /statements?date=$(date -d yesterday +%F)" "GET /boarding-audit?date=$(date +%F)" \
+          "GET /disputes" "GET /driving-flags" "GET /fleet/vans/board"; do
+  m=${ep%% *}; p=${ep#* }
+  S=$(code "$m" "$p" "" "$OT")
+  [ "$S" = "200" ] && ok "${p%%\?*} readable" || bad "$p gave $S"
+done
 
 # Who is driving what, when: the day's trip board carries each trip's van,
 # operator and Dispatcher (the seed assigns today's live trips).

@@ -241,8 +241,8 @@ else ok "notifications listed"; fi
 # ═══════════════════════════════════════════════ 8. BOUNDARIES
 hdr "8. Passengers cannot act as crew"
 
-for ep in "POST /scans" "GET /trips/$TRIP/manifest" "GET /audits/pending" \
-          "GET /fleet/vans" "GET /config/policies" "GET /revenue/summary"; do
+for ep in "POST /scans" "GET /trips/$TRIP/manifest" "GET /boarding-audit" \
+          "GET /fleet/vans" "GET /config/policies" "GET /statements"; do
   m=${ep%% *}; p=${ep#* }
   S=$(code "$m" "$p" '{"qr_payload":"x","trip_id":"x","stop_sequence":1}' "$TOKEN")
   [ "$S" = "403" ] && ok "$p blocked (403)" || bad "$p gave $S, expected 403"
