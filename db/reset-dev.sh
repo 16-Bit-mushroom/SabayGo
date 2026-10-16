@@ -29,11 +29,15 @@ UPDATE trips
        departure_datetime = ${DEPART_SQL},
        status = 'scheduled',
        departed_at = NULL,
-       completed_at = NULL
+       completed_at = NULL,
+       reschedule_cutoff_hours = 0
  WHERE trip_id IN ('TRIP-DEMO-00000001', 'TRIP-DEMO-00000002');
 -- The seeded trip departs 20 min out with --soon, so a 2-hour
 -- cancellation deadline would refuse everything. The fixture starts
 -- permissive; test_group_f.sh sets its own value to exercise the rule.
+-- The reschedule cutoff is also copied onto each trip at generation
+-- (the passenger keeps the terms they booked under), so the two fixture
+-- trips get 0 above as well, or the policy row alone changes nothing.
 UPDATE cooperative_policies SET policy_value = '0'
  WHERE policy_key IN ('cancel_cutoff_hours', 'reschedule_cutoff_hours');
 UPDATE trip_legs l JOIN trips t ON t.trip_id = l.trip_id

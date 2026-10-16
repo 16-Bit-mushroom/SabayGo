@@ -268,8 +268,12 @@ else bad "xlsx export gave $S"; fi
 S=$(code GET "/revenue/export?format=pdf" "" "$OT")
 [ "$S" = "422" ] && ok "unknown export format rejected (422)" || bad "pdf format gave $S"
 
-S=$(code GET /fleet/crew/schedule "" "$OT")
-[ "$S" = "404" ] && gap "no crew roster view -- cannot see who is driving what, when" || ok "crew schedule"
+# Who is driving what, when: the day's trip board carries each trip's van,
+# operator and Dispatcher (the seed assigns today's live trips).
+S=$(code GET "/config/trips?date=$(date +%F)" "" "$OT")
+CREWED=$(python3 -c "import json;print(sum(1 for t in json.load(open('/tmp/resp.json')) if t['plate_number'] and t['operator_name'] and t['dispatcher_name']))" 2>/dev/null)
+[ "$S" = "200" ] && [ "${CREWED:-0}" -ge 1 ] && ok "trip board shows van, operator and Dispatcher ($CREWED trips)" \
+                 || bad "trip board gave $S, $CREWED crewed trips"
 
 printf '\n\033[1m═══ SUMMARY ═══\033[0m\n  passed  %d\n  failed  %d\n  gaps    %d\n\n' \
   "$PASS_N" "$FAIL_N" "$GAP_N"

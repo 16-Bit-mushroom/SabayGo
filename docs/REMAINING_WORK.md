@@ -73,13 +73,18 @@ uses the heads-up rather than deciding whether it exists.
 |---|---|---|
 | ~~G.1~~ | ~~Export reports to spreadsheet~~ | ✅ 15 Sep. `GET /revenue/export?format=xlsx|csv&date_from&date_to` — workbook has a totals row and an About sheet explaining *cash in hand* vs *unreconciled*. Console Revenue tab: Export menu |
 | ~~G.2~~ | ~~View resolved audit history~~ | ✅ 15 Sep. `GET /audits/history?status=&trip_id=` with resolver and notes. Console Audits tab: Queue / History switch; closed audits show their disposition instead of the buttons |
-| G.3 | Crew roster: who drives what, when | Arguably a Tier 2 miss; "fleet management" implies seeing assignments |
-| G.4 | Passenger edits own name, phone, password | |
-| G.5 | Passenger closes own account | Data Privacy Act right to erasure |
-| G.6 | Abandon a checkout and release the space immediately | Currently must wait 10 minutes |
+| ~~G.3~~ | ~~Crew roster: who drives what, when~~ | ✅ rev 603. `GET /config/trips?date=` carries each trip's van, operator and Dispatcher; console Trips page. The office journey checks it |
+| ~~G.4~~ | ~~Passenger edits own name, phone, password~~ | ✅ `PATCH /auth/me` (password needs `current_password`) |
+| ~~G.5~~ | ~~Passenger closes own account~~ | ✅ `POST /auth/me/close` with the password; soft close, the token and sign-in stop working |
+| ~~G.6~~ | ~~Abandon a checkout and release the space immediately~~ | ✅ `POST /bookings/{id}/cancel` releases an unpaid hold at once |
 | ~~G.7~~ | ~~Single-booking detail endpoint~~ | ✅ 15 Sep. `GET /bookings/{id}`, same shape as `/mine`; 404 for anyone else's. Ticket screen now polls this instead of the whole list |
-| G.8 | ~~Notifications~~ and saved-destinations endpoints | Notifications done with E.1; saved destinations still unread |
-| G.9 | Passenger lookup by name or ticket number | For the conductor |
+| ~~G.8~~ | ~~Notifications~~ and saved-destinations endpoints | Notifications done with E.1. Saved destinations: **not in rev 603, not built** (16 Oct); the table and ORM model stay unread |
+| ~~G.9~~ | ~~Passenger lookup by name or ticket number~~ | **Not in rev 603, not built** (16 Oct). The Dispatcher works from the list and the scan |
+| — | Passenger notification settings (`passenger_settings`) | **Not in rev 603, not built** (16 Oct) |
+
+The journey scripts probed G.3–G.6 at URLs that were never built, so they
+reported them as gaps after they were done; the probes now call the real
+endpoints (16 Oct).
 
 ---
 

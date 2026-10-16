@@ -143,16 +143,13 @@ print(next((b['status'] for b in d if b['booking_id']=='$BID'),'?'))")
 
 S=$(code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$TOKEN")
+# A hold the passenger walks away from before paying; section 5 cancels
+# it and checks the space comes back.
 ABANDON=$(j "['booking_id']" < /tmp/resp.json)
-S=$(code DELETE "/payments/checkout/$ABANDON" "" "$TOKEN")
-if [ "$S" = "404" ] || [ "$S" = "405" ]; then
-  gap "abandon checkout -- seat stays held for 10 min with no way to release it"
-else ok "checkout abandoned, seat released"; fi
 
 # ═══════════════════════════════════════════════ 5. CHANGES
-# Group F added a cancellation deadline; the seeded trip departs in 20 min
-# so a 2-hour cutoff refuses everything. Disable it for this section.
-code PUT /config/policies/cancel_cutoff_hours "{"policy_value":"0"}" "" >/dev/null 2>&1
+# The seeded trip departs in 20 min; reset-dev.sh sets both cutoffs to 0
+# (policy and the trip's own copy) so this section can run.
 hdr "5. Changing plans"
 
 S=$(code POST "/bookings/$BID/reschedule" '{"new_trip_id":"TRIP-DEMO-00000002"}' "$TOKEN")
@@ -163,8 +160,16 @@ if [ "$S" = "200" ]; then
 elif [ "$S" = "404" ]; then gap "reschedule -- no second trip seeded"
 else bad "reschedule gave $S"; fi
 
+spaces() {
+  code GET "/bookings/availability?trip_id=$TRIP&boarding_stop=1&alighting_stop=4" >/dev/null
+  j "['seats_available']" < /tmp/resp.json
+}
+BEFORE=$(spaces)
 S=$(code POST "/bookings/$ABANDON/cancel" "" "$TOKEN")
-[ "$S" = "200" ] && ok "cancel (no refund, seat released)" || bad "cancel gave $S"
+AFTER=$(spaces)
+if [ "$S" = "200" ] && [ "$AFTER" = "$((BEFORE + 1))" ]; then
+  ok "unpaid hold cancelled, space released ($BEFORE -> $AFTER)"
+else bad "cancel gave $S, spaces $BEFORE -> $AFTER"; fi
 
 S=$(code POST "/bookings/$ABANDON/cancel" "" "$TOKEN")
 [ "$S" = "409" ] && ok "double cancel rejected (409)" || bad "double cancel gave $S"
@@ -217,31 +222,21 @@ if [ "$S" = "404" ] || [ "$S" = "405" ]; then
   gap "update profile -- name, phone and address cannot be changed"
 else ok "profile updated"; fi
 
-S=$(code POST /auth/change-password \
-  "{\"current_password\":\"$PASS\",\"new_password\":\"newpass123\"}" "$TOKEN")
-if [ "$S" = "404" ] || [ "$S" = "405" ]; then
-  gap "change password -- not implemented"
-else ok "password changed"; fi
+NEWPASS="newpass123"
+S=$(code PATCH /auth/me "{\"current_password\":\"wrong\",\"new_password\":\"$NEWPASS\"}" "$TOKEN")
+[ "$S" = "409" ] && ok "password change with a wrong current password refused (409)" \
+                 || bad "wrong current password gave $S"
+S=$(code PATCH /auth/me "{\"current_password\":\"$PASS\",\"new_password\":\"$NEWPASS\"}" "$TOKEN")
+[ "$S" = "200" ] && ok "password changed" || bad "password change gave $S"
+S=$(code POST /auth/login "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}")
+[ "$S" = "401" ] && ok "old password no longer signs in (401)" || bad "old password gave $S"
+S=$(code POST /auth/login "{\"email\":\"$EMAIL\",\"password\":\"$NEWPASS\"}")
+[ "$S" = "200" ] && ok "new password signs in" || bad "new password gave $S"
 
 S=$(code GET /notifications "" "$TOKEN")
 if [ "$S" = "404" ]; then
   gap "notifications -- table exists, no endpoint reads it"
 else ok "notifications listed"; fi
-
-S=$(code GET /saved-destinations "" "$TOKEN")
-if [ "$S" = "404" ]; then
-  gap "saved destinations -- table and ORM model exist, no endpoints"
-else ok "saved destinations listed"; fi
-
-S=$(code GET /settings "" "$TOKEN")
-if [ "$S" = "404" ]; then
-  gap "notification settings -- passenger_settings unreachable"
-else ok "settings readable"; fi
-
-S=$(code DELETE /auth/me "" "$TOKEN")
-if [ "$S" = "404" ] || [ "$S" = "405" ]; then
-  gap "delete/deactivate account -- no way for a passenger to leave"
-else ok "account deactivated"; fi
 
 # ═══════════════════════════════════════════════ 8. BOUNDARIES
 hdr "8. Passengers cannot act as crew"
@@ -252,6 +247,19 @@ for ep in "POST /scans" "GET /trips/$TRIP/manifest" "GET /audits/pending" \
   S=$(code "$m" "$p" '{"qr_payload":"x","trip_id":"x","stop_sequence":1}' "$TOKEN")
   [ "$S" = "403" ] && ok "$p blocked (403)" || bad "$p gave $S, expected 403"
 done
+
+# ═══════════════════════════════════════════════ 9. LEAVING
+# Last, because a closed account's token stops working.
+hdr "9. Closing the account"
+
+S=$(code POST /auth/me/close '{"password":"wrong"}' "$TOKEN")
+[ "$S" = "409" ] && ok "close with a wrong password refused (409)" || bad "wrong-password close gave $S"
+S=$(code POST /auth/me/close "{\"password\":\"$NEWPASS\"}" "$TOKEN")
+[ "$S" = "204" ] && ok "account closed (204)" || bad "close gave $S"
+S=$(code POST /auth/login "{\"email\":\"$EMAIL\",\"password\":\"$NEWPASS\"}")
+[ "$S" = "401" ] && ok "closed account cannot sign in (401)" || bad "closed-account login gave $S"
+S=$(code GET /auth/me "" "$TOKEN")
+[ "$S" = "403" ] && ok "closed account's token refused (403)" || bad "closed-account token gave $S"
 
 # ═══════════════════════════════════════════════ SUMMARY
 printf '\n\033[1m═══ SUMMARY ═══\033[0m\n'

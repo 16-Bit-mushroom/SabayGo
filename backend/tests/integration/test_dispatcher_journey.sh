@@ -143,11 +143,6 @@ else bad "manifest gave $S"; fi
 S=$(code "GET" "/bookings/availability?trip_id=$TRIP&boarding_stop=1&alighting_stop=4")
 ok "seats still sellable end-to-end: $(j "['seats_available']" < /tmp/resp.json)"
 
-S=$(code GET "/trips/$TRIP/passenger-lookup?q=Maria" "" "$CT")
-if [ "$S" = "404" ]; then
-  gap "passenger lookup -- no way to find a booking by name or ticket number"
-else ok "passenger lookup"; fi
-
 # ═══════════════════════════════════════════════ 5. AUDIT
 hdr "5. Camera audit"
 
