@@ -735,8 +735,33 @@ phone's state in the Start and departure panel; the Overview map's
 "aboard" uses the camera count when there is one. `test_door_check.sh`
 65.
 
-**R10 is done.** Open: the capture app and `ai_service` are rev 468
-leftovers (manual counts only); `/revenue/*` has no client.
+**R10 is done.**
+
+Done: **runner probes and the reschedule failure** (16 Oct, `1169e7b`).
+Four "gaps" were done features probed at URLs never built: password
+change is `PATCH /auth/me`, account close `POST /auth/me/close`, an
+unpaid hold is released by `POST /bookings/{id}/cancel`, who is on what
+is `GET /config/trips?date=`. The probes now call them. Passenger lookup,
+saved destinations and notification settings are not in rev 603: probes
+removed, listed in `REMAINING_WORK.md`. **The long-standing `--soon`
+reschedule failure was a reset gap, not fixture self-conflict:**
+`reset-dev.sh` zeroed the policy but not the cutoff each fixture trip
+copied at generation. It zeroes both now. Suite **922 passed, 0 failed**.
+
+Done: **rev 468 leftovers retired** (16 Oct). Removed: the Flask AI node
+(`ai_service/app.py`), `ai_capture_app/`, `api/v1/audits.py` (`/audits/*`
+and `/revenue/*`), `application/audit/`, `ai_node_client.py`,
+`domain/audit_reading.py`, `NotificationService.notify_variance`, the
+`AI_NODE_*` / `PHONE_CAPTURE_API_KEY` settings, and `run.sh`'s AI node
+and `--capture`. Migration **030** (down script) removes the
+`variance_alert_threshold` setting, which nothing reads now. **Kept:**
+`ai_service/inference.py` + `ai_service/eval/` (they measured
+`yolov8n.pt`, the weights the phone runs; the harness counts at 640 px,
+the phone at 320/416), and the tables (`yolov8_audit_logs`,
+`cash_remittances`, the revenue view) as history, no migration.
+`test_notifications.py` now drives a rev 603 alert (payment block lifted
+→ Cashier) over HTTP. `MANUSCRIPT_CORRECTIONS.md` §3, §7, §9 are marked
+superseded and §12 records the rev 603 open points the code settled.
 
 **Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
 The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
@@ -783,8 +808,6 @@ contribution.
 
 | File | Why |
 |---|---|
-| `docs/RULES.md` | Business rules vs application rules, in plain language |
-| `docs/HOW_IT_WORKS.md` | Same, written for the cooperative and the panel |
 | `docs/REMAINING_WORK.md` | What is left, grouped |
 | `docs/MANUSCRIPT_CORRECTIONS.md` | Where the paper and the code disagree, with replacement wording |
 | `docs/FLUTTER_PHASE1_ISSUES.md` | 20 documented setup failures and fixes |
@@ -841,9 +864,10 @@ The **operator** is the van owner, who always drives: a row in
 ```
 db/           MySQL 8.0 in Docker, host port 3307. Migrations are truth.
 backend/      FastAPI, async SQLAlchemy 2.0, Clean Architecture
-ai_service/   Flask + YOLOv8 headcount, port 5000
-mobile/       Flutter: passenger, conductor, driver
-operator_console/  Flutter Web: coop_admin only
+ai_service/   YOLOv8 evaluation harness only (eval/); no server since 16 Oct
+edge_app/     native Kotlin, the in-van phone (benchmark first, then door events)
+mobile/       Flutter: passenger, Dispatcher
+operator_console/  Flutter Web: Terminal Manager, Cashier
 ```
 
 Package name is still `mobile_v2_uv_express` though the folder is
@@ -858,13 +882,12 @@ On a machine that is not set up yet, `./setup.sh` does the whole thing and
 
 **`./run.sh` starts the whole system in one command** and is what the demo
 uses. It resolves this machine's LAN address once and hands the same
-address to every process — backend CORS, console, handset, capture app —
-because four hand-maintained copies of an IP address is what broke the
-last demo.
+address to every process — backend CORS, console, handset — because
+four hand-maintained copies of an IP address is what broke the last demo.
 
 ```fish
-./run.sh                      # db + backend + AI node + console
-./run.sh --mobile --capture   # also the two handset apps, on an attached device
+./run.sh                      # db + backend + console
+./run.sh --mobile             # also the passenger/Dispatcher app, on an attached device
 ./run.sh --host 10.0.52.117   # force the address, when detection picks the wrong NIC
 ./run.sh --soon               # rebuild demo data, trip departs in 20 min
 ./run.sh --reset-db           # rebuild demo data; live trips dated from now
@@ -872,8 +895,8 @@ last demo.
 
 `002_demo_dataset.sql` seeds three **live trips dated from the moment of
 the reset**, so reset shortly before a demo: `TRIP-A2Z-LIVE-BOARD`
-(boarding, the dev dispatcher@, passenger@ holds a ticket; leg 1
-manifest = 4, so photograph 4 people for a match and 5+ for a flag),
+(boarding, the dev dispatcher@, passenger@ holds a ticket; its list is
+5),
 `TRIP-A2Z-LIVE-DEPART` (departed, a no-show) and
 `TRIP-A2Z-LIVE-SOON` (scheduled in 2 h, bookable). They are special trips
 (template `NULL`) because `uq_trip_instance` is (template, date).
@@ -890,16 +913,14 @@ and is skipped on later runs unless `lib/`, `pubspec.yaml` or the baked-in
 API address changed (stamp: `build/web/.sabaygo-api-base`). Run `./run.sh`
 once before a demo so the build is not on stage.
 
-Handset apps (`--mobile`, `--capture`) are built with `flutter build apk
---debug`, installed with `adb install -r` (keeps app data, so the conductor
-stays signed in) and launched, one after the other, before the launcher
-reports "up". They are not left under `flutter run`: two of those at one
-phone queued on Flutter's startup lock, and stopping the launcher killed
-both mid-Gradle with nothing installed. An installed app outlives the
-launcher. When the venue's network
-changes, re-run `./run.sh` — or, on a handset whose app is already
-installed, press **Find server** in the capture app, which sweeps its own
-/24 for the backend's `/health` and re-points itself with no rebuild.
+The handset app (`--mobile`) is built with `flutter build apk --debug`,
+installed with `adb install -r` (keeps app data, so the Dispatcher stays
+signed in) and launched before the launcher reports "up". It is not left
+under `flutter run`: two of those at one phone queued on Flutter's
+startup lock, and stopping the launcher killed both mid-Gradle with
+nothing installed. An installed app outlives the launcher. When the
+venue's network changes, re-run `./run.sh --mobile` so the app is rebuilt
+against the new address.
 
 Piece by piece, when one component is being worked on:
 
@@ -912,11 +933,6 @@ docker compose up -d
 # backend — 0.0.0.0, not localhost, or the phone cannot reach it
 cd backend && source venv/bin/activate.fish
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-# AI node
-cd ai_service && source venv/bin/activate.fish
-export (grep -v '^#' .env | xargs -L1)
-python app.py
 
 # mobile, on a physical device over wireless adb
 cd mobile
@@ -977,10 +993,11 @@ never matches.
 policy must not alter terms a passenger already booked under. The
 reschedule check reads `trips.reschedule_cutoff_hours`, not the live row.
 
-**The AI node never fabricates a count.** If the camera is unreachable the
-endpoint returns 502. An earlier prototype substituted `visual_count = 1`
-and displayed it as real, which would flag an innocent driver on an
-invented number.
+**The system never fabricates a count.** A trip with no phone reporting
+is marked Unaudited (`no_phone`, `silent_at_start`, `lens_blocked`,
+`lost_en_route`), never counted as zero. An earlier prototype substituted
+`visual_count = 1` when the camera was unreachable and displayed it as
+real, which would flag an innocent driver on an invented number.
 
 **An SOS is recorded before any SMS is attempted, and a text message is
 never reported as sent unless the gateway accepted it.** `RaiseSosUseCase`
@@ -1257,32 +1274,22 @@ alpha testing from 6 Oct.
 
 ## Next
 
-1. **Hardening, continued** — replace the placeholder routes in
-   `002_demo_dataset.sql` with A2Z's real routes, fares and templates once
-   they answer; run `scripts/demo_rehearsal.sh` on the demo machine with
-   the AI node up; confirm the release build hides the dev-account chips.
-   Remaining Group G items (roster, profile edit, account deletion) in
-   `docs/REMAINING_WORK.md` if time allows. The van kit (camera, GPS) is
-   not a blocker — the laptop webcam and `tracking_simulator.py` are
-   verified plug-in stand-ins for both, see `docs/REMAINING_WORK.md`.
-2. **Chat** — messages in MySQL, delivered via FCM. Not Firestore: the
-   ERD would have a hole where the data model should be.
-3. **Auto-detect "Van is at"** — the conductor currently sets the current
-   stop by hand on the manifest screen, which is poor UX for someone
-   whose hands are full at the door. `geolocator` is already a dependency
-   (used for passenger check-in); reuse it to snap to the nearest
-   terminal automatically, keeping the dropdown as a manual override.
-4. *(Superseded by rev 468: the model runs on the phone.)* **Phone camera
-   as the AI capture device** — YOLOv8 stays server-side
-   in `ai_service` on the server PC, never on the edge device; a phone
-   just captures a photo and uploads it there for inference. Needs a new
-   `ai_service` endpoint that accepts an uploaded image, since
-   `POST /api/audit/capture` only pulls a frame from a server-attached
-   camera (`camera.capture()`) — it takes no upload today. The Flutter
-   side is a small standalone app, not a `mobile/` feature: take a photo,
-   POST it to the new endpoint, show the returned count. Same
-   never-fabricate-a-count rule applies — a failed upload or inference is
-   an error state, not a placeholder number.
+In the order agreed on 16 Oct, one step at a time. The runner probes and
+the rev 468 retirement are done (Rev 603 progress, above). Left:
+
+1. ~~Docs and merge~~ done 18 Oct: docs brought up to date,
+   `main` fast-forwarded to this branch (local, not pushed).
+2. **The phone benchmark** (the owner runs it in a van): export, install,
+   Sweep, one full Run on vehicle power, then the report in
+   `docs/benchmarks/`. No frame rate is quoted before it exists.
+3. **The edge app proper** (brief 5.1–5.3) against `/edge/*`, sized by
+   the benchmark; the owner field-tests and runs the Realme checklist.
+4. **A2Z's numbers** (the owner asks A2Z): `depart_zone_radius_m`,
+   `depart_readings`, `home_pickup_max_route_m`, `special_trip_speed_kmh`,
+   per-stretch speed limits, the real routes, fares, timetable and SOS
+   numbers, and `docs/QUESTIONS_FOR_COOPERATIVE.md`.
+5. **The manuscript** (the owner): paste `MANUSCRIPT_CORRECTIONS.md` into
+   the `.docx`.
 
 For the demo itself: `docs/DEMO_SCRIPT.md`.
 
@@ -1329,15 +1336,11 @@ was inserted.
 
 ## Known issues
 
-- One journey-test failure is fixture self-conflict: `run_all_journeys.sh`
-  resets `--soon` before each journey, so the trip departs in 20 min and
-  the 6-hour reschedule cutoff has already passed — 422
-  `PolicyViolationError`. `--soon` cannot make check-in and reschedule
-  testable at once. Proven not a defect: a direct reschedule call returns
-  200, and the passenger journey passes standalone after a plain reset.
-  The same applies on the device: the reschedule button is correctly
-  hidden on a `--soon` trip.
-- The *second* failure here was long recorded as fixture self-conflict
+- The `--soon` reschedule failure, recorded for weeks as fixture
+  self-conflict, was a reset gap (fixed 16 Oct): `reset-dev.sh` zeroed the
+  policy row but not the cutoff each fixture trip copied at generation.
+  The suite now has no known failure.
+- An earlier failure was long recorded as fixture self-conflict
   too. It was not — it was a test bug, fixed 28 Sep. The conductor
   journey reserved its unpaid ticket *after* `start-boarding`, but
   `APP_BOOKABLE` is `{scheduled}`, so the reserve was refused, `UNPAID_QR`
@@ -1380,41 +1383,15 @@ was inserted.
   `seat_repository.py` (seat-hold expiry), left alone because it is the
   thesis file and any change there needs its own review — and
   `security.py`, where UTC is correct because JWT `exp` is epoch time.
-- The conductor sets "Van is at" manually on the manifest screen — see
-  Next, item 3.
-- **The model-evaluation numbers do not exist yet.** `ai_service/eval/` is
-  built and tested end to end on sample images, but the full run needs COCO
-  val2017 (~800 MB) downloaded via `eval/fetch_coco.sh`. On CPU, budget
-  ~100 ms per inference: the whole manifest with all six degradation
-  conditions and the five-point threshold sweep is a few hours, so start it
-  and leave it. A single-threshold run over original frames only is
-  minutes, and is enough to sanity-check the tables before committing to
-  the long one. Nothing may be quoted to the adviser until a report file
-  exists in `docs/benchmarks/`.
-- **There is no physical door sensor.** §2.3.5's "door closures" is
-  implemented as the conductor closing boarding and departing, which is
-  the closest event the system genuinely observes. Say it that way in the
-  paper rather than implying a reed switch on the sliding door; the van
-  kit has a camera and a GPS unit, not door hardware. The `gps_node`
-  trigger needs no proxy — it is the real thing.
-- **Automatic capture needs a camera on the inference host.**
-  `door_close` and `gps_node` go through `TriggerAuditUseCase.execute()`
-  → `ai.capture()` → the AI node's server-attached camera. On the demo
-  laptop the webcam *is* that camera, so automatic audits run end to end.
-  In a van with no kit there is no such camera, so they write nothing —
-  correctly: `UpstreamServiceError`, a log line, no row, no invented
-  count. The phone path is a different method (`ai.upload()`) reached only
-  when a person creates a pending request the phone polls for, because a
-  handset cannot accept an inbound call — so it is manual-only *by
-  construction* and cannot serve an automatic trigger. Do not bridge the
-  two: the phone slot is an in-memory single-slot stand-in that retires
-  when the Orange Pi arrives. Alpha testing in real vans from 6 Oct will
-  produce no automatic audits until the kit is installed.
-- Automatic captures are in-process, like the hold sweep and the phone
-  capture slot. With more than one backend worker the per-leg check
-  against `yolov8_audit_logs` still holds, but the in-flight guard does
-  not, so a simultaneous double-fire could write two rows for one leg.
-  One more entry for the single-process list in Limitations.
+- **The model-evaluation report exists**:
+  `docs/benchmarks/ai_count_2026-10-09_full.txt` (COCO val2017, all
+  degradation conditions, five-point threshold sweep, `yolov8n.pt` at
+  640 px). The phone runs the same weights at 320 or 416 px, so the
+  paper should say the counting error is at 640 px until a re-run at the
+  phone's size exists. No staged in-van set yet (see
+  `ai_service/eval/README.md`).
+- **There is no physical door sensor.** "Door" means the door line in the
+  phone camera's view (door events); say it that way in the paper.
 
 ---
 

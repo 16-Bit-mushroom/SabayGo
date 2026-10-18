@@ -1,6 +1,39 @@
 # SabayGo — Remaining Work
 
-*Current as of 15 September 2026. Development deadline: **27 September** — 12 days.*
+*Current as of 18 October 2026 (rev 603). The open work is the first
+section. Everything after it is the September record, kept as history:
+its suite counts, deadlines and "done" rows describe the code as it was
+then, and several of those features were retired on 16 Oct (noted where
+they appear).*
+
+---
+
+## Open, 18 October
+
+| # | Work | Who | State |
+|---|---|---|---|
+| 1 | **Phone benchmark** | owner, in a van | Models exported (YOLOv8n TFLite at 320 and 416 px, git-ignored under `edge_app/app/src/main/assets/models/`), debug APK built 14 Oct. Left: plug in the Realme, install, Sweep, one full Run on vehicle power, then the report in `docs/benchmarks/` via `edge_app/tools/summarise_benchmark.py`. No frame rate is quoted before that report exists |
+| 2 | **Edge app proper** (brief 5.1–5.3) | Claude, after 1 | Door line and seat mask, ByteTrack, offline queue, heartbeats, clock sync from `GET /edge/session`, blurred still, all against `/edge/*` (built and tested). Then the Realme setup checklist |
+| 3 | **A2Z's figures** | owner asks A2Z | These settings ship unset, which turns their feature off: `depart_zone_radius_m` + `depart_readings` (no GPS departure), `home_pickup_max_route_m` (no home pickup), `special_trip_speed_kmh` (no rental flagged), per-stretch speed limits (only stops flagged). Also the real routes, fares, timetable and SOS numbers in place of the `002_demo_dataset.sql` placeholders, and the questions below |
+| 4 | **Manuscript** | owner | Paste `MANUSCRIPT_CORRECTIONS.md` into the `.docx` |
+
+Closed on 16 Oct, though older lists still carry them:
+
+- **Rev 468 leftovers** (`d57fd01`): the AI node (`ai_service/app.py`),
+  `ai_capture_app/`, `/audits/*` and `/revenue/*` are removed.
+  `ai_service/` keeps only the evaluation harness (`inference.py`,
+  `eval/`), which measured the weights the phone runs. The
+  `cash_remittances` and `yolov8_audit_logs` tables and the revenue view
+  stay as history: nothing writes them, and dropping them would lose the
+  September records.
+- **"Missing" endpoints in the runner** (`1169e7b`): four were built at
+  other URLs, three are not in rev 603. See Group G.
+- **The YOLOv8 evaluation report exists**:
+  `docs/benchmarks/ai_count_2026-10-09_full.txt` (and the 8 Oct run), at
+  640 px. The phone runs at 320 or 416 px, so a re-run at its size is
+  still worth having.
+
+Journey suite: **922 passed, 0 failed** (16 Oct).
 
 ---
 
@@ -71,8 +104,8 @@ uses the heads-up rather than deciding whether it exists.
 
 | # | Task | Notes |
 |---|---|---|
-| ~~G.1~~ | ~~Export reports to spreadsheet~~ | ✅ 15 Sep. `GET /revenue/export?format=xlsx|csv&date_from&date_to` — workbook has a totals row and an About sheet explaining *cash in hand* vs *unreconciled*. Console Revenue tab: Export menu |
-| ~~G.2~~ | ~~View resolved audit history~~ | ✅ 15 Sep. `GET /audits/history?status=&trip_id=` with resolver and notes. Console Audits tab: Queue / History switch; closed audits show their disposition instead of the buttons |
+| ~~G.1~~ | ~~Export reports to spreadsheet~~ | ✅ 15 Sep, **retired 16 Oct** with `/revenue/*`. Rev 603's record is the Remittance statements; Member Records exports CSV/PDF |
+| ~~G.2~~ | ~~View resolved audit history~~ | ✅ 15 Sep, **retired 16 Oct** with `/audits/*`. Rev 603: Boarding Audit, Disputes (decided / withdrawn) |
 | ~~G.3~~ | ~~Crew roster: who drives what, when~~ | ✅ rev 603. `GET /config/trips?date=` carries each trip's van, operator and Dispatcher; console Trips page. The office journey checks it |
 | ~~G.4~~ | ~~Passenger edits own name, phone, password~~ | ✅ `PATCH /auth/me` (password needs `current_password`) |
 | ~~G.5~~ | ~~Passenger closes own account~~ | ✅ `POST /auth/me/close` with the password; soft close, the token and sign-in stop working |

@@ -12,6 +12,9 @@ Sections 9-10 added 8 October 2026, when the evaluation harness
 (`ai_service/eval/`) was built and surfaced them.
 Section 11 added 13 October 2026, for the revision 468 data dictionary
 (migrations 018 and 019).
+Section 12 added 16 October 2026: where the code settled an [OPEN] point
+of revision 603. Sections 3, 7 and 9 were marked superseded the same day:
+they describe the rev 468 server-side camera check, which is retired.
 
 ---
 
@@ -45,6 +48,12 @@ coordinate capture for geofenced check-in and SOS location."
 is OpenStreetMap. The old row credits one vendor for both.
 
 ## 3. "Door closures" → the event the system actually observes  (§2.3.5, line 530)
+
+> **Superseded 16 Oct (rev 603): do not paste.** The `door_close` and
+> `gps_node` captures below were removed with the rev 468 audit. Under
+> rev 603 the in-van phone counts people crossing a door line in its own
+> camera view (door events). There is still no door sensor; if the paper
+> says "door", it should mean that line in the camera's view.
 
 **Now:** "an in-van IoT camera captures cabin snapshots triggered by door
 closures or specific GPS nodes to initiate physical audits."
@@ -108,6 +117,12 @@ dependency the system does not require.
 
 ## 7. New paragraph for Scope and Limitation
 
+> **Superseded 16 Oct (rev 603): do not paste.** It describes the
+> retired automatic capture through the server's camera. The in-van phone
+> runs the model itself; a trip with no phone reporting is marked
+> Unaudited (`no_phone`, `silent_at_start`, `lens_blocked`,
+> `lost_en_route`) rather than counted.
+
 Paste at the end of the second Limitation paragraph, after the sentence
 ending "…rather than dedicated vehicle-mounted hardware."
 
@@ -154,6 +169,13 @@ distinguishing it from the franchise holder.
 ---
 
 ## 9. Two different alert rules  (§2.3.2.1 export line 228, §2.3.4 line 154)
+
+> **Settled by rev 603 (16 Oct).** Neither formula is the rule any more.
+> Before departure the camera's count aboard is checked against the
+> passenger list: fewer is a no-show, more stops Depart until each extra
+> boarding is listed or given a reason. After departure the count only
+> holds the van to 14 (brief 2.4, 6.1). The evaluation's both-direction
+> figures stay valid as a description of the detector.
 
 Not a claim the code fails to meet — a place where **the manuscript
 contradicts itself**, found while building the evaluation harness.
@@ -268,3 +290,52 @@ MatchedBookingID and MatchedLogEntryID → one `matched_booking_id`;
 Route_Stretches' From/ToTerminalID → the terminals at stops *k* and *k*+1;
 Notifications RecipientType/RecipientID → `audience`/`user_id`;
 Status 'En Route' → `departed`.
+
+---
+
+## 12. Revision 603: open points the code has settled  (brief rev 603)
+
+Revision 603 marks these [OPEN]. Each was decided while building (the
+owner delegated the choices on 15 Oct); the paper should state the
+decision rather than leave the point open.
+
+**Hash-chain genesis (brief 6.2, `EventHash`).** Built: the first event's
+"previous hash" is SHA-256 of `"sabaygo:" + ScheduleID`. Events are
+chained in the order they reach the server (a late upload appends), and
+the phone declares each still's `SnapshotHash` on the event, so a still
+deleted under retention leaves the chain intact. Suggested sentence:
+"For the first event of a trip, the previous hash is the SHA-256 of a
+fixed prefix and the trip's identifier." The stronger design in the
+brief, signing each event on the phone with a hardware-backed key, is not
+built; the server computes the hash.
+
+**Where the Dispatcher records a dispute (brief, Disputes).** In the
+mobile app, on their own trip's fare lines and driving flags. The Cashier
+and the Terminal Manager record one in the web console; only the
+Terminal Manager decides.
+
+**Emergencies (brief, module 18).** Kept as built: SOS from any role,
+recorded before any text message is attempted.
+
+**Dispatcher sign-in (brief, Authentication).** Email and password, the
+same JWT sign-in as every other role (see §4 for Firebase).
+
+**A van that leaves with boardings counted and no trip waiting.** No
+trip is created for it. The phone's events stay held, the Terminal
+Manager gets one "Trip not started · van left" alert, and the events
+join the trip the van is next assigned to. Suggested sentence: "Door
+events recorded while a van has no assigned trip are kept and attached
+to its next assigned trip; the Terminal Manager is alerted."
+
+**Settings with no value in the paper.** Shipped unset, and unset turns
+the feature off rather than guessing: `DepartZoneRadiusM` and
+`DepartReadings` (no GPS departure until a site survey sets them),
+`HomePickupMaxRouteM` (no home pickup offered), and the special-trip
+speed limit (no rental flagged). `RetentionDays` ships at the brief's
+assumed 30.
+
+**The model's input size (adds to §10).** The evaluation harness counts
+at Ultralytics' default 640 px input; the phone runs the same weights and
+thresholds at 320 or 416 px, chosen by the on-device benchmark
+(`docs/benchmarks/`). Until a re-run at the phone's size exists, say that
+the reported counting error is at 640 px.
