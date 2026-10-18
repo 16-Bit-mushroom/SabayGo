@@ -1279,9 +1279,11 @@ the rev 468 retirement are done (Rev 603 progress, above). Left:
 
 1. ~~Docs and merge~~ done 18 Oct: docs brought up to date,
    `main` fast-forwarded to this branch (local, not pushed).
-2. **The phone benchmark** (the owner runs it in a van): export, install,
-   Sweep, one full Run on vehicle power, then the report in
-   `docs/benchmarks/`. No frame rate is quoted before it exists.
+2. **The phone benchmark** (the owner runs it in a van). *Part 1 done
+   18 Oct:* the bench Sweep, `docs/benchmarks/edge_sweep_2026-10-18.md`
+   (CPU FP16 fastest at both sizes; the GPU slower on this phone; no
+   throttling in 9.5 min). Left: one full Run on vehicle power (part 2).
+   No operating frame rate is quoted before it exists.
 3. **The edge app proper** (brief 5.1–5.3) against `/edge/*`, sized by
    the benchmark; the owner field-tests and runs the Realme checklist.
 4. **A2Z's numbers** (the owner asks A2Z): `depart_zone_radius_m`,

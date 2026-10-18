@@ -12,7 +12,7 @@ they appear).*
 
 | # | Work | Who | State |
 |---|---|---|---|
-| 1 | **Phone benchmark** | owner, in a van | Models exported (YOLOv8n TFLite at 320 and 416 px, git-ignored under `edge_app/app/src/main/assets/models/`), debug APK built 14 Oct. Left: plug in the Realme, install, Sweep, one full Run on vehicle power, then the report in `docs/benchmarks/` via `edge_app/tools/summarise_benchmark.py`. No frame rate is quoted before that report exists |
+| 1 | **Phone benchmark** | owner, in a van | Models exported (YOLOv8n TFLite at 320 and 416 px, git-ignored under `edge_app/app/src/main/assets/models/`), debug APK built 14 Oct. Bench Sweep done 18 Oct: `docs/benchmarks/edge_sweep_2026-10-18.md`. Left: one full Run on vehicle power, summarised with `edge_app/tools/summarise_benchmark.py` as part 2. No operating frame rate is quoted before it exists |
 | 2 | **Edge app proper** (brief 5.1–5.3) | Claude, after 1 | Door line and seat mask, ByteTrack, offline queue, heartbeats, clock sync from `GET /edge/session`, blurred still, all against `/edge/*` (built and tested). Then the Realme setup checklist |
 | 3 | **A2Z's figures** | owner asks A2Z | These settings ship unset, which turns their feature off: `depart_zone_radius_m` + `depart_readings` (no GPS departure), `home_pickup_max_route_m` (no home pickup), `special_trip_speed_kmh` (no rental flagged), per-stretch speed limits (only stops flagged). Also the real routes, fares, timetable and SOS numbers in place of the `002_demo_dataset.sql` placeholders, and the questions below |
 | 4 | **Manuscript** | owner | Paste `MANUSCRIPT_CORRECTIONS.md` into the `.docx` |
