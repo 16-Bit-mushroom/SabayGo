@@ -4,9 +4,17 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/fleet_repository.dart';
+import '../../../viewmodels/auth_provider.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
+import '../roster_transfers.dart';
+import '../van_photos.dart';
 
+/// Member Records (brief 8, was Vans & Crew): the binder as three lists --
+/// operators, vans and staff -- with each record's validation. Only a
+/// validated van and Dispatcher can be assigned to a trip; the Terminal
+/// Manager validates, and not a record they imported. Import and export
+/// (Terminal Manager and Cashier) are logged.
 class FleetRosterScreen extends StatefulWidget {
   const FleetRosterScreen({super.key});
 
@@ -18,18 +26,25 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
   late final FleetRepository _fleet = context.read<FleetRepository>();
   late final DispatchRepository _dispatch = context.read<DispatchRepository>();
 
+  /// The Cashier sees the roster; only the Terminal Manager changes it.
+  bool get _canEdit => context.read<AuthProvider>().profile?.role.isManager ?? false;
+
   List<Van>? _vans;
   List<StaffMember>? _crew;
+  List<OperatorRecord>? _operators;
+  String _list = 'vans'; // operators | vans | staff
   List<RouteSummary> _routes = [];
   String? _error;
   bool _loading = true;
   final _vansScroll = ScrollController();
   final _crewScroll = ScrollController();
+  final _operatorsScroll = ScrollController();
 
   @override
   void dispose() {
     _vansScroll.dispose();
     _crewScroll.dispose();
+    _operatorsScroll.dispose();
     super.dispose();
   }
 
@@ -49,12 +64,14 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
         _fleet.listVans(),
         _fleet.listCrew(),
         _dispatch.listRoutes(),
+        _fleet.listOperators(),
       ]);
       if (!mounted) return;
       setState(() {
         _vans = results[0] as List<Van>;
         _crew = results[1] as List<StaffMember>;
         _routes = results[2] as List<RouteSummary>;
+        _operators = results[3] as List<OperatorRecord>;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -93,6 +110,48 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     } on ApiException catch (e) {
       _showSnack(e.message, isError: true);
     }
+  }
+
+  Future<void> _validate(String kind, String id, String name, String status) async {
+    try {
+      await _fleet.validate(kind, id, status);
+      _showSnack('$name: ${_validationWord(status)}.');
+      await _load();
+    } on ApiException catch (e) {
+      _showSnack(e.message, isError: true);
+    }
+  }
+
+  Future<void> _openAddOperatorDialog() async {
+    final created = await showDialog<OperatorRecord>(
+      context: context,
+      builder: (_) => _AddOperatorDialog(fleet: _fleet),
+    );
+    if (created != null) {
+      _showSnack('${created.fullName} added, Pending until validated.');
+      await _load();
+    }
+  }
+
+  Future<void> _openPhotos(Van van) async {
+    final changed = await showDialog<bool>(context: context, builder: (_) => VanPhotosDialog(van: van));
+    if (changed == true) await _load();
+  }
+
+  void _showOperatorDetail(OperatorRecord op) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _DetailDialog(title: op.fullName, rows: [
+        ('Licence', op.licenseNumber),
+        ('Licence expires', op.licenseExpiry == null
+            ? '—'
+            : '${op.licenseExpiry!.toIso8601String().substring(0, 10)}${op.licenseExpired ? ' (EXPIRED)' : ''}'),
+        ('Contact', op.contactNumber.isEmpty ? '—' : op.contactNumber),
+        ('Van', op.plateNumber ?? 'None yet'),
+        ('Record', _validationWord(op.validationStatus)),
+        if (op.importBatchId != null) ('Imported', 'Yes, in a batch'),
+      ]),
+    );
   }
 
   Future<void> _openAddVanDialog() async {
@@ -144,39 +203,79 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               PageHeader(
-                title: 'Vans & Crew',
-                description: 'The cooperative\'s vans, and the drivers and conductors who work '
-                    'them. Click a row for details; use the ⋮ button to change a status.',
-                actions: [RefreshButton(onPressed: _load, busy: _loading)],
+                title: 'Member Records',
+                technicalNote: 'Operators · Vans · Dispatchers',
+                description: 'A2Z\'s roster: the operators who own and drive the vans, the vans, and '
+                    'the staff. Only a validated van and Dispatcher can be assigned to a trip.',
+                actions: [
+                  RosterTransfers(onImported: _load),
+                  RefreshButton(onPressed: _load, busy: _loading),
+                ],
               ),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'operators', label: Text('Operators (${_operators?.length ?? 0})')),
+                  ButtonSegment(value: 'vans', label: Text('Vans (${_vans?.length ?? 0})')),
+                  ButtonSegment(value: 'staff', label: Text('Staff (${_crew?.length ?? 0})')),
+                ],
+                selected: {_list},
+                onSelectionChanged: (s) => setState(() => _list = s.first),
+              ),
+              const SizedBox(height: AppSpacing.lg),
               Expanded(
-                child: _loading
+                child: _loading && _vans == null
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
                         ? LoadError(message: _error!, onRetry: _load)
-                        : isDesktop
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: _buildVansTable()),
-                                  const SizedBox(width: 24),
-                                  Expanded(child: _buildDriversTable()),
-                                ],
-                              )
-                            : SingleChildScrollView(
-                                child: Column(
-                                  children: [
-                                    _buildVansTable(),
-                                    const SizedBox(height: 24),
-                                    _buildDriversTable(),
-                                  ],
-                                ),
-                              ),
+                        : switch (_list) {
+                            'operators' => _buildOperatorsTable(),
+                            'vans' => _buildVansTable(),
+                            _ => _buildStaffTable(),
+                          },
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildOperatorsTable() {
+    final ops = _operators ?? [];
+    return _RosterCard(
+      title: 'Operators',
+      count: ops.length,
+      icon: Icons.person_outline,
+      addLabel: 'Add operator',
+      onAdd: _canEdit ? _openAddOperatorDialog : null,
+      emptyMessage: 'No operators yet. Add one, or import the binder.',
+      scroll: _operatorsScroll,
+      columns: const [
+        ('Name', 24, false),
+        ('Licence', 22, false),
+        ('Van', 12, false),
+        ('Record', 14, false),
+      ],
+      rows: [
+        for (final op in ops)
+          _RosterRow(
+            semanticLabel: '${op.fullName}, ${_validationWord(op.validationStatus)}. Opens operator details.',
+            onTap: () => _showOperatorDetail(op),
+            cells: [
+              Text(op.fullName,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              Text('${op.licenseNumber}${op.licenseExpired ? '  · expired' : ''}',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: op.licenseExpired ? AppColors.danger : AppColors.textPrimary)),
+              Text(op.plateNumber ?? '—', style: _figures),
+              _validationBadge(op.validationStatus),
+            ],
+            trailing: _canEdit
+                ? _menu([..._validationItems()], (v) => _validate('operators', op.operatorId, op.fullName, v))
+                : const SizedBox.shrink(),
+          ),
+      ],
     );
   }
 
@@ -187,14 +286,15 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
       count: vans.length,
       icon: Icons.airport_shuttle_outlined,
       addLabel: 'Add van',
-      onAdd: _openAddVanDialog,
+      onAdd: _canEdit ? _openAddVanDialog : null,
       emptyMessage: 'No vans yet. Add the first one with "Add van".',
       scroll: _vansScroll,
       columns: const [
-        ('Plate number', 16, false),
-        ('Make and model', 24, false),
-        ('Seats', 8, true),
-        ('Status', 16, false),
+        ('Plate number', 14, false),
+        ('Operator', 20, false),
+        ('Photos', 8, true),
+        ('Status', 14, false),
+        ('Record', 14, false),
       ],
       rows: [
         for (final van in vans)
@@ -204,35 +304,52 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
             cells: [
               Text(van.plateNumber,
                   style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-              Text(
-                [van.brand, van.model].where((s) => s != null && s.isNotEmpty).join(' '),
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: AppColors.textPrimary),
-              ),
-              Text('${van.seatCapacity}', style: _figures),
+              Text(van.operatorName ?? '—',
+                  overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.textPrimary)),
+              Text('${van.photos.length}/4',
+                  style: _figures.copyWith(color: van.hasAllPhotos ? null : AppColors.warning)),
               _statusBadge(van.operationalStatus, _vanStatus(van.operationalStatus)),
+              _validationBadge(van.validationStatus),
             ],
-            trailing: _buildVanStatusMenu(van),
+            trailing: _menu([
+              const PopupMenuItem(value: 'photos', child: Text('Photographs…')),
+              if (_canEdit) ...[
+                const PopupMenuDivider(),
+                for (final s in const ['active', 'maintenance', 'inactive'])
+                  PopupMenuItem(value: 'status:$s', child: Text('Mark ${_vanStatus(s).toLowerCase()}')),
+                const PopupMenuDivider(),
+                ..._validationItems(),
+              ],
+            ], (v) {
+              if (v == 'photos') {
+                _openPhotos(van);
+              } else if (v.startsWith('status:')) {
+                _setVanStatus(van, v.substring(7));
+              } else {
+                _validate('vans', van.vanId, van.plateNumber, v);
+              }
+            }),
           ),
       ],
     );
   }
 
-  Widget _buildDriversTable() {
+  Widget _buildStaffTable() {
     final crew = _crew ?? [];
     return _RosterCard(
-      title: 'Drivers and conductors',
+      title: 'Staff',
       count: crew.length,
       icon: Icons.badge_outlined,
-      addLabel: 'Add crew member',
-      onAdd: _openAddCrewDialog,
-      emptyMessage: 'No drivers or conductors yet. Add the first with "Add crew member".',
+      addLabel: 'Add staff member',
+      onAdd: _canEdit ? _openAddCrewDialog : null,
+      emptyMessage: 'No staff yet. Add the first with "Add staff member".',
       scroll: _crewScroll,
       columns: const [
         ('Name', 24, false),
-        ('Role', 14, false),
-        ('Licence', 18, false),
+        ('Role', 16, false),
+        ('Phone', 14, false),
         ('Status', 14, false),
+        ('Record', 14, false),
       ],
       rows: [
         for (final staff in crew)
@@ -246,10 +363,25 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
                   style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               Text(_roleLabel(staff.role),
                   overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.textPrimary)),
-              Text(staff.licenseNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
+              Text(staff.phoneNumber ?? '—', overflow: TextOverflow.ellipsis, style: _figures),
               _statusBadge(staff.employmentStatus, _crewStatus(staff.employmentStatus)),
+              // Only a Dispatcher's record is validated (brief 3).
+              staff.role == 'dispatcher'
+                  ? _validationBadge(staff.validationStatus)
+                  : Text('—', style: TextStyle(color: AppColors.textMuted)),
             ],
-            trailing: _buildCrewStatusMenu(staff),
+            trailing: _canEdit
+                ? _menu([
+                    for (final s in const ['active', 'suspended', 'inactive'])
+                      PopupMenuItem(value: 'status:$s', child: Text('Mark ${_crewStatus(s).toLowerCase()}')),
+                    if (staff.role == 'dispatcher') ...[
+                      const PopupMenuDivider(),
+                      ..._validationItems(),
+                    ],
+                  ], (v) => v.startsWith('status:')
+                      ? _setCrewStatus(staff, v.substring(7))
+                      : _validate('crew', staff.userId, staff.fullName, v))
+                : const SizedBox.shrink(),
           ),
       ],
     );
@@ -260,12 +392,12 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
     fontFeatures: [FontFeature.tabularFigures()],
   );
 
-  /// Role in words. `coop_admin` is office staff -- never "operator", which
-  /// under LTFRB usage is the franchise holder (see migration 010).
+  /// Role in words. Never "operator" for staff: under LTFRB usage that is
+  /// the franchise holder, here the van owner, who has no account.
   static String _roleLabel(String role) => switch (role) {
-        'driver' => 'Driver',
-        'conductor' => 'Conductor',
-        'coop_admin' => 'Office staff',
+        'dispatcher' => 'Dispatcher',
+        'terminal_manager' => 'Terminal Manager',
+        'cashier' => 'Cashier',
         'admin' => 'Administrator',
         _ => role,
       };
@@ -286,29 +418,40 @@ class _FleetRosterScreenState extends State<FleetRosterScreen> {
         _ => s,
       };
 
-  Widget _buildVanStatusMenu(Van van) {
+  Widget _menu(List<PopupMenuEntry<String>> items, ValueChanged<String> onSelected) {
     return PopupMenuButton<String>(
-      tooltip: 'Change status',
+      tooltip: 'Change',
       icon: Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
-      onSelected: (status) => _setVanStatus(van, status),
-      itemBuilder: (_) => [
-        for (final s in const ['active', 'maintenance', 'inactive'])
-          PopupMenuItem(value: s, child: Text(_vanStatus(s))),
-      ],
+      onSelected: onSelected,
+      itemBuilder: (_) => items,
     );
   }
 
-  Widget _buildCrewStatusMenu(StaffMember staff) {
-    return PopupMenuButton<String>(
-      tooltip: 'Change status',
-      icon: Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
-      onSelected: (status) => _setCrewStatus(staff, status),
-      itemBuilder: (_) => [
-        for (final s in const ['active', 'suspended', 'inactive'])
-          PopupMenuItem(value: s, child: Text(_crewStatus(s))),
-      ],
-    );
-  }
+  /// The Terminal Manager's decision on a record (brief 3). A record they
+  /// imported themselves is refused by the server.
+  static List<PopupMenuEntry<String>> _validationItems() => const [
+        PopupMenuItem(value: 'validated', child: Text('Validate')),
+        PopupMenuItem(value: 'rejected', child: Text('Reject')),
+        PopupMenuItem(value: 'suspended', child: Text('Suspend')),
+        PopupMenuItem(value: 'pending', child: Text('Back to pending')),
+      ];
+
+  static String _validationWord(String s) => switch (s) {
+        'validated' => 'Validated',
+        'rejected' => 'Rejected',
+        'suspended' => 'Suspended',
+        _ => 'Pending',
+      };
+
+  static Widget _validationBadge(String s) => StatusBadge(
+        _validationWord(s),
+        tone: switch (s) {
+          'validated' => Tone.success,
+          'rejected' => Tone.danger,
+          'suspended' => Tone.neutral,
+          _ => Tone.warning,
+        },
+      );
 
   /// Three states, three tones, each with its word on the chip: in service,
   /// temporarily out (maintenance, suspended), and retired.
@@ -365,7 +508,8 @@ class _RosterCard extends StatelessWidget {
   final int count;
   final IconData icon;
   final String addLabel;
-  final VoidCallback onAdd;
+  /// Null hides the button: the Cashier reads the roster but does not edit it.
+  final VoidCallback? onAdd;
   final String emptyMessage;
   final ScrollController scroll;
 
@@ -445,11 +589,12 @@ class _RosterCard extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         if (count > 0) Text('$count', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
         const Spacer(),
-        TextButton.icon(
-          onPressed: onAdd,
-          icon: const Icon(Icons.add, size: 18),
-          label: Text(addLabel),
-        ),
+        if (onAdd != null)
+          TextButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(addLabel),
+          ),
       ]),
     );
 
@@ -540,6 +685,37 @@ class _AddVanDialogState extends State<_AddVanDialog> {
   bool _submitting = false;
   String? _error;
 
+  /// Operators with no van yet: one van per operator.
+  List<OperatorRecord>? _operators;
+  String? _operatorId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOperators();
+  }
+
+  Future<void> _loadOperators({String? select}) async {
+    try {
+      final all = await widget.fleet.listOperators();
+      if (!mounted) return;
+      setState(() {
+        _operators = all.where((o) => o.vanId == null).toList();
+        if (select != null) _operatorId = select;
+      });
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  Future<void> _addOperator() async {
+    final created = await showDialog<OperatorRecord>(
+      context: context,
+      builder: (_) => _AddOperatorDialog(fleet: widget.fleet),
+    );
+    if (created != null) await _loadOperators(select: created.operatorId);
+  }
+
   @override
   void dispose() {
     _plate.dispose();
@@ -558,6 +734,7 @@ class _AddVanDialogState extends State<_AddVanDialog> {
     try {
       await widget.fleet.createVan(
         plateNumber: _plate.text,
+        operatorId: _operatorId!,
         brand: _brand.text,
         model: _model.text,
         seatCapacity: int.parse(_seats.text),
@@ -588,6 +765,34 @@ class _AddVanDialogState extends State<_AddVanDialog> {
                   Text(_error!, style: TextStyle(color: AppColors.danger)),
                   const SizedBox(height: 12),
                 ],
+                DropdownButtonFormField<String>(
+                  decoration: _decoration('Operator (the van\'s owner, who drives)'),
+                  dropdownColor: AppColors.surfaceSunken,
+                  style: TextStyle(color: AppColors.textPrimary),
+                  value: _operatorId,
+                  items: (_operators ?? [])
+                      .map((o) => DropdownMenuItem(
+                          value: o.operatorId,
+                          child: Text('${o.fullName} · ${o.licenseNumber}')))
+                      .toList(),
+                  onChanged: (v) => setState(() => _operatorId = v),
+                  validator: (v) => v == null ? 'Pick the operator' : null,
+                ),
+                if (_operators != null && _operators!.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('Every operator on the roster already has a van.',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _submitting ? null : _addOperator,
+                    icon: const Icon(Icons.person_add_alt_1, size: 18),
+                    label: const Text('Add a new operator'),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 _field(_plate, 'Plate number', validator: (v) =>
                     (v == null || v.trim().length < 3) ? 'Required' : null),
                 const SizedBox(height: 12),
@@ -658,6 +863,141 @@ class _AddVanDialogState extends State<_AddVanDialog> {
       );
 }
 
+/// A van owner, added to the roster as Pending. Returns the new record.
+class _AddOperatorDialog extends StatefulWidget {
+  const _AddOperatorDialog({required this.fleet});
+  final FleetRepository fleet;
+
+  @override
+  State<_AddOperatorDialog> createState() => _AddOperatorDialogState();
+}
+
+class _AddOperatorDialogState extends State<_AddOperatorDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _contact = TextEditingController();
+  final _licence = TextEditingController();
+  DateTime? _expiry;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _contact.dispose();
+    _licence.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickExpiry() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _expiry ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 15),
+    );
+    if (picked != null) setState(() => _expiry = picked);
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_expiry == null) {
+      setState(() => _error = 'Pick the licence expiry date.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final created = await widget.fleet.createOperator(
+        fullName: _name.text,
+        contactNumber: _contact.text,
+        licenseNumber: _licence.text,
+        licenseExpiry: _expiry!,
+      );
+      if (mounted) Navigator.of(context).pop(created);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String? required(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
+    final expiry = _expiry;
+    return AlertDialog(
+      title: const Text('Add an operator'),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_error != null) ...[
+                Text(_error!, style: TextStyle(color: AppColors.danger)),
+                const SizedBox(height: 12),
+              ],
+              _input(_name, 'Full name, as on the licence', required),
+              const SizedBox(height: 12),
+              _input(_contact, 'Mobile number (09XXXXXXXXX)', required),
+              const SizedBox(height: 12),
+              _input(_licence, 'LTO licence number (N01-23-456789)', required),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      expiry == null
+                          ? 'Licence expiry: not set'
+                          : 'Licence expiry: ${expiry.toIso8601String().substring(0, 10)}',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
+                  ),
+                  TextButton(onPressed: _pickExpiry, child: const Text('Pick date')),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text('Saved as Pending until the Terminal Manager validates it.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Add operator'),
+        ),
+      ],
+    );
+  }
+
+  Widget _input(TextEditingController controller, String label,
+      String? Function(String?) validator) {
+    return TextFormField(
+      controller: controller,
+      style: TextStyle(color: AppColors.textPrimary),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: AppColors.textMuted),
+      ),
+      validator: validator,
+    );
+  }
+}
+
 class _AddCrewDialog extends StatefulWidget {
   const _AddCrewDialog({required this.fleet});
   final FleetRepository fleet;
@@ -673,12 +1013,8 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _password = TextEditingController();
-  final _license = TextEditingController();
-  // Only conductor/driver are valid Role values for crew. The backend's
-  // StaffIn model still accepts a stale "operator" literal left over from
-  // before migration 010 renamed that role to coop_admin -- there is no
-  // such Role any more, so it is never offered here.
-  String _role = 'conductor';
+  // Staff accounts only. The operator (van owner) has no login.
+  String _role = 'dispatcher';
   bool _submitting = false;
   String? _error;
 
@@ -689,7 +1025,6 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
     _email.dispose();
     _phone.dispose();
     _password.dispose();
-    _license.dispose();
     super.dispose();
   }
 
@@ -707,10 +1042,6 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
         role: _role,
         firstName: _firstName.text,
         lastName: _lastName.text,
-        licenseNumber: _role == 'driver' ? _license.text : null,
-        licenseExpiryDate: _role == 'driver'
-            ? DateTime.now().add(const Duration(days: 365))
-            : null,
       );
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -723,7 +1054,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add a crew member'),
+      title: const Text('Add a staff member'),
       content: SizedBox(
         width: 380,
         child: Form(
@@ -742,10 +1073,11 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
                   style: TextStyle(color: AppColors.textPrimary),
                   value: _role,
                   items: const [
-                    DropdownMenuItem(value: 'conductor', child: Text('Conductor')),
-                    DropdownMenuItem(value: 'driver', child: Text('Driver')),
+                    DropdownMenuItem(value: 'dispatcher', child: Text('Dispatcher')),
+                    DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+                    DropdownMenuItem(value: 'terminal_manager', child: Text('Terminal Manager')),
                   ],
-                  onChanged: (v) => setState(() => _role = v ?? 'conductor'),
+                  onChanged: (v) => setState(() => _role = v ?? 'dispatcher'),
                 ),
                 const SizedBox(height: 12),
                 _field(_firstName, 'First name', required: true),
@@ -757,10 +1089,6 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
                 _field(_phone, 'Phone number', required: true),
                 const SizedBox(height: 12),
                 _field(_password, 'Temporary password', required: true, obscure: true),
-                if (_role == 'driver') ...[
-                  const SizedBox(height: 12),
-                  _field(_license, 'Driver\'s licence number', required: true),
-                ],
               ],
             ),
           ),
@@ -776,7 +1104,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
           child: _submitting
               ? const SizedBox(
                   width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Add crew member'),
+              : const Text('Add staff member'),
         ),
       ],
     );
@@ -802,8 +1130,7 @@ class _AddCrewDialogState extends State<_AddCrewDialog> {
 }
 
 /// Row-click detail views. Fields the roster table has no room for --
-/// CPC papers, the camera unit's device id, a driver's full licence and
-/// CTTMO record -- already exist on the backend; this just surfaces them
+/// CPC papers and the camera unit's device id -- already exist on the backend; this just surfaces them
 /// instead of adding new ones. No photos yet: `vans` has no photo column
 /// at all, and wiring one up (migration + upload endpoint + storage) is
 /// separate follow-on work.
@@ -860,6 +1187,9 @@ class _VanDetailDialog extends StatelessWidget {
     return _DetailDialog(
       title: van.plateNumber,
       rows: [
+        ('Operator', van.operatorName ?? '—'),
+        ('Record', _FleetRosterScreenState._validationWord(van.validationStatus)),
+        ('Photographs', '${van.photos.length} of 4${van.hasAllPhotos ? '' : ' (all four needed to validate)'}'),
         ('Brand / Model', brandModel.isEmpty ? '—' : brandModel),
         ('Color', van.color ?? '—'),
         ('Seat capacity', van.seatCapacity.toString()),
@@ -895,16 +1225,6 @@ class _CrewDetailDialog extends StatelessWidget {
         ('Email', staff.email),
         ('Phone', staff.phoneNumber ?? '—'),
         ('Cooperative', staff.cooperativeName ?? '—'),
-        if (staff.role == 'driver') ...[
-          ('License number', staff.licenseNumber ?? '—'),
-          (
-            'License expiry',
-            staff.licenseExpiryDate == null
-                ? '—'
-                : '${staff.licenseExpiryDate!.year}-${staff.licenseExpiryDate!.month.toString().padLeft(2, '0')}-${staff.licenseExpiryDate!.day.toString().padLeft(2, '0')}'
-          ),
-          ('CTTMO ID', staff.cttmoIdNumber ?? '—'),
-        ],
       ],
     );
   }

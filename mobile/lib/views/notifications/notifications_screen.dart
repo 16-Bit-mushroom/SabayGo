@@ -9,7 +9,7 @@ import '../../viewmodels/notifications_viewmodel.dart';
 
 class NotificationsScreen extends StatefulWidget {
   /// Pass a [viewModel] to share one already polling elsewhere (the
-  /// conductor's app-bar badge); omit it and the screen owns its own.
+  /// Dispatcher's app-bar badge); omit it and the screen owns its own.
   const NotificationsScreen({super.key, this.viewModel});
 
   final NotificationsViewModel? viewModel;

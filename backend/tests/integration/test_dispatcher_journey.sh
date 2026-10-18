@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# Dispatcher journey -- everything a Dispatcher does at the terminal.
+#
+#   ./tests/integration/test_dispatcher_journey.sh
+#
+# The Dispatcher works the van door: scan tickets, log cash walk-ins,
+# watch the manifest, close boarding.
+set -uo pipefail
+
+API="http://127.0.0.1:8000/api/v1"
+TRIP="TRIP-DEMO-00000001"
+STAMP=$(date +%s)
+PASS_N=0; FAIL_N=0; GAP_N=0
+
+j() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1)" 2>/dev/null; }
+hdr() { printf '\n\033[1m%s\033[0m\n' "── $* ────────────────────────────────"; }
+ok()  { printf '  \033[32mPASS\033[0m  %s\n' "$1"; PASS_N=$((PASS_N+1)); }
+bad() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAIL_N=$((FAIL_N+1)); }
+gap() { printf '  \033[33mGAP \033[0m  %s\n' "$1"; GAP_N=$((GAP_N+1)); }
+
+code() {
+  local m=$1 p=$2 d=${3:-} t=${4:-}
+  local args=(-s -o /tmp/resp.json -w "%{http_code}" -X "$m" "$API$p")
+  [ -n "$t" ] && args+=(-H "Authorization: Bearer $t")
+  [ -n "$d" ] && args+=(-H "Content-Type: application/json" -d "$d")
+  curl "${args[@]}"
+}
+
+# ═══════════════════════════════════════════════ 1. SIGN IN
+hdr "1. Conductor signs in"
+
+S=$(code POST /auth/login '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}')
+[ "$S" = "200" ] && ok "login" || { bad "login gave $S"; exit 1; }
+CT=$(j "['access_token']" < /tmp/resp.json)
+[ "$(j "['role']" < /tmp/resp.json)" = "dispatcher" ] && ok "role is dispatcher" || bad "wrong role"
+# The office takes the share, starts and departs the trip (rev 603,
+# brief 2.1, 4.2).
+code POST /auth/login '{"email":"cashier@sabaygo.dev","password":"sabaygo123"}' >/dev/null
+OFF=$(j "['access_token']" < /tmp/resp.json)
+
+S=$(code GET /auth/me "" "$CT")
+[ "$S" = "200" ] && ok "profile: $(j "['display_name']" < /tmp/resp.json)" || bad "me gave $S"
+
+# ── set up a paid passenger to scan
+hdr "   (setting up a paid passenger)"
+S=$(code POST /auth/register "{\"email\":\"pax${STAMP}@sabaygo.dev\",
+  \"phone_number\":\"0916${STAMP: -7}\",\"password\":\"sabaygo123\",
+  \"first_name\":\"Scan\",\"last_name\":\"Target\"}")
+PT=$(j "['access_token']" < /tmp/resp.json)
+code POST /bookings/reserve \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
+BID=$(j "['booking_id']" < /tmp/resp.json)
+QR=$(j "['qr_payload']" < /tmp/resp.json)
+python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1 \
+  && ok "passenger booked and paid" || gap "webhook secret not set -- ticket stays unpaid"
+
+# A second ticket, deliberately left unpaid. Reserved here rather than at
+# the scan below because APP_BOOKABLE is {scheduled} -- once boarding
+# opens, reserve is correctly refused and the QR came back empty, which
+# made the unpaid scan look like wrong_trip and tested nothing.
+code POST /bookings/reserve \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
+UNPAID_QR=$(j "['qr_payload']" < /tmp/resp.json)
+
+# ═══════════════════════════════════════════════ 2. BOARDING
+hdr "2. Boarding"
+
+code GET "/trips/$TRIP/share" "" "$OFF" >/dev/null
+S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$(j "['amount_due']" < /tmp/resp.json)\",\"reference\":\"OR-$STAMP\"}" "$OFF")
+[ "$S" = "200" ] && ok "the cashier records the 15 % share" || bad "payment gave $S"
+S=$(code POST "/trips/$TRIP/start" "" "$OFF")
+[ "$S" = "200" ] && ok "the cashier starts the trip" || bad "start gave $S"
+
+S=$(code POST /scans \
+  "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
+R=$(j "['result']" < /tmp/resp.json)
+[ "$R" = "valid" ] && ok "valid ticket accepted" \
+                   || bad "valid scan returned $R"
+
+S=$(code POST /scans \
+  "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
+R=$(j "['result']" < /tmp/resp.json)
+[ "$R" = "already_boarded" ] && ok "duplicate scan flagged (already_boarded)" \
+                            || bad "duplicate scan returned $R"
+
+S=$(code POST /scans \
+  "{\"qr_payload\":\"SBG-does-not-exist\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
+R=$(j "['result']" < /tmp/resp.json)
+# 200 on purpose: a Dispatcher with a queue needs a verdict, not an exception.
+[ "$S" = "200" ] && [ "$R" = "wrong_trip" ] \
+  && ok "unknown QR rejected without raising ($R)" || bad "unknown QR: $S/$R"
+
+S=$(code POST /scans \
+  "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":3}" "$CT")
+R=$(j "['result']" < /tmp/resp.json)
+[ "$R" = "already_boarded" ] || [ "$R" = "wrong_stop" ] \
+  && ok "wrong stop handled ($R)" || bad "wrong stop returned $R"
+
+# unpaid ticket -- reserved in section 1, while the trip was still scheduled
+S=$(code POST /scans \
+  "{\"qr_payload\":\"$UNPAID_QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
+R=$(j "['result']" < /tmp/resp.json)
+[ "$R" = "unpaid" ] && ok "unpaid ticket refused (unpaid)" || bad "unpaid scan returned $R"
+
+# ═══════════════════════════════════════════════ 3. WALK-INS
+hdr "3. Cash walk-ins"
+
+S=$(code POST /bookings/walk-in \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
+[ "$S" = "201" ] && ok "anonymous walk-in logged -- status $(j "['status']" < /tmp/resp.json)" \
+                 || bad "walk-in gave $S"
+
+S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,
+  \"alighting_stop\":4,\"name\":\"Maria Santos\",\"phone\":\"09171112222\",
+  \"wants_receipt\":true}" "$CT")
+[ "$S" = "201" ] && ok "walk-in with receipt details -- P$(j "['fare_amount']" < /tmp/resp.json)" \
+                 || bad "receipt walk-in gave $S"
+
+S=$(code POST /bookings/walk-in \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":3}" "$CT")
+[ "$S" = "201" ] && ok "walk-in to an intermediate terminal (stop 1->3)" || bad "walk-in to stop 3 gave $S"
+
+S=$(code POST /bookings/walk-in \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":3,\"alighting_stop\":4}" "$CT")
+[ "$S" = "422" ] && ok "a walk-in from a later terminal is refused (rev 603)" || bad "stop-3 walk-in gave $S"
+
+# ═══════════════════════════════════════════════ 4. MANIFEST
+hdr "4. Manifest"
+
+S=$(code GET "/trips/$TRIP/manifest" "" "$CT")
+if [ "$S" = "200" ]; then
+  python3 -c "
+import json;m=json.load(open('/tmp/resp.json'))
+print(f\"        capacity={m['seat_capacity']}  total={m['total_bookings']}  \"
+      f\"boarded={m['boarded']}  awaiting={m['awaiting']}  unpaid={m['unpaid']}\")
+for p in m['passengers']:
+    who = p['name'] or ('walk-in' if p['booking_type']!='app' else 'app')
+    print(f\"        {p['boarding_stop']}->{p['alighting_stop']}  \"
+          f\"{p['status']:<11} {who}\")"
+  ok "manifest retrieved"
+else bad "manifest gave $S"; fi
+
+S=$(code "GET" "/bookings/availability?trip_id=$TRIP&boarding_stop=1&alighting_stop=4")
+ok "seats still sellable end-to-end: $(j "['seats_available']" < /tmp/resp.json)"
+
+# ═══════════════════════════════════════════════ 5. DEPARTURE
+hdr "5. Departure"
+
+S=$(code POST "/trips/$TRIP/depart" "" "$OFF")
+if [ "$S" = "200" ]; then
+  ok "departed -- $(j "['no_shows']" < /tmp/resp.json) no-show(s) recorded"
+else bad "depart gave $S"; fi
+
+S=$(code POST /bookings/reserve \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")
+[ "$S" = "409" ] && ok "bookings closed after departure (409)" || bad "post-departure booking gave $S"
+
+# ═══════════════════════════════════════════════ 6. BOUNDARIES
+hdr "6. A Dispatcher is not the Terminal Manager"
+
+for ep in "GET /fleet/vans" "GET /config/policies" "GET /statements" \
+          "GET /boarding-audit"; do
+  m=${ep%% *}; p=${ep#* }
+  S=$(code "$m" "$p" "" "$CT")
+  [ "$S" = "403" ] && ok "$p blocked (403)" || bad "$p gave $S, expected 403"
+done
+
+S=$(code POST /fleet/vans '{"plate_number":"HAX-0001","seat_capacity":14}' "$CT")
+[ "$S" = "403" ] && ok "cannot add vans (403)" || bad "van creation gave $S"
+
+printf '\n\033[1m═══ SUMMARY ═══\033[0m\n  passed  %d\n  failed  %d\n  gaps    %d\n\n' \
+  "$PASS_N" "$FAIL_N" "$GAP_N"

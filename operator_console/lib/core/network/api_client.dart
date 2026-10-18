@@ -61,6 +61,30 @@ class ApiClient {
     }
   }
 
+  /// A multipart upload of one file under [field]: a van photograph, a
+  /// roster import. Errors are surfaced exactly as for JSON calls.
+  Future<dynamic> upload(
+    String method,
+    String path, {
+    required String field,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final request = http.MultipartRequest(method, Uri.parse('$_baseUrl$path'))
+      ..headers['Accept'] = 'application/json'
+      ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
+    final token = await _tokens.readAccessToken();
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    try {
+      final streamed = await _http.send(request).timeout(AppConfig.requestTimeout);
+      return _handle(await http.Response.fromStream(streamed));
+    } on TimeoutException {
+      throw const RequestTimeoutException();
+    } on http.ClientException {
+      throw const NetworkException();
+    }
+  }
+
   Future<dynamic> _send(
     String method,
     String path, {

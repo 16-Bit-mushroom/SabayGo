@@ -24,48 +24,8 @@ class RouteSummary {
       );
 }
 
-/// One row of the dispatch board -- a scheduled or special departure.
-///
-/// Sourced from the same reconciliation view the revenue module reads, so
-/// a trip with zero bookings still appears: the view LEFT JOINs bookings
-/// rather than requiring one.
-class TripBoardRow {
-  const TripBoardRow({
-    required this.tripId,
-    required this.serviceDate,
-    required this.departureDatetime,
-    required this.routeName,
-    this.plateNumber,
-    required this.seatCapacity,
-    required this.totalBookings,
-    required this.pendingAudits,
-  });
-
-  final String tripId;
-  final DateTime serviceDate;
-  final DateTime departureDatetime;
-  final String routeName;
-  final String? plateNumber;
-  final int seatCapacity;
-  final int totalBookings;
-  final int pendingAudits;
-
-  bool get hasDeparted => departureDatetime.isBefore(DateTime.now());
-
-  factory TripBoardRow.fromJson(Map<String, dynamic> json) => TripBoardRow(
-        tripId: json['trip_id'] as String,
-        serviceDate: DateTime.parse(json['service_date'] as String),
-        departureDatetime: DateTime.parse(json['departure_datetime'] as String),
-        routeName: json['route_name'] as String,
-        plateNumber: json['plate_number'] as String?,
-        seatCapacity: json['seat_capacity'] as int,
-        totalBookings: json['total_bookings'] as int,
-        pendingAudits: json['pending_audits'] as int,
-      );
-}
-
 /// One trip on the office's trip board (GET /config/trips): live status,
-/// crew and passenger counts -- what each conductor sees, all at once.
+/// crew and passenger counts -- what each Dispatcher sees, all at once.
 class TripBoardEntry {
   const TripBoardEntry({
     required this.tripId,
@@ -74,14 +34,31 @@ class TripBoardEntry {
     required this.departureDatetime,
     required this.status,
     required this.departedAt,
+    required this.vanId,
+    required this.dispatcherId,
     required this.plateNumber,
-    required this.driverName,
-    required this.conductorName,
+    required this.operatorName,
+    required this.dispatcherName,
+    required this.assignedByName,
+    required this.startOpensAt,
+    required this.startMode,
+    required this.startedByName,
+    required this.startedAt,
+    required this.startReviewStatus,
+    required this.auditStatus,
+    required this.unauditedReason,
+    required this.departureSource,
+    required this.changeNote,
+    required this.paymentStatus,
     required this.seatCapacity,
     required this.booked,
     required this.checkedIn,
     required this.boarded,
     required this.noShow,
+    this.doorAboard,
+    this.phoneLastReportAt,
+    this.phoneBatteryPct,
+    this.phoneSilent,
   });
 
   final String tripId;
@@ -90,14 +67,43 @@ class TripBoardEntry {
   final DateTime departureDatetime;
   final String status;
   final DateTime? departedAt;
+  final String? vanId;
+  final String? dispatcherId;
   final String? plateNumber;
-  final String? driverName;
-  final String? conductorName;
+  /// The van's owner, who drives it. A name beside the plate, never a user.
+  final String? operatorName;
+  final String? dispatcherName;
+
+  // The lifecycle (rev 468, brief 4): assignment at the van's turn, the
+  // start (by a person, or by the system and then held for review), the
+  // phone's audit state, and the Terminal Manager's last change.
+  final String? assignedByName;
+  final DateTime startOpensAt;
+  final String? startMode; // manual | auto_assigned | auto_detected
+  final String? startedByName;
+  final DateTime? startedAt;
+  final String startReviewStatus; // not_required | pending | reviewed
+  final String auditStatus; // audited | unaudited
+  final String? unauditedReason;
+  final String? departureSource; // confirmed | detected
+  final String? changeNote;
+  /// A2Z's 15 % (brief 2.1): unpaid | paid | overridden | left_unpaid.
+  final String paymentStatus;
+
+  bool get isAssigned => vanId != null && dispatcherId != null;
+  bool get awaitsReview => startReviewStatus == 'pending';
   final int seatCapacity;
   final int booked;
   final int checkedIn;
   final int boarded;
   final int noShow;
+  /// The camera's door count aboard; null when the phone counted nothing.
+  final int? doorAboard;
+  /// The phone out with the van (Trip Monitoring, brief 9); `phoneSilent`
+  /// is null when no phone is checked out with it.
+  final DateTime? phoneLastReportAt;
+  final int? phoneBatteryPct;
+  final bool? phoneSilent;
 
   factory TripBoardEntry.fromJson(Map<String, dynamic> j) => TripBoardEntry(
         tripId: j['trip_id'] as String,
@@ -106,18 +112,36 @@ class TripBoardEntry {
         departureDatetime: DateTime.parse(j['departure_datetime'] as String),
         status: j['status'] as String,
         departedAt: j['departed_at'] == null ? null : DateTime.parse(j['departed_at'] as String),
+        vanId: j['van_id'] as String?,
+        dispatcherId: j['dispatcher_id'] as String?,
         plateNumber: j['plate_number'] as String?,
-        driverName: j['driver_name'] as String?,
-        conductorName: j['conductor_name'] as String?,
+        operatorName: j['operator_name'] as String?,
+        dispatcherName: j['dispatcher_name'] as String?,
+        assignedByName: j['assigned_by_name'] as String?,
+        startOpensAt: DateTime.parse(j['start_opens_at'] as String),
+        startMode: j['start_mode'] as String?,
+        startedByName: j['started_by_name'] as String?,
+        startedAt: j['started_at'] == null ? null : DateTime.parse(j['started_at'] as String),
+        startReviewStatus: j['start_review_status'] as String,
+        auditStatus: j['audit_status'] as String,
+        unauditedReason: j['unaudited_reason'] as String?,
+        departureSource: j['departure_source'] as String?,
+        changeNote: j['change_note'] as String?,
+        paymentStatus: j['payment_status'] as String,
         seatCapacity: j['seat_capacity'] as int,
         booked: j['booked'] as int,
         checkedIn: j['checked_in'] as int,
         boarded: j['boarded'] as int,
         noShow: j['no_show'] as int,
+        doorAboard: j['door_aboard'] as int?,
+        phoneLastReportAt:
+            j['phone_last_report_at'] == null ? null : DateTime.parse(j['phone_last_report_at'] as String),
+        phoneBatteryPct: j['phone_battery_pct'] as int?,
+        phoneSilent: j['phone_silent'] as bool?,
       );
 }
 
-/// The conductor's manifest (GET /trips/{id}/manifest), read by the office.
+/// The Dispatcher's manifest (GET /trips/{id}/manifest), read by the office.
 /// Same endpoint, same fields, so the two screens cannot disagree.
 class TripManifest {
   const TripManifest({
@@ -157,8 +181,6 @@ class ManifestPassenger {
     required this.bookingType,
     required this.status,
     required this.fareAmount,
-    required this.isRoadsidePickup,
-    required this.pickupLandmark,
   });
 
   final String ticketNumber;
@@ -168,8 +190,6 @@ class ManifestPassenger {
   final String bookingType;
   final String status;
   final String fareAmount;
-  final bool isRoadsidePickup;
-  final String? pickupLandmark;
 
   factory ManifestPassenger.fromJson(Map<String, dynamic> j) => ManifestPassenger(
         ticketNumber: j['ticket_number'] as String,
@@ -179,8 +199,6 @@ class ManifestPassenger {
         bookingType: j['booking_type'] as String,
         status: j['status'] as String,
         fareAmount: j['fare_amount'].toString(),
-        isRoadsidePickup: j['is_roadside_pickup'] as bool? ?? false,
-        pickupLandmark: j['pickup_landmark'] as String?,
       );
 }
 
@@ -203,22 +221,6 @@ class DispatchRepository {
     final json = await _api.get('/config/routes');
     return (json as List)
         .map((e) => RouteSummary.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  /// Today's departures, generated or special, newest scheduled first.
-  Future<List<TripBoardRow>> todaysTrips() async {
-    final today = DateTime.now();
-    final iso = '${today.year.toString().padLeft(4, '0')}-'
-        '${today.month.toString().padLeft(2, '0')}-'
-        '${today.day.toString().padLeft(2, '0')}';
-    final json = await _api.get('/revenue/trips', query: {
-      'date_from': iso,
-      'date_to': iso,
-      'limit': 200,
-    });
-    return (json as List)
-        .map((e) => TripBoardRow.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -246,23 +248,117 @@ class DispatchRepository {
     return TripManifest.fromJson(json as Map<String, dynamic>);
   }
 
-  /// An ad-hoc departure outside the regular schedule template.
-  Future<Map<String, dynamic>> createSpecialTrip({
-    required String routeId,
-    required DateTime departureDatetime,
-    String? vanId,
-    String? driverId,
-    String? conductorId,
-    String? tripLabel,
-  }) async {
-    final json = await _api.post('/config/trips/special', body: {
-      'route_id': routeId,
-      'departure_datetime': departureDatetime.toIso8601String(),
-      if (vanId != null) 'van_id': vanId,
-      if (driverId != null) 'driver_id': driverId,
-      if (conductorId != null) 'conductor_id': conductorId,
-      if (tripLabel != null && tripLabel.isNotEmpty) 'trip_label': tripLabel,
-    });
-    return json as Map<String, dynamic>;
+  // ---------------------------------------------------------- lifecycle
+  // The office assigns, starts and departs; the Terminal Manager alone
+  // reviews an automatic start, changes a started trip's van or voids it.
+
+  Future<void> assign(String tripId, {String? vanId, String? dispatcherId}) =>
+      _api.put('/trips/$tripId/assignment', body: {
+        'van_id': vanId,
+        'dispatcher_id': dispatcherId,
+      });
+
+  /// Starts the trip. Returns the warnings for the person who started it:
+  /// an expired licence, no phone with the van. A start is never refused
+  /// for them.
+  Future<List<String>> start(String tripId, {String? vanId}) async {
+    final json = await _api.post('/trips/$tripId/start',
+        body: {if (vanId != null) 'van_id': vanId});
+    return ((json as Map<String, dynamic>)['warnings'] as List).cast<String>();
   }
+
+  Future<void> depart(String tripId) => _api.post('/trips/$tripId/depart');
+
+  Future<void> reviewStart(String tripId, {String? vanId, String? note}) =>
+      _api.post('/trips/$tripId/start-review', body: {
+        if (vanId != null) 'van_id': vanId,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+
+  Future<void> changeVan(String tripId, {required String vanId, required String reason}) =>
+      _api.post('/trips/$tripId/change-van', body: {'van_id': vanId, 'reason': reason});
+
+  Future<void> voidTrip(String tripId, {required String reason}) =>
+      _api.post('/trips/$tripId/void', body: {'reason': reason});
+
+  // ------------------------------------------------------- A2Z's share
+  // The Cashier records the 15 % the Dispatcher hands over; Start waits
+  // for it (brief 2.1). The Terminal Manager may lift the block, with a
+  // reason, but records no payment.
+
+  /// The share does not carry the trip's status; the board's is passed in.
+  Future<TripShare> share(String tripId, {required String tripStatus}) async => TripShare.fromJson(
+        await _api.get('/trips/$tripId/share') as Map<String, dynamic>,
+        beforeDeparture: tripStatus == 'scheduled' || tripStatus == 'boarding',
+      );
+
+  /// Before departure the payment is the trip's; after, it goes on the
+  /// van's statement, where a trip that left unpaid is still owed.
+  Future<void> recordPayment(TripShare share, {required String amount, String? reference}) {
+    final body = {'amount': amount, if (reference != null && reference.isNotEmpty) 'reference': reference};
+    return share.beforeDeparture
+        ? _api.post('/trips/${share.tripId}/payment', body: body)
+        : _api.post('/statements/${share.remittanceId}/payments', body: body);
+  }
+
+  Future<void> overridePayment(String tripId, {required String note}) =>
+      _api.post('/trips/$tripId/payment-override', body: {'note': note});
+}
+
+/// A trip's share (GET /trips/{id}/share). `amountDue` is the van's
+/// undisputed balance for the day: this trip's share plus anything the van
+/// still owes, which is what the Cashier should receive now.
+class TripShare {
+  const TripShare({
+    required this.tripId,
+    required this.paymentStatus,
+    required this.remittanceId,
+    required this.amountDue,
+    required this.disputed,
+    required this.lines,
+    required this.beforeDeparture,
+  });
+
+  final String tripId;
+  final String paymentStatus;
+  final String? remittanceId;
+  final double amountDue;
+  final double disputed;
+  final List<ShareLine> lines;
+  final bool beforeDeparture;
+
+  factory TripShare.fromJson(Map<String, dynamic> j, {required bool beforeDeparture}) => TripShare(
+        tripId: j['trip_id'] as String,
+        paymentStatus: j['payment_status'] as String,
+        remittanceId: j['remittance_id'] as String?,
+        amountDue: double.parse(j['amount_due'].toString()),
+        disputed: double.parse(j['disputed'].toString()),
+        lines: (j['lines'] as List).map((e) => ShareLine.fromJson(e as Map<String, dynamic>)).toList(),
+        beforeDeparture: beforeDeparture,
+      );
+}
+
+/// One fare line: passengers to one drop-off terminal at one fare.
+class ShareLine {
+  const ShareLine({
+    required this.destination,
+    required this.passengerCount,
+    required this.farePerPassenger,
+    required this.shareAmount,
+    required this.isTopUp,
+  });
+
+  final String destination;
+  final int passengerCount;
+  final double farePerPassenger;
+  final double shareAmount;
+  final bool isTopUp;
+
+  factory ShareLine.fromJson(Map<String, dynamic> j) => ShareLine(
+        destination: (j['dest_terminal_name'] ?? 'No drop-off terminal') as String,
+        passengerCount: j['passenger_count'] as int,
+        farePerPassenger: double.parse(j['fare_per_passenger'].toString()),
+        shareAmount: double.parse(j['share_amount'].toString()),
+        isTopUp: j['is_top_up'] as bool,
+      );
 }

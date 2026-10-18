@@ -104,14 +104,19 @@ It is not in `requirements.txt` because the *service* does not need it, and
 `evaluate.py` skips the figure with a warning rather than failing if it is
 absent.
 
-## Why the harness imports the service's own code
+## Why the harness imports `inference.py`
 
-`evaluate.py` counts through `inference.count_people()` — the same function
-`app.py` calls on every real audit. If the harness carried its own YOLO handle
-and its own thresholds, the numbers in the paper would not be the numbers the
-running system produces, and a panel would be right to ask which of the two
-the paper was describing. `inference.py` exists to make that impossible; the
-only thing `evaluate.py` overrides is the confidence threshold, for the sweep.
+`evaluate.py` counts through `inference.count_people()`, which holds the
+person rule the in-van phone runs: the same `yolov8n.pt` weights (exported to
+TFLite) and the same thresholds. If the harness carried its own YOLO handle
+and its own thresholds, a panel would be right to ask which of the two the
+paper was describing. The only thing `evaluate.py` overrides is the
+confidence threshold, for the sweep.
+
+One difference to state: the harness uses Ultralytics' default input size,
+640 px; the phone runs at 320 or 416 px (the edge benchmark in
+`docs/benchmarks/` picks one). The rev 468 Flask node (`app.py`) that also
+called `count_people` was retired on 16 Oct.
 
 ## Files
 

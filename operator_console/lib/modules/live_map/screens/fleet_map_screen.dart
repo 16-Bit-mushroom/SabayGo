@@ -376,7 +376,7 @@ class _VanList extends StatelessWidget {
           child: EmptyState(
             icon: Icons.airport_shuttle_outlined,
             title: 'No van is on a trip right now',
-            hint: 'A van appears here once its conductor opens boarding or departs, '
+            hint: 'A van appears here once its Dispatcher opens boarding or departs, '
                 'and its phone sends a location.',
           ),
         ),
@@ -553,7 +553,9 @@ class _VanCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: _AboardTile(
-                      aboard: t?.boarded,
+                      // The camera's door count when the phone has one
+                      // (Passenger_Events, brief 9), else scanned tickets.
+                      aboard: t?.doorAboard ?? t?.boarded,
                       seats: t?.seatCapacity,
                     ),
                   ),
@@ -569,9 +571,9 @@ class _VanCard extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      PersonRow(role: 'Driver', name: t.driverName),
+                      PersonRow(role: 'Operator', name: t.operatorName),
                       const SizedBox(height: AppSpacing.sm),
-                      PersonRow(role: 'Conductor', name: t.conductorName),
+                      PersonRow(role: 'Dispatcher', name: t.dispatcherName),
                     ],
                   ),
                 ),

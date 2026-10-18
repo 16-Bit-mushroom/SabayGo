@@ -100,9 +100,9 @@ async def register(payload: RegisterRequest, session: SessionDep) -> TokenRespon
     Returns a token directly so the app does not have to bounce the person
     to a login screen immediately after signing up.
 
-    Staff accounts are deliberately NOT creatable here -- conductors,
-    drivers and operators are provisioned by a cooperative administrator, because
-    employment is a cooperative decision, not self-service.
+    Staff accounts are deliberately NOT creatable here -- Dispatchers and
+    Cashiers are provisioned by the Terminal Manager, because employment is
+    A2Z's decision, not self-service. The operator has no account at all.
     """
     result = await RegisterPassengerUseCase(session).execute(
         RegisterPassengerCommand(

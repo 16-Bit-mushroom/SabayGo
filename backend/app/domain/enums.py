@@ -9,10 +9,13 @@ from enum import Enum
 
 
 class Role(str, Enum):
+    """Who can sign in. The operator (van owner, who drives) is not here:
+    a roster row in `operators`, no login."""
+
     PASSENGER = "passenger"
-    CONDUCTOR = "conductor"
-    DRIVER = "driver"
-    COOP_ADMIN = "coop_admin"
+    DISPATCHER = "dispatcher"
+    TERMINAL_MANAGER = "terminal_manager"
+    CASHIER = "cashier"
     ADMIN = "admin"
 
 
@@ -28,6 +31,42 @@ class TripStatus(str, Enum):
     DEPARTED = "departed"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class StartMode(str, Enum):
+    """How a trip was started (brief 4.2 rules 5 and 7; migration 019)."""
+
+    MANUAL = "manual"
+    AUTO_ASSIGNED = "auto_assigned"
+    AUTO_DETECTED = "auto_detected"
+
+
+class StartReview(str, Enum):
+    """An automatic start is held off the statement until reviewed."""
+
+    NOT_REQUIRED = "not_required"
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+
+
+class TripAuditStatus(str, Enum):
+    AUDITED = "audited"
+    UNAUDITED = "unaudited"
+
+
+class UnauditedReason(str, Enum):
+    NO_PHONE = "no_phone"
+    SILENT_AT_START = "silent_at_start"
+    LOST_EN_ROUTE = "lost_en_route"
+    LENS_BLOCKED = "lens_blocked"
+
+
+class DepartureSource(str, Enum):
+    """Who tapped Depart, or 'gps' when nobody did (brief 4.2 rule 7)."""
+
+    DISPATCHER = "dispatcher"
+    STAFF = "staff"
+    GPS = "gps"
 
 
 class BookingStatus(str, Enum):

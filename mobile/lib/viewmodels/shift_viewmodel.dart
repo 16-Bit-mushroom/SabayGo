@@ -3,13 +3,12 @@ import 'package:flutter/foundation.dart';
 import '../core/network/api_exception.dart';
 import '../data/repositories/operations_repository.dart';
 
-/// The crew member's shift: their rostered trips, the one they are
-/// working now, and the stop the van is currently at.
+/// The crew member's shift: their assigned trips and the one they are
+/// working now.
 ///
-/// The stop matters because every scan is judged against it — a ticket
-/// for Digos is refused at Ecoland — and a roadside pickup is anchored to
-/// the last stop passed. One place to hold it, rather than each screen
-/// asking again.
+/// There is no "van is at" stop any more: every passenger boards at the
+/// trip's starting terminal (rev 603, brief 2.4), so scans and walk-ins
+/// are judged against that one stop (`CrewTrip.boardingStop`).
 class ShiftViewModel extends ChangeNotifier {
   ShiftViewModel(this._ops);
 
@@ -21,7 +20,6 @@ class ShiftViewModel extends ChangeNotifier {
   String? error;
 
   CrewTrip? active;
-  int currentStop = 1;
 
   Future<void> load() async {
     isLoading = true;
@@ -49,13 +47,7 @@ class ShiftViewModel extends ChangeNotifier {
   }
 
   void select(CrewTrip trip) {
-    if (active?.tripId != trip.tripId) currentStop = 1;
     active = trip;
-    notifyListeners();
-  }
-
-  void setStop(int sequence) {
-    currentStop = sequence;
     notifyListeners();
   }
 

@@ -40,6 +40,7 @@ dependencies:
   permission_handler: ^11.3.1
   connectivity_plus: ^6.1.0     # offline detection for the manifest
   url_launcher: ^6.3.1          # PayMongo checkout redirect
+  image_picker: ^1.2.3          # home-pickup payment screenshot
 
   # --- maps ---
   # NAHGM's client half. OpenStreetMap tiles via flutter_map rather than the

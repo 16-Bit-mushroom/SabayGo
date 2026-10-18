@@ -2,9 +2,9 @@
 
 Creates the three rows a passenger needs in one transaction: credentials
 (`users`), profile (`passenger_profiles`), and notification preferences
-(`passenger_settings`). Staff accounts are NOT created here -- conductors,
-drivers and operators are provisioned by a cooperative administrator, since employment is
-a cooperative decision rather than a self-service one.
+(`passenger_settings`). Staff accounts are NOT created here -- Dispatchers
+and Cashiers are provisioned by the Terminal Manager, since employment is
+A2Z's decision rather than a self-service one.
 """
 
 from __future__ import annotations

@@ -51,18 +51,25 @@ VALUES
 SET @pw = '$2b$12$REPLACE_ME_WITH_A_REAL_BCRYPT_HASH_000000000000000000000';
 
 INSERT INTO users (user_id, email, phone_number, password_hash, role) VALUES
-  ('USER-COOPADMIN-0001',  'coopadmin@sabaygo.test',  '+639170000001', @pw, 'coop_admin'),
-  ('USER-CONDUCTOR-0001', 'conductor@sabaygo.test', '+639170000002', @pw, 'conductor'),
-  ('USER-DRIVER-0001',    'driver@sabaygo.test',    '+639170000003', @pw, 'driver'),
-  ('USER-PASSENGER-0001', 'passenger@sabaygo.test', '+639170000004', @pw, 'passenger');
+  ('USER-MANAGER-0001',    'manager@sabaygo.test',    '+639170000001', @pw, 'terminal_manager'),
+  ('USER-DISPATCHER-0001', 'dispatcher@sabaygo.test', '+639170000002', @pw, 'dispatcher'),
+  ('USER-CASHIER-0001',    'cashier@sabaygo.test',    '+639170000005', @pw, 'cashier'),
+  ('USER-PASSENGER-0001',  'passenger@sabaygo.test',  '+639170000004', @pw, 'passenger');
 
 INSERT INTO staff_profiles (user_id, first_name, last_name, cooperative_name, assigned_terminal_id) VALUES
-  ('USER-COOPADMIN-0001',  'Maria',  'Santos',     'A2Z Transport Cooperative', @t_ecoland),
-  ('USER-CONDUCTOR-0001', 'Ramon',  'Villanueva', 'A2Z Transport Cooperative', @t_ecoland),
-  ('USER-DRIVER-0001',    'Juan',   'Dela Cruz',  'A2Z Transport Cooperative', @t_ecoland);
+  ('USER-MANAGER-0001',    'Maria',  'Santos',     'A2Z Transport Cooperative', @t_ecoland),
+  ('USER-DISPATCHER-0001', 'Ramon',  'Villanueva', 'A2Z Transport Cooperative', @t_ecoland),
+  ('USER-CASHIER-0001',    'Joy',    'Alcantara',  'A2Z Transport Cooperative', @t_ecoland);
 
-INSERT INTO driver_credentials (user_id, license_number, license_expiry_date, cttmo_id_number)
-VALUES ('USER-DRIVER-0001', 'N01-23-456789', '2028-06-30', 'CTTMO-DVO-4471');
+-- Van owners, who always drive: roster records with no login, one van each.
+INSERT INTO operators
+  (operator_id, full_name, contact_number, license_number, license_expiry,
+   validation_status, validated_by, validated_at)
+VALUES
+  ('OP-0001', 'Juan Dela Cruz', '+639170000003', 'N01-23-456789', '2028-06-30',
+   'validated', 'USER-MANAGER-0001', '2026-09-01 09:00:00'),
+  ('OP-0002', 'Pedro Lumbay',   '+639170000006', 'N01-22-118734', '2027-09-30',
+   'validated', 'USER-MANAGER-0001', '2026-09-01 09:00:00');
 
 INSERT INTO passenger_profiles (user_id, first_name, last_name, home_address, gender)
 VALUES ('USER-PASSENGER-0001', 'Sarah', 'Kalaw', 'Matina Crossing, Davao City', 'female');
@@ -71,36 +78,46 @@ INSERT INTO passenger_settings (user_id) VALUES ('USER-PASSENGER-0001');
 
 -- ------------------------------------------------------------------- van
 INSERT INTO vans
-  (van_id, plate_number, brand, model, color, seat_capacity,
+  (van_id, plate_number, operator_id, brand, model, color, seat_capacity,
    operational_status, registered_route_id, has_cabin_camera, camera_device_id)
 VALUES
-  ('VAN-0001', 'ABC-1234', 'Toyota', 'HiAce Commuter', 'White', 14,
+  ('VAN-0001', 'ABC-1234', 'OP-0001', 'Toyota', 'HiAce Commuter', 'White', 14,
    'active', @route, TRUE, 'EDGE-PI-0001'),
-  ('VAN-0002', 'XYZ-9876', 'Nissan', 'NV350 Urvan',    'Silver', 14,
+  ('VAN-0002', 'XYZ-9876', 'OP-0002', 'Nissan', 'NV350 Urvan',    'Silver', 14,
    'active', @route, FALSE, NULL);
 
+-- Validated, so they can be assigned to a trip (brief 4.2 rule 2). The
+-- four-photo rule binds a person validating through the API; seed vans
+-- carry no photographs.
+UPDATE vans
+   SET validation_status = 'validated', validated_by = 'USER-MANAGER-0001',
+       validated_at = '2026-09-01 09:00:00'
+ WHERE van_id IN ('VAN-0001', 'VAN-0002');
+UPDATE staff_profiles
+   SET validation_status = 'validated', validated_by = 'USER-MANAGER-0001',
+       validated_at = '2026-09-01 09:00:00'
+ WHERE user_id = 'USER-DISPATCHER-0001';
+
 -- -------------------------------------------------------- schedule template
+-- Route, time and operating days only: no usual van or Dispatcher
+-- (rev 468). Both are assigned to a trip at the van's turn.
 INSERT INTO schedule_templates
-  (template_id, route_id, departure_time, days_of_week,
-   default_van_id, default_driver_id, default_conductor_id,
-   trip_label, valid_from)
+  (template_id, route_id, departure_time, days_of_week, trip_label, valid_from)
 VALUES
-  ('TMPL-ECO-COT-0530', @route, '05:30:00', '1111111',
-   'VAN-0001', 'USER-DRIVER-0001', 'USER-CONDUCTOR-0001', 'First Trip', '2026-01-01'),
-  ('TMPL-ECO-COT-0730', @route, '07:30:00', '1111100',
-   'VAN-0002', 'USER-DRIVER-0001', NULL, 'Second Trip', '2026-01-01');
+  ('TMPL-ECO-COT-0530', @route, '05:30:00', '1111111', 'First Trip', '2026-01-01'),
+  ('TMPL-ECO-COT-0730', @route, '07:30:00', '1111100', 'Second Trip', '2026-01-01');
 
 -- ------------------------------------------------- one materialized trip
 -- In production the nightly generator creates these. Seeded here so you
 -- have something to hammer with the Week 2 concurrency test today.
 INSERT INTO trips
   (trip_id, template_id, route_id, service_date, departure_datetime,
-   van_id, driver_id, conductor_id, trip_label,
+   van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
    seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status)
 VALUES
   ('TRIP-DEMO-00000001', 'TMPL-ECO-COT-0530', @route,
    CURRENT_DATE, CONCAT(CURRENT_DATE, ' 05:30:00'),
-   'VAN-0001', 'USER-DRIVER-0001', 'USER-CONDUCTOR-0001', 'First Trip',
+   'VAN-0001', 'USER-DISPATCHER-0001', 'USER-MANAGER-0001', NOW(6), 'First Trip',
    14, 10, 6, 'scheduled');
 
 -- trip_legs: derived from the route's stop sequence (4 stops -> 3 legs)
@@ -128,15 +145,15 @@ WHERE l.trip_id = 'TRIP-DEMO-00000001';
 -- Needed so reschedule has a target: a booking can only move to another
 -- trip on the same route, and with one seeded trip there is nowhere to
 -- move it to. Uses the 07:30 template and the second van, which also
--- keeps the van/driver overlap check from firing.
+-- keeps the van overlap check from firing.
 INSERT INTO trips
   (trip_id, template_id, route_id, service_date, departure_datetime,
-   van_id, driver_id, conductor_id, trip_label,
+   van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
    seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status)
 VALUES
   ('TRIP-DEMO-00000002', 'TMPL-ECO-COT-0730', @route,
    CURRENT_DATE, CONCAT(CURRENT_DATE, ' 07:30:00'),
-   'VAN-0002', 'USER-DRIVER-0001', 'USER-CONDUCTOR-0001', 'Second Trip',
+   'VAN-0002', 'USER-DISPATCHER-0001', 'USER-MANAGER-0001', NOW(6), 'Second Trip',
    14, 14, 6, 'scheduled');
 
 INSERT INTO trip_legs (trip_id, leg_sequence, from_stop_sequence, to_stop_sequence, departs_at)

@@ -9,6 +9,7 @@ import '../../../core/design/components/status_chip.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/util/when.dart';
 import '../../../models/uv_trip_model.dart';
+import 'camera_notice.dart';
 
 /// The last screen before a space is held, so it answers the questions that
 /// decide it: when, where, how much, and how many are left.
@@ -23,10 +24,14 @@ class TripDetailsSheet extends StatelessWidget {
     super.key,
     required this.trip,
     required this.onBook,
+    this.onBookForOther,
   });
 
   final UvTripModel trip;
   final VoidCallback onBook;
+
+  /// Book for someone else (brief 2.6); null where it is not offered.
+  final VoidCallback? onBookForOther;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +129,8 @@ class TripDetailsSheet extends StatelessWidget {
               ),
             ],
 
+            const SizedBox(height: AppSpacing.lg),
+            const CameraNotice(),
             const SizedBox(height: AppSpacing.xxl),
             FilledButton(
               // Reserve first, pay on the ticket screen: the space has to be
@@ -140,6 +147,14 @@ class TripDetailsSheet extends StatelessWidget {
                 'payment is pending.',
                 textAlign: TextAlign.center,
                 style: text.bodySmall,
+              ),
+            ],
+            if (!trip.isFull && onBookForOther != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              OutlinedButton.icon(
+                onPressed: onBookForOther,
+                icon: const Icon(Icons.accessible_forward),
+                label: const Text('Book for someone else (home pickup)'),
               ),
             ],
           ],

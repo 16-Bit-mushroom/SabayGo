@@ -37,15 +37,13 @@ log = logging.getLogger(__name__)
 # App bookings close the moment a van starts loading.
 APP_BOOKABLE = {TripStatus.SCHEDULED.value}
 
-# Cash passengers are recorded whenever there is room. A conductor logs
-# walk-ins while the van is loading, and a driver picks up roadside
-# passengers after departure. Blocking either would make the honest path
-# impossible and leave undocumented boarding as the only option -- which
-# is precisely what the YOLOv8 check exists to detect.
+# The Dispatcher lists cash passengers at the starting terminal, on the
+# scheduled trip once assigned and while it boards (brief 2.4, rev 603):
+# the list is complete before the van leaves. A pickup after departure is
+# neither listed nor priced; the camera only holds the van to 14.
 CASH_BOOKABLE = {
     TripStatus.SCHEDULED.value,
     TripStatus.BOARDING.value,
-    TripStatus.DEPARTED.value,
 }
 
 CASH_TYPES = {BookingType.WALK_IN, BookingType.DRIVER_ISSUED}
@@ -61,18 +59,17 @@ class ReserveSeatCommand:
     walkin_name: str | None = None
     walkin_phone: str | None = None
     walkin_wants_receipt: bool = False
-    # Roadside pickup: boarded between terminals, recorded from the
-    # section they are travelling on.
-    is_roadside_pickup: bool = False
-    pickup_landmark: str | None = None
-    # Conductor-set fare. Required for roadside, optional otherwise.
-    fare_override: Decimal | None = None
-    fare_note: str | None = None
+    # Who recorded a cash walk-in (the paper's LogBookEntries.LoggedBy).
+    logged_by: str | None = None
     # Set by the mobile client when a walk-in was queued offline, so a
     # retried sync can be recognised as a replay. The duplicate check
     # itself lives at the API boundary (bookings.py); this only persists
     # the id onto the row it created.
     client_request_id: str | None = None
+    # Home pickup (brief 2.6): the relative's booking of the passenger's
+    # seat. The pickup itself is `booking/home_pickup.py`.
+    booked_for_other: bool = False
+    is_home_pickup_seat: bool = False
 
 
 @dataclass(frozen=True)
@@ -80,12 +77,10 @@ class ReserveSeatResult:
     booking_id: str
     ticket_number: str
     fare_amount: Decimal
-    fare_is_manual: bool
     status: BookingStatus
     qr_payload: str | None
     boarding_stop: int
     alighting_stop: int
-    is_roadside_pickup: bool
 
 
 class ReserveSeatUseCase:
@@ -95,7 +90,22 @@ class ReserveSeatUseCase:
         self.policies = PolicyRepository(session)
 
     async def execute(self, cmd: ReserveSeatCommand) -> ReserveSeatResult:
-        segment = Segment(cmd.boarding_stop, cmd.alighting_stop)
+        result = await self.reserve(cmd)
+        await self.session.commit()
+        # ---- lock released -------------------------------------------
+
+        log.info(
+            "Reserved space on trip %s, stops %s..%s (booking %s, P%s)",
+            cmd.trip_id, result.boarding_stop, result.alighting_stop,
+            result.booking_id, result.fare_amount,
+        )
+        return result
+
+    async def reserve(self, cmd: ReserveSeatCommand) -> ReserveSeatResult:
+        """Everything but the commit. The caller holds the transaction, and
+        the seat lock with it, until it commits: a home pickup reserves
+        both of its seats in one."""
+        segment = Segment.from_starting_terminal(cmd.boarding_stop, cmd.alighting_stop)
         is_cash = cmd.booking_type in CASH_TYPES
 
         trip = await self.session.get(Trip, cmd.trip_id)
@@ -119,12 +129,7 @@ class ReserveSeatUseCase:
                 raise ConflictError("This trip has already departed.")
             await self._assert_within_booking_window(trip)
 
-        if cmd.is_roadside_pickup and not is_cash:
-            raise ConflictError(
-                "A roadside pickup is recorded by the crew, not booked in the app."
-            )
-
-        fare, fare_is_manual = await self._resolve_fare(trip, segment, cmd, is_cash)
+        fare = await self._resolve_fare(trip, segment)
 
         # ---- the locked section -------------------------------------
         hold_ttl = await self.policies.get_int("seat_hold_ttl_seconds")
@@ -164,15 +169,14 @@ class ReserveSeatUseCase:
                 walkin_phone=booking.walkin_phone,
                 walkin_wants_receipt=booking.walkin_wants_receipt,
                 booking_type=booking.booking_type.value,
-                is_roadside_pickup=cmd.is_roadside_pickup,
-                pickup_landmark=cmd.pickup_landmark,
+                logged_by=cmd.logged_by if is_cash else None,
                 client_request_id=cmd.client_request_id,
+                booked_for_other=cmd.booked_for_other,
+                is_home_pickup_seat=cmd.is_home_pickup_seat,
                 boarding_stop_sequence=segment.boarding_stop,
                 alighting_stop_sequence=segment.alighting_stop,
                 seat_number=slot,
                 fare_amount=fare,
-                fare_is_manual=fare_is_manual,
-                fare_note=cmd.fare_note,
                 status=booking.status.value,
                 qr_payload=booking.qr_payload,
                 reschedule_count=0,
@@ -196,7 +200,7 @@ class ReserveSeatUseCase:
         if is_cash:
             await self.seats.confirm(booking_id=booking.booking_id)
             # Record the fare as collected but NOT settled. Cash in a
-            # conductor's pocket is a different state from money
+            # Dispatcher's pocket is a different state from money
             # missing, and the revenue view separates the two. It
             # settles when the crew remits at the end of the trip.
             self.session.add(
@@ -211,51 +215,23 @@ class ReserveSeatUseCase:
                 )
             )
 
-        await self.session.commit()
-        # ---- lock released -------------------------------------------
-
-        log.info(
-            "Reserved space on trip %s, stops %s..%s%s (booking %s, P%s%s)",
-            cmd.trip_id, segment.boarding_stop, segment.alighting_stop,
-            " roadside" if cmd.is_roadside_pickup else "",
-            booking.booking_id, fare, " manual" if fare_is_manual else "",
-        )
         return ReserveSeatResult(
             booking_id=booking.booking_id,
             ticket_number=booking.ticket_number,
             fare_amount=fare,
-            fare_is_manual=fare_is_manual,
             status=booking.status,
             qr_payload=booking.qr_payload,
             boarding_stop=segment.boarding_stop,
             alighting_stop=segment.alighting_stop,
-            is_roadside_pickup=cmd.is_roadside_pickup,
         )
 
     # ------------------------------------------------------------------
-    async def _resolve_fare(
-        self, trip: Trip, segment: Segment, cmd: ReserveSeatCommand, is_cash: bool
-    ) -> tuple[Decimal, bool]:
-        """Decide the fare, and whether it was set by hand.
+    async def _resolve_fare(self, trip: Trip, segment: Segment) -> Decimal:
+        """The approved terminal-to-terminal fare, cash or app alike.
 
-        A roadside passenger has not travelled a fare-table distance: they
-        boarded partway along a section, so neither the previous nor the
-        next terminal's price is right. The conductor judges it, and the
-        system records that it was manual so the office can see how often
-        and by how much fares are being set by hand.
+        Nobody sets a fare by hand: a declared cash fare the Dispatcher
+        could price would let the declared income be whatever they said.
         """
-        if cmd.fare_override is not None:
-            if not is_cash:
-                raise ConflictError("App bookings use the approved fare table.")
-            if cmd.fare_override < 0:
-                raise ConflictError("A fare cannot be negative.")
-            return cmd.fare_override, True
-
-        if cmd.is_roadside_pickup:
-            raise ConflictError(
-                "A roadside pickup needs a fare entered by the conductor."
-            )
-
         result = await self.session.execute(
             select(FareMatrix)
             .where(
@@ -272,7 +248,7 @@ class ReserveSeatUseCase:
                 f"No approved fare for stops {segment.boarding_stop}"
                 f"->{segment.alighting_stop} on this route."
             )
-        return fare.fare_amount, False
+        return fare.fare_amount
 
     async def _assert_within_booking_window(self, trip: Trip) -> None:
         """Passengers cannot book arbitrarily far ahead."""

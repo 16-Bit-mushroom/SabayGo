@@ -4,16 +4,15 @@
 # thing that would embarrass you on stage.
 #
 #   register -> login -> search -> book -> pay -> e-ticket -> check-in
-#   -> scan -> board -> manifest -> audit -> revenue
+#   -> scan -> board -> manifest -> camera check -> statements
 #
 # Run it the morning of the demo, after:
 #   ./db/reset-dev.sh --soon          # fixture trip departs in 20 min
 #   uvicorn app.main:app ...          # backend
-#   (optional) ai_service python app.py
 #
 # The live loop runs on the fixture trip (Ecoland - Cotabato, "First
 # Trip") because --soon puts it inside the check-in window. The A2Z demo
-# dataset (routes, yesterday's revenue, audit history) is the backdrop
+# dataset (routes, yesterday's statements, driving flags) is the backdrop
 # the console screens show while you talk.
 #
 # Needs the venv and .env exported (the webhook simulator signs with
@@ -50,9 +49,9 @@ curl -s -o /dev/null -w '%{http_code}' "$API/../../docs" | grep -q 200 && ok "ba
   || die "PAYMONGO_WEBHOOK_SECRET not in the environment -- set -a; source .env; set +a"
 
 PT=$(login passenger@sabaygo.dev); [ -n "$PT" ] && ok "passenger@ logs in" || die "passenger@ login failed -- did reset-dev.sh run?"
-CT=$(login conductor@sabaygo.dev); [ -n "$CT" ] && ok "conductor@ logs in" || die "conductor@ login failed"
-DT=$(login driver@sabaygo.dev);    [ -n "$DT" ] && ok "driver@ logs in"    || die "driver@ login failed"
-OT=$(login coopadmin@sabaygo.dev); [ -n "$OT" ] && ok "coopadmin@ logs in" || die "coopadmin@ login failed"
+CT=$(login dispatcher@sabaygo.dev); [ -n "$CT" ] && ok "dispatcher@ logs in" || die "dispatcher@ login failed"
+OT=$(login manager@sabaygo.dev);    [ -n "$OT" ] && ok "manager@ logs in"    || die "manager@ login failed"
+KT=$(login cashier@sabaygo.dev);    [ -n "$KT" ] && ok "cashier@ logs in"    || die "cashier@ login failed"
 
 TODAY=$(date +%F)
 S=$(code GET "/trips/search?origin_terminal_id=TERM-ECOLAND-000001&destination_terminal_id=TERM-COTABATO-00001&service_date=$TODAY" "" "$PT")
@@ -66,14 +65,10 @@ if [ -z "$DEP" ]; then die "fixture trip $TRIP is not bookable today -- run ./db
 elif [ "$DEP" -gt 45 ]; then warn "fixture trip departs in $DEP min -- check-in opens 45 min before; use --soon for the live loop"
 else ok "fixture trip departs in $DEP min (check-in window open)"; fi
 
-S=$(code GET /audits/node-health "" "$CT")
-if [ "$S" = "200" ] && [ "$(j "['reachable']" < /tmp/resp.json)" = "True" ]; then ok "AI node reachable -- audit step will show a real count"
-else warn "AI node offline -- audit step will return 502. Either start ai_service, or say on stage: 'the node never invents a count'"; fi
-
-S=$(code GET /revenue/summary?date_from=$(date -d '-2 days' +%F) "" "$OT")
-T=$(j "['trips']" < /tmp/resp.json)
-[ "${T:-0}" -ge 6 ] && ok "A2Z backdrop present: $T trips in the last three days, ₱$(j "['collected_fare']" < /tmp/resp.json) collected" \
-  || warn "revenue backdrop thin ($T trips) -- 002_demo_dataset.sql may not have loaded"
+S=$(code GET "/statements?date=$(date -d yesterday +%F)" "" "$OT")
+T=$(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))" 2>/dev/null)
+[ "${T:-0}" -ge 1 ] && ok "A2Z backdrop present: $T van statement(s) for yesterday" \
+  || warn "statement backdrop thin (${T:-0} for yesterday) -- 002_demo_dataset.sql may not have loaded"
 
 # ─────────────────────────────────────────────────────── 1. passenger books
 step "1. Passenger: search Ecoland → Cotabato, reserve, pay, e-ticket"
@@ -101,13 +96,19 @@ S=$(code POST "/bookings/$BID/check-in" "{\"latitude\":$LAT,\"longitude\":$LNG,\
 if [ "$S" = "200" ]; then ok "checked in -- manifest will show AT TERMINAL"
 else warn "check-in refused ($S): $(j "['detail']" < /tmp/resp.json) -- fine to show as the 'too early' rejection, then continue"; fi
 
-# ──────────────────────────────────────────────────────── 3. conductor
-step "3. Conductor: open boarding, scan, walk-in, manifest"
+# ─────────────────────────────────────────────────────── 3. dispatcher
+step "3. Cashier takes the share, office starts the trip; Dispatcher scans, logs a walk-in, reads the manifest"
 S=$(code GET /trips/assigned "" "$CT")
-grep -q "$TRIP" /tmp/resp.json && ok "trip is on conductor@'s assigned list" || die "fixture trip not in /trips/assigned for conductor@"
+grep -q "$TRIP" /tmp/resp.json && ok "trip is on dispatcher@'s assigned list" || die "fixture trip not in /trips/assigned for dispatcher@"
 
-S=$(code POST "/trips/$TRIP/start-boarding" "" "$CT")
-[ "$S" = "200" ] && ok "boarding opened" || die "start-boarding gave $S: $(j "['detail']" < /tmp/resp.json)"
+# Start waits for A2Z's 15 % share (rev 603, brief 2.1): the Dispatcher
+# hands it over and the Cashier records it. Either office role starts.
+code GET "/trips/$TRIP/share" "" "$KT" >/dev/null
+DUE=$(j "['amount_due']" < /tmp/resp.json)
+S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$DUE\",\"reference\":\"OR-DEMO\"}" "$KT")
+[ "$S" = "200" ] && ok "cashier@ records the share, ₱$DUE -- the passenger list locks" || die "payment gave $S: $(j "['detail']" < /tmp/resp.json)"
+S=$(code POST "/trips/$TRIP/start" "" "$OT")
+[ "$S" = "200" ] && ok "manager@ starts the trip" || die "start gave $S: $(j "['detail']" < /tmp/resp.json)"
 
 S=$(code POST /scans "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
 RES=$(j "['result']" < /tmp/resp.json)
@@ -117,7 +118,7 @@ S=$(code POST /scans "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_seque
   || warn "second scan gave $(j "['result']" < /tmp/resp.json)"
 
 S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
-[ "$S" = "201" ] && ok "cash walk-in logged -- ₱$(j "['fare_amount']" < /tmp/resp.json) pending in the conductor's hand" \
+[ "$S" = "201" ] && ok "cash walk-in logged -- ₱$(j "['fare_amount']" < /tmp/resp.json) pending in the Dispatcher's hand" \
   || die "walk-in gave $S: $(j "['detail']" < /tmp/resp.json)"
 
 S=$(code GET "/trips/$TRIP/manifest" "" "$CT")
@@ -126,24 +127,18 @@ import json;m=json.load(open('/tmp/resp.json'))
 ps=m.get('passengers',m if isinstance(m,list) else [])
 print(f\"{len(ps)} passengers, {sum(1 for p in ps if p.get('status')=='boarded')} boarded\")")"
 
-# ──────────────────────────────────────────────────────── 4. audit
-step "4. Driver: headcount, then the camera audit"
-S=$(code POST "/trips/$TRIP/headcount" '{"stop_sequence":1,"confirmed_count":2}' "$DT")
-[ "$S" = "200" ] && ok "driver headcount 2 -- variance $(j "['variance']" < /tmp/resp.json)" || warn "headcount gave $S: $(j "['detail']" < /tmp/resp.json)"
-
-S=$(code POST /audits/trigger "{\"trip_id\":\"$TRIP\",\"leg_sequence\":1,\"trigger_type\":\"manual\"}" "$DT")
+# ──────────────────────────────────────────────────────── 4. camera check
+step "4. The camera's count against the list (door events, brief 6.1)"
+S=$(code GET "/trips/$TRIP/door-check" "" "$CT")
 if [ "$S" = "200" ]; then
-  ok "YOLOv8: visual $(j "['visual_count']" < /tmp/resp.json) vs manifest $(j "['booked_count']" < /tmp/resp.json) -- $(j "['resolution_status']" < /tmp/resp.json)"
-elif [ "$S" = "502" ]; then warn "AI node unreachable -> 502. The line: 'it refuses to invent a number'. Yesterday's audits are in the console History tab"
-else warn "audit gave $S: $(j "['detail']" < /tmp/resp.json)"; fi
+  ok "aboard $(j "['aboard']" < /tmp/resp.json) by the camera, listed $(j "['listed']" < /tmp/resp.json), excess $(j "['excess']" < /tmp/resp.json) (aboard stays 0 until a phone out with the van reports)"
+else warn "door check gave $S: $(j "['detail']" < /tmp/resp.json)"; fi
 
 # ──────────────────────────────────────────────────────── 5. office
-step "5. Office console: queue, history, revenue, export"
-S=$(code GET /audits/pending "" "$OT");  ok "audit queue: $(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))") pending (one is yesterday's Digos +2)"
-S=$(code GET /audits/history "" "$OT");  ok "audit history: $(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))") closed -- resolved, ignored, reconciled, failed"
-S=$(code GET "/revenue/summary?date_from=$(date -d '-2 days' +%F)" "" "$OT")
-ok "revenue, last 3 days: collected ₱$(j "['collected_fare']" < /tmp/resp.json), cash in hand ₱$(j "['cash_in_hand']" < /tmp/resp.json), unreconciled ₱$(j "['unreconciled_amount']" < /tmp/resp.json)"
-S=$(curl -s -o /tmp/rehearsal.xlsx -w '%{http_code}' -H "Authorization: Bearer $OT" "$API/revenue/export?date_from=$(date -d '-2 days' +%F)")
-[ "$S" = "200" ] && ok "export: $(du -h /tmp/rehearsal.xlsx | cut -f1) workbook at /tmp/rehearsal.xlsx" || warn "export gave $S"
+step "5. Office console: statements, Boarding Audit"
+S=$(code GET "/statements?date=$(date +%F)" "" "$OT")
+ok "today's statements: $(python3 -c "import json;r=json.load(open('/tmp/resp.json'));print(len(r), 'van(s),', sum(1 for x in r if x['status']=='settled'), 'settled')")"
+S=$(code GET "/boarding-audit?date=$(date +%F)" "" "$OT")
+[ "$S" = "200" ] && ok "Boarding Audit: $(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))") trip(s) with something to review today" || warn "boarding audit gave $S"
 
 printf "\n${G}${B}Rehearsal complete.${N} Reset before the real run: ./db/reset-dev.sh --soon\n"

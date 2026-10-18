@@ -10,9 +10,9 @@ drives business logic; the distance is what lets you report GPS accuracy
 in the Results chapter.
 
 Check-in is a heads-up for dispatch, not a gate (Group D decision, 15 Sep):
-the conductor sees who is already at the terminal and can release the
+the Dispatcher sees who is already at the terminal and can release the
 space of someone who is not coming. It never blocks a scan -- the
-conductor looking at a passenger is better proof of presence than a phone
+Dispatcher looking at a passenger is better proof of presence than a phone
 reading. Two consequences:
 
 * The time window is measured against the passenger's OWN boarding stop
@@ -26,7 +26,6 @@ reading. Two consequences:
 from __future__ import annotations
 
 import logging
-import math
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -35,6 +34,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.tracking.geometry import haversine_m
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.enums import BookingStatus
@@ -43,22 +43,6 @@ from app.infrastructure.models import CheckIn, RouteStop, Trip
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
-
-EARTH_RADIUS_M = 6_371_000.0
-
-
-def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in metres.
-
-    Haversine rather than a planar approximation: at Davao's latitude the
-    error from treating degrees as flat is small, but haversine costs
-    nothing and removes a caveat you would otherwise have to defend.
-    """
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
 
 @dataclass(frozen=True)
@@ -153,7 +137,7 @@ class CheckInUseCase:
             )
 
         # The attempt is recorded either way. A rejected check-in is
-        # evidence too -- it tells the cooperative administrator a passenger tried, and it
+        # evidence too -- it tells the Terminal Manager a passenger tried, and it
         # gives you the distance distribution for accuracy analysis.
         check_in_id = str(uuid.uuid4())
         self.session.add(
@@ -226,7 +210,7 @@ class UndoCheckInResult:
 class UndoCheckInUseCase:
     """D.2: withdraw an accidental "I'm here".
 
-    Allowed only while the booking is `checked_in`. Once the conductor has
+    Allowed only while the booking is `checked_in`. Once the Dispatcher has
     scanned the ticket the passenger is aboard and presence is no longer
     the phone's claim to retract.
     """

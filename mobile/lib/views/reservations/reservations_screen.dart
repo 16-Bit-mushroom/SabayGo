@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/design/components/app_card.dart';
 import '../../core/design/components/empty_state.dart';
@@ -9,6 +10,7 @@ import '../../core/design/components/section_header.dart';
 import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/util/when.dart';
 import '../../data/repositories/booking_repository.dart';
 import '../../data/repositories/trip_repository.dart';
@@ -229,6 +231,61 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     return _nextTripCard(b);
   }
 
+  /// One of a home pickup's two seats: who it is for, where they board,
+  /// and the payment screenshot when the gateway was down (brief 2.6).
+  Widget _homePickupBand(BookingSummary b, HomePickupRef p) {
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.accessible_forward, size: 18, color: AppColors.info),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              p.isPassengerSeat
+                  ? '${p.beneficiaryName}\'s seat: the van stops for them at the pin.'
+                  : 'Your seat, riding with ${p.beneficiaryName}. Scan this ticket at the terminal.',
+              style: text.bodyMedium,
+            ),
+          ),
+        ]),
+        if (b.isAwaitingPayment) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            p.proofSent
+                ? (p.proofConfirmed ? 'Screenshot confirmed.' : 'Screenshot sent: the Dispatcher will confirm it.')
+                : 'Payment page not working? Send a screenshot of your payment to the Dispatcher.',
+            style: text.bodySmall,
+          ),
+          if (!p.proofConfirmed)
+            TextButton.icon(
+              onPressed: () => _sendScreenshot(p),
+              icon: const Icon(Icons.image_outlined, size: 18),
+              label: Text(p.proofSent ? 'Send another screenshot' : 'Send a payment screenshot'),
+            ),
+        ],
+      ]),
+    );
+  }
+
+  Future<void> _sendScreenshot(HomePickupRef p) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null || !mounted) return;
+    try {
+      await BookingRepository(context.read<ApiClient>())
+          .sendPaymentScreenshot(p.pickupId, await picked.readAsBytes(), picked.name);
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Sent to the trip\'s Dispatcher. Both seats are held until departure.'),
+        behavior: SnackBarBehavior.floating,
+      ));
+      _vm.load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating));
+    }
+  }
+
   /// The one booking that matters right now, in full.
   Widget _nextTripCard(BookingSummary b) {
     final busy = _vm.isBusy(b.bookingId);
@@ -298,6 +355,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               ),
             ),
           ),
+          if (b.homePickup case final pickup?) ...[
+            const Divider(height: 1),
+            _homePickupBand(b, pickup),
+          ],
           if (b.canReschedule || canCancel) ...[
             const Divider(height: 1),
             Row(

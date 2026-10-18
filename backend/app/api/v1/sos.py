@@ -11,17 +11,15 @@ import datetime as dt
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from app.api.v1.deps import CurrentUser, SessionDep, require_roles
+from app.api.v1.deps import OFFICE, CurrentUser, SessionDep
 from app.application.safety.sos import (
     DispositionSosUseCase,
     RaiseSosUseCase,
     SosQueueUseCase,
 )
-from app.domain.enums import Role
 
 router = APIRouter(prefix="/sos", tags=["sos"])
 
-COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
 
 
 class RaiseSosRequest(BaseModel):
@@ -105,7 +103,7 @@ class SosAlertOut(BaseModel):
     sms: SmsSummaryOut
 
 
-@router.get("", response_model=list[SosAlertOut], dependencies=[Depends(COOP_ADMIN)])
+@router.get("", response_model=list[SosAlertOut], dependencies=[Depends(OFFICE)])
 async def list_sos(
     session: SessionDep,
     status: str | None = Query(
@@ -120,7 +118,7 @@ class DispositionRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=512)
 
 
-@router.post("/{sos_id}/acknowledge", dependencies=[Depends(COOP_ADMIN)])
+@router.post("/{sos_id}/acknowledge", dependencies=[Depends(OFFICE)])
 async def acknowledge_sos(
     sos_id: str, session: SessionDep, user: CurrentUser
 ) -> dict:
@@ -130,7 +128,7 @@ async def acknowledge_sos(
     )
 
 
-@router.post("/{sos_id}/resolve", dependencies=[Depends(COOP_ADMIN)])
+@router.post("/{sos_id}/resolve", dependencies=[Depends(OFFICE)])
 async def resolve_sos(
     sos_id: str, payload: DispositionRequest, session: SessionDep, user: CurrentUser
 ) -> dict:

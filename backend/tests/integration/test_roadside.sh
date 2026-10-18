@@ -1,80 +1,111 @@
 #!/usr/bin/env bash
-# Walk-in timing, roadside pickup, manual fares, no-show release.
+# Rev 603 R2: boarding only at the starting terminal, before departure
+# (change brief 2.4). Roadside refusal, table fares only, no seat numbers.
+#
+#   ./db/reset-dev.sh --soon && ./tests/integration/test_roadside.sh
 set -uo pipefail
 API="http://127.0.0.1:8000/api/v1"
-TRIP="TRIP-DEMO-00000001"
+TRIP="TRIP-DEMO-00000001"     # VAN-0001, dispatcher@, departs in 20 min
 STAMP=$(date +%s)
 P=0; F=0
 j() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1)" 2>/dev/null; }
 hdr(){ printf '\n\033[1m── %s ─────────────────────\033[0m\n' "$1"; }
 ok(){ printf '  \033[32mPASS\033[0m  %s\n' "$1"; P=$((P+1)); }
 bad(){ printf '  \033[31mFAIL\033[0m  %s\n' "$1"; F=$((F+1)); }
+is() { [ "$1" = "$2" ] && ok "$3" || bad "$3 (got $1)"; }
 code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
   local a=(-s -o /tmp/r.json -w "%{http_code}" -X "$m" "$API$p")
   [ -n "$t" ] && a+=(-H "Authorization: Bearer $t")
   [ -n "$d" ] && a+=(-H "Content-Type: application/json" -d "$d")
   curl "${a[@]}"; }
+login() { curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
+  -d "{\"email\":\"$1@sabaygo.dev\",\"password\":\"sabaygo123\"}" | j "['access_token']"; }
+sql() {
+  (cd "$(dirname "$0")/../.." && venv/bin/python -c "
+import asyncio, sys
+from sqlalchemy import text
+from app.core.db import engine
+async def m():
+    async with engine.begin() as c:
+        await c.execute(text(sys.argv[1]))
+    await engine.dispose()
+asyncio.run(m())" "$1")
+}
+total() { code GET "/trips/$TRIP/manifest" "" "$DT" >/dev/null; j "['total_bookings']" < /tmp/r.json; }
 
-CT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+DT=$(login dispatcher); CT=$(login cashier); AT=$(login ana)
 PT=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" \
   -d "{\"email\":\"rs${STAMP}@sabaygo.dev\",\"phone_number\":\"0917${STAMP: -7}\",
        \"password\":\"sabaygo123\",\"first_name\":\"Road\",\"last_name\":\"Side\"}" \
   | j "['access_token']")
+[ -n "$DT" ] && [ -n "$CT" ] && [ -n "$PT" ] && [ -n "$AT" ] && ok "signed in" || { bad "login"; exit 1; }
 
-hdr "no seat number in any response"
+code GET "/trips/$TRIP/stops" >/dev/null
+read -r FIRST SECOND LAST < <(python3 -c "
+import json;s=json.load(open('/tmp/r.json'));print(s[0]['terminal_id'],s[1]['terminal_id'],s[-1]['terminal_id'])")
+TODAY=$(date +%F)
+
+hdr "search offers the starting terminal only"
+code GET "/trips/search?origin_terminal_id=$FIRST&destination_terminal_id=$LAST&service_date=$TODAY" >/dev/null
+python3 -c "import json;assert any(t['trip_id']=='$TRIP' for t in json.load(open('/tmp/r.json')))" \
+  && ok "from the starting terminal the trip is offered" || bad "trip not offered from stop 1"
+code GET "/trips/search?origin_terminal_id=$SECOND&destination_terminal_id=$LAST&service_date=$TODAY" >/dev/null
+is "$(python3 -c "import json;print(len(json.load(open('/tmp/r.json'))))")" 0 \
+   "from a later terminal nothing is offered"
+is "$(code GET "/trips/search?boarding_stop=2&alighting_stop=4&service_date=$TODAY")" 422 \
+   "the stop-sequence search refuses a later boarding stop"
+is "$(code GET "/bookings/availability?trip_id=$TRIP&boarding_stop=3&alighting_stop=4")" 422 \
+   "no space is advertised from a later stop"
+is "$(code GET "/bookings/availability?trip_id=$TRIP&boarding_stop=1&alighting_stop=4")" 200 \
+   "space from stop 1 is advertised"
+
+hdr "app bookings board at stop 1"
+is "$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,\"alighting_stop\":4}" "$PT")" 422 \
+   "a booking from stop 2 is refused"
+grep -q "starting terminal" /tmp/r.json && ok "and says why" || bad "detail: $(cat /tmp/r.json)"
 S=$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")
-[ -s /tmp/r.json ] && { grep -q seat_number /tmp/r.json && bad "reserve still returns seat_number" || ok "reserve has no seat number"; } || bad "no response body"
+is "$S" 201 "a booking from stop 1 is taken"
+grep -q seat_number /tmp/r.json && bad "reserve still returns seat_number" || ok "reserve has no seat number"
 BID=$(j "['booking_id']" < /tmp/r.json)
 python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1
+# A booking from before the rule; the seed's are all stop 1 now.
+sql "UPDATE bookings SET boarding_stop_sequence = 2 WHERE booking_id = 'BKG-A2Z-U002'"
+is "$(code POST /bookings/BKG-A2Z-U002/reschedule '{"new_trip_id":"TRIP-A2Z-TAG-D1-0900"}' "$AT")" 422 \
+   "a stored stop-2 booking cannot be moved to another trip"
+sql "UPDATE bookings SET boarding_stop_sequence = 1 WHERE booking_id = 'BKG-A2Z-U002'"
 
-hdr "walk-in while the van is loading"
-code POST "/trips/$TRIP/start-boarding" "" "$CT" >/dev/null
-S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
-[ "$S" = "201" ] && ok "walk-in accepted during boarding (was 409)" || bad "walk-in gave $S"
+hdr "the Dispatcher lists cash passengers at stop 1"
+BEFORE=$(total)
+is "$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,\"alighting_stop\":4}" "$DT")" 422 \
+   "a cash passenger from stop 2 is refused"
+is "$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4,
+  \"is_roadside_pickup\":true,\"pickup_landmark\":\"Km 42 waiting shed\",\"fare_override\":250.00}" "$DT")" 422 \
+   "a roadside pickup is refused"
+is "$(total)" "$BEFORE" "the refusals wrote no booking"
+S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":3,\"fare_override\":1.00}" "$DT")
+FARE=$(j "['fare_amount']" < /tmp/r.json)
+[ "$S" = "201" ] && [ "$FARE" != "1.00" ] && ok "listed on the scheduled trip at the table fare P$FARE" \
+  || bad "walk-in gave $S, fare $FARE"
+grep -q fare_is_manual /tmp/r.json && bad "response still reports fare_is_manual" || ok "no manual-fare flag"
 
-hdr "walk-in after departure"
-code POST "/trips/$TRIP/depart" "" "$CT" >/dev/null
-S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,\"alighting_stop\":4}" "$CT")
-[ "$S" = "201" ] && ok "walk-in accepted after departure" || bad "post-departure walk-in gave $S"
+hdr "nothing is listed after departure"
+code GET "/trips/$TRIP/share" "" "$CT" >/dev/null
+is "$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$(j "['amount_due']" < /tmp/r.json)\",\"reference\":\"OR-$STAMP\"}" "$CT")" 200 \
+   "the cashier records the share"
+is "$(code POST "/trips/$TRIP/start" "" "$CT")" 200 "the trip is started"
+is "$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$DT")" 201 \
+   "listed while the trip boards"
+is "$(code POST "/trips/$TRIP/depart" "" "$CT")" 200 "the trip departs"
+is "$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$DT")" 409 \
+   "a cash passenger after departure is refused"
+is "$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")" 409 \
+   "and so is an app booking"
 
-hdr "roadside pickup"
-S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,
-  \"alighting_stop\":4,\"is_roadside_pickup\":true,
-  \"pickup_landmark\":\"Km 42 waiting shed\",\"fare_override\":250.00,
-  \"fare_note\":\"Boarded past Digos\"}" "$CT")
-if [ "$S" = "201" ]; then
-  ok "roadside recorded — P$(j "['fare_amount']" < /tmp/r.json), manual=$(j "['fare_is_manual']" < /tmp/r.json)"
-else bad "roadside gave $S"; fi
+hdr "the passenger list has no seat numbers or roadside fields"
+code GET "/trips/$TRIP/manifest" "" "$DT" >/dev/null
+grep -q '"seat_number"' /tmp/r.json && bad "manifest still has seat_number" || ok "no seat numbers"
+grep -qE '"is_roadside_pickup"|"fare_is_manual"|"pickup_landmark"' /tmp/r.json \
+  && bad "manifest still reports roadside fields" || ok "no roadside fields"
 
-S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":2,
-  \"alighting_stop\":4,\"is_roadside_pickup\":true}" "$CT")
-[ "$S" = "409" ] && ok "roadside without a fare rejected (409)" || bad "no-fare roadside gave $S"
-
-hdr "app bookings still use the approved table"
-S=$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")
-[ "$S" = "409" ] && ok "app booking closed once departed (409)" || bad "app booking gave $S"
-
-hdr "no-show space released"
-python3 -c "
-import json;m=json.load(open('/tmp/m.json'))" 2>/dev/null
-code GET "/trips/$TRIP/manifest" "" "$CT" >/dev/null; cp /tmp/r.json /tmp/m.json
-python3 -c "
-import json;m=json.load(open('/tmp/m.json'))
-ns=[p for p in m['passengers'] if p['status']=='no_show']
-print(f'        no-shows: {len(ns)}  total: {m[\"total_bookings\"]}')"
-S=$(code "GET" "/bookings/availability?trip_id=$TRIP&boarding_stop=3&alighting_stop=4")
-ok "space still sellable on later sections: $(j "['seats_available']" < /tmp/r.json)"
-
-hdr "manifest shows roadside flags, no seat numbers"
-code GET "/trips/$TRIP/manifest" "" "$CT" >/dev/null
-grep -q '"seat_number"' /tmp/r.json && bad "manifest still has seat_number" || ok "manifest has no seat numbers"
-python3 -c "
-import json;m=json.load(open('/tmp/r.json'))
-for p in m['passengers']:
-    tag = 'roadside' if p.get('is_roadside_pickup') else p['booking_type']
-    fare = f\"P{p['fare_amount']}\" + ('*' if p.get('fare_is_manual') else '')
-    print(f\"        {p['boarding_stop']}->{p['alighting_stop']}  {p['status']:<11} {tag:<14} {fare}\")
-print('        (* = fare set by hand)')"
-
-printf '\n  passed %d   failed %d\n\n' "$P" "$F"
+printf '\n%d passed, %d failed\n' "$P" "$F"
+[ "$F" -eq 0 ]

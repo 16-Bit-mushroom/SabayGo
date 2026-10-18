@@ -159,10 +159,12 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
   IconData _iconFor(String role) {
     switch (role) {
-      case 'coop_admin':
+      case 'terminal_manager':
+      case 'cashier':
         return Icons.storefront;
-      case 'conductor':
+      case 'dispatcher':
         return Icons.badge_outlined;
+      // Legacy threads only: drivers have no accounts since migration 017.
       case 'driver':
         return Icons.airline_seat_recline_normal;
       case 'passenger':

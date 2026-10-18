@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.booking.home_pickup import HomePickups, pickup_of
 from app.core.timezone import APP_TZ
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.entities.booking import Booking as BookingEntity
@@ -66,8 +67,15 @@ class RescheduleBookingUseCase:
         old_trip = await self.session.get(Trip, row.trip_id)
         if old_trip is None:
             raise NotFoundError("Original trip not found.")
+        if await pickup_of(self.session, booking_id) is not None:
+            raise PolicyViolationError(
+                "A home pickup stays on its trip: both seats and the pin belong to it."
+            )
 
-        segment = Segment(row.boarding_stop_sequence, row.alighting_stop_sequence)
+        # The same journey on another trip is a new boarding (rev 603).
+        segment = Segment.from_starting_terminal(
+            row.boarding_stop_sequence, row.alighting_stop_sequence
+        )
 
         # Rebuild the entity from persistence WITHOUT re-running creation
         # invariants -- this is exactly what reconstitute() exists for.
@@ -96,6 +104,12 @@ class RescheduleBookingUseCase:
             cutoff_hours=old_trip.reschedule_cutoff_hours,
             max_reschedules=max_reschedules,
         )
+
+        if old_trip.list_locked_at is not None:
+            raise PolicyViolationError(
+                "The passenger list of this trip is locked: the share was recorded "
+                "or the van has left. The booking can no longer be moved."
+            )
 
         new_trip = await self.session.get(Trip, new_trip_id)
         if new_trip is None:
@@ -228,6 +242,14 @@ class CancelBookingUseCase:
             reschedule_count=row.reschedule_count,
             booked_at=row.booked_at,
         )
+        trip = await self.session.get(Trip, row.trip_id)
+        # The list locks at the Cashier's payment or the departure (rev
+        # 603, brief 2.1): after that no cancellation, refund or credit.
+        if trip is not None and trip.list_locked_at is not None:
+            raise PolicyViolationError(
+                "The passenger list of this trip is locked: the share was recorded "
+                "or the van has left. It can no longer be cancelled."
+            )
         # Cooperative policy may close cancellation some hours before
         # departure. 0 means it stays open until the van leaves, which
         # was the previous behaviour.
@@ -235,7 +257,6 @@ class CancelBookingUseCase:
             "cancel_cutoff_hours"
         )
         if cutoff > 0:
-            trip = await self.session.get(Trip, row.trip_id)
             if trip is not None:
                 departure = trip.departure_datetime
                 if departure.tzinfo is None:
@@ -255,6 +276,7 @@ class CancelBookingUseCase:
 
         # Return the seat-legs to the pool so someone else can book them.
         await self.seats.release(booking_id=booking_id)
+        await HomePickups(self.session).on_cancelled(row)
         await self.session.commit()
 
         log.info("Cancelled booking %s (seat %s released)", booking_id, row.seat_number)

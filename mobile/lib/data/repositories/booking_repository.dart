@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../core/network/api_client.dart';
 
 /// A booking as the passenger sees it.
@@ -24,6 +26,7 @@ class BookingSummary {
     this.rescheduleDeadline,
     this.boardingDueAt,
     this.checkinOpensAt,
+    this.homePickup,
   });
 
   final String bookingId;
@@ -51,6 +54,9 @@ class BookingSummary {
   /// on the route; a stop-3 passenger is not at the origin at departure.
   final DateTime? boardingDueAt;
   final DateTime? checkinOpensAt;
+
+  /// Set when this is one of a home pickup's two seats (brief 2.6).
+  final HomePickupRef? homePickup;
 
   bool get isAwaitingPayment => status == 'pending';
   bool get isConfirmed => status == 'confirmed';
@@ -99,6 +105,66 @@ class BookingSummary {
         checkinOpensAt: j['checkin_opens_at'] == null
             ? null
             : DateTime.parse(j['checkin_opens_at'] as String),
+        homePickup: j['home_pickup'] == null
+            ? null
+            : HomePickupRef.fromJson(j['home_pickup'] as Map<String, dynamic>),
+      );
+}
+
+/// The home pickup a booking belongs to: the passenger's seat boards at
+/// the pin, the relative's at the terminal.
+class HomePickupRef {
+  const HomePickupRef({
+    required this.pickupId,
+    required this.beneficiaryName,
+    required this.isPassengerSeat,
+    required this.proofSent,
+    required this.proofConfirmed,
+  });
+
+  final String pickupId;
+  final String beneficiaryName;
+  final bool isPassengerSeat;
+  final bool proofSent;
+  final bool proofConfirmed;
+
+  factory HomePickupRef.fromJson(Map<String, dynamic> j) => HomePickupRef(
+        pickupId: j['pickup_id'] as String,
+        beneficiaryName: j['beneficiary_name'] as String,
+        isPassengerSeat: j['is_passenger_seat'] as bool,
+        proofSent: j['proof_sent'] as bool,
+        proofConfirmed: j['proof_confirmed'] as bool,
+      );
+}
+
+/// The two seats of a home pickup, just booked.
+class HomePickupBooking {
+  const HomePickupBooking({required this.pickupId, required this.relative, required this.passenger});
+  final String pickupId;
+  final ReservationResult relative;
+  final ReservationResult passenger;
+}
+
+/// What the booking screen says about the camera (brief 4.5), from A2Z's
+/// settings in force.
+class PrivacyNotice {
+  const PrivacyNotice({
+    required this.retentionDays,
+    required this.chatImageRetentionDays,
+    required this.chatImageMaxKb,
+    required this.privacyContact,
+  });
+
+  final int? retentionDays;
+  final int chatImageRetentionDays;
+  final int chatImageMaxKb;
+  final String privacyContact;
+
+  factory PrivacyNotice.fromJson(Map<String, dynamic> j) => PrivacyNotice(
+        retentionDays: j['retention_days'] as int?,
+        chatImageRetentionDays: j['chat_image_retention_days'] as int,
+        chatImageMaxKb: j['chat_image_max_kb'] as int,
+        privacyContact: j['privacy_contact'] as String,
       );
 }
 
@@ -185,6 +251,42 @@ class BookingRepository {
   }
 
   /// Cancel and release the space. No refund is issued.
+  /// Book for someone else (brief 2.6): the relative's seat and the
+  /// passenger's, from the starting terminal to one drop-off, in one go.
+  /// Both are paid one by one, like any booking.
+  Future<HomePickupBooking> bookHomePickup({
+    required String tripId,
+    required int alightingStop,
+    required String name,
+    required String contact,
+    required double latitude,
+    required double longitude,
+    String? note,
+  }) async {
+    final json = await _api.post('/home-pickups', body: {
+      'trip_id': tripId,
+      'alighting_stop': alightingStop,
+      'beneficiary_name': name,
+      'beneficiary_contact': contact,
+      'pickup_latitude': latitude.toStringAsFixed(6),
+      'pickup_longitude': longitude.toStringAsFixed(6),
+      if (note != null && note.isNotEmpty) 'pickup_note': note,
+    }) as Map<String, dynamic>;
+    return HomePickupBooking(
+      pickupId: (json['pickup'] as Map<String, dynamic>)['pickup_id'] as String,
+      relative: ReservationResult.fromJson(json['relative_booking'] as Map<String, dynamic>),
+      passenger: ReservationResult.fromJson(json['passenger_booking'] as Map<String, dynamic>),
+    );
+  }
+
+  /// The gateway is down: a screenshot of the payment, sent to the trip's
+  /// Dispatcher in the chat, who confirms it.
+  Future<void> sendPaymentScreenshot(String pickupId, Uint8List bytes, String filename) =>
+      _api.upload('/home-pickups/$pickupId/proof', field: 'image', bytes: bytes, filename: filename);
+
+  Future<PrivacyNotice> privacyNotice() async =>
+      PrivacyNotice.fromJson(await _api.get('/trips/privacy-notice') as Map<String, dynamic>);
+
   Future<void> cancel(String bookingId) =>
       _api.post('/bookings/$bookingId/cancel');
 

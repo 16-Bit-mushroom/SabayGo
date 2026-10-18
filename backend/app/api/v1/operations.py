@@ -1,16 +1,20 @@
-"""Operations endpoints: check-in, boarding, manifest, headcount."""
+"""Operations endpoints: check-in, boarding, manifest, trip lifecycle."""
 
 from __future__ import annotations
 
 import datetime as dt
-import uuid
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
-from app.api.v1.deps import CurrentUser, SessionDep, require_roles
+from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep, require_roles
+from app.application.edge import chain
+from app.application.edge.boarding_audit import BoardingAudit, TripAudit
+from app.application.edge.checking import ListCheck
+from app.application.messaging.service import STORAGE_DIR
 from app.application.operations.boarding import (
     DepartTripUseCase,
     ManifestUseCase,
@@ -22,14 +26,16 @@ from app.application.operations.check_in import (
     UndoCheckInUseCase,
 )
 from app.application.operations.guards import assert_assigned_to_trip
+from app.application.operations.non_passenger import NonPassengerMoves
+from app.application.operations.trip_lifecycle import TripLifecycle
+from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError
-from app.core.timezone import APP_TZ
-from app.domain.enums import Role
-from app.infrastructure.models import DriverHeadcount, Trip
+from app.domain.enums import DepartureSource, Role
+from app.infrastructure.models import PassengerEvent, Trip, User
 
 router = APIRouter(tags=["operations"])
 
-CREW = require_roles(Role.CONDUCTOR, Role.DRIVER, Role.COOP_ADMIN)
+CREW = require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER)
 
 
 # ----------------------------------------------------------------- check-in
@@ -128,10 +134,10 @@ async def scan_ticket(
 ) -> ScanResponse:
     """Validate a QR code at the van door.
 
-    Always 200, even for an invalid ticket -- the conductor needs a verdict
+    Always 200, even for an invalid ticket -- the Dispatcher needs a verdict
     on screen, not an error dialog, while a queue waits. Read `accepted`.
     """
-    # A conductor may only scan the trip they are rostered to. Without
+    # A Dispatcher may only scan the trip they are rostered to. Without
     # this the remittance record is meaningless: the fares a person is
     # accountable for would not match the runs they actually worked.
     await assert_assigned_to_trip(session, trip_id=payload.trip_id, user=user)
@@ -155,9 +161,6 @@ class ManifestPassenger(BaseModel):
     booking_type: str
     status: str
     fare_amount: Decimal
-    fare_is_manual: bool = False
-    is_roadside_pickup: bool = False
-    pickup_landmark: str | None = None
     name: str | None
 
 
@@ -184,113 +187,331 @@ async def manifest(trip_id: str, session: SessionDep) -> ManifestResponse:
     return ManifestResponse(**await ManifestUseCase(session).for_trip(trip_id))
 
 
-# ---------------------------------------------------------------- headcount
-class HeadcountRequest(BaseModel):
-    stop_sequence: int = Field(ge=1)
-    confirmed_count: int = Field(ge=0, le=14)
-
-
-class HeadcountResponse(BaseModel):
-    headcount_id: str
+# ----------------------------------------------------------- lifecycle
+# Brief 4.2 and the permission table (section 3), rev 603: the office
+# assigns and starts; the Dispatcher taps Depart (the office may too) and
+# Arrived; only the Terminal Manager overrides the payment block, reviews
+# an automatic start, changes a started trip's van or voids a trip. The
+# rules are in application/operations/trip_lifecycle.py.
+class TripStateOut(BaseModel):
     trip_id: str
-    stop_sequence: int
-    confirmed_count: int
-    manifest_count: int
-    variance: int
-    message: str
+    status: str
+    van_id: str | None
+    dispatcher_id: str | None
+    plate_number: str | None
+    start_mode: str | None
+    start_review_status: str
+    audit_status: str
+    unaudited_reason: str | None
+    departure_source: str | None
+    payment_status: str
+    list_locked_at: dt.datetime | None
+    crew_aboard: bool
+    payment_override_note: str | None
+    change_note: str | None
+    # Shown to whoever started the trip; a start is never refused for these.
+    warnings: list[str] = []
 
 
-@router.post(
-    "/trips/{trip_id}/headcount",
-    response_model=HeadcountResponse,
-    dependencies=[Depends(require_roles(Role.DRIVER, Role.CONDUCTOR))],
-)
-async def confirm_headcount(
-    trip_id: str,
-    payload: HeadcountRequest,
-    session: SessionDep,
-    user: CurrentUser,
-) -> HeadcountResponse:
-    """Driver confirms how many people are physically aboard.
-
-    A single number, deliberately -- asking a driver to itemise passengers
-    before departure guarantees it will not be done. This is the human
-    cross-check on the YOLOv8 count: two independent observations of the
-    same reality, and disagreement between them is itself a signal.
-    """
-    trip = await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
-
-    manifest_count = await ManifestUseCase(session).booked_count_on_leg(
-        trip_id, payload.stop_sequence
+def _state(trip: Trip, warnings: list[str] | None = None) -> TripStateOut:
+    return TripStateOut(
+        trip_id=trip.trip_id,
+        status=trip.status,
+        van_id=trip.van_id,
+        dispatcher_id=trip.dispatcher_id,
+        plate_number=trip.van_plate_number or (trip.van.plate_number if trip.van else None),
+        start_mode=trip.start_mode,
+        start_review_status=trip.start_review_status,
+        audit_status=trip.audit_status,
+        unaudited_reason=trip.unaudited_reason,
+        departure_source=trip.departure_source,
+        payment_status=trip.payment_status,
+        list_locked_at=trip.list_locked_at,
+        crew_aboard=bool(trip.crew_aboard),
+        payment_override_note=trip.payment_override_note,
+        change_note=trip.change_note,
+        warnings=warnings or [],
     )
-    variance = payload.confirmed_count - manifest_count
 
-    now = dt.datetime.now(APP_TZ)
 
-    # driver_headcounts has UNIQUE (trip_id, stop_sequence): one
-    # authoritative figure per stop. A driver correcting their own count is
-    # legitimate, so update in place rather than letting the constraint
-    # raise an IntegrityError the caller cannot interpret.
-    existing = await session.execute(
-        select(DriverHeadcount).where(
-            DriverHeadcount.trip_id == trip_id,
-            DriverHeadcount.stop_sequence == payload.stop_sequence,
-        )
+class AssignmentIn(BaseModel):
+    van_id: str | None = None
+    dispatcher_id: str | None = None
+
+
+@router.put("/trips/{trip_id}/assignment", response_model=TripStateOut)
+async def assign(
+    trip_id: str, payload: AssignmentIn, session: SessionDep,
+    user: Annotated[User, Depends(OFFICE)],
+) -> TripStateOut:
+    """Assign the van and the Dispatcher at the van's turn. The Cashier's
+    assignment always works and alerts the Terminal Manager."""
+    trip = await TripLifecycle(session).assign(
+        trip_id, van_id=payload.van_id, dispatcher_id=payload.dispatcher_id, by=user
     )
-    record = existing.scalar_one_or_none()
+    return _state(trip)
 
-    if record is not None:
-        record.confirmed_count = payload.confirmed_count
-        record.manifest_count = manifest_count
-        record.variance = variance
-        record.confirmed_by_user_id = user.user_id
-        record.confirmed_at = now
-        headcount_id = record.headcount_id
+
+class StartIn(BaseModel):
+    # Confirm the assigned van (omit), or start with another validated van.
+    van_id: str | None = None
+
+
+@router.post("/trips/{trip_id}/start", response_model=TripStateOut)
+async def start(
+    trip_id: str, session: SessionDep, user: Annotated[User, Depends(OFFICE)],
+    payload: StartIn | None = None,
+) -> TripStateOut:
+    outcome = await TripLifecycle(session).start(
+        trip_id, by=user, van_id=payload.van_id if payload else None
+    )
+    return _state(outcome.trip, outcome.warnings)
+
+
+DEPARTS = require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER, Role.CASHIER, Role.ADMIN)
+
+
+@router.post("/trips/{trip_id}/depart")
+async def depart(
+    trip_id: str, session: SessionDep, user: Annotated[User, Depends(DEPARTS)],
+) -> dict:
+    """The Dispatcher taps Depart (or the Cashier or the Terminal Manager).
+    Anyone confirmed but unscanned becomes a no-show; the list locks."""
+    if user.role == Role.DISPATCHER.value:
+        await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
+        source = DepartureSource.DISPATCHER
     else:
-        headcount_id = str(uuid.uuid4())
-        session.add(
-            DriverHeadcount(
-                headcount_id=headcount_id,
-                trip_id=trip_id,
-                stop_sequence=payload.stop_sequence,
-                confirmed_count=payload.confirmed_count,
-                manifest_count=manifest_count,
-                variance=variance,
-                confirmed_by_user_id=user.user_id,
-                confirmed_at=now,
-            )
-        )
+        source = DepartureSource.STAFF
+    return await DepartTripUseCase(session).execute(trip_id=trip_id, source=source)
 
+
+class OverrideIn(BaseModel):
+    note: str = Field(min_length=3, max_length=255)
+
+
+@router.post("/trips/{trip_id}/payment-override", response_model=TripStateOut)
+async def override_payment(
+    trip_id: str, payload: OverrideIn, session: SessionDep,
+    user: Annotated[User, Depends(MANAGER)],
+) -> TripStateOut:
+    """Lift this trip's payment block (its assignment and its Start) with
+    a written reason. The Terminal Manager only; the share stays owed."""
+    return _state(await TripLifecycle(session).override_payment(trip_id, by=user, note=payload.note))
+
+
+class CrewIn(BaseModel):
+    aboard: bool
+
+
+DISPATCHER = require_roles(Role.DISPATCHER)
+
+
+@router.put("/trips/{trip_id}/crew", response_model=TripStateOut)
+async def set_crew(
+    trip_id: str, payload: CrewIn, session: SessionDep,
+    user: Annotated[User, Depends(DISPATCHER)],
+) -> TripStateOut:
+    """The assigned Dispatcher adds themselves as crew: not a boarding,
+    not counted toward the 14."""
+    return _state(await TripLifecycle(session).set_crew(trip_id, by=user, aboard=payload.aboard))
+
+
+# ------------------------------------------------- aboard against listed
+class UnlistedOut(BaseModel):
+    event_id: str
+    event_at: dt.datetime
+    resolution_status: str
+    resolution_note: str | None
+    has_snapshot: bool
+
+
+class DoorCheckOut(BaseModel):
+    """The Dispatcher's before-departure screen (brief 2.4, 6.1)."""
+    aboard: int
+    listed: int
+    explained: int
+    excess: int
+    crew_aboard: bool
+    unlisted: list[UnlistedOut]
+
+
+@router.get("/trips/{trip_id}/door-check", response_model=DoorCheckOut)
+async def door_check(
+    trip_id: str, session: SessionDep, user: Annotated[User, Depends(CREW)],
+) -> DoorCheckOut:
+    """The camera's count aboard against the passenger list. More aboard
+    than listed: list each person with a destination, or type a reason,
+    before Depart. Fewer: no-shows, nothing to do."""
+    trip = await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
+    check = await ListCheck(session).recheck(trip)
     await session.commit()
-
-    return HeadcountResponse(
-        headcount_id=headcount_id,
-        trip_id=trip_id,
-        stop_sequence=payload.stop_sequence,
-        confirmed_count=payload.confirmed_count,
-        manifest_count=manifest_count,
-        variance=variance,
-        message=(
-            "Headcount matches the manifest."
-            if variance == 0
-            else f"Headcount differs from the manifest by {variance:+d}."
-        ),
+    return DoorCheckOut(
+        aboard=check.aboard, listed=check.listed, explained=check.explained,
+        excess=check.excess, crew_aboard=check.crew_aboard,
+        unlisted=[UnlistedOut(
+            event_id=e.event_id, event_at=e.event_at, resolution_status=e.resolution_status,
+            resolution_note=e.resolution_note, has_snapshot=e.snapshot_url is not None,
+        ) for e in check.unlisted],
     )
 
 
-# ------------------------------------------------------------------- depart
-@router.post("/trips/{trip_id}/depart", dependencies=[Depends(CREW)])
-async def depart(trip_id: str, session: SessionDep) -> dict:
-    """Close boarding. Anyone confirmed but unscanned becomes a no-show."""
-    return await DepartTripUseCase(session).execute(trip_id=trip_id)
+class ChainOut(BaseModel):
+    trip_id: str
+    events: int
+    verified: bool
+    broken_at: int | None
+    unchained: int
 
 
-@router.post("/trips/{trip_id}/start-boarding", dependencies=[Depends(CREW)])
-async def start_boarding(trip_id: str, session: SessionDep) -> dict:
-    trip = await session.get(Trip, trip_id)
-    if trip is None:
+@router.get("/trips/{trip_id}/chain", response_model=ChainOut, dependencies=[Depends(OFFICE)])
+async def verify_chain(trip_id: str, session: SessionDep) -> ChainOut:
+    """Recompute the trip's door-event hash chain (brief 6.2). A changed,
+    removed or reordered event shows as the first link that does not
+    hold; a still deleted under retention does not break it (T39)."""
+    if await session.get(Trip, trip_id) is None:
         raise NotFoundError("Trip not found.")
-    trip.status = "boarding"
-    trip.updated_at = dt.datetime.now(APP_TZ)
-    await session.commit()
-    return {"trip_id": trip_id, "status": "boarding"}
+    check = await chain.verify(session, trip_id)
+    return ChainOut(trip_id=trip_id, events=check.events, verified=check.verified,
+                    broken_at=check.broken_at, unchained=check.unchained)
+
+
+@router.get("/boarding-audit", response_model=list[TripAudit], dependencies=[Depends(MANAGER)])
+async def boarding_audit(session: SessionDep, date: dt.date | None = None) -> list[TripAudit]:
+    """The day's trips with door events to review (brief 9, Boarding
+    Audit): unlisted boardings before departure with the Dispatcher's fix
+    or reason, capacity alerts with their general place, departures with
+    more aboard than listed, and each trip's hash chain. The Terminal
+    Manager only, as the stills are."""
+    return await BoardingAudit(session).day(date or app_tz.now().date())
+
+
+class ExplainIn(BaseModel):
+    note: str = Field(min_length=3, max_length=255)
+
+
+@router.post("/door-events/{event_id}/explain", response_model=UnlistedOut)
+async def explain_unlisted(
+    event_id: str, payload: ExplainIn, session: SessionDep,
+    user: Annotated[User, Depends(CREW)],
+) -> UnlistedOut:
+    """A reason for a boarding that is not on the list, kept with who and
+    when. To list the person instead, log the walk-in with `for_event_id`."""
+    e = await ListCheck(session).explain(event_id, by=user, note=payload.note.strip())
+    return UnlistedOut(
+        event_id=e.event_id, event_at=e.event_at, resolution_status=e.resolution_status,
+        resolution_note=e.resolution_note, has_snapshot=e.snapshot_url is not None,
+    )
+
+
+@router.get("/door-events/{event_id}/snapshot",
+            dependencies=[Depends(require_roles(Role.TERMINAL_MANAGER))])
+async def door_event_snapshot(event_id: str, session: SessionDep) -> FileResponse:
+    """The blurred still of a door event. The Terminal Manager only (brief
+    4.5, T38): no other role is ever given a still or its address."""
+    event = await session.get(PassengerEvent, event_id)
+    if event is None:
+        raise NotFoundError("Door event not found.")
+    path = STORAGE_DIR / (event.snapshot_url or "")
+    if event.snapshot_url is None or not path.is_file():
+        raise NotFoundError(
+            "The still is no longer kept: its retention period is over."
+            if event.snapshot_deleted_at else "No still was received for this event."
+        )
+    return FileResponse(path)
+
+
+class MoveIn(BaseModel):
+    reason: str
+    note: str | None = Field(default=None, max_length=255)
+
+
+class MoveOut(BaseModel):
+    move_id: str
+    van_id: str
+    trip_id: str | None
+    reason: str
+    reason_note: str | None
+    started_at: dt.datetime
+    ended_at: dt.datetime | None
+
+
+@router.post("/non-passenger-moves", response_model=MoveOut, status_code=201)
+async def start_move(
+    payload: MoveIn, session: SessionDep, user: Annotated[User, Depends(DISPATCHER)],
+) -> MoveOut:
+    """'Not a passenger trip': pressed before the van leaves. Nothing is
+    started or owed, and the GPS fallback holds off, until it ends."""
+    move = await NonPassengerMoves(session).start(by=user, reason=payload.reason, note=payload.note)
+    return MoveOut.model_validate(move, from_attributes=True)
+
+
+@router.get("/non-passenger-moves/open", response_model=MoveOut | None)
+async def open_move(
+    session: SessionDep, user: Annotated[User, Depends(DISPATCHER)],
+) -> MoveOut | None:
+    """The open 'Not a passenger trip' of the van this Dispatcher has the
+    phone of, or null."""
+    move = await NonPassengerMoves(session).mine(user)
+    return None if move is None else MoveOut.model_validate(move, from_attributes=True)
+
+
+@router.post("/non-passenger-moves/{move_id}/end", response_model=MoveOut)
+async def end_move(
+    move_id: str, session: SessionDep, user: Annotated[User, Depends(DISPATCHER)],
+) -> MoveOut:
+    move = await NonPassengerMoves(session).end(move_id, by=user)
+    return MoveOut.model_validate(move, from_attributes=True)
+
+
+@router.post("/trips/{trip_id}/arrive", response_model=TripStateOut,
+             dependencies=[Depends(CREW)])
+async def arrive(trip_id: str, session: SessionDep, user: CurrentUser) -> TripStateOut:
+    """The Dispatcher taps Arrived: the trip is completed."""
+    await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
+    return _state(await TripLifecycle(session).arrive(trip_id))
+
+
+class StartReviewIn(BaseModel):
+    # Confirm the van (omit), or change it -- then the note says why.
+    van_id: str | None = None
+    note: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/trips/{trip_id}/start-review", response_model=TripStateOut)
+async def review_start(
+    trip_id: str, session: SessionDep, user: Annotated[User, Depends(MANAGER)],
+    payload: StartReviewIn | None = None,
+) -> TripStateOut:
+    payload = payload or StartReviewIn()
+    trip = await TripLifecycle(session).review_start(
+        trip_id, by=user, van_id=payload.van_id, note=payload.note
+    )
+    return _state(trip)
+
+
+class ChangeVanIn(BaseModel):
+    van_id: str
+    reason: str = Field(min_length=3, max_length=200)
+
+
+@router.post("/trips/{trip_id}/change-van", response_model=TripStateOut)
+async def change_van(
+    trip_id: str, payload: ChangeVanIn, session: SessionDep,
+    user: Annotated[User, Depends(MANAGER)],
+) -> TripStateOut:
+    trip = await TripLifecycle(session).change_van(
+        trip_id, by=user, van_id=payload.van_id, reason=payload.reason
+    )
+    return _state(trip)
+
+
+class VoidIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=200)
+
+
+@router.post("/trips/{trip_id}/void", response_model=TripStateOut)
+async def void(
+    trip_id: str, payload: VoidIn, session: SessionDep,
+    user: Annotated[User, Depends(MANAGER)],
+) -> TripStateOut:
+    return _state(await TripLifecycle(session).void(trip_id, by=user, reason=payload.reason))

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../modules/ai_audit_queue/screens/audit_dashboard_screen.dart';
-import '../../modules/trip_dispatcher/screens/dispatch_board_screen.dart';
+import '../../modules/boarding_audit/boarding_audit_screen.dart';
+import '../../modules/disputes/disputes_screen.dart';
+import '../../modules/driving_flags/driving_flags_screen.dart';
+import '../../modules/phones/phones_screen.dart';
+import '../../modules/remittance/remittance_screen.dart';
+import '../../modules/start_review/start_review_screen.dart';
+import '../../modules/van_board/van_board_screen.dart';
+import '../../modules/special_trips/special_trips_screen.dart';
 import '../../modules/fleet_management/screens/fleet_roster_screen.dart';
 import '../../modules/schedule_management/screens/schedule_screen.dart';
 import '../../modules/policy_editor/screens/policy_editor_screen.dart';
-import '../../modules/revenue/screens/revenue_screen.dart';
 import '../../modules/messaging/screens/messages_screen.dart';
 import '../../modules/live_map/screens/fleet_map_screen.dart';
 import '../../modules/emergency/screens/sos_console_screen.dart';
@@ -66,41 +71,74 @@ class _OperatorShellState extends State<OperatorShell> {
     _Module('Overview', Icons.map_outlined, Icons.map, FleetMapScreen(), group: 'Today'),
     _Module('Trips', Icons.departure_board_outlined, Icons.departure_board,
         TripMonitorScreen()),
-    _Module('Special Trips', Icons.alt_route_outlined, Icons.alt_route,
-        DispatchBoardScreen()),
+    _Module('Van Status Board', Icons.view_list_outlined, Icons.view_list, VanBoardScreen()),
+    _Module('Review Starts', Icons.rule_outlined, Icons.rule, StartReviewScreen(), managerOnly: true),
+    // The Terminal Manager and the Cashier both review requests and enter
+    // walk-ins (brief 3).
+    _Module('Special Trips', Icons.alt_route_outlined, Icons.alt_route, SpecialTripsScreen()),
     _Module('Emergencies (SOS)', Icons.emergency_outlined, Icons.emergency,
         SosConsoleScreen(), urgent: true),
     _Module('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, MessagesScreen()),
-    _Module('Fares & Cash', Icons.payments_outlined, Icons.payments, RevenueScreen(),
+    _Module('Remittance', Icons.receipt_long_outlined, Icons.receipt_long, RemittanceScreen(),
         group: 'Money & checks'),
-    _Module('Passenger Count Checks', Icons.fact_check_outlined, Icons.fact_check,
-        AuditDashboardScreen()),
+    _Module('Disputes', Icons.gavel_outlined, Icons.gavel, DisputesScreen()),
+    _Module('Boarding Audit', Icons.how_to_reg_outlined, Icons.how_to_reg, BoardingAuditScreen(),
+        managerOnly: true),
+    _Module('Driving Flags', Icons.speed_outlined, Icons.speed, DrivingFlagsScreen()),
+    // Member Records opens the group: the Cashier sees it, so the heading
+    // must not sit on an entry the Cashier is not shown.
+    _Module('Member Records', Icons.airport_shuttle_outlined, Icons.airport_shuttle,
+        FleetRosterScreen(), group: 'Setup'),
+    _Module('Phones', Icons.phone_android_outlined, Icons.phone_android, PhonesScreen()),
     _Module('Timetable', Icons.calendar_month_outlined, Icons.calendar_month,
-        ScheduleScreen(), group: 'Setup'),
-    _Module('Vans & Crew', Icons.airport_shuttle_outlined, Icons.airport_shuttle,
-        FleetRosterScreen()),
-    _Module('Rules & Settings', Icons.tune_outlined, Icons.tune, PolicyEditorScreen()),
+        ScheduleScreen(), managerOnly: true),
+    _Module('Rules & Settings', Icons.tune_outlined, Icons.tune, PolicyEditorScreen(),
+        managerOnly: true),
   ];
 
-  /// Looked up by screen type rather than written out as an index.
-  void _show(bool Function(Widget) test) {
-    final index = _modules.indexWhere((m) => test(m.screen));
-    if (index >= 0) setState(() => _selectedIndex = index);
+  /// The pages this person may open. The Cashier records payments and
+  /// does not decide what is owed, set rules or plan the timetable (brief
+  /// section 3), so those pages are not offered rather than refused.
+  List<_Module> get _visible {
+    final isManager = context.read<AuthProvider>().profile?.role.isManager ?? false;
+    return [for (final m in _modules) if (isManager || !m.managerOnly) m];
   }
 
-  void _openFor(AppNotification n) => n.isSosAlert
-      ? _show((w) => w is SosConsoleScreen)
-      : _show((w) => w is AuditDashboardScreen);
+  /// Looked up by screen type rather than written out as an index. False
+  /// when this person is not shown that page.
+  bool _show(bool Function(Widget) test) {
+    final index = _visible.indexWhere((m) => test(m.screen));
+    if (index >= 0) setState(() => _selectedIndex = index);
+    return index >= 0;
+  }
+
+  /// The page an alert is about; the next one this person may open when
+  /// that page is the Terminal Manager's.
+  void _openFor(AppNotification n) {
+    final _ = switch (n.type) {
+      'sos_alert' => _show((w) => w is SosConsoleScreen),
+      'capacity_alert' => _show((w) => w is BoardingAuditScreen) || _show((w) => w is VanBoardScreen),
+      'departed_more_than_listed' => _show((w) => w is BoardingAuditScreen),
+      'driving_flag' => _show((w) => w is DrivingFlagsScreen),
+      'dispute_raised' => _show((w) => w is DisputesScreen),
+      'left_unpaid' => _show((w) => w is RemittanceScreen),
+      'special_trip_request' => _show((w) => w is SpecialTripsScreen),
+      'unconfirmed_trip_start' => _show((w) => w is StartReviewScreen) || _show((w) => w is TripMonitorScreen),
+      _ when n.isTripAlert => _show((w) => w is TripMonitorScreen),
+      _ => false,
+    };
+  }
 
   void _openToday(TodayTarget target) => switch (target) {
         TodayTarget.fleet => _show((w) => w is FleetMapScreen),
         TodayTarget.trips => _show((w) => w is TripMonitorScreen),
-        TodayTarget.checks => _show((w) => w is AuditDashboardScreen),
+        TodayTarget.review => _show((w) => w is BoardingAuditScreen) || _show((w) => w is VanBoardScreen),
         TodayTarget.emergencies => _show((w) => w is SosConsoleScreen),
       };
 
   @override
   Widget build(BuildContext context) {
+    final modules = _visible;
     return ChangeNotifierProvider<NotificationProvider>.value(
       value: _notifications,
       child: Scaffold(
@@ -108,7 +146,7 @@ class _OperatorShellState extends State<OperatorShell> {
         body: Row(
           children: [
             _Sidebar(
-              modules: _modules,
+              modules: modules,
               selectedIndex: _selectedIndex,
               collapsed: _collapsed,
               onSelect: (i) => setState(() => _selectedIndex = i),
@@ -121,7 +159,7 @@ class _OperatorShellState extends State<OperatorShell> {
                     strip: TodayStrip(onOpen: _openToday),
                     bell: NotificationBell(onOpen: _openFor),
                   ),
-                  Expanded(child: _modules[_selectedIndex].screen),
+                  Expanded(child: modules[_selectedIndex].screen),
                 ],
               ),
             ),
@@ -455,7 +493,7 @@ class _SidebarButton extends StatelessWidget {
 /// One sidebar entry and the screen it shows.
 class _Module {
   const _Module(this.label, this.icon, this.selectedIcon, this.screen,
-      {this.group, this.urgent = false});
+      {this.group, this.urgent = false, this.managerOnly = false});
 
   /// The sidebar label -- and, word for word, the screen's own title.
   final String label;
@@ -468,4 +506,7 @@ class _Module {
 
   /// Drawn in the danger colour. Only the SOS console.
   final bool urgent;
+
+  /// Hidden from the Cashier; the Terminal Manager's decisions.
+  final bool managerOnly;
 }

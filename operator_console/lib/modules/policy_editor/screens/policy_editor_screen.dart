@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/policy_repository.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
+import '../../../viewmodels/auth_provider.dart';
+import '../speed_limits_panel.dart';
 
 /// Cooperative-wide settings, as data rather than a redeploy.
 ///
@@ -103,8 +106,8 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
           PageHeader(
             title: 'Rules & Settings',
             technicalNote: 'Cooperative policies',
-            description: 'The cooperative\'s rules for booking, check-in and tracking. A change '
-                'applies to new trips; trips already booked keep the terms they were sold under.',
+            description: 'A2Z\'s rules for booking, trips, payment, the phones and evidence. A change '
+                'is kept with who made it; trips already booked keep the terms they were sold under.',
             actions: [RefreshButton(onPressed: _load, busy: _loading)],
           ),
           Expanded(
@@ -127,10 +130,13 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
       groups.putIfAbsent(_plain[p.policyKey]?.$2 ?? 'Other', () => []).add(p);
     }
     final order = [..._groupOrder.where(groups.containsKey), ...groups.keys.where((g) => !_groupOrder.contains(g))];
+    final manager = context.read<AuthProvider>().profile?.role.isManager ?? false;
     return ListView.separated(
-      itemCount: order.length,
+      itemCount: order.length + 1,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
-      itemBuilder: (context, i) => Panel(
+      itemBuilder: (context, i) => i == order.length
+          ? SpeedLimitsPanel(canEdit: manager)
+          : Panel(
         title: order[i],
         child: Column(
           children: [
@@ -161,9 +167,14 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
                 const SizedBox(height: 2),
                 Text(policy.description, style: text.bodySmall),
                 const SizedBox(height: 2),
-                // The stored name, for whoever maintains the system.
-                Text(policy.policyKey,
-                    style: text.bodySmall!.copyWith(fontSize: 11, color: AppColors.border)),
+                // The stored name, for whoever maintains the system, and who
+                // set the value in force.
+                Text(
+                    '${policy.policyKey}${policy.updatedBy != null ? ' · set by ${policy.updatedBy}' : ''}',
+                    style: text.bodySmall!.copyWith(fontSize: 11, color: AppColors.textMuted)),
+                if (policy.policyValue.isEmpty)
+                  Text('Not set: this is off until A2Z decides a value.',
+                      style: text.bodySmall!.copyWith(color: AppColors.warning)),
               ],
             ),
           ),
@@ -174,12 +185,16 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
               controller: controller,
               onSubmitted: (_) => _save(policy),
               decoration: InputDecoration(
-                prefixText: policy.dataType == 'decimal' ? '₱ ' : null,
+                hintText: 'Not set',
                 suffixText: _unit(policy.policyKey),
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          IconButton(
+            tooltip: 'Earlier values',
+            onPressed: () => _history(policy),
+            icon: Icon(Icons.history, color: AppColors.textMuted),
+          ),
           SizedBox(
             width: 88,
             child: saving
@@ -193,11 +208,48 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     );
   }
 
+  Future<void> _history(Policy policy) => showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(_plain[policy.policyKey]?.$1 ?? _humanise(policy.policyKey)),
+          content: SizedBox(
+            width: 460,
+            height: 320,
+            child: FutureBuilder(
+              future: _policies.history(policy.policyKey),
+              builder: (_, snap) {
+                if (snap.hasError) {
+                  final e = snap.error;
+                  return Text(e is ApiException ? e.message : '$e');
+                }
+                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                final when = DateFormat('d MMM yyyy, h:mm a');
+                return ListView(children: [
+                  for (final (i, p) in snap.data!.indexed)
+                    ListTile(
+                      dense: true,
+                      title: Text(p.policyValue.isEmpty ? 'Not set' : '${p.policyValue} ${_unit(p.policyKey) ?? ''}'),
+                      subtitle: Text('${i == 0 ? 'In force since' : 'From'} '
+                          '${when.format(p.effectiveFrom ?? p.updatedAt)} · ${p.updatedBy ?? 'set at installation'}'),
+                    ),
+                ]);
+              },
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        ),
+      );
+
   static const _groupOrder = [
     'Booking and changes',
     'At the terminal',
+    'Trips and payment',
+    'Departure and home pickup',
+    'Phones and camera',
+    'Driving flags',
+    'Evidence and privacy',
     'Vans and tracking',
-    'Safety and camera checks',
+    'Safety',
     'Other',
   ];
 
@@ -218,15 +270,35 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     'default_seat_capacity': ('Seats in a new van', 'Vans and tracking'),
     'tracking_ping_interval_seconds': ('How often a van sends its location', 'Vans and tracking'),
     'tracking_stale_after_seconds': ('Show "No signal" after', 'Vans and tracking'),
-    'licence_expiry_warning_days': ('Warn before a driver\'s licence expires', 'Vans and tracking'),
-    'variance_alert_threshold': ('Alert when the camera count is off by', 'Safety and camera checks'),
-    'sos_contact_numbers': ('Numbers texted on an emergency (SOS)', 'Safety and camera checks'),
+    'licence_expiry_warning_days': ('Warn before an operator\'s licence expires', 'Vans and tracking'),
+    'sos_contact_numbers': ('Numbers texted on an emergency (SOS)', 'Safety'),
+    'start_opens_minutes': ('When Start opens before departure', 'Trips and payment'),
+    'remittance_rate_pct': ('A2Z\'s share of each van\'s fares', 'Trips and payment'),
+    'depart_zone_radius_m': ('Terminal zone for a GPS departure (radius)', 'Departure and home pickup'),
+    'depart_readings': ('Readings outside the zone that make a departure', 'Departure and home pickup'),
+    'home_pickup_wait_minutes': ('How long the van waits at a home pickup', 'Departure and home pickup'),
+    'home_pickup_max_route_m': ('Farthest a home pickup may be from the route', 'Departure and home pickup'),
+    'heartbeat_gap_seconds': ('A phone is silent after', 'Phones and camera'),
+    'match_window_seconds': ('A boarding matches a scan or cash entry within', 'Phones and camera'),
+    'overspeed_seconds': ('Above the limit this long is overspeed', 'Driving flags'),
+    'stop_seconds': ('Standing still longer than this is an unscheduled stop', 'Driving flags'),
+    'slow_tolerance_pct': ('A stretch is slow beyond its expected time by', 'Driving flags'),
+    'expected_speed_kmh': ('Average speed behind each stretch\'s expected time', 'Driving flags'),
+    'standstill_kmh': ('At or below this speed the van is standing still', 'Driving flags'),
+    'special_trip_speed_kmh': ('Speed limit for a special trip (no route of its own)', 'Driving flags'),
+    'retention_days': ('Days blurred stills and GPS logs are kept', 'Evidence and privacy'),
+    'chat_image_max_kb': ('Largest payment screenshot accepted', 'Evidence and privacy'),
+    'chat_image_retention_days': ('Days payment screenshots are kept', 'Evidence and privacy'),
   };
 
   /// The unit is part of the stored name (`_hours`, `_days`...), so it is
   /// read from there rather than guessed per key.
   static String? _unit(String key) {
     for (final (suffix, unit) in const [
+      ('_pct', '%'),
+      ('_kmh', 'km/h'),
+      ('_kb', 'KB'),
+      ('_readings', 'readings'),
       ('_days', 'days'),
       ('_hours', 'hours'),
       ('_minutes', 'minutes'),

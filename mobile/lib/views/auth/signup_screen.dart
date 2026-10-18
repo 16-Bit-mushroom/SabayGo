@@ -10,11 +10,11 @@ import '../../viewmodels/auth_provider.dart';
 /// Two things changed from the previous version.
 ///
 /// The "I'm a van terminal" checkbox is gone. It routed to the crew
-/// portal, so anyone registering could tick it and land in the conductor
+/// portal, so anyone registering could tick it and land in the Dispatcher
 /// app. The backend never honoured it -- /auth/register creates
 /// passengers only -- but a control that implies otherwise is worth
-/// removing rather than leaving to be refused server-side. Conductors,
-/// drivers and cooperative administrators are provisioned by the office,
+/// removing rather than leaving to be refused server-side. Dispatchers,
+/// Cashiers and the Terminal Manager are provisioned by the office,
 /// because employment is a cooperative decision, not self-service.
 ///
 /// There is also no navigation on success. The root router watches the

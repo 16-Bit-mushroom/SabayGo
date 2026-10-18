@@ -7,9 +7,6 @@ class ScheduleTemplate {
     required this.departureTime,
     required this.daysOfWeek,
     this.tripLabel,
-    this.defaultVanId,
-    this.defaultDriverId,
-    this.defaultConductorId,
     required this.isActive,
     required this.validFrom,
     this.validUntil,
@@ -20,9 +17,6 @@ class ScheduleTemplate {
   final String departureTime; // "HH:MM:SS"
   final String daysOfWeek; // Monday-first 7-char mask, e.g. "1111100"
   final String? tripLabel;
-  final String? defaultVanId;
-  final String? defaultDriverId;
-  final String? defaultConductorId;
   final bool isActive;
   final DateTime validFrom;
   final DateTime? validUntil;
@@ -46,9 +40,6 @@ class ScheduleTemplate {
         departureTime: json['departure_time'] as String,
         daysOfWeek: json['days_of_week'] as String,
         tripLabel: json['trip_label'] as String?,
-        defaultVanId: json['default_van_id'] as String?,
-        defaultDriverId: json['default_driver_id'] as String?,
-        defaultConductorId: json['default_conductor_id'] as String?,
         isActive: json['is_active'] as bool,
         validFrom: DateTime.parse(json['valid_from'] as String),
         validUntil: json['valid_until'] != null
@@ -99,18 +90,12 @@ class ScheduleRepository {
     required String routeId,
     required String departureTime, // "HH:MM" or "HH:MM:SS"
     required String daysOfWeek,
-    String? defaultVanId,
-    String? defaultDriverId,
-    String? defaultConductorId,
     String? tripLabel,
   }) async {
     await _api.post('/config/schedule-templates', body: {
       'route_id': routeId,
       'departure_time': departureTime,
       'days_of_week': daysOfWeek,
-      if (defaultVanId != null) 'default_van_id': defaultVanId,
-      if (defaultDriverId != null) 'default_driver_id': defaultDriverId,
-      if (defaultConductorId != null) 'default_conductor_id': defaultConductorId,
       if (tripLabel != null && tripLabel.isNotEmpty) 'trip_label': tripLabel,
     });
   }

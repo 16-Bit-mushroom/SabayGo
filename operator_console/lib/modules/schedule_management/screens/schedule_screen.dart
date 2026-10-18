@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
-import '../../../data/repositories/fleet_repository.dart';
 import '../../../data/repositories/schedule_repository.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
@@ -31,13 +30,9 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen> {
   late final ScheduleRepository _schedule = context.read<ScheduleRepository>();
   late final DispatchRepository _dispatch = context.read<DispatchRepository>();
-  late final FleetRepository _fleet = context.read<FleetRepository>();
 
   List<ScheduleTemplate>? _templates;
   List<RouteSummary> _routes = [];
-  List<Van> _vans = [];
-  List<StaffMember> _drivers = [];
-  List<StaffMember> _conductors = [];
   bool _loading = true;
   String? _error;
   bool _generating = false;
@@ -65,17 +60,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final results = await Future.wait([
         _schedule.listTemplates(),
         _dispatch.listRoutes(),
-        _fleet.listVans(),
-        _fleet.listCrew(role: 'driver'),
-        _fleet.listCrew(role: 'conductor'),
       ]);
       if (!mounted) return;
       setState(() {
         _templates = results[0] as List<ScheduleTemplate>;
         _routes = results[1] as List<RouteSummary>;
-        _vans = results[2] as List<Van>;
-        _drivers = results[3] as List<StaffMember>;
-        _conductors = results[4] as List<StaffMember>;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -114,27 +103,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _onTemplateCreated() async {
     _showSnack('Regular departure added.');
     await _load();
-  }
-
-  void _showDetails(ScheduleTemplate t) {
-    T? find<T>(List<T> list, String? id, String Function(T) key) {
-      if (id == null) return null;
-      for (final e in list) {
-        if (key(e) == id) return e;
-      }
-      return null;
-    }
-
-    showDialog<void>(
-      context: context,
-      builder: (_) => _TemplateDetailsDialog(
-        template: t,
-        routeName: _routeName(t.routeId),
-        van: find<Van>(_vans, t.defaultVanId, (v) => v.vanId),
-        driver: find<StaffMember>(_drivers, t.defaultDriverId, (s) => s.userId),
-        conductor: find<StaffMember>(_conductors, t.defaultConductorId, (s) => s.userId),
-      ),
-    );
   }
 
   Future<void> _generateTrips() async {
@@ -225,9 +193,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             child: _NewTemplateCard(
                               schedule: _schedule,
                               routes: _routes,
-                              vans: _vans,
-                              drivers: _drivers,
-                              conductors: _conductors,
                               onCreated: _onTemplateCreated,
                             ),
                           ),
@@ -243,11 +208,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   /// fills its card (a DataTable is only as wide as its content and left a
   /// blank band), and the heading row stays put while the rows scroll.
   static const _columns = <(String, int)>[
-    ('Name', 16),
-    ('Route', 20),
+    ('Name', 20),
+    ('Route', 27),
     ('Leaves at', 9),
     ('Days', 12),
-    ('Van & crew', 11),
     ('In use', 9),
   ];
 
@@ -338,18 +302,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           _cell(3, Text(t.daysSummary, overflow: TextOverflow.ellipsis, style: TextStyle(color: ink))),
           _cell(
             4,
-            OutlinedButton.icon(
-              onPressed: () => _showDetails(t),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 34),
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              ),
-              icon: const Icon(Icons.badge_outlined, size: 16),
-              label: const Text('Details'),
-            ),
-          ),
-          _cell(
-            5,
             Tooltip(
               message: t.isActive
                   ? 'In use: included when upcoming trips are created'
@@ -361,201 +313,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ),
           ),
         ]),
-      ),
-    );
-  }
-}
-
-/// Who and what a slot runs with.
-///
-/// Read-only, and resolved from the roster the screen already loaded, so
-/// opening it costs no request. An unassigned role is said plainly along
-/// with its consequence, rather than shown as a blank: a generated trip
-/// with no van cannot board anyone until dispatch assigns one.
-class _TemplateDetailsDialog extends StatelessWidget {
-  const _TemplateDetailsDialog({
-    required this.template,
-    required this.routeName,
-    this.van,
-    this.driver,
-    this.conductor,
-  });
-
-  final ScheduleTemplate template;
-  final String routeName;
-  final Van? van;
-  final StaffMember? driver;
-  final StaffMember? conductor;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = template;
-    String date(DateTime d) =>
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-    return AlertDialog(
-      title: Text(t.tripLabel ?? 'Regular departure'),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$routeName · departs ${t.departureTime.substring(0, 5)} · ${t.daysSummary}',
-                style: TextStyle(color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Valid from ${date(t.validFrom)}'
-                '${t.validUntil != null ? ' until ${date(t.validUntil!)}' : ', no end date'}'
-                ' · ${t.isActive ? 'In use' : 'Paused'}',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              _AssignmentBlock(
-                icon: Icons.airport_shuttle_outlined,
-                role: 'Van',
-                assigned: t.defaultVanId != null,
-                title: van?.plateNumber,
-                lines: [
-                  if (van != null) ...[
-                    [van!.brand, van!.model].whereType<String>().join(' ').trim().isEmpty
-                        ? 'Make not recorded'
-                        : [van!.brand, van!.model].whereType<String>().join(' '),
-                    '${van!.seatCapacity} seats',
-                  ],
-                ],
-                status: van?.operationalStatus,
-                unassignedNote: 'No usual van. Trips created from this start without one.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _AssignmentBlock(
-                icon: Icons.person_outline,
-                role: 'Driver',
-                assigned: t.defaultDriverId != null,
-                title: driver?.fullName,
-                lines: [
-                  if (driver?.phoneNumber != null) driver!.phoneNumber!,
-                  if (driver?.licenseNumber != null)
-                    'Licence ${driver!.licenseNumber}'
-                        '${driver!.licenseExpiryDate != null ? ' · expires ${date(driver!.licenseExpiryDate!)}' : ''}',
-                ],
-                status: driver?.employmentStatus,
-                unassignedNote: 'No usual driver. Trips created from this start without one.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _AssignmentBlock(
-                icon: Icons.confirmation_number_outlined,
-                role: 'Conductor',
-                assigned: t.defaultConductorId != null,
-                title: conductor?.fullName,
-                lines: [
-                  if (conductor?.phoneNumber != null) conductor!.phoneNumber!,
-                ],
-                status: conductor?.employmentStatus,
-                unassignedNote: 'No usual conductor. Trips created from this start without one.',
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-      ],
-    );
-  }
-}
-
-/// One role in the details dialog: assigned, unassigned, or assigned to
-/// someone no longer in the roster.
-class _AssignmentBlock extends StatelessWidget {
-  const _AssignmentBlock({
-    required this.icon,
-    required this.role,
-    required this.assigned,
-    required this.title,
-    required this.lines,
-    required this.status,
-    required this.unassignedNote,
-  });
-
-  final IconData icon;
-  final String role;
-  final bool assigned;
-  final String? title;
-  final List<String> lines;
-  final String? status;
-  final String unassignedNote;
-
-  @override
-  Widget build(BuildContext context) {
-    // Three states, never a blank: assigned, not assigned, or assigned to
-    // an id the roster no longer returns.
-    final missing = assigned && title == null;
-    final inactive = status != null && status != 'active';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: assigned ? AppColors.surfaceRaised : AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 22, color: assigned ? AppColors.textPrimary : AppColors.textMuted),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(role.toUpperCase(),
-                    style: TextStyle(
-                        fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.textMuted)),
-                const SizedBox(height: 2),
-                if (!assigned) ...[
-                  Text('Not assigned',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
-                  const SizedBox(height: 2),
-                  Text(unassignedNote, style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
-                ] else if (missing)
-                  Text('Assigned record not found in the roster.',
-                      style: TextStyle(fontSize: 14, color: AppColors.warning))
-                else ...[
-                  Row(children: [
-                    Flexible(
-                      child: Text(title!,
-                          style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                    ),
-                    if (inactive) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.warningContainer,
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                        ),
-                        child: Text(status!.toUpperCase(),
-                            style: TextStyle(
-                                fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning)),
-                      ),
-                    ],
-                  ]),
-                  for (final l in lines)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(l, style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -623,17 +380,11 @@ class _NewTemplateCard extends StatefulWidget {
   const _NewTemplateCard({
     required this.schedule,
     required this.routes,
-    required this.vans,
-    required this.drivers,
-    required this.conductors,
     required this.onCreated,
   });
 
   final ScheduleRepository schedule;
   final List<RouteSummary> routes;
-  final List<Van> vans;
-  final List<StaffMember> drivers;
-  final List<StaffMember> conductors;
   final Future<void> Function() onCreated;
 
   @override
@@ -646,9 +397,6 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
   String? _routeId;
   TimeOfDay _time = _defaultTime;
   final _label = TextEditingController();
-  String? _vanId;
-  String? _driverId;
-  String? _conductorId;
   // Monday-first mask.
   final List<bool> _days = List.filled(7, true);
   bool _submitting = false;
@@ -668,9 +416,6 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
     _routeId = null;
     _time = _defaultTime;
     _label.clear();
-    _vanId = null;
-    _driverId = null;
-    _conductorId = null;
     _days.fillRange(0, 7, true);
     _epoch++;
     _error = null;
@@ -696,9 +441,6 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
         routeId: _routeId!,
         departureTime: '$hh:$mm:00',
         daysOfWeek: _days.map((d) => d ? '1' : '0').join(),
-        defaultVanId: _vanId,
-        defaultDriverId: _driverId,
-        defaultConductorId: _conductorId,
         tripLabel: _label.text,
       );
       if (!mounted) return;
@@ -727,7 +469,8 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
           children: [
             Text('Add a regular departure', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 4),
-            Text('A trip that repeats on the chosen days, with its usual van and crew.',
+            Text('A trip that repeats on the chosen days. The van and the Dispatcher '
+                'are assigned to each trip at the van\'s turn, on the Trips page.',
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: AppSpacing.xl),
             if (_error != null) ...[
@@ -798,38 +541,6 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
                   labelText: 'Name (optional)', hintText: 'For example: Morning run'),
             ),
             const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Usual van (optional)'),
-              isExpanded: true,
-              initialValue: _vanId,
-              key: ValueKey('van-$_epoch'),
-              items: widget.vans
-                  .map((v) => DropdownMenuItem(value: v.vanId, child: Text(v.plateNumber)))
-                  .toList(),
-              onChanged: (v) => setState(() => _vanId = v),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Usual driver (optional)'),
-              isExpanded: true,
-              initialValue: _driverId,
-              key: ValueKey('driver-$_epoch'),
-              items: widget.drivers
-                  .map((d) => DropdownMenuItem(value: d.userId, child: Text(d.fullName)))
-                  .toList(),
-              onChanged: (v) => setState(() => _driverId = v),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Usual conductor (optional)'),
-              isExpanded: true,
-              initialValue: _conductorId,
-              key: ValueKey('conductor-$_epoch'),
-              items: widget.conductors
-                  .map((c) => DropdownMenuItem(value: c.userId, child: Text(c.fullName)))
-                  .toList(),
-              onChanged: (v) => setState(() => _conductorId = v),
-            ),
             const SizedBox(height: AppSpacing.xl),
             FilledButton.icon(
               onPressed: _submitting ? null : _submit,

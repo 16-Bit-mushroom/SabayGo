@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.config import settings
+from app.core.exceptions import ConflictError
 
 engine = create_async_engine(
     settings.database_url,
@@ -42,3 +44,13 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+async def commit_or_conflict(session: AsyncSession, message: str) -> None:
+    """Commit, turning a unique-key race the pre-checks could not see into
+    a 409 with `message` instead of a 500."""
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise ConflictError(message) from None

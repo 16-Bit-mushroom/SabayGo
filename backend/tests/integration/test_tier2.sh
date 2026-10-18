@@ -6,7 +6,7 @@ STAMP=$(date +%s)
 j() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1)"; }
 
 TOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 AUTH="Authorization: Bearer $TOKEN"
 JSON="Content-Type: application/json"
 
@@ -35,10 +35,15 @@ for v in json.load(sys.stdin):
     print(f\"  {v['plate_number']:<10} {v['seat_capacity']:>2} seats  {v['operational_status']:<12} {cam}\")"
 
 echo
-echo "== add a van ==========================================="
+echo "== add an operator, then the van =========================="
+# One van per operator, and the van is created with its operator (rev 468).
+OP=$(curl -s -X POST "$API/fleet/operators" -H "$AUTH" -H "$JSON" -d "{
+  \"full_name\":\"Tier Two Owner\",\"contact_number\":\"0927${STAMP: -7}\",
+  \"license_number\":\"Y${STAMP: -10}\",\"license_expiry\":\"2029-01-31\"}" \
+  | python3 -c "import json,sys;print(json.load(sys.stdin)['operator_id'])")
 curl -s -X POST "$API/fleet/vans" -H "$AUTH" -H "$JSON" -d "{
-  \"plate_number\":\"TST-${STAMP: -4}\",\"brand\":\"Toyota\",\"model\":\"HiAce\",
-  \"seat_capacity\":14,\"has_cabin_camera\":true}" | python3 -m json.tool
+  \"plate_number\":\"TST-${STAMP: -4}\",\"operator_id\":\"$OP\",\"brand\":\"Toyota\",
+  \"model\":\"HiAce\",\"seat_capacity\":14,\"has_cabin_camera\":true}" | python3 -m json.tool
 
 echo
 echo "== reject over-capacity van (LTFRB limit is 14) ========="
@@ -47,14 +52,14 @@ curl -s -X POST "$API/fleet/vans" -H "$AUTH" -H "$JSON" \
 echo
 
 echo
-echo "== provision a conductor ==============================="
+echo "== provision a dispatcher =============================="
 curl -s -X POST "$API/fleet/crew" -H "$AUTH" -H "$JSON" -d "{
   \"email\":\"cond${STAMP}@sabaygo.dev\",\"phone_number\":\"0918${STAMP: -7}\",
-  \"password\":\"sabaygo123\",\"role\":\"conductor\",
-  \"first_name\":\"New\",\"last_name\":\"Conductor\"}" | python3 -m json.tool
+  \"password\":\"sabaygo123\",\"role\":\"dispatcher\",
+  \"first_name\":\"New\",\"last_name\":\"Dispatcher\"}" | python3 -m json.tool
 
 echo
-echo "== driver without a licence should be rejected ========="
+echo "== a driver account is refused: the operator has no login ="
 curl -s -X POST "$API/fleet/crew" -H "$AUTH" -H "$JSON" -d "{
   \"email\":\"drv${STAMP}@sabaygo.dev\",\"phone_number\":\"0919${STAMP: -7}\",
   \"password\":\"sabaygo123\",\"role\":\"driver\",

@@ -8,7 +8,7 @@ import '../tokens.dart';
 /// three screens each kept their own `(label, colour)` switch, and the
 /// colours had drifted into `Colors.blue`, `Colors.teal` and
 /// `Colors.deepOrange` — 3.12:1, 3.67:1 and 3.16:1 against white, all
-/// below AA, all of them labelling manifest rows a conductor reads in
+/// below AA, all of them labelling manifest rows a Dispatcher reads in
 /// daylight.
 enum StatusTone {
   /// Done, paid, aboard.

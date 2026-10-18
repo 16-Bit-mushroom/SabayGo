@@ -8,8 +8,8 @@ import '../../../viewmodels/messaging_provider.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 
-/// The cooperative office's shared inbox: every passenger, conductor and
-/// driver thread with coop_admin lands here, and any signed-in office
+/// The A2Z office's shared inbox: every passenger and Dispatcher thread
+/// with the office lands here, and any signed-in office
 /// staff member can pick one up and reply (see the "office" kind in
 /// backend/app/application/messaging/service.py). A specific staff member
 /// never "owns" a thread the way a 1:1 chat would.
@@ -146,8 +146,9 @@ class _ConversationList extends StatelessWidget {
 
   IconData _iconFor(String role) {
     switch (role) {
-      case 'conductor':
+      case 'dispatcher':
         return Icons.badge_outlined;
+      // Legacy threads only: drivers have no accounts since migration 017.
       case 'driver':
         return Icons.airline_seat_recline_normal;
       case 'passenger':

@@ -34,21 +34,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 12
 
-    # --- AI node --------------------------------------------------------
-    ai_node_url: str = "http://localhost:5000"
-    ai_node_api_key: str | None = None
-    ai_node_timeout_s: float = 20.0
-
     # Shared key for in-vehicle tracking units. Devices cannot hold a
-    # user session, so they authenticate the same way the YOLOv8 node
-    # does. Unset in development leaves the ping endpoint open.
+    # user session, so they send a key instead. Unset in development
+    # leaves the ping endpoint open. (The in-van phone has its own
+    # per-device token, X-Device-Token, not this key.)
     tracker_api_key: str | None = None
-
-    # Shared key for the phone-as-camera PoC (ai_capture_app), standing in
-    # for the Orange Pi until that hardware arrives. Kept separate from
-    # tracker_api_key -- a camera device and a GPS dongle are different
-    # trust boundaries even though both are unattended devices.
-    phone_capture_api_key: str | None = None
 
     # --- payments -------------------------------------------------------
     paymongo_secret_key: str | None = None

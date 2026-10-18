@@ -1,24 +1,22 @@
 #!/usr/bin/env bash
 # Start the whole SabayGo system with one command.
 #
-#   ./run.sh                     database, backend, AI node, console
-#   --mobile                     also the passenger/conductor app on a handset
-#   --capture                    also the AI capture app on a handset
+#   ./run.sh                     database, backend, console
+#   --mobile                     also the passenger/Dispatcher app on a handset
 #   --device <id>                which handset (default: the first attached)
 #   --host <ip>                  force the address handsets dial, when
 #                                detection picks the wrong interface
 #   --reset-db                   rebuild the demo data before starting
 #   --soon                       rebuild it with the trip departing in 20 min
-#   --no-ai                      skip the Flask/YOLOv8 node
 #   --no-console                 skip the cooperative console
 #   --no-gps                     do not simulate GPS for trips on the road
 #
 # WHY THIS SCRIPT EXISTS
 #
 # The address of this machine is the one piece of configuration that is
-# different at every venue, and it has to arrive in five places at once:
+# different at every venue, and it had to arrive in five places at once:
 # the backend's CORS rules, the console's API_BASE_URL, the handset's
-# API_BASE_URL, and the capture app's two URLs. At the last demo the
+# API_BASE_URL, and the (since retired) capture app's two URLs. At the last demo the
 # school network handed out a different address, the handsets were still
 # built against the home one, and the console's trigger-phone request
 # went to a phone that was polling a dead host. Nothing was broken --
@@ -31,9 +29,7 @@ cd "$(dirname "$0")"
 ROOT="$PWD"
 
 HOST=""
-WITH_AI=1
 WITH_MOBILE=0
-WITH_CAPTURE=0
 WITH_CONSOLE=1
 WITH_GPS=1
 RESET_DB=0
@@ -45,13 +41,11 @@ while [ $# -gt 0 ]; do
     --host)       HOST="${2:?--host needs an address}"; shift 2 ;;
     --device)     DEVICE="${2:?--device needs a device id}"; shift 2 ;;
     --mobile)     WITH_MOBILE=1; shift ;;
-    --capture)    WITH_CAPTURE=1; shift ;;
-    --no-ai)      WITH_AI=0; shift ;;
     --no-console) WITH_CONSOLE=0; shift ;;
     --no-gps)     WITH_GPS=0; shift ;;
     --reset-db)   RESET_DB=1; shift ;;
     --soon)       RESET_DB=1; RESET_ARGS+=(--soon); shift ;;
-    -h|--help)    sed -n '2,14p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help)    sed -n '2,12p' "$0" | sed 's/^# \?//'; exit 0 ;;
     *) echo "unknown option: $1  (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -62,7 +56,6 @@ warn() { printf '  ! %s\n' "$*" >&2; }
 die()  { printf '\nFAILED: %s\n' "$*" >&2; exit 1; }
 
 PORT_BACKEND=8000
-PORT_AI=5000
 PORT_CONSOLE=3001        # pinned, not random: see the CORS note in config.py
 LOGS="$ROOT/logs"
 mkdir -p "$LOGS"
@@ -101,24 +94,21 @@ esac
 # on a phone hotspot. Rules need root, so the script only checks and
 # prints the one command that fixes it; ufw keeps the rule across reboots.
 if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ufw 2>/dev/null; then
-  warn "ufw is active. If a phone cannot reach this machine, allow the two"
-  warn "  ports from private networks (once, it persists):"
-  warn "    for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; sudo ufw allow proto tcp from \$net to any port $PORT_BACKEND,$PORT_AI; end"
-  warn "  (bash: for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do sudo ufw allow proto tcp from \$net to any port $PORT_BACKEND,$PORT_AI; done)"
+  warn "ufw is active. If a phone cannot reach this machine, allow the"
+  warn "  backend port from private networks (once, it persists):"
+  warn "    for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; sudo ufw allow proto tcp from \$net to any port $PORT_BACKEND; end"
+  warn "  (bash: for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do sudo ufw allow proto tcp from \$net to any port $PORT_BACKEND; done)"
 fi
 
 # The console runs in a browser on THIS machine, so it dials 127.0.0.1 and
 # is immune to the address changing. Only the handsets need $HOST.
 API_LAN="http://$HOST:$PORT_BACKEND/api/v1"
 API_LOCAL="http://127.0.0.1:$PORT_BACKEND/api/v1"
-AI_LAN="http://$HOST:$PORT_AI"
 
 read_env() {  # read_env <file> <key>
   [ -f "$1" ] || return 0
   grep -E "^$2=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2- || true
 }
-AI_KEY="$(read_env backend/.env AI_NODE_API_KEY)"
-PHONE_KEY="$(read_env backend/.env PHONE_CAPTURE_API_KEY)"
 
 # ───────────────────────────────────────────── child process bookkeeping
 PIDS=()
@@ -225,25 +215,6 @@ start backend "$ROOT/backend" "$LOGS/backend.log" \
   --host 0.0.0.0 --port "$PORT_BACKEND"
 wait_for backend "http://127.0.0.1:$PORT_BACKEND/health" 45 "$LOGS/backend.log"
 
-# ───────────────────────────────────────────── 3. AI node
-if [ "$WITH_AI" = 1 ]; then
-  say "AI node"
-  if [ ! -x ai_service/venv/bin/python ]; then
-    warn "ai_service/venv is missing -- skipping the AI node."
-    warn "  ./setup.sh --with-ai installs it (PyTorch, ~6 GB)."
-    warn "  Without it, audits return 502 rather than an invented count."
-    WITH_AI=0
-  else
-    # app.py reads AI_NODE_API_KEY from the environment, not from its
-    # .env file, and it must be the same string the backend sends or every
-    # capture comes back 401.
-    if [ -n "$AI_KEY" ]; then export AI_NODE_API_KEY="$AI_KEY"; fi
-    start "ai node" "$ROOT/ai_service" "$LOGS/ai_service.log" \
-      "$ROOT/ai_service/venv/bin/python" app.py
-    wait_for "ai node" "http://127.0.0.1:$PORT_AI/health" 90 "$LOGS/ai_service.log"
-  fi
-fi
-
 # ───────────────────────────────────────────── GPS for trips on the road
 # The live map draws only vans that have REPORTED a position -- it never
 # places one where nobody said it was. Until the van kit's GPS unit
@@ -280,7 +251,7 @@ if [ "$WITH_GPS" = 1 ]; then
   fi
 fi
 
-# ───────────────────────────────────────────── 4. Flutter clients
+# ───────────────────────────────────────────── 3. Flutter clients
 # This script runs under bash while the shell here is fish, so flutter may
 # be on the interactive PATH and not on this one. Check the usual place
 # before concluding it is absent.
@@ -370,20 +341,20 @@ if [ "$WITH_CONSOLE" = 1 ] && [ "$HAVE_FLUTTER" = 1 ]; then
   fi
 fi
 
-if { [ "$WITH_MOBILE" = 1 ] || [ "$WITH_CAPTURE" = 1 ]; } && [ "$HAVE_FLUTTER" = 1 ]; then
+if [ "$WITH_MOBILE" = 1 ] && [ "$HAVE_FLUTTER" = 1 ]; then
   if [ -z "$DEVICE" ]; then
     DEVICE="$(pick_device)"
   fi
   if [ -z "$DEVICE" ]; then
     warn "no handset attached. Connect one (adb devices) or pass --device <id>."
-    WITH_MOBILE=0; WITH_CAPTURE=0
+    WITH_MOBILE=0
   else
     ok "handset: $DEVICE"
   fi
 fi
 
-# Handset apps are BUILT, INSTALLED and LAUNCHED -- one after the other,
-# in the foreground -- not left running under `flutter run`.
+# The handset app is BUILT, INSTALLED and LAUNCHED in the foreground --
+# not left running under `flutter run`.
 #
 # The first version backgrounded two `flutter run`s at the same handset.
 # They queued on Flutter's startup lock and fought over Gradle, the
@@ -392,9 +363,8 @@ fi
 # installed and no error in either log.
 #
 # Installed this way, an app outlives the launcher: Ctrl-C and re-run on
-# a new network and it is still on the phone, which is what makes the
-# capture app's "Find server" button useful. `adb install -r` rather than
-# `flutter install` because -r keeps app data -- the conductor stays
+# a new network and it is still on the phone. `adb install -r` rather than
+# `flutter install` because -r keeps app data -- the Dispatcher stays
 # signed in across a reinstall.
 #
 # Debug builds, because that is what has been verified on device: a
@@ -408,7 +378,6 @@ done
 [ -n "$ADB" ] || ADB="$(command -v adb || true)"
 
 MOBILE_STATUS="not installed (pass --mobile)"
-CAPTURE_STATUS="not installed (pass --capture)"
 
 # install_app <label> <dir> <android package> <log> <dart-define...>
 # Sets INSTALL_RESULT rather than printing it, so its progress lines reach
@@ -444,24 +413,16 @@ install_app() {
   INSTALL_RESULT="installed on $DEVICE"
 }
 
-if { [ "$WITH_MOBILE" = 1 ] || [ "$WITH_CAPTURE" = 1 ]; } && [ -z "$ADB" ]; then
+if [ "$WITH_MOBILE" = 1 ] && [ -z "$ADB" ]; then
   warn "adb not found -- cannot install to a handset. Install platform-tools."
-  WITH_MOBILE=0; WITH_CAPTURE=0
+  WITH_MOBILE=0
 fi
 
 if [ "$WITH_MOBILE" = 1 ]; then
-  install_app "passenger / conductor app" "$ROOT/mobile" \
+  install_app "passenger / Dispatcher app" "$ROOT/mobile" \
     com.example.mobile_v2_uv_express "$LOGS/mobile_build.log" \
     "API_BASE_URL=$API_LAN"
   MOBILE_STATUS="$INSTALL_RESULT"
-fi
-
-if [ "$WITH_CAPTURE" = 1 ]; then
-  install_app "AI capture app" "$ROOT/ai_capture_app" \
-    com.sabaygo.ai_capture_app "$LOGS/capture_build.log" \
-    "BACKEND_URL=$API_LAN" "PHONE_DEVICE_KEY=$PHONE_KEY" \
-    "AI_NODE_URL=$AI_LAN" "AI_NODE_API_KEY=$AI_KEY"
-  CAPTURE_STATUS="$INSTALL_RESULT"
 fi
 
 # ───────────────────────────────────────────── summary
@@ -477,7 +438,6 @@ cat <<EOF
 
   Console                  $CONSOLE_SUMMARY
   Backend                  http://$HOST:$PORT_BACKEND   (docs: /docs)
-  AI node                  $([ "$WITH_AI" = 1 ] && echo "$AI_LAN" || echo "not running")
   Adminer                  http://localhost:8080
 
   Handsets dial            $API_LAN
@@ -486,14 +446,13 @@ EOF
 
 cat <<EOF
 
-  Passenger/conductor app  $MOBILE_STATUS
-  AI capture app           $CAPTURE_STATUS
+  Passenger/Dispatcher app $MOBILE_STATUS
 EOF
 
 cat <<EOF
 
-  If the network changes mid-demo: Ctrl-C and re-run ./run.sh. An already
-  installed capture app needs no rebuild -- press "Find server" on it.
+  If the network changes mid-demo: Ctrl-C and re-run ./run.sh with --mobile
+  so the handset app is rebuilt against the new address.
 
   Ctrl-C stops everything. Logs: ${LOGS#$ROOT/}/
 ────────────────────────────────────────────────────────────────────

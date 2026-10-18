@@ -25,7 +25,7 @@ Loaded every session via `@docs/SESSION_RULES.md` in CLAUDE.md. Keep it short.
 - Journey suite: run the one script for the feature, not
   `run_all_journeys.sh`, and show only the final summary line and failures.
 - `flutter analyze` → `| grep -E "error|warning" | head -n 30`.
-- Long-running servers (uvicorn, ai_service, `flutter run`) go to a log file
+- Long-running servers (uvicorn, `flutter run`) go to a log file
   in the background; grep the log, do not stream it.
 - One Bash call with `&&` beats three calls with three result blocks.
 - Do not run a command just to confirm what an Edit already reported.

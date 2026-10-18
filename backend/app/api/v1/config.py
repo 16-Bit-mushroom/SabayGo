@@ -10,33 +10,40 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import case, func, select
 
-from app.api.v1.deps import SessionDep, require_roles
+from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep
 from app.application.scheduling.generate_trips import (
     CreateSpecialTripUseCase,
     GenerateDailyTripsUseCase,
 )
-from app.core.exceptions import ConflictError, NotFoundError
+from app.application.tracking.geometry import haversine_m
+from app.core.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.core.timezone import APP_TZ
-from app.domain.enums import Role
 from app.infrastructure.models import (
     Booking,
     CooperativePolicy,
+    DeviceCheckout,
+    EdgeDevice,
     FareMatrix,
+    Operator,
+    PassengerEvent,
     Route,
     RouteStop,
+    RouteStretch,
     ScheduleTemplate,
     StaffProfile,
     Terminal,
     Trip,
+    User,
 )
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 router = APIRouter(prefix="/config", tags=["configuration"])
-COOP_ADMIN = require_roles(Role.COOP_ADMIN, Role.ADMIN)
 
 
 # ===================================================================
@@ -47,6 +54,10 @@ class PolicyOut(BaseModel):
     policy_value: str
     data_type: str
     description: str
+    # In force since; who set it (NULL for values set before 021).
+    effective_from: dt.datetime
+    updated_by: str | None
+    updated_by_name: str | None = None
     updated_at: dt.datetime
 
 
@@ -54,54 +65,57 @@ class PolicyIn(BaseModel):
     policy_value: str
 
 
+def _policy_out(p: CooperativePolicy, names: dict[str, str] | None = None) -> PolicyOut:
+    return PolicyOut(**{c: getattr(p, c) for c in PolicyOut.model_fields if hasattr(p, c)},
+                     updated_by_name=(names or {}).get(p.updated_by))
+
+
+async def _policies_out(session, rows: list[CooperativePolicy]) -> list[PolicyOut]:
+    ids = {p.updated_by for p in rows} - {None}
+    names = {s.user_id: f"{s.first_name} {s.last_name}" for s in (await session.execute(
+        select(StaffProfile).where(StaffProfile.user_id.in_(ids))
+    )).scalars()} if ids else {}
+    return [_policy_out(p, names) for p in rows]
+
+
 @router.get("/policies", response_model=list[PolicyOut],
-            dependencies=[Depends(COOP_ADMIN)])
+            dependencies=[Depends(OFFICE)])
 async def list_policies(session: SessionDep) -> list[PolicyOut]:
-    """Every configurable cooperative policy.
+    """Every configurable cooperative policy, at the value in force now.
 
     These are rows precisely so a cooperative can revise them without a
     deployment -- reschedule cutoff, advance-booking cap, geofence radius,
-    hold TTL, variance threshold.
+    hold TTL, variance threshold, start window, remittance rate.
     """
-    result = await session.execute(
-        select(CooperativePolicy).order_by(CooperativePolicy.policy_key)
-    )
-    return [PolicyOut(**{c: getattr(p, c) for c in PolicyOut.model_fields})
-            for p in result.scalars()]
+    return await _policies_out(session, await PolicyRepository(session).current_rows())
+
+
+@router.get("/policies/{policy_key}/history", response_model=list[PolicyOut],
+            dependencies=[Depends(OFFICE)])
+async def policy_history(policy_key: str, session: SessionDep) -> list[PolicyOut]:
+    """Every value the key has held, newest first, with who set it."""
+    return await _policies_out(session, await PolicyRepository(session).history(policy_key))
 
 
 @router.put("/policies/{policy_key}", response_model=PolicyOut,
-            dependencies=[Depends(COOP_ADMIN)])
+            dependencies=[Depends(MANAGER)])
 async def update_policy(
-    policy_key: str, payload: PolicyIn, session: SessionDep
+    policy_key: str, payload: PolicyIn, session: SessionDep, user: CurrentUser
 ) -> PolicyOut:
-    policy = await session.get(CooperativePolicy, policy_key)
-    if policy is None:
-        raise NotFoundError(f"Policy '{policy_key}' does not exist.")
-
-    # Validate against the declared type before storing. A malformed value
-    # here would fail much later, inside a booking, as an opaque ValueError.
-    value = payload.policy_value.strip()
+    """Put a new value in force from now; the old one stays on record."""
     try:
-        if policy.data_type == "int":
-            int(value)
-        elif policy.data_type == "decimal":
-            Decimal(value)
-        elif policy.data_type == "bool":
-            if value.lower() not in ("true", "false", "1", "0", "yes", "no"):
-                raise ValueError
-    except (ValueError, ArithmeticError):
+        policy = await PolicyRepository(session).set(
+            policy_key, payload.policy_value, user.user_id
+        )
+    except ValueError as exc:
         raise ConflictError(
-            f"'{value}' is not a valid {policy.data_type} for {policy_key}."
+            f"'{payload.policy_value.strip()}' is not valid for {policy_key}: {exc}."
         ) from None
-
-    policy.policy_value = value
-    policy.updated_at = dt.datetime.now(APP_TZ)
     await session.commit()
 
     # Existing trips are unaffected: seat capacity, advance cap and
     # reschedule cutoff are snapshotted onto each trip at generation time.
-    return PolicyOut(**{c: getattr(policy, c) for c in PolicyOut.model_fields})
+    return (await _policies_out(session, [policy]))[0]
 
 
 # ===================================================================
@@ -117,7 +131,7 @@ class TerminalIn(BaseModel):
     is_staffed: bool = True
 
 
-@router.post("/terminals", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/terminals", status_code=201, dependencies=[Depends(MANAGER)])
 async def create_terminal(payload: TerminalIn, session: SessionDep) -> dict:
     terminal_id = str(uuid.uuid4())
     session.add(
@@ -160,7 +174,7 @@ class RouteOut(BaseModel):
 
 
 @router.get("/routes", response_model=list[RouteOut],
-            dependencies=[Depends(COOP_ADMIN)])
+            dependencies=[Depends(OFFICE)])
 async def list_routes(session: SessionDep) -> list[RouteOut]:
     """Routes for pickers -- dispatching a special trip, assigning a van.
 
@@ -180,7 +194,7 @@ async def list_routes(session: SessionDep) -> list[RouteOut]:
     ]
 
 
-@router.post("/routes", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/routes", status_code=201, dependencies=[Depends(MANAGER)])
 async def create_route(payload: RouteIn, session: SessionDep) -> dict:
     """Create a route with its ordered stop sequence.
 
@@ -253,7 +267,7 @@ class FareBulkIn(BaseModel):
     fares: list[FareIn] = Field(min_length=1)
 
 
-@router.post("/fares", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/fares", status_code=201, dependencies=[Depends(MANAGER)])
 async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     """Set the pairwise fare matrix for a route.
 
@@ -303,7 +317,7 @@ async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     return {"route_id": payload.route_id, "fares_created": created}
 
 
-@router.get("/routes/{route_id}/fares", dependencies=[Depends(COOP_ADMIN)])
+@router.get("/routes/{route_id}/fares", dependencies=[Depends(OFFICE)])
 async def list_fares(route_id: str, session: SessionDep) -> list[dict]:
     result = await session.execute(
         select(FareMatrix)
@@ -326,6 +340,94 @@ async def list_fares(route_id: str, session: SessionDep) -> list[dict]:
     ]
 
 
+class StretchesIn(BaseModel):
+    """A2Z's speed limit for each stretch in route order, and one stop-zone
+    radius for the route's stops (brief 6.3; 100 m in the sample)."""
+    speed_limits_kmh: list[int] = Field(min_length=1)
+    stop_zone_radius_m: int = Field(default=100, ge=1, le=2000)
+
+
+class StretchOut(BaseModel):
+    stretch_no: int
+    from_stop: str
+    to_stop: str
+    from_distance_m: Decimal
+    length_m: Decimal
+    speed_limit_kmh: int
+    stop_zone_radius_m: int
+    expected_time_s: int
+
+
+async def _stretches(session, route_id: str) -> list[StretchOut]:
+    names = dict((await session.execute(
+        select(RouteStop.stop_sequence, Terminal.terminal_name)
+        .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
+        .where(RouteStop.route_id == route_id)
+    )).all())
+    rows = (await session.execute(
+        select(RouteStretch).where(RouteStretch.route_id == route_id)
+        .order_by(RouteStretch.stretch_no)
+    )).scalars()
+    return [StretchOut(
+        stretch_no=s.stretch_no, from_stop=names[s.stretch_no], to_stop=names[s.stretch_no + 1],
+        from_distance_m=s.from_distance_m, length_m=s.length_m,
+        speed_limit_kmh=s.speed_limit_kmh, stop_zone_radius_m=s.stop_zone_radius_m,
+        expected_time_s=s.expected_time_s,
+    ) for s in rows]
+
+
+@router.get("/routes/{route_id}/stretches", response_model=list[StretchOut],
+            dependencies=[Depends(OFFICE)])
+async def list_stretches(route_id: str, session: SessionDep) -> list[StretchOut]:
+    """The route's stretches as NAHGM measures them. Empty until the
+    Terminal Manager sets the speed limits: no overspeed or slow-stretch
+    flag is raised on a route without them."""
+    return await _stretches(session, route_id)
+
+
+@router.put("/routes/{route_id}/stretches", response_model=list[StretchOut],
+            dependencies=[Depends(MANAGER)])
+async def set_stretches(
+    route_id: str, payload: StretchesIn, session: SessionDep,
+) -> list[StretchOut]:
+    """Set the speed limits. Lengths are measured stop to stop along the
+    straight route line, as NAHGM snaps to it; each expected time is
+    (length - the stop zone at each end) / `expected_speed_kmh` in force
+    now, and stays with the stretch until it is saved again."""
+    stops = (await session.execute(
+        select(RouteStop.stop_sequence, Terminal.latitude, Terminal.longitude)
+        .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
+        .where(RouteStop.route_id == route_id).order_by(RouteStop.stop_sequence)
+    )).all()
+    if len(stops) < 2:
+        raise NotFoundError("Route not found, or it has fewer than two stops.")
+    if len(payload.speed_limits_kmh) != len(stops) - 1:
+        raise InvalidInputError(
+            f"The route has {len(stops) - 1} stretches: give one speed limit for each.")
+    if any(not 1 <= limit <= 200 for limit in payload.speed_limits_kmh):
+        raise InvalidInputError("A speed limit is between 1 and 200 km/h.")
+    speed = await PolicyRepository(session).get_int("expected_speed_kmh")
+    radius = payload.stop_zone_radius_m
+
+    existing = {s.stretch_no: s for s in (await session.execute(
+        select(RouteStretch).where(RouteStretch.route_id == route_id)
+    )).scalars()}
+    travelled = 0.0
+    for (seq, alat, alon), (_, blat, blon), limit in zip(stops, stops[1:], payload.speed_limits_kmh):
+        length = haversine_m(float(alat), float(alon), float(blat), float(blon))
+        row = existing.get(seq) or RouteStretch(stretch_id=str(uuid.uuid4()), route_id=route_id,
+                                                stretch_no=seq)
+        row.from_distance_m = Decimal(f"{travelled:.2f}")
+        row.length_m = Decimal(f"{length:.2f}")
+        row.speed_limit_kmh = limit
+        row.stop_zone_radius_m = radius
+        row.expected_time_s = max(0, round((length - 2 * radius) / (speed / 3.6)))
+        session.add(row)
+        travelled += length
+    await session.commit()
+    return await _stretches(session, route_id)
+
+
 # ===================================================================
 # Schedule templates
 # ===================================================================
@@ -334,15 +436,13 @@ class TemplateIn(BaseModel):
     departure_time: dt.time
     # Monday-first 7-char mask: '1111100' = weekdays only.
     days_of_week: str = Field(default="1111111", pattern="^[01]{7}$")
-    default_van_id: str | None = None
-    default_driver_id: str | None = None
-    default_conductor_id: str | None = None
+    # No van or Dispatcher: the timetable has no usual crew (brief 4.2).
     trip_label: str | None = None
     valid_from: dt.date | None = None
     valid_until: dt.date | None = None
 
 
-@router.get("/schedule-templates", dependencies=[Depends(COOP_ADMIN)])
+@router.get("/schedule-templates", dependencies=[Depends(OFFICE)])
 async def list_templates(session: SessionDep) -> list[dict]:
     result = await session.execute(
         select(ScheduleTemplate).order_by(ScheduleTemplate.departure_time)
@@ -354,12 +454,6 @@ async def list_templates(session: SessionDep) -> list[dict]:
             "departure_time": str(t.departure_time),
             "days_of_week": t.days_of_week,
             "trip_label": t.trip_label,
-            "default_van_id": t.default_van_id,
-            # Returned so the console can show who a slot is crewed by.
-            # They were always stored and always copied onto generated
-            # trips; the list just never said so.
-            "default_driver_id": t.default_driver_id,
-            "default_conductor_id": t.default_conductor_id,
             "is_active": t.is_active,
             "valid_from": t.valid_from,
             "valid_until": t.valid_until,
@@ -369,7 +463,7 @@ async def list_templates(session: SessionDep) -> list[dict]:
 
 
 @router.post("/schedule-templates", status_code=201,
-             dependencies=[Depends(COOP_ADMIN)])
+             dependencies=[Depends(MANAGER)])
 async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
     if await session.get(Route, payload.route_id) is None:
         raise NotFoundError("Route not found.")
@@ -381,9 +475,6 @@ async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
             route_id=payload.route_id,
             departure_time=payload.departure_time,
             days_of_week=payload.days_of_week,
-            default_van_id=payload.default_van_id,
-            default_driver_id=payload.default_driver_id,
-            default_conductor_id=payload.default_conductor_id,
             trip_label=payload.trip_label,
             is_active=True,
             valid_from=payload.valid_from or dt.date.today(),
@@ -396,7 +487,7 @@ async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
 
 
 @router.patch("/schedule-templates/{template_id}/active",
-              dependencies=[Depends(COOP_ADMIN)])
+              dependencies=[Depends(MANAGER)])
 async def toggle_template(
     template_id: str, is_active: bool, session: SessionDep
 ) -> dict:
@@ -411,7 +502,7 @@ async def toggle_template(
 # ===================================================================
 # Trip generation
 # ===================================================================
-@router.post("/trips/generate", dependencies=[Depends(COOP_ADMIN)])
+@router.post("/trips/generate", dependencies=[Depends(MANAGER)])
 async def generate_trips(
     session: SessionDep,
     service_date: dt.date | None = None,
@@ -443,25 +534,25 @@ class SpecialTripIn(BaseModel):
     route_id: str
     departure_datetime: dt.datetime
     van_id: str | None = None
-    driver_id: str | None = None
-    conductor_id: str | None = None
+    dispatcher_id: str | None = None
     trip_label: str | None = None
     advance_booking_seat_cap: int | None = Field(default=None, ge=0, le=14)
 
 
-@router.post("/trips/special", status_code=201, dependencies=[Depends(COOP_ADMIN)])
+@router.post("/trips/special", status_code=201)
 async def create_special_trip(
-    payload: SpecialTripIn, session: SessionDep
+    payload: SpecialTripIn, session: SessionDep,
+    user: Annotated[User, Depends(MANAGER)],
 ) -> dict:
     """Create an ad-hoc departure outside the regular schedule."""
     return await CreateSpecialTripUseCase(session).execute(
         route_id=payload.route_id,
         departure_datetime=payload.departure_datetime,
         van_id=payload.van_id,
-        driver_id=payload.driver_id,
-        conductor_id=payload.conductor_id,
+        dispatcher_id=payload.dispatcher_id,
         trip_label=payload.trip_label,
         advance_booking_seat_cap=payload.advance_booking_seat_cap,
+        by=user,
     )
 
 
@@ -473,21 +564,46 @@ class TripBoardOut(BaseModel):
     departure_datetime: dt.datetime
     status: str
     departed_at: dt.datetime | None
+    van_id: str | None
+    dispatcher_id: str | None
     plate_number: str | None
-    driver_name: str | None
-    conductor_name: str | None
+    # The van's owner, who drives it. On a trip the operator is only ever
+    # a name beside the plate, never a user (brief 9). From the copy made
+    # at the start once the trip has started.
+    operator_name: str | None
+    dispatcher_name: str | None
+    # The lifecycle (brief 4): who assigned and started it, and how.
+    assigned_by_name: str | None
+    start_opens_at: dt.datetime
+    start_mode: str | None
+    started_by_name: str | None
+    started_at: dt.datetime | None
+    start_review_status: str
+    audit_status: str
+    unaudited_reason: str | None
+    departure_source: str | None
+    payment_status: str
+    change_note: str | None
     seat_capacity: int
     booked: int
     checked_in: int
     boarded: int
     no_show: int
+    # The camera's door count aboard (boardings less alightings, less the
+    # Dispatcher as crew); None when the phone has counted nothing.
+    door_aboard: int | None = None
+    # The phone out with the van (brief 9, Trip Monitoring); None when no
+    # phone is checked out with it.
+    phone_last_report_at: dt.datetime | None = None
+    phone_battery_pct: int | None = None
+    phone_silent: bool | None = None
 
 
-@router.get("/trips", response_model=list[TripBoardOut], dependencies=[Depends(COOP_ADMIN)])
+@router.get("/trips", response_model=list[TripBoardOut], dependencies=[Depends(OFFICE)])
 async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[TripBoardOut]:
     """Every trip on one service date with its live status and crew -- the
-    office's view of what the conductor sees on each van. Per-trip detail
-    is the conductor's own manifest, GET /trips/{id}/manifest.
+    office's view of what the Dispatcher sees on each van. Per-trip detail
+    is the Dispatcher's own manifest, GET /trips/{id}/manifest.
 
     A separate endpoint, not a column on the revenue view, because status
     is operational and the view is a reconciliation: adding it there would
@@ -518,31 +634,74 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
             )
         ).all()
     }
-    crew_ids = {u for t in trips for u in (t.driver_id, t.conductor_id) if u}
+    people = {t.dispatcher_id for t in trips} | {t.assigned_by for t in trips} \
+        | {t.started_by for t in trips}
+    dispatcher_ids = people - {None}
     names = {
         p.user_id: f"{p.first_name} {p.last_name}"
         for p in (
-            await session.execute(select(StaffProfile).where(StaffProfile.user_id.in_(crew_ids)))
+            await session.execute(select(StaffProfile).where(StaffProfile.user_id.in_(dispatcher_ids)))
         ).scalars()
-    } if crew_ids else {}
+    } if dispatcher_ids else {}
+    operator_ids = {t.van.operator_id for t in trips if t.van and t.van.operator_id}
+    operators = {
+        o.operator_id: o.full_name
+        for o in (
+            await session.execute(select(Operator).where(Operator.operator_id.in_(operator_ids)))
+        ).scalars()
+    } if operator_ids else {}
 
+    opens = dt.timedelta(minutes=await PolicyRepository(session).get_int("start_opens_minutes"))
+    doors = dict((await session.execute(
+        select(PassengerEvent.trip_id,
+               func.sum(case((PassengerEvent.event_type == "board", 1), else_=-1)))
+        .where(PassengerEvent.trip_id.in_(ids)).group_by(PassengerEvent.trip_id)
+    )).all())
+    phones = {van_id: device for van_id, device in (await session.execute(
+        select(DeviceCheckout.van_id, EdgeDevice)
+        .join(EdgeDevice, EdgeDevice.device_id == DeviceCheckout.device_id)
+        .where(DeviceCheckout.returned_at.is_(None),
+               DeviceCheckout.van_id.in_({t.van_id for t in trips} - {None}))
+    )).all()}
+    gap = dt.timedelta(seconds=await PolicyRepository(session).get_int("heartbeat_gap_seconds"))
+    now = dt.datetime.now(APP_TZ).replace(tzinfo=None)
     out = []
     for t in trips:
         c = counts.get(t.trip_id)
+        phone = phones.get(t.van_id)
+        door = doors.get(t.trip_id)
         out.append(TripBoardOut(
             trip_id=t.trip_id,
             trip_label=t.trip_label,
-            route_name=t.route.route_name,
+            route_name=t.route.route_name if t.route else "Van rental",
             departure_datetime=t.departure_datetime,
             status=t.status,
             departed_at=t.departed_at,
-            plate_number=t.van.plate_number if t.van else None,
-            driver_name=names.get(t.driver_id),
-            conductor_name=names.get(t.conductor_id),
+            van_id=t.van_id,
+            dispatcher_id=t.dispatcher_id,
+            plate_number=t.van_plate_number or (t.van.plate_number if t.van else None),
+            operator_name=t.driver_name or (operators.get(t.van.operator_id) if t.van else None),
+            dispatcher_name=names.get(t.dispatcher_id),
+            assigned_by_name=names.get(t.assigned_by),
+            start_opens_at=t.departure_datetime - opens,
+            start_mode=t.start_mode,
+            started_by_name=names.get(t.started_by),
+            started_at=t.started_at,
+            start_review_status=t.start_review_status,
+            audit_status=t.audit_status,
+            unaudited_reason=t.unaudited_reason,
+            departure_source=t.departure_source,
+            payment_status=t.payment_status,
+            change_note=t.change_note,
             seat_capacity=t.seat_capacity,
             booked=int(c.booked or 0) if c else 0,
             checked_in=int(c.checked_in or 0) if c else 0,
             boarded=int(c.boarded or 0) if c else 0,
             no_show=int(c.no_show or 0) if c else 0,
+            door_aboard=None if door is None else max(0, int(door) - (1 if t.crew_aboard else 0)),
+            phone_last_report_at=phone.last_heartbeat_at if phone else None,
+            phone_battery_pct=phone.battery_pct if phone else None,
+            phone_silent=None if phone is None else (
+                phone.last_heartbeat_at is None or now - phone.last_heartbeat_at > gap),
         ))
     return out

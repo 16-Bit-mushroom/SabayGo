@@ -1,6 +1,6 @@
 """Scheduling conflict detection.
 
-A van cannot be in two places at once, and neither can a driver. The trip
+A van cannot be in two places at once, and neither can a Dispatcher. The trip
 generator happily produced a 05:30 and an 06:00 departure on the same unit
 for a five-hour route -- physically impossible, and nothing caught it.
 
@@ -11,7 +11,7 @@ hours from departure, plus a turnaround allowance.
 The check is advisory for generation (the trip is still created, but
 unassigned and flagged) and blocking for manual assignment. Reasoning: a
 nightly job that silently skips departures leaves passengers unable to
-book, while a cooperative administrator assigning by hand should be told immediately.
+book, while the Terminal Manager assigning by hand should be told immediately.
 """
 
 from __future__ import annotations
@@ -29,14 +29,14 @@ from app.infrastructure.models import RouteStop, Trip
 log = logging.getLogger(__name__)
 
 # Minutes a van needs between arriving and departing again: unloading,
-# refuelling, the driver's break. Deliberately generous -- a false
+# refuelling, the operator's break. Deliberately generous -- a false
 # conflict warning is cheaper than a double-booked van.
 TURNAROUND_MINUTES = 45
 
 
 @dataclass(frozen=True)
 class Conflict:
-    resource: str          # "van", "driver" or "conductor"
+    resource: str          # "van" or "dispatcher"
     resource_id: str
     conflicting_trip_id: str
     conflicting_departure: datetime
@@ -62,12 +62,11 @@ class ScheduleConflictChecker:
         route_id: str,
         departure: datetime,
         van_id: str | None = None,
-        driver_id: str | None = None,
-        conductor_id: str | None = None,
+        dispatcher_id: str | None = None,
         exclude_trip_id: str | None = None,
     ) -> list[Conflict]:
         """Every resource already committed during this trip's window."""
-        if not any([van_id, driver_id, conductor_id]):
+        if not any([van_id, dispatcher_id]):
             return []
 
         duration = await self.route_duration_minutes(route_id)
@@ -80,10 +79,10 @@ class ScheduleConflictChecker:
         conditions = []
         if van_id:
             conditions.append(Trip.van_id == van_id)
-        if driver_id:
-            conditions.append(Trip.driver_id == driver_id)
-        if conductor_id:
-            conditions.append(Trip.conductor_id == conductor_id)
+        # The operator always drives their own one van, so a van clash is
+        # the operator clash too.
+        if dispatcher_id:
+            conditions.append(Trip.dispatcher_id == dispatcher_id)
 
         stmt = select(Trip).where(
             or_(*conditions),
@@ -111,8 +110,7 @@ class ScheduleConflictChecker:
 
             for resource, wanted, held in (
                 ("van", van_id, other.van_id),
-                ("driver", driver_id, other.driver_id),
-                ("conductor", conductor_id, other.conductor_id),
+                ("dispatcher", dispatcher_id, other.dispatcher_id),
             ):
                 if wanted and wanted == held:
                     conflicts.append(

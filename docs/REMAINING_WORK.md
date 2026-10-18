@@ -1,6 +1,39 @@
 # SabayGo — Remaining Work
 
-*Current as of 15 September 2026. Development deadline: **27 September** — 12 days.*
+*Current as of 18 October 2026 (rev 603). The open work is the first
+section. Everything after it is the September record, kept as history:
+its suite counts, deadlines and "done" rows describe the code as it was
+then, and several of those features were retired on 16 Oct (noted where
+they appear).*
+
+---
+
+## Open, 18 October
+
+| # | Work | Who | State |
+|---|---|---|---|
+| 1 | **Phone benchmark** | owner, in a van | Models exported (YOLOv8n TFLite at 320 and 416 px, git-ignored under `edge_app/app/src/main/assets/models/`), debug APK built 14 Oct. Bench Sweep done 18 Oct: `docs/benchmarks/edge_sweep_2026-10-18.md`. Left: one full Run on vehicle power, summarised with `edge_app/tools/summarise_benchmark.py` as part 2. No operating frame rate is quoted before it exists |
+| 2 | **Edge app proper** (brief 5.1–5.3) | owner and team | Built 18 Oct (`edge_app/README.md`, migration 031). Left: test door counting with people crossing a line and in a van, run the Realme checklist on the pilot phone. Then the per-stop cabin snapshot (brief 5.2 item 6), its own step |
+| 3 | **A2Z's figures** | owner asks A2Z | These settings ship unset, which turns their feature off: `depart_zone_radius_m` + `depart_readings` (no GPS departure), `home_pickup_max_route_m` (no home pickup), `special_trip_speed_kmh` (no rental flagged), per-stretch speed limits (only stops flagged). Also the real routes, fares, timetable and SOS numbers in place of the `002_demo_dataset.sql` placeholders, and the questions below |
+| 4 | **Manuscript** | owner | Paste `MANUSCRIPT_CORRECTIONS.md` into the `.docx` |
+
+Closed on 16 Oct, though older lists still carry them:
+
+- **Rev 468 leftovers** (`d57fd01`): the AI node (`ai_service/app.py`),
+  `ai_capture_app/`, `/audits/*` and `/revenue/*` are removed.
+  `ai_service/` keeps only the evaluation harness (`inference.py`,
+  `eval/`), which measured the weights the phone runs. The
+  `cash_remittances` and `yolov8_audit_logs` tables and the revenue view
+  stay as history: nothing writes them, and dropping them would lose the
+  September records.
+- **"Missing" endpoints in the runner** (`1169e7b`): four were built at
+  other URLs, three are not in rev 603. See Group G.
+- **The YOLOv8 evaluation report exists**:
+  `docs/benchmarks/ai_count_2026-10-09_full.txt` (and the 8 Oct run), at
+  640 px. The phone runs at 320 or 416 px, so a re-run at its size is
+  still worth having.
+
+Journey suite: **922 passed, 0 failed** (16 Oct).
 
 ---
 
@@ -71,15 +104,20 @@ uses the heads-up rather than deciding whether it exists.
 
 | # | Task | Notes |
 |---|---|---|
-| ~~G.1~~ | ~~Export reports to spreadsheet~~ | ✅ 15 Sep. `GET /revenue/export?format=xlsx|csv&date_from&date_to` — workbook has a totals row and an About sheet explaining *cash in hand* vs *unreconciled*. Console Revenue tab: Export menu |
-| ~~G.2~~ | ~~View resolved audit history~~ | ✅ 15 Sep. `GET /audits/history?status=&trip_id=` with resolver and notes. Console Audits tab: Queue / History switch; closed audits show their disposition instead of the buttons |
-| G.3 | Crew roster: who drives what, when | Arguably a Tier 2 miss; "fleet management" implies seeing assignments |
-| G.4 | Passenger edits own name, phone, password | |
-| G.5 | Passenger closes own account | Data Privacy Act right to erasure |
-| G.6 | Abandon a checkout and release the space immediately | Currently must wait 10 minutes |
+| ~~G.1~~ | ~~Export reports to spreadsheet~~ | ✅ 15 Sep, **retired 16 Oct** with `/revenue/*`. Rev 603's record is the Remittance statements; Member Records exports CSV/PDF |
+| ~~G.2~~ | ~~View resolved audit history~~ | ✅ 15 Sep, **retired 16 Oct** with `/audits/*`. Rev 603: Boarding Audit, Disputes (decided / withdrawn) |
+| ~~G.3~~ | ~~Crew roster: who drives what, when~~ | ✅ rev 603. `GET /config/trips?date=` carries each trip's van, operator and Dispatcher; console Trips page. The office journey checks it |
+| ~~G.4~~ | ~~Passenger edits own name, phone, password~~ | ✅ `PATCH /auth/me` (password needs `current_password`) |
+| ~~G.5~~ | ~~Passenger closes own account~~ | ✅ `POST /auth/me/close` with the password; soft close, the token and sign-in stop working |
+| ~~G.6~~ | ~~Abandon a checkout and release the space immediately~~ | ✅ `POST /bookings/{id}/cancel` releases an unpaid hold at once |
 | ~~G.7~~ | ~~Single-booking detail endpoint~~ | ✅ 15 Sep. `GET /bookings/{id}`, same shape as `/mine`; 404 for anyone else's. Ticket screen now polls this instead of the whole list |
-| G.8 | ~~Notifications~~ and saved-destinations endpoints | Notifications done with E.1; saved destinations still unread |
-| G.9 | Passenger lookup by name or ticket number | For the conductor |
+| ~~G.8~~ | ~~Notifications~~ and saved-destinations endpoints | Notifications done with E.1. Saved destinations: **not in rev 603, not built** (16 Oct); the table and ORM model stay unread |
+| ~~G.9~~ | ~~Passenger lookup by name or ticket number~~ | **Not in rev 603, not built** (16 Oct). The Dispatcher works from the list and the scan |
+| — | Passenger notification settings (`passenger_settings`) | **Not in rev 603, not built** (16 Oct) |
+
+The journey scripts probed G.3–G.6 at URLs that were never built, so they
+reported them as gaps after they were done; the probes now call the real
+endpoints (16 Oct).
 
 ---
 
@@ -119,22 +157,15 @@ reuse the same `NotificationService` and appear in it without client work.
 Neither piece of the physical van kit (camera, GPS) blocks development.
 Both are designed to run as an HTTP client against the same production
 endpoints a real kit would hit, so nothing changes on the backend when
-the real hardware shows up — only where the AI node's camera and the GPS
-device point.
+the real hardware shows up — only where the phone and the GPS device
+point.
 
-- **Camera**: `ai_service/app.py` opens `cv2.VideoCapture(AI_NODE_CAMERA_INDEX)`
-  (env var, defaults to `0`). On this dev machine that's the laptop's
-  built-in webcam — confirmed working end to end: `GET /health` reports
-  `camera_index: 0`, `POST /api/audit/capture` returns a real
-  `visual_count` from an actual frame, and `POST /audits/trigger`
-  (backend) returns 200 with a genuine count and a saved snapshot. The
-  backend only calls the AI node's HTTP API and never touches the camera,
-  so it needs no changes when the real kit arrives.
-  **When the kit arrives:** if its camera enumerates as a normal
-  V4L2/USB device, just point `AI_NODE_CAMERA_INDEX` at it. If it's an
-  IP/RTSP camera, `CAMERA_INDEX` currently only parses as `int()` — that
-  will need a small follow-up to accept a URL string (`cv2.VideoCapture`
-  itself already accepts one).
+- **Camera** (rev 603, 16 Oct): the in-van phone is the camera and runs
+  the model itself (`edge_app/`); the rev 468 AI node and its laptop-webcam
+  stand-in are retired. Without a phone, a test plays one over HTTP
+  against `/edge/*`, as `tests/integration/test_edge_ingestion.sh` does:
+  add a phone (`POST /devices`), check it out to a van, then post door
+  events, fixes and heartbeats.
 - **GPS**: `backend/scripts/tracking_simulator.py` posts to the real
   production `POST /tracking/trips/{trip}/ping` endpoint (not a mock
   table) — confirmed end to end: a simulated run against

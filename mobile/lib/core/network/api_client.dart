@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -47,6 +48,46 @@ class ApiClient {
       _send('PATCH', path, body: body);
 
   Future<dynamic> delete(String path) => _send('DELETE', path);
+
+  /// A binary GET: a payment screenshot. Errors as for JSON calls.
+  Future<Uint8List> getBytes(String path) async {
+    final token = await _tokens.readAccessToken();
+    final request = http.Request('GET', Uri.parse('$_baseUrl$path'))
+      ..headers['Accept'] = '*/*';
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    final response = await _exchange(request);
+    if (response.statusCode >= 200 && response.statusCode < 300) return response.bodyBytes;
+    _handle(response); // throws the typed exception for this status
+    throw ServerException('Request failed (${response.statusCode}).');
+  }
+
+  /// A multipart upload of one file under [field]: a payment screenshot.
+  Future<dynamic> upload(
+    String path, {
+    required String field,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final token = await _tokens.readAccessToken();
+    final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl$path'))
+      ..headers['Accept'] = 'application/json'
+      ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    return _handle(await _exchange(request));
+  }
+
+  Future<http.Response> _exchange(http.BaseRequest request) async {
+    try {
+      return await _http
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(AppConfig.requestTimeout);
+    } on TimeoutException {
+      throw const RequestTimeoutException();
+    } on http.ClientException {
+      throw const NetworkException();
+    }
+  }
 
   // -----------------------------------------------------------------
   Future<dynamic> _send(

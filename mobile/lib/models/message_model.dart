@@ -1,6 +1,6 @@
 /// Mirrors `GET /conversations` — one row per thread, peer already resolved
 /// server-side (an "office" thread shows "Cooperative Office" to anyone
-/// but the coop_admin reading it).
+/// but the office staff reading it).
 class Conversation {
   Conversation({
     required this.id,
@@ -16,7 +16,7 @@ class Conversation {
   });
 
   final String id;
-  final String kind; // passenger_conductor | conductor_driver | office
+  final String kind; // passenger_dispatcher | office (| legacy conductor_driver)
   final String? tripId;
   final String? peerUserId;
   final String peerRole;

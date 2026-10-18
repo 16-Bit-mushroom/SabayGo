@@ -7,14 +7,23 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
 from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError, PolicyViolationError
 from app.domain.enums import Role, TripStatus
 from app.domain.value_objects import Segment
-from app.infrastructure.models import FareMatrix, Route, RouteStop, Terminal, Trip
+from app.infrastructure.models import (
+    FareMatrix,
+    Operator,
+    Route,
+    RouteStop,
+    SpecialTripRequest,
+    Terminal,
+    Trip,
+)
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -71,6 +80,27 @@ class TerminalOut(BaseModel):
     stop_sequence: int
 
 
+class PrivacyNoticeOut(BaseModel):
+    """What the booking screen tells a passenger about the camera (brief
+    4.5, 11): read from A2Z's settings, so the notice states the period in
+    force."""
+    retention_days: int | None
+    chat_image_retention_days: int
+    chat_image_max_kb: int
+    # Until A2Z names its data privacy contact (brief 4.5).
+    privacy_contact: str = "[name and position to be supplied by A2Z]"
+
+
+@router.get("/privacy-notice", response_model=PrivacyNoticeOut)
+async def privacy_notice(session: SessionDep, user: CurrentUser) -> PrivacyNoticeOut:
+    policies = PolicyRepository(session)
+    return PrivacyNoticeOut(
+        retention_days=await policies.get_optional_int("retention_days"),
+        chat_image_retention_days=await policies.get_int("chat_image_retention_days"),
+        chat_image_max_kb=await policies.get_int("chat_image_max_kb"),
+    )
+
+
 @router.get("/terminals", response_model=list[TerminalOut])
 async def list_terminals(session: SessionDep) -> list[TerminalOut]:
     """Distinct terminals on any active route -- populates the pickers.
@@ -102,9 +132,10 @@ async def list_terminals(session: SessionDep) -> list[TerminalOut]:
 async def _segments_between(
     session: SessionDep, origin_terminal_id: str, destination_terminal_id: str
 ) -> dict[str, tuple[int, int]]:
-    """route_id -> (boarding_seq, alighting_seq) for every route that passes
-    the origin before the destination. Empty when no route links them in
-    that direction -- the reverse direction is a different LTFRB route."""
+    """route_id -> (1, alighting_seq) for every route that starts at the
+    origin and passes the destination. Empty when none does: passengers
+    board only at the starting terminal (rev 603), and the reverse
+    direction is a different LTFRB route."""
     rows = await session.execute(
         select(RouteStop.route_id, RouteStop.terminal_id, RouteStop.stop_sequence)
         .join(Route, Route.route_id == RouteStop.route_id)
@@ -119,7 +150,7 @@ async def _segments_between(
     out: dict[str, tuple[int, int]] = {}
     for route_id, seqs in by_route.items():
         a, b = seqs.get(origin_terminal_id), seqs.get(destination_terminal_id)
-        if a is not None and b is not None and a < b:
+        if a == 1 and b is not None and b > 1:
             out[route_id] = (a, b)
     return out
 
@@ -160,7 +191,7 @@ async def search_trips(
         if not segment_by_route:
             return []
     elif boarding_stop is not None and alighting_stop is not None:
-        Segment(boarding_stop, alighting_stop)  # validates the pair
+        Segment.from_starting_terminal(boarding_stop, alighting_stop)  # validates the pair
         segment_by_route = None
     else:
         raise PolicyViolationError(
@@ -226,6 +257,19 @@ async def search_trips(
     return out
 
 
+class RentalOut(BaseModel):
+    """The rental a special trip carries out (brief 2.5): what the
+    Dispatcher needs to collect a cash fee."""
+    request_id: str
+    customer_name: str | None
+    customer_contact: str | None
+    pickup_address: str
+    destination_address: str
+    passenger_count: int
+    rental_fee: Decimal | None
+    payment_status: str
+
+
 class AssignedTrip(BaseModel):
     trip_id: str
     trip_label: str | None
@@ -235,20 +279,26 @@ class AssignedTrip(BaseModel):
     status: str
     plate_number: str | None
     seat_capacity: int
-    role_on_trip: str
     stops: list[StopOut]
+    # The operator, shown as a name and licence beside the plate (brief 9):
+    # copied onto the trip at its start, the van's operator until then.
+    operator_name: str | None
+    operator_licence: str | None
+    payment_status: str
+    crew_aboard: bool
+    rental: RentalOut | None
 
 
 @router.get(
     "/assigned",
     response_model=list[AssignedTrip],
-    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER))],
+    dependencies=[Depends(require_roles(Role.DISPATCHER))],
 )
 async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[AssignedTrip]:
-    """The trips this crew member is rostered to, today onward.
+    """The trips this Dispatcher is assigned to, today onward.
 
     This list is the boundary of what the crew app can act on: every
-    scan, walk-in and headcount is guarded server-side by the same
+    scan and walk-in is guarded server-side by the same
     assignment, so there is no point offering a trip the guard would
     refuse. Stops ride along because the scanner and the walk-in form
     need the sequence numbers immediately.
@@ -257,7 +307,7 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
     result = await session.execute(
         select(Trip)
         .where(
-            or_(Trip.conductor_id == user.user_id, Trip.driver_id == user.user_id),
+            Trip.dispatcher_id == user.user_id,
             Trip.service_date >= today,
             Trip.status != TripStatus.CANCELLED.value,
         )
@@ -280,6 +330,19 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
                 StopOut.from_row(rs, t)
             )
 
+    operators = {o.operator_id: o for o in (await session.execute(
+        select(Operator).where(Operator.operator_id.in_({t.van.operator_id for t in trips if t.van}))
+    )).scalars()} if trips else {}
+    rentals = {r.trip_id: r for r in (await session.execute(
+        select(SpecialTripRequest).where(SpecialTripRequest.trip_id.in_([t.trip_id for t in trips]))
+    )).scalars()} if trips else {}
+
+    def operator(t: Trip) -> tuple[str | None, str | None]:
+        if t.driver_name:
+            return t.driver_name, t.driver_license_no
+        op = operators.get(t.van.operator_id) if t.van else None
+        return (op.full_name, op.license_number) if op else (None, None)
+
     return [
         AssignedTrip(
             trip_id=t.trip_id,
@@ -288,10 +351,15 @@ async def assigned_trips(session: SessionDep, user: CurrentUser) -> list[Assigne
             service_date=t.service_date,
             departure_datetime=t.departure_datetime,
             status=t.status,
-            plate_number=t.van.plate_number if t.van else None,
+            plate_number=t.van_plate_number or (t.van.plate_number if t.van else None),
             seat_capacity=t.seat_capacity,
-            role_on_trip="driver" if t.driver_id == user.user_id else "conductor",
             stops=stops_by_route.get(t.route_id, []),
+            operator_name=operator(t)[0],
+            operator_licence=operator(t)[1],
+            payment_status=t.payment_status,
+            crew_aboard=bool(t.crew_aboard),
+            rental=RentalOut.model_validate(rentals[t.trip_id], from_attributes=True)
+            if t.trip_id in rentals else None,
         )
         for t in trips
     ]
@@ -321,12 +389,12 @@ class TripFareOut(BaseModel):
 @router.get(
     "/{trip_id}/fares",
     response_model=list[TripFareOut],
-    dependencies=[Depends(require_roles(Role.CONDUCTOR, Role.DRIVER))],
+    dependencies=[Depends(require_roles(Role.DISPATCHER))],
 )
 async def trip_fares(trip_id: str, session: SessionDep) -> list[TripFareOut]:
     """The fare for every stop pair on this trip's route, for the crew.
 
-    So the walk-in screen can show the price *before* the conductor logs
+    So the walk-in screen can show the price *before* the Dispatcher logs
     the passenger, the way any till shows a total before taking money --
     it used to appear only on the confirmation, after the booking existed.
 

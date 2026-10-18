@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full operations loop: book -> pay -> check-in -> scan -> audit -> revenue
+# Full operations loop: book -> pay -> check-in -> scan -> manifest
 set -euo pipefail
 API="http://127.0.0.1:8000/api/v1"
 TRIP="TRIP-DEMO-00000001"
@@ -33,9 +33,12 @@ curl -s -X POST "$API/bookings/$BID/check-in" -H "Authorization: Bearer $PTOKEN"
 echo
 echo "== crew login =========================================="
 CTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 
-curl -s -X POST "$API/trips/$TRIP/start-boarding" -H "Authorization: Bearer $CTOKEN" >/dev/null
+# The office starts the trip (rev 468).
+OTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
+  -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+curl -s -X POST "$API/trips/$TRIP/start" -H "Authorization: Bearer $OTOKEN" >/dev/null
 
 echo "== scan the QR (valid) ================================="
 curl -s -X POST "$API/scans" -H "Authorization: Bearer $CTOKEN" \
@@ -57,28 +60,3 @@ m=json.load(sys.stdin)
 print(f\"  capacity={m['seat_capacity']} bookings={m['total_bookings']} boarded={m['boarded']} awaiting={m['awaiting']}\")
 for p in m['passengers']:
     print(f\"    seat {p['seat_number']:>2}  stops {p['boarding_stop']}->{p['alighting_stop']}  {p['status']:<12} {p['booking_type']}\")"
-
-echo
-echo "== driver headcount ===================================="
-DTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"driver@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
-curl -s -X POST "$API/trips/$TRIP/headcount" -H "Authorization: Bearer $DTOKEN" \
-  -H "Content-Type: application/json" -d '{"stop_sequence":1,"confirmed_count":2}' \
-  | python3 -m json.tool
-
-echo
-echo "== AI node health ======================================"
-curl -s "$API/audits/node-health" -H "Authorization: Bearer $CTOKEN" | python3 -m json.tool || \
-  echo "  (start ai_service first: cd ai_service && python app.py)"
-
-echo
-echo "== trigger YOLOv8 audit ================================"
-curl -s -X POST "$API/audits/trigger" -H "Authorization: Bearer $CTOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"trip_id\":\"$TRIP\",\"leg_sequence\":1,\"trigger_type\":\"manual\"}" | python3 -m json.tool
-
-echo
-echo "== revenue summary ====================================="
-OTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
-curl -s "$API/revenue/summary" -H "Authorization: Bearer $OTOKEN" | python3 -m json.tool

@@ -137,7 +137,7 @@ class _TicketScreenState extends State<TicketScreen> {
     );
   }
 
-  /// The pass: the QR the conductor scans, then the journey it is for.
+  /// The pass: the QR the Dispatcher scans, then the journey it is for.
   ///
   /// One card, two halves, a tear line between them — the QR half is what
   /// gets held up at the door, the details half is what gets read on the
@@ -169,7 +169,7 @@ class _TicketScreenState extends State<TicketScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Show this to the conductor when you board',
+                  'Show this to the Dispatcher when you board',
                   textAlign: TextAlign.center,
                   style: text.bodySmall,
                 ),
@@ -253,7 +253,7 @@ class _TicketScreenState extends State<TicketScreen> {
       return Semantics(
         // A blind passenger still holds the phone up to be scanned, so the
         // code needs naming rather than hiding.
-        label: 'QR boarding ticket. Show this to the conductor.',
+        label: 'QR boarding ticket. Show this to the Dispatcher.',
         image: true,
         excludeSemantics: true,
         child: QrImageView(
@@ -381,7 +381,7 @@ class _TicketScreenState extends State<TicketScreen> {
           Text(
             'Check-in opens '
             '${clockTime(_viewModel.checkinOpensAt!)} at '
-            '${trip.origin.name}. It is a heads-up for the conductor, not a '
+            '${trip.origin.name}. It is a heads-up for the Dispatcher, not a '
             'requirement for boarding.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
@@ -414,7 +414,7 @@ class _TicketScreenState extends State<TicketScreen> {
       );
     }
 
-    // D.2: an accidental "I'm here" can be taken back until the conductor
+    // D.2: an accidental "I'm here" can be taken back until the Dispatcher
     // scans the ticket.
     if (_viewModel.canUndoCheckIn) {
       actions.add(
@@ -467,7 +467,7 @@ class _TicketScreenState extends State<TicketScreen> {
         icon: Icons.schedule,
         title: 'Waiting for payment',
         body: 'Your space is held while the payment is pending. Pay to get '
-            'the QR ticket the conductor scans.',
+            'the QR ticket the Dispatcher scans.',
       );
     }
     if (_viewModel.isBoarded) {
@@ -475,7 +475,7 @@ class _TicketScreenState extends State<TicketScreen> {
         tone: StatusTone.success,
         icon: Icons.check_circle_outline,
         title: 'On board',
-        body: 'The conductor has scanned your ticket. Have a safe trip.',
+        body: 'The Dispatcher has scanned your ticket. Have a safe trip.',
       );
     }
     if (_viewModel.isCheckedIn) {
@@ -483,7 +483,7 @@ class _TicketScreenState extends State<TicketScreen> {
         tone: StatusTone.success,
         icon: Icons.how_to_reg_outlined,
         title: 'Checked in at the terminal',
-        body: 'The conductor can see you are waiting. Show the QR when the '
+        body: 'The Dispatcher can see you are waiting. Show the QR when the '
             'van is ready to board.',
       );
     }
@@ -493,8 +493,8 @@ class _TicketScreenState extends State<TicketScreen> {
       title: 'Confirmed',
       body: _viewModel.canCheckIn
           ? 'Your space is booked. Tap "I\'m at the terminal" when you get '
-              'there, then show the QR to the conductor.'
-          : 'Your space is booked. Show the QR to the conductor when you '
+              'there, then show the QR to the Dispatcher.'
+          : 'Your space is booked. Show the QR to the Dispatcher when you '
               'board.',
     );
   }

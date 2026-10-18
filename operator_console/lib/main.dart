@@ -7,11 +7,13 @@ import 'core/design/theme.dart';
 import 'core/network/api_client.dart';
 import 'core/storage/token_storage.dart';
 import 'data/repositories/auth_repository.dart';
-import 'data/repositories/audit_repository.dart';
+import 'data/repositories/device_repository.dart';
 import 'data/repositories/dispatch_repository.dart';
 import 'data/repositories/fleet_repository.dart';
+import 'data/repositories/money_repository.dart';
+import 'data/repositories/oversight_repository.dart';
 import 'data/repositories/policy_repository.dart';
-import 'data/repositories/revenue_repository.dart';
+import 'data/repositories/rental_repository.dart';
 import 'data/repositories/tracking_repository.dart';
 import 'data/repositories/sos_repository.dart';
 import 'data/repositories/schedule_repository.dart';
@@ -66,12 +68,14 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         Provider<ApiClient>.value(value: _api),
         Provider<FleetRepository>(create: (_) => FleetRepository(_api)),
         Provider<DispatchRepository>(create: (_) => DispatchRepository(_api)),
-        Provider<AuditRepository>(create: (_) => AuditRepository(_api)),
         Provider<ScheduleRepository>(create: (_) => ScheduleRepository(_api)),
         Provider<PolicyRepository>(create: (_) => PolicyRepository(_api)),
-        Provider<RevenueRepository>(create: (_) => RevenueRepository(_api)),
         Provider<TrackingRepository>(create: (_) => TrackingRepository(_api)),
         Provider<SosRepository>(create: (_) => SosRepository(_api)),
+        Provider<MoneyRepository>(create: (_) => MoneyRepository(_api)),
+        Provider<OversightRepository>(create: (_) => OversightRepository(_api)),
+        Provider<DeviceRepository>(create: (_) => DeviceRepository(_api)),
+        Provider<RentalRepository>(create: (_) => RentalRepository(_api)),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
         ChangeNotifierProvider<Appearance>.value(value: _appearance),
       ],

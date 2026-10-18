@@ -8,9 +8,9 @@ enum Tone { success, warning, danger, info, neutral }
 /// A status as a tinted pill with a dot and a word -- never colour alone
 /// (WCAG 1.4.1).
 ///
-/// The trip and passenger words live here, once. They are the conductor
+/// The trip and passenger words live here, once. They are the Dispatcher
 /// app's words in sentence case, so a dispatcher on the phone with a
-/// conductor is using the words on the conductor's screen; three screens
+/// Dispatcher is using the words on the Dispatcher's screen; three screens
 /// used to keep their own copies of this mapping.
 class StatusBadge extends StatelessWidget {
   const StatusBadge(this.label, {super.key, this.tone = Tone.neutral});

@@ -244,21 +244,21 @@ need to explain the domain to it.
 | `CLAUDE.md` | Vocabulary, domain invariants, current state. Read before writing any code. |
 | `docs/UI_REDESIGN.md` | The task you are picking up: what is done, what is left, decisions already made. |
 | `docs/status/2026-09-29-status.html` | Where the whole project stands. Open it in a browser. |
-| `docs/SETUP.md` | Setup in more depth than this page, including the AI node and how to attach a phone. |
+| `docs/SETUP.md` | Setup in more depth than this page, including the evaluation harness and how to attach a phone. |
 | `docs/REMAINING_WORK.md` | Everything else outstanding. |
 
 Two pieces of vocabulary that will save you a wrong assumption. Capacity is
 counted in **spaces per leg**, not seats — UV Express assigns no seat
 numbers, and one space can carry two paying passengers on one trip when
-their journeys do not overlap. And `coop_admin` is **never** called
-"operator": under LTFRB usage an operator is the franchise holder, a
-different party from the cooperative's office staff.
+their journeys do not overlap. And office staff are **never** called
+"operator": under LTFRB usage the operator is the franchise holder, here
+the van owner who drives, who has no account (paper revision 468).
 
 ## Signing in
 
 Dev accounts, password `sabaygo123`:
-`passenger@sabaygo.dev`, `conductor@sabaygo.dev`, `driver@sabaygo.dev`,
-`coopadmin@sabaygo.dev`. The sign-in screen offers them as one-tap chips in
+`passenger@sabaygo.dev`, `dispatcher@sabaygo.dev`, `manager@sabaygo.dev`,
+`cashier@sabaygo.dev`. The sign-in screen offers them as one-tap chips in
 debug builds.
 
 ## What you can and cannot see in a browser

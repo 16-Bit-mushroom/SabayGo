@@ -1,8 +1,8 @@
 import '../../core/network/api_client.dart';
 
 /// Mirrors `GET /conversations`. For the office kind (the only kind the
-/// console ever sees -- coop_admin is only ever a participant in an
-/// "office" thread), the peer is the specific passenger/conductor/driver
+/// console ever sees -- the office is only ever a participant in an
+/// "office" thread), the peer is the specific passenger/Dispatcher
 /// on the other end.
 class ConsoleConversation {
   const ConsoleConversation({

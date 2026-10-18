@@ -6,7 +6,7 @@ import '../../data/repositories/messaging_repository.dart';
 import '../../models/message_model.dart';
 import 'conversation_thread_screen.dart';
 
-/// Who this user is allowed to message: their assigned conductor/driver
+/// Who this user is allowed to message: their assigned Dispatcher
 /// for a trip they're actually on, plus the cooperative office. Never a
 /// free-text search -- the pairing is role- and trip-scoped on the server.
 class NewConversationScreen extends StatefulWidget {
@@ -88,10 +88,12 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
 
   IconData _iconFor(String role) {
     switch (role) {
-      case 'coop_admin':
+      case 'terminal_manager':
+      case 'cashier':
         return Icons.storefront;
-      case 'conductor':
+      case 'dispatcher':
         return Icons.badge_outlined;
+      // Legacy threads only: drivers have no accounts since migration 017.
       case 'driver':
         return Icons.airline_seat_recline_normal;
       case 'passenger':

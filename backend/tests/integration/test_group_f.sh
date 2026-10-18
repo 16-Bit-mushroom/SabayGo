@@ -18,9 +18,9 @@ code(){ local m=$1 p=$2 d=${3:-} t=${4:-}
   curl "${a[@]}"; }
 
 OT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"coopadmin@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 CT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"conductor@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+  -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 
 hdr "F.4  cancellation deadline"
 code GET /config/policies "" "$OT" >/dev/null
@@ -46,26 +46,26 @@ S=$(code POST "/bookings/$BID2/cancel" "" "$PT")
 [ "$S" = "422" ] && ok "cancel refused past the deadline (422)" || bad "late cancel gave $S"
 code PUT /config/policies/cancel_cutoff_hours '{"policy_value":"2"}' "$OT" >/dev/null
 
-hdr "F.2  conductor restricted to their own trip"
+hdr "F.2  Dispatcher restricted to their own trip"
 code POST /fleet/crew "{\"email\":\"other${STAMP}@sabaygo.dev\",
   \"phone_number\":\"0928${STAMP: -7}\",\"password\":\"sabaygo123\",
-  \"role\":\"conductor\",\"first_name\":\"Other\",\"last_name\":\"Conductor\"}" "$OT" >/dev/null
+  \"role\":\"dispatcher\",\"first_name\":\"Other\",\"last_name\":\"Dispatcher\"}" "$OT" >/dev/null
 OTHER=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d "{\"email\":\"other${STAMP}@sabaygo.dev\",\"password\":\"sabaygo123\"}" | j "['access_token']")
 
-S=$(code POST "/trips/$TRIP/start-boarding" "" "$CT")
-[ "$S" = "200" ] && ok "assigned conductor can open boarding" || bad "gave $S"
+S=$(code POST "/trips/$TRIP/start" "" "$OT")
+[ "$S" = "200" ] && ok "the office starts the trip" || bad "gave $S"
 
 S=$(code POST /scans "{\"qr_payload\":\"x\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$OTHER")
-[ "$S" = "403" ] && ok "unassigned conductor cannot scan (403)" || bad "scan gave $S"
+[ "$S" = "403" ] && ok "unassigned Dispatcher cannot scan (403)" || bad "scan gave $S"
 
 S=$(code POST /scans "{\"qr_payload\":\"x\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
-[ "$S" = "200" ] && ok "assigned conductor can scan" || bad "assigned scan gave $S"
+[ "$S" = "200" ] && ok "assigned Dispatcher can scan" || bad "assigned scan gave $S"
 
 S=$(code POST /scans "{\"qr_payload\":\"x\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$OT")
-[ "$S" = "200" ] && ok "operator can act on any trip (override)" || bad "operator gave $S"
+[ "$S" = "200" ] && ok "Terminal Manager can act on any trip (override)" || bad "Terminal Manager gave $S"
 
-hdr "F.1  van and driver cannot run overlapping trips"
+hdr "F.1  a van cannot run overlapping trips"
 code GET /config/schedule-templates "" "$OT" >/dev/null
 ROUTE=$(python3 -c "
 import json;d=json.load(open('/tmp/r.json'));print(d[0]['route_id'] if d else '')")

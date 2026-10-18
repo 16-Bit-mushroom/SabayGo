@@ -2,15 +2,14 @@ import '../../core/network/api_client.dart';
 
 /// Roles as the backend defines them.
 ///
-/// `coopAdmin` maps to `coop_admin`, not `operator`: under LTFRB usage an
-/// operator is the franchise holder -- the CPC holder, usually the van
-/// owner -- a different party from cooperative office staff. This console
-/// is for `coop_admin` only.
+/// This console is for the office: the Terminal Manager and the Cashier.
+/// Never "operator" for either -- under LTFRB usage the operator is the
+/// franchise holder, here the van owner who drives, and has no account.
 enum UserRole {
   passenger('passenger'),
-  conductor('conductor'),
-  driver('driver'),
-  coopAdmin('coop_admin'),
+  dispatcher('dispatcher'),
+  terminalManager('terminal_manager'),
+  cashier('cashier'),
   admin('admin');
 
   const UserRole(this.wire);
@@ -20,6 +19,17 @@ enum UserRole {
         (r) => r.wire == value,
         orElse: () => UserRole.passenger,
       );
+
+  bool get isOffice =>
+      this == UserRole.terminalManager || this == UserRole.cashier || this == UserRole.admin;
+
+  /// Decides what is owed, sets rules, validates records. The Cashier
+  /// records payments and does none of these (separation of duties).
+  bool get isManager => this == UserRole.terminalManager || this == UserRole.admin;
+
+  /// Records A2Z's share. The Terminal Manager does not (separation of
+  /// duties); the server's guard is the same.
+  bool get isCashier => this == UserRole.cashier || this == UserRole.admin;
 }
 
 class AuthSession {

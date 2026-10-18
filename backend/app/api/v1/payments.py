@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+from dataclasses import dataclass
 from decimal import Decimal
 
 from fastapi import APIRouter, Header, Request
@@ -28,6 +29,7 @@ from app.infrastructure.clients.sandbox_checkout import (
 )
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import Payment as PaymentRow
+from app.infrastructure.models import SpecialTripRequest
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -119,7 +121,17 @@ async def _receive_webhook(
 # Development sandbox -- see infrastructure/clients/sandbox_checkout.py.
 # Every route here is a 404 unless sandbox_enabled().
 # ===================================================================
-async def _sandbox_booking(session, checkout_session_id: str) -> tuple[PaymentRow, BookingRow]:
+@dataclass(frozen=True)
+class _SandboxCheckout:
+    """What a sandbox checkout pays for: a booking's fare or a rental fee."""
+    label: str              # shown to the payer
+    amount: Decimal
+    state: str              # 'pending' when it can still be paid
+    reference: str
+    metadata: dict[str, str]
+
+
+async def _sandbox_checkout(session, checkout_session_id: str) -> _SandboxCheckout:
     if not sandbox_enabled():
         raise NotFoundError("Not found.")
     payment = (
@@ -128,9 +140,27 @@ async def _sandbox_booking(session, checkout_session_id: str) -> tuple[PaymentRo
         )
     ).scalar_one_or_none()
     booking = await session.get(BookingRow, payment.booking_id) if payment else None
-    if payment is None or booking is None:
-        raise NotFoundError("Unknown checkout session.")
-    return payment, booking
+    if payment is not None and booking is not None:
+        return _SandboxCheckout(
+            label=f"Ticket {booking.ticket_number}", amount=payment.amount,
+            state=booking.status, reference=f"ticket {booking.ticket_number}",
+            metadata={"booking_id": booking.booking_id, "ticket_number": booking.ticket_number},
+        )
+    rental = (
+        await session.execute(
+            select(SpecialTripRequest)
+            .where(SpecialTripRequest.payment_reference == checkout_session_id)
+        )
+    ).scalar_one_or_none()
+    if rental is not None:
+        return _SandboxCheckout(
+            label=f"Van rental {rental.pickup_at:%d %b %H:%M}", amount=rental.rental_fee,
+            state="pending" if rental.payment_status == "unpaid" and rental.status == "approved"
+            else rental.payment_status,
+            reference=f"van rental {rental.pickup_at:%d %b %H:%M}",
+            metadata={"request_id": rental.request_id},
+        )
+    raise NotFoundError("Unknown checkout session.")
 
 
 def _sandbox_page(title: str, body: str) -> HTMLResponse:
@@ -159,56 +189,55 @@ def _sandbox_page(title: str, body: str) -> HTMLResponse:
 async def sandbox_checkout_page(
     checkout_session_id: str, session: SessionDep, cancelled: bool = False
 ) -> HTMLResponse:
-    payment, booking = await _sandbox_booking(session, checkout_session_id)
-    ticket = html.escape(booking.ticket_number)
+    checkout = await _sandbox_checkout(session, checkout_session_id)
+    label = html.escape(checkout.label)
     tag = '<span class="tag">SANDBOX -- NO REAL MONEY</span>'
     if cancelled:
         return _sandbox_page("Payment cancelled", f"""{tag}
 <h2>Payment cancelled</h2>
-<p class="muted">Ticket {ticket} was not paid. The space is held until the
-hold expires. Return to the SabayGo app.</p>""")
-    if booking.status != BookingStatus.PENDING.value:
+<p class="muted">{label} was not paid. Return to the SabayGo app.</p>""")
+    if checkout.state != BookingStatus.PENDING.value:
         return _sandbox_page("Not awaiting payment", f"""{tag}
 <h2>Nothing to pay</h2>
-<p class="muted">Ticket {ticket} is <b>{html.escape(booking.status)}</b>, not awaiting
+<p class="muted">{label} is <b>{html.escape(checkout.state)}</b>, not awaiting
 payment. Return to the SabayGo app.</p>""")
     cs = html.escape(checkout_session_id)
     return _sandbox_page("SabayGo payment", f"""{tag}
-<p class="muted" style="margin-top:16px">Ticket {ticket}</p>
-<div class="amount">&#8369;{payment.amount:,.2f}</div>
+<p class="muted" style="margin-top:16px">{label}</p>
+<div class="amount">&#8369;{checkout.amount:,.2f}</div>
 <p class="muted">This page stands in for PayMongo during development. Paying
 sends a signed webhook through the same check a real PayMongo payment
 passes.</p>
-<form method="post" action="{cs}/pay"><button type="submit">Pay &#8369;{payment.amount:,.2f}</button></form>
+<form method="post" action="{cs}/pay"><button type="submit">Pay &#8369;{checkout.amount:,.2f}</button></form>
 <a href="{cs}?cancelled=true">Cancel</a>""")
 
 
 @router.post("/sandbox/{checkout_session_id}/pay", include_in_schema=False)
 async def sandbox_pay(checkout_session_id: str, session: SessionDep) -> HTMLResponse:
-    payment, booking = await _sandbox_booking(session, checkout_session_id)
-    ticket = html.escape(booking.ticket_number)
+    checkout = await _sandbox_checkout(session, checkout_session_id)
+    label = html.escape(checkout.label)
     tag = '<span class="tag">SANDBOX -- NO REAL MONEY</span>'
     # Refused here rather than settled: a paid event for a hold that has
     # already expired would record money against a space given away.
-    if booking.status != BookingStatus.PENDING.value:
+    if checkout.state != BookingStatus.PENDING.value:
         return _sandbox_page("Not awaiting payment", f"""{tag}
 <h2>Nothing to pay</h2>
-<p class="muted">Ticket {ticket} is <b>{html.escape(booking.status)}</b>.
+<p class="muted">{label} is <b>{html.escape(checkout.state)}</b>.
 Return to the SabayGo app.</p>""")
 
     raw, signature = SandboxCheckoutClient.signed_paid_event(
         checkout_session_id=checkout_session_id,
-        booking_id=booking.booking_id,
-        ticket_number=booking.ticket_number,
-        amount=payment.amount,
+        reference=checkout.reference,
+        metadata=checkout.metadata,
+        amount=checkout.amount,
     )
     outcome = await _receive_webhook(raw, signature, session)
 
     if outcome.get("status") == "confirmed":
         return _sandbox_page("Payment received", f"""{tag}
 <h2>Payment received</h2>
-<p class="muted">Ticket {ticket} is confirmed by the signed webhook. Return to
-the SabayGo app -- it will show your boarding pass.</p>""")
+<p class="muted">{label} is confirmed by the signed webhook. Return to
+the SabayGo app.</p>""")
     return _sandbox_page("Payment not confirmed", f"""{tag}
 <h2>Payment not confirmed</h2>
 <p class="muted">The webhook answered <b>{html.escape(str(outcome))}</b>.

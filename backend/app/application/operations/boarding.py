@@ -1,4 +1,4 @@
-"""Conductor operations: QR boarding validation and the trip manifest."""
+"""Dispatcher operations: QR boarding validation and the trip manifest."""
 
 from __future__ import annotations
 
@@ -10,10 +10,13 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.audit import auto_trigger
+from app.application.booking.home_pickup import HomePickups
+from app.application.edge.checking import ListCheck
+from app.application.finance.statement import Statements
+from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
-from app.core.exceptions import NotFoundError
-from app.domain.enums import AuditTrigger, BookingStatus, TripStatus
+from app.core.exceptions import ConflictError, NotFoundError
+from app.domain.enums import BookingStatus, DepartureSource, Role, TripStatus
 from app.infrastructure.models import BoardingScan
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import Trip
@@ -63,7 +66,7 @@ class ScanResult:
 class ScanTicketUseCase:
     """Validate a QR payload at the van door and mark the passenger boarded.
 
-    Never raises for an invalid ticket. A conductor scanning in a queue
+    Never raises for an invalid ticket. A Dispatcher scanning in a queue
     needs a fast verdict on screen, not an exception -- so every outcome
     returns a `result` code that the app renders as green or red. The
     outcome is recorded in `boarding_scans` either way, which is what
@@ -133,6 +136,11 @@ class ScanTicketUseCase:
             return await record("unpaid", "This booking has not been paid.", False)
         if booking.status == BookingStatus.BOARDED.value:
             return await record("already_boarded", "Already scanned aboard.", False)
+        if booking.is_home_pickup_seat:
+            return await record(
+                "wrong_stop", "This passenger is picked up at home: they board at the pin.",
+                False,
+            )
         if booking.boarding_stop_sequence != stop_sequence:
             return await record(
                 "wrong_stop",
@@ -142,16 +150,18 @@ class ScanTicketUseCase:
 
         booking.status = BookingStatus.BOARDED.value
         booking.updated_at = now
+        # A relative's ticket activates their home pickup (brief 2.6).
+        pickup = await HomePickups(self.session).activate_by_scan(booking)
         return await record(
             "valid",
             f"Valid - stops {booking.boarding_stop_sequence} to "
-            f"{booking.alighting_stop_sequence}.",
+            f"{booking.alighting_stop_sequence}." + (f" {pickup}" if pickup else ""),
             True,
         )
 
 
 class ManifestUseCase:
-    """Who is aboard, and what the cooperative administrator should see."""
+    """Who is aboard, and what the Terminal Manager should see."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -198,9 +208,6 @@ class ManifestUseCase:
                     "booking_type": b.booking_type,
                     "status": b.status,
                     "fare_amount": b.fare_amount,
-                    "fare_is_manual": b.fare_is_manual,
-                    "is_roadside_pickup": b.is_roadside_pickup,
-                    "pickup_landmark": b.pickup_landmark,
                     # Walk-ins may legitimately be anonymous.
                     "name": b.walkin_name,
                 }
@@ -223,23 +230,66 @@ class ManifestUseCase:
 
 
 class DepartTripUseCase:
-    """Close boarding: mark the trip departed and no-show anyone unscanned."""
+    """Close boarding: mark the trip departed and no-show anyone unscanned.
+
+    Brief 4.2 rules 7-8: the Dispatcher taps Depart ('dispatcher'), or
+    the Cashier or the Terminal Manager ('staff'), or the van's GPS
+    leaves the terminal with a boarding counted ('gps'), whichever is
+    first. Only a started
+    trip departs; the row lock keeps the two from both releasing the
+    no-shows.
+
+    The passenger list locks here if the Cashier's payment did not lock
+    it first, and its fare lines are final (`finance.statement`). A trip
+    whose share was not recorded is 'left_unpaid' and the Terminal
+    Manager and the Cashier are told; the share stays owed on the van's
+    statement, which refuses its next assignment (brief 2.1).
+
+    More people aboard than listed (brief 2.4, `edge.checking`) stops a
+    person's Depart until the Dispatcher fixes the list or types a
+    reason. The van leaving anyway is not stopped: GPS departs it and
+    'Departed With More Than Listed' goes to the Terminal Manager.
+    """
 
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def execute(self, *, trip_id: str) -> dict:
-        trip = await self.session.get(Trip, trip_id)
+    async def execute(
+        self, *, trip_id: str, source: DepartureSource = DepartureSource.STAFF
+    ) -> dict:
+        trip = (await self.session.execute(
+            select(Trip).where(Trip.trip_id == trip_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )).scalar_one_or_none()
         if trip is None:
             raise NotFoundError("Trip not found.")
+        if trip.status != TripStatus.BOARDING.value:
+            raise ConflictError(
+                "Start the trip before it departs."
+                if trip.status == TripStatus.SCHEDULED.value
+                else f"This trip is already {trip.status}."
+            )
+
+        check = await ListCheck(self.session).recheck(trip)
+        if check.excess and source is not DepartureSource.GPS:
+            await self.session.commit()   # the matching stays for the Dispatcher's screen
+            raise ConflictError(
+                f"{check.aboard} aboard and {check.listed} listed: "
+                f"{check.excess} more {'person' if check.excess == 1 else 'people'} aboard than "
+                "on the passenger list. Add them to the list, or type a reason, before Depart."
+            )
 
         now = app_tz.now()
+        # An activated home pickup's seat boards after the van leaves.
+        boards_later = await HomePickups(self.session).at_departure(trip)
         result = await self.session.execute(
             select(BookingRow).where(
                 BookingRow.trip_id == trip_id,
                 BookingRow.status.in_(
                     [BookingStatus.CONFIRMED.value, BookingStatus.CHECKED_IN.value]
                 ),
+                BookingRow.booking_id.notin_(boards_later),
             )
         )
         no_shows = list(result.scalars().all())
@@ -248,35 +298,36 @@ class DepartTripUseCase:
         for booking in no_shows:
             booking.status = BookingStatus.NO_SHOW.value
             booking.updated_at = now
-            # Release the space so it can be resold further down the route.
-            # The passenger paid and did not travel -- under a no-refund
-            # policy that is their loss -- but the space is physically
-            # empty and someone waiting at the next terminal can use it.
-            # Leaving it reserved would also make the camera check report
-            # fewer bodies than tickets for the rest of the trip.
+            # The seat still counts in A2Z's share: it was paid (brief
+            # 2.1). The space is released because it is empty; nobody
+            # boards after departure (rev 603), so it is never resold.
             await seats.release(booking_id=booking.booking_id)
 
         trip.status = TripStatus.DEPARTED.value
         trip.departed_at = now
+        trip.departure_source = source.value
         trip.updated_at = now
+        await self.session.flush()
+
+        unpaid = await Statements(self.session).lock_at_departure(trip)
+        notifications = NotificationService(self.session)
+        if unpaid:
+            await notifications.notify_trip(
+                trip=trip, type="left_unpaid", title="Left unpaid",
+                message=(f"{trip_label(trip)} departed with ₱{unpaid:,.2f} of A2Z's share "
+                         "not recorded. It stays owed; the van's next assignment is refused "
+                         "until it is paid or the Terminal Manager overrides."),
+                roles=(Role.TERMINAL_MANAGER, Role.CASHIER),
+            )
+        await ListCheck(self.session).alert_if_left_with_more(trip, check)
         await self.session.commit()
 
         log.info("Trip %s departed; %d no-shows recorded.", trip_id, len(no_shows))
-
-        # 2.3.5's door-closure trigger. Boarding is shut, the no-shows are
-        # released, so the manifest for leg 1 is final and this is the
-        # moment a cabin count means something. Detached: the crew is not
-        # made to wait at the door for a camera, and a camera that is down
-        # must not turn a completed departure into an error.
-        auto_trigger.schedule(
-            trip_id=trip_id,
-            leg_sequence=1,  # departing stop 1 puts the van on leg 1
-            trigger=AuditTrigger.DOOR_CLOSE,
-        )
 
         return {
             "trip_id": trip_id,
             "status": TripStatus.DEPARTED.value,
             "departed_at": now.isoformat(),
+            "departure_source": source.value,
             "no_shows": len(no_shows),
         }

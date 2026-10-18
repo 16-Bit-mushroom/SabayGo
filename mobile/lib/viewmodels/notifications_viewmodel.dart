@@ -7,7 +7,7 @@ import '../models/notification_model.dart';
 
 /// Notifications for the signed-in user, from `GET /notifications`.
 ///
-/// Pass [pollEvery] to keep an unread badge current (the conductor's app
+/// Pass [pollEvery] to keep an unread badge current (the Dispatcher's app
 /// bar does this); the passenger tab loads on open and on pull-to-refresh.
 class NotificationsViewModel extends ChangeNotifier {
   NotificationsViewModel(this._repo, {Duration? pollEvery}) {

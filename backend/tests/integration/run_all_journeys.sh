@@ -48,11 +48,6 @@ strip_ansi() { sed -r 's/\x1B\[[0-9;]*[mGKHfJ]//g'; }
   else
     echo "  STOP  API not running - start: uvicorn app.main:app --reload"
   fi
-  if curl -sf http://127.0.0.1:5000/health >/dev/null 2>&1; then
-    echo "  ok    AI node responding"
-  else
-    echo "  warn  AI node offline - audit steps will report GAP"
-  fi
 } | tee -a "$REPORT"
 
 if grep -q "STOP" "$REPORT"; then
@@ -62,10 +57,10 @@ if grep -q "STOP" "$REPORT"; then
 fi
 
 # ── journeys ──────────────────────────────────────────────────────────
-# Each journey gets a clean database: the conductor script departs the
+# Each journey gets a clean database: the dispatcher script departs the
 # trip and the passenger script consumes seats, so shared state produces
 # failures that look like bugs but are really ordering.
-for journey in passenger conductor driver_operator; do
+for journey in passenger dispatcher office; do
   label=$(echo "$journey" | tr '[:lower:]_' '[:upper:] ')
   {
     echo
@@ -85,8 +80,8 @@ for journey in passenger conductor driver_operator; do
   fi
 done
 
-# E.1: flagged variance -> notifications. Python because it swaps the
-# camera for a fake capture; the HTTP side is real.
+# E.1: an alert reaches the roles it names and mark-read is scoped to its
+# owner (a rev 603 trip alert; until 16 Oct the retired YOLOv8 variance).
 {
   echo
   echo "==================================================================="
@@ -99,21 +94,6 @@ if [ "$QUIET" = "1" ]; then
   python tests/integration/test_notifications.py 2>&1 | strip_ansi >> "$REPORT"
 else
   python tests/integration/test_notifications.py 2>&1 | tee >(strip_ansi >> "$REPORT")
-fi
-
-# Automatic captures: door closure and GPS node. Python for the same
-# reason -- a faked camera -- and it needs no running backend, only the
-# database, so it runs against whatever state the reset above left.
-{
-  echo
-  echo "==================================================================="
-  echo "  AUTOMATIC AI CAPTURE (2.3.5)"
-  echo "==================================================================="
-} | tee -a "$REPORT"
-if [ "$QUIET" = "1" ]; then
-  python tests/integration/test_auto_audit.py 2>&1 | strip_ansi >> "$REPORT"
-else
-  python tests/integration/test_auto_audit.py 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
 # SOS emergency alerts. No database reset: the script closes whatever it
@@ -129,6 +109,165 @@ if [ "$QUIET" = "1" ]; then
   ./tests/integration/test_sos.sh 2>&1 | strip_ansi >> "$REPORT"
 else
   ./tests/integration/test_sos.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 468 step 3. Makes only new, stamped records, so it needs no reset.
+{
+  echo
+  echo "==================================================================="
+  echo "  SETTINGS, MEMBER ROSTER AND PHONE POOL (rev 468 step 3)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_roster.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_roster.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 468 step 4. Starts, departs and voids trips, so it gets a clean
+# database with the fixture trips inside the start window.
+{
+  echo
+  echo "==================================================================="
+  echo "  TRIP LIFECYCLE (rev 468 step 4)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_trip_lifecycle.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_trip_lifecycle.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 468 step 5. Plays four phones; moves trips in time with SQL, so it
+# gets its own clean database.
+{
+  echo
+  echo "==================================================================="
+  echo "  EDGE PHONE INGESTION (rev 468 step 5)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_edge_ingestion.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_edge_ingestion.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R2: boarding only at the starting terminal.
+{
+  echo
+  echo "==================================================================="
+  echo "  BOARDING POINT (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_roadside.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_roadside.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R3b: special trips, a whole van rented.
+{
+  echo
+  echo "==================================================================="
+  echo "  SPECIAL TRIPS (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_special_trips.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_special_trips.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R5a: door events against the passenger list.
+{
+  echo
+  echo "==================================================================="
+  echo "  DOOR CHECK (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_door_check.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_door_check.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R6a: home pickup, booking to the stop at the pin.
+{
+  echo
+  echo "==================================================================="
+  echo "  HOME PICKUP (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_home_pickup.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_home_pickup.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R7: operator disputes, recorded at the counter, decided by the
+# Terminal Manager.
+{
+  echo
+  echo "==================================================================="
+  echo "  DISPUTES (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_disputes.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_disputes.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R8: evidence retention (stills, GPS readings, chat images).
+{
+  echo
+  echo "==================================================================="
+  echo "  RETENTION (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_retention.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_retention.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R9: driving flags -- the rules on the paper's sample trip
+# (pure), then the pipeline from the phone's GPS readings.
+{
+  echo
+  echo "==================================================================="
+  echo "  DRIVING FLAGS (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  python tests/test_driving_flags.py 2>&1 | strip_ansi >> "$REPORT"
+  ./tests/integration/test_driving_flags.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  python tests/test_driving_flags.py 2>&1 | tee >(strip_ansi >> "$REPORT")
+  ./tests/integration/test_driving_flags.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# Rev 603 R10a: the Van Status Board.
+{
+  echo
+  echo "==================================================================="
+  echo "  VAN STATUS BOARD (rev 603)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_van_board.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_van_board.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
 sleep 1   # let the tee subshells finish flushing before counting

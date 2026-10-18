@@ -16,6 +16,7 @@ import 'widgets/journey_picker_card.dart';
 import 'widgets/time_block_filter.dart';
 import 'widgets/trip_card.dart';
 import 'widgets/trip_details_sheet.dart';
+import '../home_pickup/home_pickup_screen.dart';
 
 const double kWideLayoutBreakpoint = 700;
 
@@ -179,6 +180,16 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.pop(sheetContext);
           _handleBook(trip);
         },
+        // Two seats are needed: the relative's and the passenger's.
+        onBookForOther: trip.isSpecialTrip || trip.availableSeats < 2
+            ? null
+            : () async {
+                Navigator.pop(sheetContext);
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => HomePickupScreen(trip: trip)),
+                );
+                _vm.refreshTrips();
+              },
       ),
     );
   }

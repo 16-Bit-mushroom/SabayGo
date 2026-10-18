@@ -43,15 +43,15 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Signs in, but only completes for `coop_admin`. This console has no
+  /// Signs in, but only completes for office staff. This console has no
   /// use for any other role, and letting one further in would just mean
   /// failing later on every screen instead of at the door.
   Future<bool> login({required String email, required String password}) async {
     _begin();
     try {
       final session = await _repo.login(email: email, password: password);
-      if (session.role != UserRole.coopAdmin) {
-        _fail('This console is for cooperative office staff only.');
+      if (!session.role.isOffice) {
+        _fail('This console is for A2Z office staff only.');
         return false;
       }
       await _tokens.save(

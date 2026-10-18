@@ -8,7 +8,7 @@ The order of work in `RaiseSosUseCase` is the whole design:
 
 An SMS gateway is a phone on a shelf or a vendor with a balance. Either
 can be unreachable at the exact moment someone needs help, and a send that
-blocks for ten seconds must not be standing between a panicking conductor
+blocks for ten seconds must not be standing between a panicking Dispatcher
 and a saved record. So the emergency is durable before the first packet
 leaves, and the reply the handset gets says plainly how many texts went
 out -- including "none, nobody is configured to receive them".
@@ -34,12 +34,12 @@ from app.domain.enums import BookingStatus, Role, SosStatus
 from app.infrastructure.clients.sms_client import SmsClient
 from app.infrastructure.models import (
     Booking,
-    CooperativePolicy,
     SosAlert,
     SosDispatch,
     Trip,
     User,
 )
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
 
@@ -160,7 +160,7 @@ class RaiseSosUseCase:
 
         Without this, any signed-in account could raise an emergency
         against any crew in the fleet -- a false alarm aimed at a named
-        driver, which is exactly the accusation this system is built to
+        operator, which is exactly the accusation this system is built to
         avoid making carelessly. An SOS with no trip is always allowed:
         a passenger waiting at the terminal has an emergency too.
         """
@@ -170,11 +170,11 @@ class RaiseSosUseCase:
         if trip is None:
             raise NotFoundError("Trip not found.")
 
-        if user.role in (Role.COOP_ADMIN.value, Role.ADMIN.value):
+        if user.role in (Role.TERMINAL_MANAGER.value, Role.CASHIER.value, Role.ADMIN.value):
             return trip
-        if user.role in (Role.DRIVER.value, Role.CONDUCTOR.value):
-            if user.user_id not in (trip.driver_id, trip.conductor_id):
-                raise PermissionDeniedError("You are not crewed on this trip.")
+        if user.role == Role.DISPATCHER.value:
+            if user.user_id != trip.dispatcher_id:
+                raise PermissionDeniedError("You are not assigned to this trip.")
             return trip
         booked = await self.session.scalar(
             select(Booking.booking_id).where(
@@ -188,7 +188,7 @@ class RaiseSosUseCase:
         return trip
 
     async def _contact_numbers(self) -> list[str]:
-        policy = await self.session.get(CooperativePolicy, SOS_CONTACTS_POLICY)
+        policy = await PolicyRepository(self.session).current(SOS_CONTACTS_POLICY)
         raw = policy.policy_value if policy else ""
         return [n.strip() for n in raw.split(",") if n.strip()]
 

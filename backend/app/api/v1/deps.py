@@ -48,3 +48,13 @@ def require_roles(*roles: Role):
         return user
 
     return _guard
+
+
+# The office. Deciding what is owed, setting rules and validating records
+# are the Terminal Manager's alone; the Cashier joins only where the
+# brief's permission table (section 3) gives both -- separation of duties.
+MANAGER = require_roles(Role.TERMINAL_MANAGER, Role.ADMIN)
+OFFICE = require_roles(Role.TERMINAL_MANAGER, Role.CASHIER, Role.ADMIN)
+# Receiving A2Z's 15 % and recording it: the Cashier's alone, so the person
+# who decides what is owed is not the one who records it (brief 3).
+CASHIER = require_roles(Role.CASHIER, Role.ADMIN)

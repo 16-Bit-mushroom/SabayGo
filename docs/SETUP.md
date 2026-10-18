@@ -11,12 +11,13 @@ The system is four pieces and only one of them is containerised:
 | MySQL 8 + Adminer | Docker | **yes** |
 | FastAPI backend | Python venv on the host | **yes** |
 | Flutter clients | Flutter SDK on the host | **yes** |
-| Flask + YOLOv8 AI node | Python venv on the host | no — skip it |
+| YOLOv8 evaluation harness (`ai_service/`) | Python venv on the host | no — skip it |
 
-The AI node is the one you can leave out. It pulls in `ultralytics`, which
-pulls in PyTorch — a multi-gigabyte install — and nothing in the passenger
-or conductor UI needs it running. Set it up only when you touch the audit
-path.
+The evaluation harness is the one you can leave out. It pulls in
+`ultralytics`, which pulls in PyTorch — a multi-gigabyte install — and
+nothing in the running system needs it: it only measures the person count
+for the paper. (The rev 468 Flask AI node and the capture app were retired
+on 16 Oct; the in-van phone, `edge_app/`, runs the model itself.)
 
 ---
 
@@ -172,23 +173,20 @@ CRLF on checkout, and bash then fails with `$'\r': command not found`.
   script in `db/` and `backend/scripts/` has a `#!/usr/bin/env bash`
   shebang, so your own shell does not matter.
 
-## Three things are not in the repository or the archive
+## Two things are not in the repository or the archive
 
-`.gitignore` excludes all three, and the handover archive leaves them out
+`.gitignore` excludes both, and the handover archive leaves them out
 too — secrets do not belong in a file that gets uploaded anywhere. You do
-not need to chase any of them: `setup.sh` generates the first two and
-Ultralytics fetches the third.
+not need to chase either: `setup.sh` generates the first and Ultralytics
+fetches the second.
 
 1. **`.env` (root)** and **`backend/.env`** — built from the `.env.example`
-   files, with `JWT_SECRET`, `AI_NODE_API_KEY` and `PHONE_CAPTURE_API_KEY`
-   generated locally. The one value nobody can invent is
-   `PAYMONGO_WEBHOOK_SECRET`; ask for it only when you need to test a live
-   payment webhook, which the UI work does not.
-2. **`ai_service/.env`** — a single line, `AI_NODE_API_KEY=...`, written
-   with the same value as `backend/.env`. They must match or the backend
-   gets a 401 from the node.
-3. **`yolov8n.pt`** — excluded by `*.pt`. Ultralytics downloads it on the
-   node's first start, so this one needs no help, just internet.
+   files, with `JWT_SECRET` and `PAYMONGO_WEBHOOK_SECRET` generated
+   locally (the sandbox signs its webhooks with it). For real PayMongo,
+   paste PayMongo's own webhook secret over it.
+2. **`yolov8n.pt`** — excluded by `*.pt`. Ultralytics downloads it on the
+   first evaluation run or model export, so this one needs no help, just
+   internet.
 
 Never commit any of them. If you generate a key you want the rest of the
 team to share, send it over a channel that is not the repository.
@@ -289,15 +287,15 @@ flutter run -d chrome --web-port=3000 \
 flutter run -d 192.168.1.2:5555 \
   --dart-define=API_BASE_URL=http://192.168.1.8:8000/api/v1
 
-# operator console (coop_admin)
+# office console (Terminal Manager, Cashier)
 cd ../operator_console
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000/api/v1
 ```
 
 `192.168.1.8` is the backend machine's LAN IP — find yours with `ip -4 addr`.
 
-Sign in with `passenger@`, `conductor@`, `driver@` or
-`coopadmin@sabaygo.dev`, password `sabaygo123`. The sign-in screen shows
+Sign in with `passenger@` or `dispatcher@` on the phone, `manager@` or
+`cashier@sabaygo.dev` on the console, password `sabaygo123`. The sign-in screen shows
 dev-account chips in debug builds only.
 
 ### 6. Check it works
@@ -314,23 +312,21 @@ any overflow.
 
 ---
 
-## Optional: the AI node
+## Optional: the evaluation harness
 
-Only for work on the YOLOv8 audit path.
+Only for regenerating the model figures (`docs/benchmarks/ai_count_*`).
+Read `ai_service/eval/README.md` first.
 
 ```bash
+./setup.sh --with-ai                             # or by hand:
 cd ai_service
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt      # large: ultralytics pulls PyTorch
-printf 'AI_NODE_API_KEY=%s\n' "$(openssl rand -hex 16)" > .env   # same value in backend/.env
-set -a; source .env; set +a
-./venv/bin/python app.py                        # 0.0.0.0:5000, downloads yolov8n.pt on first run
-curl http://127.0.0.1:5000/health
+./venv/bin/python eval/test_metrics.py          # the arithmetic, no model needed
 ```
 
-Automatic audits need a camera on this host — a laptop webcam is a verified
-stand-in. With no camera the trigger writes no row at all and logs an
-`UpstreamServiceError`, which is correct: the node never invents a count.
+The phone's TFLite models are exported by `edge_app/tools/export_models.sh`,
+which keeps its own Python 3.13 venv.
 
 ---
 
