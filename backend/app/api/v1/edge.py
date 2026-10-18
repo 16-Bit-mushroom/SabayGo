@@ -8,7 +8,10 @@ sending the same batch again changes nothing.
 
     GET  /edge/session              server time (for the clock), the
                                     phone's van and Dispatcher, the gap,
-                                    and whether to count or pause
+                                    whether to count or pause, and the
+                                    van's door line and seat mask
+    PUT  /edge/door-layout          the door line and seat mask drawn at
+                                    mounting, kept on the van
     POST /edge/heartbeats           status reports
     POST /edge/events               door events
     PUT  /edge/events/{id}/snapshot the blurred still of one event
@@ -21,7 +24,7 @@ import datetime as dt
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Header, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
 from app.api.v1.deps import SessionDep
@@ -34,7 +37,7 @@ from app.application.edge.ingestion import (
 )
 from app.application.edge.ledger import trip_for
 from app.core import timezone as app_tz
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, ConflictError
 from app.core.security import hash_device_token
 from app.infrastructure.models import DeviceCheckout, EdgeDevice, StaffProfile, Van
 from app.infrastructure.repositories.policy_repository import PolicyRepository
@@ -77,18 +80,21 @@ class SessionOut(BaseModel):
     # and ask again (rule 13). The way back is not counted.
     counting: bool
     trip_id: str | None
+    # The van's door line and seat mask (DoorLayout), None until drawn.
+    door_layout: dict | None
 
 
 @router.get("/session", response_model=SessionOut)
 async def edge_session(session: SessionDep, device: Device) -> SessionOut:
     row = (await session.execute(
-        select(DeviceCheckout, Van.plate_number, StaffProfile.first_name, StaffProfile.last_name)
+        select(DeviceCheckout, Van.plate_number, Van.door_layout,
+               StaffProfile.first_name, StaffProfile.last_name)
         .join(Van, Van.van_id == DeviceCheckout.van_id)
         .join(StaffProfile, StaffProfile.user_id == DeviceCheckout.dispatcher_id)
         .where(DeviceCheckout.device_id == device.device_id,
                DeviceCheckout.returned_at.is_(None))
     )).first()
-    checkout, plate, first, last = row if row else (None, None, None, None)
+    checkout, plate, layout, first, last = row if row else (None,) * 5
     now = app_tz.now().replace(tzinfo=None)
     trip = await trip_for(session, checkout.van_id, now) if checkout else None
     return SessionOut(
@@ -101,7 +107,53 @@ async def edge_session(session: SessionDep, device: Device) -> SessionOut:
         dispatcher_name=f"{first} {last}" if checkout else None,
         counting=trip is not None,
         trip_id=trip.trip_id if trip else None,
+        door_layout=layout,
     )
+
+
+# --------------------------------------------------------- door layout
+Fraction = Annotated[float, Field(ge=0, le=1)]
+Point = tuple[Fraction, Fraction]
+
+
+class DoorLayout(BaseModel):
+    """Coordinates are fractions of the upright camera frame. `inside` is
+    the side of the line, going from its first point to its second, that
+    the cabin is on: 1 left of it, -1 right (image axes, y down)."""
+    door_line: tuple[Point, Point]
+    inside: Literal[1, -1]
+    seat_mask: tuple[Point, Point] | None = None
+
+    @model_validator(mode="after")
+    def _sizes(self) -> DoorLayout:
+        (x1, y1), (x2, y2) = self.door_line
+        if ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5 < 0.05:
+            raise ValueError("The door line is too short to cross.")
+        if self.seat_mask is not None:
+            (a, b), (c, d) = self.seat_mask
+            if abs(c - a) < 0.02 or abs(d - b) < 0.02:
+                raise ValueError("The seat mask has no area.")
+        return self
+
+
+@router.put("/door-layout", response_model=DoorLayout)
+async def door_layout(payload: DoorLayout, session: SessionDep, device: Device) -> DoorLayout:
+    """The door line and the driver's seat mask, drawn on the phone when
+    the Dispatcher mounts it (brief 5.5). Kept on the van the phone is
+    checked out with, so the next phone in that van loads them; which
+    phone set them and when are kept."""
+    checkout = (await session.execute(
+        select(DeviceCheckout).where(DeviceCheckout.device_id == device.device_id,
+                                     DeviceCheckout.returned_at.is_(None))
+    )).scalar_one_or_none()
+    if checkout is None:
+        raise ConflictError("This phone is not checked out to a van.")
+    van = await session.get(Van, checkout.van_id)
+    van.door_layout = payload.model_dump(mode="json")
+    van.door_layout_set_at = app_tz.now().replace(tzinfo=None)
+    van.door_layout_device_id = device.device_id
+    await session.commit()
+    return payload
 
 
 # ---------------------------------------------------------- heartbeats

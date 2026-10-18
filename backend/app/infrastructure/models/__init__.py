@@ -17,6 +17,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    JSON,
     Integer,
     Numeric,
     SmallInteger,
@@ -274,6 +275,11 @@ class Van(Base):
     photo_rear_url: Mapped[str | None] = mapped_column(String(512))
     photo_left_url: Mapped[str | None] = mapped_column(String(512))
     photo_right_url: Mapped[str | None] = mapped_column(String(512))
+    # Migration 031: the phone's door line and seat mask for this van.
+    door_layout: Mapped[dict | None] = mapped_column(JSON)
+    door_layout_set_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    door_layout_device_id: Mapped[str | None] = mapped_column(
+        ForeignKey("edge_devices.device_id"))
     validation_status: Mapped[str] = mapped_column(String(16), default="pending")
     validated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     validated_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))

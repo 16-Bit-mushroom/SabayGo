@@ -763,6 +763,25 @@ the phone at 320/416), and the tables (`yolov8_audit_logs`,
 → Cashier) over HTTP. `MANUSCRIPT_CORRECTIONS.md` §3, §7, §9 are marked
 superseded and §12 records the rev 603 open points the code settled.
 
+Done: **Edge app** (18 Oct; read `edge_app/README.md`). Migration **031**
+(down script): `vans.door_layout` (JSON: door line, cabin side, seat
+mask, in frame fractions) + `door_layout_set_at` / `_device_id`; the
+layout is the van's, not the phone's, and setting it does not reopen a
+validated van. `GET /edge/session` returns it; `PUT /edge/door-layout`
+sets it for the phone's checked-out van (409 when none).
+`test_edge_ingestion.sh` **92**. The phone (`edge_app/`, v0.2): a
+foreground service (camera + location) that counts while the session
+says so (or offline with a van, 2 min stale), YOLOv8n CPU FP16 at 320
+(416 selectable until the Run), ByteTrack in Kotlin (thresholds 0.45 /
+0.1, lost tracks by time), door-line crossings by box centre, the seat
+mask, a pixelated still per event with its SHA-256 on the event, GPS
+every 1 s, a report every 30 s, a covered-lens check, and an SQLite
+outbox sent in order with retry. Benchmark kept behind a button.
+14 JVM unit tests (`./gradlew testDebugUnitTest`). Verified on the
+Realme against the dev backend: set-up over adb, session, reports and
+uploads. **Not yet verified: crossings with people, or in a van.** The
+token is typed (or sent by adb on a debug build); a QR entry is not built.
+
 **Handoff, 15 Oct: R10, the screens (brief §9), in a separate session.**
 The server side of R1-R9 is done; R10 is Flutter work in `mobile/`
 (Passenger, Dispatcher) and `operator_console/` (Terminal Manager,
@@ -1284,8 +1303,10 @@ the rev 468 retirement are done (Rev 603 progress, above). Left:
    (CPU FP16 fastest at both sizes; the GPU slower on this phone; no
    throttling in 9.5 min). Left: one full Run on vehicle power (part 2).
    No operating frame rate is quoted before it exists.
-3. **The edge app proper** (brief 5.1–5.3) against `/edge/*`, sized by
-   the benchmark; the owner field-tests and runs the Realme checklist.
+3. **The edge app proper** (brief 5.1–5.3). *Built 18 Oct* (below,
+   "Edge app"). Left: the owner and team test door counting with people
+   and in a van, run the Realme checklist, and the per-stop cabin
+   snapshot (brief 5.2 item 6) as its own server-and-phone step.
 4. **A2Z's numbers** (the owner asks A2Z): `depart_zone_radius_m`,
    `depart_readings`, `home_pickup_max_route_m`, `special_trip_speed_kmh`,
    per-stretch speed limits, the real routes, fares, timetable and SOS

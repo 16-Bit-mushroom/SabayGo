@@ -19,7 +19,7 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import com.sabaygo.edge.bench.Backend
+import com.sabaygo.edge.vision.Backend
 import com.sabaygo.edge.bench.CsvLog
 import com.sabaygo.edge.bench.DeviceState
 import com.sabaygo.edge.bench.Session
@@ -35,7 +35,7 @@ import java.util.concurrent.Executors
  *
  * The run stops when the app leaves the foreground; keep it on screen.
  */
-class MainActivity : ComponentActivity() {
+class BenchActivity : ComponentActivity() {
 
     private lateinit var status: TextView
     private lateinit var modelPick: Spinner
@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_bench)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         status = findViewById(R.id.status)

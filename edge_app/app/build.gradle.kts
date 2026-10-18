@@ -11,8 +11,8 @@ android {
         applicationId = "com.sabaygo.edge"
         minSdk = 29          // PowerManager.currentThermalStatus
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1-bench"
+        versionCode = 2
+        versionName = "0.2"
         ndk { abiFilters += "arm64-v8a" }   // the pilot phone; keeps the APK small
     }
 
@@ -42,4 +42,9 @@ dependencies {
     // GPU is reached only through CompiledModel in 2.x, not the old GpuDelegate.
     implementation("com.google.ai.edge.litert:litert:2.3.0")
     implementation("com.google.ai.edge.litert:litert-gpu:2.3.0")
+
+    // The counting service's camera and GPS live on a LifecycleService.
+    implementation("androidx.lifecycle:lifecycle-service:2.10.0")
+
+    testImplementation("junit:junit:4.13.2")
 }

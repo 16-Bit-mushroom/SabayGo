@@ -334,8 +334,26 @@ sql "UPDATE passenger_events SET event_at = event_at - INTERVAL 1 SECOND WHERE e
 is "$(chain $TRIP1)" True/None "put back, it holds again"
 
 # ╔═══════════════════════════════════════════════════════════════╗
+hdr "9b. The door line and seat mask belong to the van (brief 5.5)"
+LAYOUT='{"door_line":[[0.2,0.9],[0.8,0.9]],"inside":-1,"seat_mask":[[0.0,0.0],[0.3,0.4]]}'
+V1=$(sql "SELECT validation_status FROM vans WHERE van_id = 'VAN-0001'")
+is "$(edge PUT /edge/door-layout "$LAYOUT" "$TA")" 200 "the phone saves the line drawn at mounting"
+is "$(sql "SELECT door_layout_device_id FROM vans WHERE van_id = 'VAN-0001'")" "$IDA" \
+   "kept on its van, with the phone that set it"
+edge GET /edge/session "" "$TA" >/dev/null
+is "$(j "['door_layout']['inside']" < /tmp/resp.json)/$(j "['door_layout']['seat_mask'][1]" < /tmp/resp.json)" \
+   "-1/[0.3, 0.4]" "the session hands it to the phone in that van"
+is "$(sql "SELECT validation_status FROM vans WHERE van_id = 'VAN-0001'")" "$V1" \
+   "camera set-up is not a record edit: the van's validation stands"
+is "$(edge PUT /edge/door-layout '{"door_line":[[0.5,0.5],[0.51,0.5]],"inside":1}' "$TA")" 422 \
+   "a line too short to cross is refused"
+is "$(edge PUT /edge/door-layout '{"door_line":[[0.2,0.9],[1.2,0.9]],"inside":1}' "$TA")" 422 \
+   "a point outside the frame is refused"
+
+# ╔═══════════════════════════════════════════════════════════════╗
 hdr "10. A retired phone uploads nothing"
 code POST /devices/$IDB/return '{}' "$CT" >/dev/null
+is "$(edge PUT /edge/door-layout "$LAYOUT" "$TB")" 409 "a phone back in the office has no van to set a line for"
 code POST /devices/$IDB/retire "" "$OT" >/dev/null
 is "$(edge GET /edge/session "" "$TB")" 401 "its token stops working"
 

@@ -2,6 +2,9 @@ package com.sabaygo.edge.bench
 
 import android.content.res.AssetManager
 import androidx.camera.core.ImageProxy
+import com.sabaygo.edge.vision.Backend
+import com.sabaygo.edge.vision.Detector
+import com.sabaygo.edge.vision.Result
 import java.time.LocalDateTime
 import java.util.Locale
 
