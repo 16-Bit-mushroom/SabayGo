@@ -74,7 +74,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         children: [
           PageHeader(
             title: 'Remittance',
-            technicalNote: 'Remittances · Remittance_Lines',
             description: 'Each van\'s statement for the day: A2Z\'s share of the fares on its passenger '
                 'lists. The Dispatcher hands the share over and the Cashier records it here.',
             actions: [
@@ -143,7 +142,9 @@ class _StatementPanel extends StatelessWidget {
     final records = cashier || (role?.isManager ?? false);
     final text = Theme.of(context).textTheme;
     final badge = s.amountDue > 0
-        ? StatusBadge('Owes ${peso.format(s.amountDue)}', tone: Tone.danger)
+        // Ochre, not red: owing the day's share is routine until it is paid,
+        // and red would read as wrongdoing (cash in hand is not missing).
+        ? StatusBadge('Owes ${peso.format(s.amountDue)}', tone: Tone.warning)
         : s.disputed > 0
             ? const StatusBadge('Disputed share waits', tone: Tone.warning)
             : const StatusBadge('Paid', tone: Tone.success);
@@ -247,7 +248,7 @@ class _LineRow extends StatelessWidget {
         ),
         SizedBox(width: 110, child: Text(peso.format(l.gross), textAlign: TextAlign.right, style: text.bodySmall)),
         SizedBox(width: 110, child: Text(peso.format(l.share), textAlign: TextAlign.right,
-            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
         SizedBox(
           width: 150,
           child: Align(

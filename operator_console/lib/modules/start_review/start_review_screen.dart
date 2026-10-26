@@ -90,7 +90,6 @@ class _StartReviewScreenState extends State<StartReviewScreen> {
         children: [
           PageHeader(
             title: 'Review Starts',
-            technicalNote: 'StartReviewStatus · HeldShare · AuditStatus',
             description: 'Trips that need your look: started by the system, left before A2Z\'s share '
                 'was recorded, departed with more aboard than listed, or went without camera evidence.',
             actions: [

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'tokens.dart';
 
-/// The console's [ThemeData], dense enough for a desk, built from whichever
-/// palette is in use (dark by default, light on request -- see
-/// `tokens.dart` and `appearance.dart`). Called again on every switch.
+/// The console's [ThemeData], dense enough for a desk, built from the one
+/// light palette in `tokens.dart` (the pila board: whiteboard white,
+/// terminal green, marker black and red).
 ///
 /// What differs from `mobile/lib/core/design/theme.dart` is what a desktop
 /// dashboard needs and a phone does not:
@@ -14,8 +14,8 @@ import 'tokens.dart';
 ///   phone and throws inside a dialog's action row or a toolbar here.
 /// * **Data tables** get a sunken header row and a divider between rows, so
 ///   a column of fares can be scanned without a grid of borders.
-/// * **The sidebar** is a shade off the canvas with a light pill for the
-///   current screen.
+/// * **The sidebar** is terminal green; the current entry is a lighter
+///   green with its icon on a white plate tile (`operator_shell.dart`).
 ///
 /// Typeface is Roboto, bundled from `assets/fonts` like the mobile app. On
 /// Flutter Web nothing declared a family before, so the console rendered in
@@ -25,7 +25,7 @@ const _font = 'Roboto';
 ThemeData buildConsoleTheme() {
   final scheme = ColorScheme.fromSeed(
     seedColor: AppColors.primary,
-    brightness: AppColors.palette.brightness,
+    brightness: Brightness.light,
     primary: AppColors.primary,
     onPrimary: AppColors.onFill,
     primaryContainer: AppColors.primaryContainer,
@@ -57,18 +57,28 @@ ThemeData buildConsoleTheme() {
     horizontal: AppSpacing.xl, vertical: AppSpacing.md,
   );
   const buttonLabel =
-      TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w600);
+      TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w700);
   // 40 high, not mobile's 52: a mouse pointer is precise, and a toolbar of
   // 52px buttons pushes the table it controls below the fold.
   const buttonMin = Size(64, 40);
+  // Keyboard focus is a 2px ring outside the control, so it never reads
+  // as a fill or a hover: terminal green on the page, marker ink around a
+  // green fill (green on green would vanish). WCAG 2.4.7.
+  WidgetStateProperty<BorderSide?> focusSide(Color ring, [BorderSide? rest]) =>
+      WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.focused)
+          ? BorderSide(color: ring, width: AppSizing.focusOutline, strokeAlign: BorderSide.strokeAlignOutside)
+          : rest);
 
   return ThemeData(
     useMaterial3: true,
     fontFamily: _font,
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.surface,
-    // Material 3 tints raised surfaces with the primary. With an ink
-    // primary that turns every white card faintly grey; panels stay white.
+    // Buttons look 40 high but take a 48px pointer target
+    // (AppSizing.minTouchTarget); the web default shrink-wraps them.
+    materialTapTargetSize: MaterialTapTargetSize.padded,
+    // Material 3 tints raised surfaces with the primary. With a green
+    // primary that turns every white card faintly green; panels stay white.
     cardTheme: CardThemeData(
       elevation: 0,
       color: AppColors.surfaceRaised,
@@ -78,6 +88,22 @@ ThemeData buildConsoleTheme() {
         borderRadius: BorderRadius.circular(AppRadius.lg),
         side: BorderSide(color: AppColors.divider),
       ),
+    ),
+
+    // The parts of a page nobody draws still carry the palette: the caret,
+    // selected text and the scrollbar.
+    textSelectionTheme: TextSelectionThemeData(
+      cursorColor: AppColors.primary,
+      selectionColor: AppColors.primary.withValues(alpha: 0.22),
+      selectionHandleColor: AppColors.primary,
+    ),
+    scrollbarTheme: ScrollbarThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) =>
+          s.contains(WidgetState.hovered) || s.contains(WidgetState.dragged)
+              ? AppColors.border
+              : AppColors.disabled),
+      radius: const Radius.circular(AppRadius.full),
+      thickness: const WidgetStatePropertyAll(6),
     ),
 
     // ── type ──────────────────────────────────────────────────────────
@@ -95,15 +121,15 @@ ThemeData buildConsoleTheme() {
         letterSpacing: -0.2, color: AppColors.textPrimary,
       ),
       titleLarge: TextStyle(
-        fontFamily: _font, fontSize: 18, height: 1.35, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 18, height: 1.35, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       titleMedium: TextStyle(
-        fontFamily: _font, fontSize: 15, height: 1.4, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 15, height: 1.4, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       titleSmall: TextStyle(
-        fontFamily: _font, fontSize: 14, height: 1.4, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 14, height: 1.4, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       bodyLarge: TextStyle(
@@ -116,11 +142,11 @@ ThemeData buildConsoleTheme() {
         fontFamily: _font, fontSize: 12.5, height: 1.4, color: AppColors.textMuted,
       ),
       labelLarge: TextStyle(
-        fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       labelMedium: TextStyle(
-        fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w700,
         color: AppColors.textMuted,
       ),
       // Uppercase micro-labels: table column heads, KPI captions.
@@ -151,8 +177,11 @@ ThemeData buildConsoleTheme() {
       indicatorSize: TabBarIndicatorSize.label,
       dividerColor: AppColors.divider,
       labelStyle: TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w700),
+      // Medium against Bold, so the selected tab reads by weight as well as
+      // colour. Roboto is bundled at 400, 500 and 700 only: a 600 or 800
+      // would be drawn as 700.
       unselectedLabelStyle:
-          TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w600),
+          TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w500),
     ),
 
     // ── actions ───────────────────────────────────────────────────────
@@ -164,7 +193,7 @@ ThemeData buildConsoleTheme() {
         padding: buttonPadding,
         shape: buttonShape,
         textStyle: buttonLabel,
-      ),
+      ).copyWith(side: focusSide(AppColors.textPrimary)),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -182,10 +211,9 @@ ThemeData buildConsoleTheme() {
         foregroundColor: AppColors.primary,
         minimumSize: buttonMin,
         padding: buttonPadding,
-        side: BorderSide(color: AppColors.border),
         shape: buttonShape,
         textStyle: buttonLabel,
-      ),
+      ).copyWith(side: focusSide(AppColors.primary, BorderSide(color: AppColors.border))),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
@@ -193,7 +221,10 @@ ThemeData buildConsoleTheme() {
         minimumSize: const Size(48, 40),
         shape: buttonShape,
         textStyle: buttonLabel,
-      ),
+      ).copyWith(side: focusSide(AppColors.primary)),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(side: focusSide(AppColors.primary)),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
@@ -221,7 +252,7 @@ ThemeData buildConsoleTheme() {
       focusedBorder: _fieldBorder(AppColors.primary, width: AppSizing.focusOutline),
       errorBorder: _fieldBorder(AppColors.danger),
       focusedErrorBorder: _fieldBorder(AppColors.danger, width: AppSizing.focusOutline),
-      disabledBorder: _fieldBorder(AppColors.divider),
+      disabledBorder: _fieldBorder(AppColors.disabled),
       labelStyle: TextStyle(fontFamily: _font, color: AppColors.textMuted),
       floatingLabelStyle: TextStyle(fontFamily: _font, color: AppColors.textPrimary),
       hintStyle: TextStyle(fontFamily: _font, color: AppColors.textMuted),
@@ -259,19 +290,25 @@ ThemeData buildConsoleTheme() {
       secondarySelectedColor: AppColors.primary,
       checkmarkColor: AppColors.onFill,
       labelStyle: TextStyle(
-        fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       secondaryLabelStyle: TextStyle(
-        fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w600,
+        fontFamily: _font, fontSize: 12.5, fontWeight: FontWeight.w700,
         color: AppColors.onFill,
       ),
-      side: BorderSide(color: AppColors.divider),
+      // Focus rings like the buttons': ink around a selected (green) chip.
+      side: WidgetStateBorderSide.resolveWith((s) => s.contains(WidgetState.focused)
+          ? BorderSide(
+              color: s.contains(WidgetState.selected) ? AppColors.textPrimary : AppColors.primary,
+              width: AppSizing.focusOutline)
+          : BorderSide(color: AppColors.divider)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.full)),
     ),
     dividerTheme: DividerThemeData(color: AppColors.divider, thickness: 1, space: 1),
     dialogTheme: DialogThemeData(
       backgroundColor: AppColors.surfaceRaised,
+      barrierColor: AppColors.scrim,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
       titleTextStyle: TextStyle(

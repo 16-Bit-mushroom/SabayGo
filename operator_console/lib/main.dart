@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'core/design/appearance.dart';
 import 'core/design/components/brand_logo.dart';
 import 'core/design/theme.dart';
 import 'core/network/api_client.dart';
@@ -14,6 +13,7 @@ import 'data/repositories/money_repository.dart';
 import 'data/repositories/oversight_repository.dart';
 import 'data/repositories/policy_repository.dart';
 import 'data/repositories/rental_repository.dart';
+import 'data/repositories/route_repository.dart';
 import 'data/repositories/tracking_repository.dart';
 import 'data/repositories/sos_repository.dart';
 import 'data/repositories/schedule_repository.dart';
@@ -38,9 +38,6 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
   late final ApiClient _api;
   late final AuthProvider _auth;
 
-  /// Before anything is built: it picks the saved palette.
-  final Appearance _appearance = Appearance();
-
   @override
   void initState() {
     super.initState();
@@ -56,7 +53,6 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
 
   @override
   void dispose() {
-    _appearance.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -76,18 +72,14 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         Provider<OversightRepository>(create: (_) => OversightRepository(_api)),
         Provider<DeviceRepository>(create: (_) => DeviceRepository(_api)),
         Provider<RentalRepository>(create: (_) => RentalRepository(_api)),
+        Provider<RouteRepository>(create: (_) => RouteRepository(_api)),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
-        ChangeNotifierProvider<Appearance>.value(value: _appearance),
       ],
-      // The theme is rebuilt from the palette whenever it is switched.
-      child: ListenableBuilder(
-        listenable: _appearance,
-        builder: (_, _) => MaterialApp(
-          title: 'SabayGo Cooperative Office',
-          debugShowCheckedModeBanner: false,
-          theme: buildConsoleTheme(),
-          home: const _RootRouter(),
-        ),
+      child: MaterialApp(
+        title: 'SabayGo Cooperative Office',
+        debugShowCheckedModeBanner: false,
+        theme: buildConsoleTheme(),
+        home: const _RootRouter(),
       ),
     );
   }

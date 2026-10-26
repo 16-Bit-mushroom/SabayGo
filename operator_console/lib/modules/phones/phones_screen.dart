@@ -9,6 +9,7 @@ import '../../core/network/api_exception.dart';
 import '../../data/repositories/device_repository.dart';
 import '../../data/repositories/fleet_repository.dart';
 import '../../viewmodels/auth_provider.dart';
+import '../setup/step_frame.dart';
 
 /// Phones (brief 5.5): A2Z's pool of in-van phones. The Terminal Manager
 /// adds a phone (its token is shown once) and retires it; the office checks
@@ -16,7 +17,10 @@ import '../../viewmodels/auth_provider.dart';
 /// its return and condition. The phone's last report shows here: battery,
 /// temperature, camera and GPS.
 class PhonesScreen extends StatefulWidget {
-  const PhonesScreen({super.key});
+  const PhonesScreen({super.key, this.onChanged});
+
+  /// Setup's queue counts again when a phone is added or retired.
+  final VoidCallback? onChanged;
 
   @override
   State<PhonesScreen> createState() => _PhonesScreenState();
@@ -26,6 +30,7 @@ class _PhonesScreenState extends State<PhonesScreen> {
   late final DeviceRepository _devices = context.read<DeviceRepository>();
   List<Phone>? _phones;
   bool _loading = true;
+  int _blank = 0;
   String? _error;
 
   @override
@@ -53,57 +58,46 @@ class _PhonesScreenState extends State<PhonesScreen> {
   Widget build(BuildContext context) {
     final manager = context.read<AuthProvider>().profile?.role.isManager ?? false;
     final phones = _phones ?? const <Phone>[];
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.xxl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          PageHeader(
-            title: 'Phones',
-            technicalNote: 'Edge_Devices · Device_Checkouts',
-            description: 'The phones that ride in the vans. Check one out to a Dispatcher and van '
-                'after the setup check, and record it when it comes back.',
-            actions: [
-              if (manager)
-                FilledButton.icon(
-                  onPressed: _add,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add phone'),
-                ),
-              RefreshButton(onPressed: _load, busy: _loading),
-            ],
-          ),
-          Expanded(
-            child: _loading && _phones == null
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? LoadError(message: _error!, onRetry: _load)
-                    : phones.isEmpty
-                        ? const EmptyState(
-                            icon: Icons.phone_android,
-                            title: 'No phones in the pool',
-                            hint: 'The Terminal Manager adds each phone once.')
-                        : ListView.separated(
-                            itemCount: phones.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-                            itemBuilder: (_, i) =>
-                                _PhoneCard(phone: phones[i], manager: manager, onChanged: _load),
-                          ),
-          ),
-        ],
-      ),
+    return StepFrame(
+      title: 'Phones',
+      description: 'The phones that ride in the vans. Add each phone once and enter its token in its app, '
+          'run its checklist, then check it out to a Dispatcher and van.',
+      actions: [RefreshButton(onPressed: _load, busy: _loading)],
+      list: _loading && _phones == null
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? LoadError(message: _error!, onRetry: _load)
+              : phones.isEmpty
+                  ? EmptyState(
+                      icon: Icons.phone_android,
+                      title: 'No phones in the pool',
+                      hint: manager
+                          ? 'Add the first phone with the form. Its token is shown once.'
+                          : 'The Terminal Manager adds each phone once.')
+                  : ListView.separated(
+                      itemCount: phones.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+                      itemBuilder: (_, i) => _PhoneCard(phone: phones[i], manager: manager, onChanged: _changed),
+                    ),
+      side: manager
+          ? SidePanel(title: 'Add phone', child: _AddPhoneForm(key: ValueKey(_blank), onSave: _add))
+          : null,
     );
   }
 
-  Future<void> _add() async {
-    final picked = await showDialog<(String, String)>(context: context, builder: (_) => const _AddPhoneDialog());
-    if (picked == null || !mounted) return;
+  Future<void> _changed() async {
+    await _load();
+    widget.onChanged?.call();
+  }
+
+  Future<void> _add(String model, String android) async {
     String? token;
     final ok = await runAction(
-        context, () async => token = await _devices.add(model: picked.$1, android: picked.$2), 'Phone added.');
+        context, () async => token = await _devices.add(model: model, android: android), 'Phone added.');
     if (!ok || !mounted) return;
     await showToken(context, token!);
-    _load();
+    setState(() => _blank++);
+    await _changed();
   }
 }
 
@@ -284,16 +278,19 @@ class _PhoneCard extends StatelessWidget {
   }
 }
 
-class _AddPhoneDialog extends StatefulWidget {
-  const _AddPhoneDialog();
+/// A phone for the pool: its model, and the Android version if known.
+class _AddPhoneForm extends StatefulWidget {
+  const _AddPhoneForm({super.key, required this.onSave});
+  final Future<void> Function(String model, String android) onSave;
 
   @override
-  State<_AddPhoneDialog> createState() => _AddPhoneDialogState();
+  State<_AddPhoneForm> createState() => _AddPhoneFormState();
 }
 
-class _AddPhoneDialogState extends State<_AddPhoneDialog> {
+class _AddPhoneFormState extends State<_AddPhoneForm> {
   final _model = TextEditingController();
   final _android = TextEditingController();
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -302,33 +299,32 @@ class _AddPhoneDialogState extends State<_AddPhoneDialog> {
     super.dispose();
   }
 
+  Future<void> _save(bool _) async {
+    setState(() => _busy = true);
+    await widget.onSave(_model.text.trim(), _android.text.trim());
+    if (mounted) setState(() => _busy = false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add a phone to the pool'),
-      content: SizedBox(
-        width: 420,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: _model,
-            autofocus: true,
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(labelText: 'Model', hintText: 'realme 8 5G'),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(controller: _android, decoration: const InputDecoration(labelText: 'Android version (optional)')),
-        ]),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      TextField(
+        controller: _model,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(labelText: 'Model', hintText: 'realme 8 5G'),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(
-          onPressed: _model.text.trim().length >= 2
-              ? () => Navigator.pop(context, (_model.text.trim(), _android.text.trim()))
-              : null,
-          child: const Text('Add phone'),
-        ),
-      ],
-    );
+      const SizedBox(height: AppSpacing.md),
+      TextField(controller: _android, decoration: const InputDecoration(labelText: 'Android version (optional)')),
+      const SizedBox(height: AppSpacing.sm),
+      Text('Its token is shown once, right after it is added: have the phone at hand.',
+          style: Theme.of(context).textTheme.bodySmall),
+      FormButtons(
+        adding: false,
+        busy: _busy,
+        saveLabel: 'Add phone',
+        onSave: _model.text.trim().length >= 2 ? _save : null,
+      ),
+    ]);
   }
 }
 

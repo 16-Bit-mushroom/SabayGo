@@ -105,23 +105,35 @@ class TripLifecyclePanel extends StatelessWidget {
           icon: const Icon(Icons.lock_open, size: 18),
           label: const Text('Lift payment block'),
         ),
+      // The filled button is the next thing to do: Assign until the trip
+      // has a van and a Dispatcher, then Start. A disabled Start is never
+      // the one filled button.
       if (scheduled) ...[
-        OutlinedButton.icon(
-          onPressed: () => _assign(context),
-          icon: const Icon(Icons.assignment_ind_outlined, size: 18),
-          label: Text(t.isAssigned ? 'Change assignment' : 'Assign van and Dispatcher'),
-        ),
+        if (t.isAssigned)
+          OutlinedButton.icon(
+            onPressed: () => _assign(context),
+            icon: const Icon(Icons.assignment_ind_outlined, size: 18),
+            label: const Text('Change assignment'),
+          )
+        else
+          FilledButton.icon(
+            onPressed: () => _assign(context),
+            icon: const Icon(Icons.assignment_ind_outlined, size: 18),
+            label: const Text('Assign van and Dispatcher'),
+          ),
         Tooltip(
           message: !t.isAssigned
               ? 'Assign a van and a Dispatcher first'
               : windowOpen
                   ? 'Start the trip with ${t.plateNumber}'
                   : 'Start opens at ${_time.format(t.startOpensAt)}',
-          child: FilledButton.icon(
-            onPressed: t.isAssigned && windowOpen ? () => _start(context) : null,
-            icon: const Icon(Icons.play_arrow, size: 18),
-            label: const Text('Start trip'),
-          ),
+          child: t.isAssigned
+              ? FilledButton.icon(
+                  onPressed: windowOpen ? () => _start(context) : null,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('Start trip'),
+                )
+              : const OutlinedButton(onPressed: null, child: Text('Start trip')),
         ),
       ],
       if (t.status == 'boarding')

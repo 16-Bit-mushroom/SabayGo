@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../viewmodels/auth_provider.dart';
+import '../design/components/password_field.dart';
 import '../design/tokens.dart';
 import '../network/api_exception.dart';
 
@@ -116,14 +117,14 @@ class _ProfileDialogState extends State<ProfileDialog> {
                 Text('Leave blank to keep the current password.',
                     style: text.bodySmall!.copyWith(color: AppColors.textMuted)),
                 const SizedBox(height: AppSpacing.md),
-                _field(_current, 'Current password', obscure: true, validator: (v) {
+                PasswordField(controller: _current, label: 'Current password', validator: (v) {
                   if (_new.text.isNotEmpty && (v == null || v.isEmpty)) {
                     return 'Needed to set a new password';
                   }
                   return null;
                 }),
                 const SizedBox(height: AppSpacing.md),
-                _field(_new, 'New password', obscure: true, validator: (v) {
+                PasswordField(controller: _new, label: 'New password', validator: (v) {
                   if (_current.text.isNotEmpty && (v == null || v.isEmpty)) {
                     return 'Enter the new password';
                   }
@@ -133,7 +134,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
                   return null;
                 }),
                 const SizedBox(height: AppSpacing.md),
-                _field(_confirm, 'Confirm new password', obscure: true, validator: (v) {
+                PasswordField(controller: _confirm, label: 'Confirm new password', validator: (v) {
                   if (_new.text.isNotEmpty && v != _new.text) return 'Does not match';
                   return null;
                 }),

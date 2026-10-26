@@ -7,6 +7,8 @@ class RouteSummary {
     required this.routeName,
     required this.isActive,
     required this.stopCount,
+    this.ltfrbCaseNo,
+    this.stops = const [],
   });
 
   final String routeId;
@@ -14,6 +16,9 @@ class RouteSummary {
   final String routeName;
   final bool isActive;
   final int stopCount;
+  final String? ltfrbCaseNo;
+  /// In order; stop 1 is where every passenger boards.
+  final List<RouteStop> stops;
 
   factory RouteSummary.fromJson(Map<String, dynamic> json) => RouteSummary(
         routeId: json['route_id'] as String,
@@ -21,6 +26,33 @@ class RouteSummary {
         routeName: json['route_name'] as String,
         isActive: json['is_active'] as bool,
         stopCount: json['stop_count'] as int,
+        ltfrbCaseNo: json['ltfrb_case_no'] as String?,
+        stops: [
+          for (final s in json['stops'] as List? ?? const [])
+            RouteStop.fromJson(s as Map<String, dynamic>)
+        ],
+      );
+}
+
+class RouteStop {
+  const RouteStop({
+    required this.sequence,
+    required this.terminalId,
+    required this.name,
+    required this.offsetMinutes,
+  });
+
+  final int sequence;
+  final String terminalId;
+  final String name;
+  /// Minutes after departure from stop 1.
+  final int offsetMinutes;
+
+  factory RouteStop.fromJson(Map<String, dynamic> j) => RouteStop(
+        sequence: j['stop_sequence'] as int,
+        terminalId: j['terminal_id'] as String,
+        name: j['terminal_name'] as String,
+        offsetMinutes: j['offset_minutes'] as int,
       );
 }
 

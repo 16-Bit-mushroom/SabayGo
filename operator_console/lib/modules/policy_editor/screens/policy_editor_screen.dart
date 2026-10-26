@@ -14,6 +14,13 @@ import '../speed_limits_panel.dart';
 /// A value edited here governs trips generated from now on -- it never
 /// rewrites a trip already booked under the old value, since policy
 /// values are snapshotted onto each trip at generation time.
+///
+/// Said in A2Z's words (UI redesign v3): each setting's title, what it
+/// does and what "not set" means come from [_plain]; the stored name and
+/// the database's own description stay with the code and the manuscript.
+/// A yes/no setting is a switch. Settings only the development team tunes
+/// sit folded under Advanced. Each row still saves on its own, and its
+/// Save appears once its value has changed.
 class PolicyEditorScreen extends StatefulWidget {
   const PolicyEditorScreen({super.key});
 
@@ -29,6 +36,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
   String? _error;
   final Map<String, TextEditingController> _controllers = {};
   final Set<String> _saving = {};
+  bool _advanced = false;
 
   @override
   void initState() {
@@ -68,7 +76,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
 
   Future<void> _save(Policy policy) async {
     final controller = _controllers[policy.policyKey]!;
-    if (controller.text.trim() == policy.policyValue) return;
+    if (!_changed(policy)) return;
 
     setState(() => _saving.add(policy.policyKey));
     try {
@@ -98,14 +106,12 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           PageHeader(
+            compact: true,
             title: 'Rules & Settings',
-            technicalNote: 'Cooperative policies',
             description: 'A2Z\'s rules for booking, trips, payment, the phones and evidence. A change '
                 'is kept with who made it; trips already booked keep the terms they were sold under.',
             actions: [RefreshButton(onPressed: _load, busy: _loading)],
@@ -118,35 +124,51 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
                     : _buildList(),
           ),
         ],
-      ),
     );
   }
 
+  bool _changed(Policy p) => _controllers[p.policyKey]!.text.trim() != p.policyValue;
+
   Widget _buildList() {
     final policies = _list ?? [];
-    // Grouped by what the office is deciding, in the order it comes up.
+    // Grouped by what the office is deciding, in the order it comes up. A
+    // setting the console has no words for goes under Advanced.
     final groups = <String, List<Policy>>{};
     for (final p in policies) {
-      groups.putIfAbsent(_plain[p.policyKey]?.$2 ?? 'Other', () => []).add(p);
+      groups.putIfAbsent(_plain[p.policyKey]?.group ?? _advancedGroup, () => []).add(p);
     }
-    final order = [..._groupOrder.where(groups.containsKey), ...groups.keys.where((g) => !_groupOrder.contains(g))];
+    final order = [for (final g in _groupOrder) if (groups.containsKey(g)) g];
+    final advanced = groups[_advancedGroup] ?? const <Policy>[];
     final manager = context.read<AuthProvider>().profile?.role.isManager ?? false;
-    return ListView.separated(
-      itemCount: order.length + 1,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
-      itemBuilder: (context, i) => i == order.length
-          ? SpeedLimitsPanel(canEdit: manager)
-          : Panel(
-        title: order[i],
-        child: Column(
-          children: [
-            for (final (j, policy) in groups[order[i]]!.indexed) ...[
-              if (j > 0) const Divider(),
-              _policyRow(policy),
-            ],
+    final text = Theme.of(context).textTheme;
+    Widget rows(List<Policy> list) => Column(children: [
+          for (final (j, policy) in list.indexed) ...[
+            if (j > 0) const Divider(),
+            _policyRow(policy),
           ],
-        ),
-      ),
+        ]);
+    return ListView(
+      children: [
+        for (final g in order) ...[
+          Panel(title: g, child: rows(groups[g]!)),
+          const SizedBox(height: AppSpacing.lg),
+        ],
+        SpeedLimitsPanel(canEdit: manager),
+        if (advanced.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.lg),
+          Panel(
+            title: _advancedGroup,
+            trailing: TextButton(
+              onPressed: () => setState(() => _advanced = !_advanced),
+              child: Text(_advanced ? 'Hide' : 'Show ${advanced.length}'),
+            ),
+            child: _advanced
+                ? rows(advanced)
+                : Text('How often the system works through its own jobs. The development team sets '
+                    'these; A2Z does not need to change them.', style: text.bodySmall),
+          ),
+        ],
+      ],
     );
   }
 
@@ -154,56 +176,84 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     final text = Theme.of(context).textTheme;
     final controller = _controllers[policy.policyKey]!;
     final saving = _saving.contains(policy.policyKey);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_plain[policy.policyKey]?.$1 ?? _humanise(policy.policyKey),
-                    style: text.titleSmall),
-                const SizedBox(height: 2),
-                Text(policy.description, style: text.bodySmall),
-                const SizedBox(height: 2),
-                // The stored name, for whoever maintains the system, and who
-                // set the value in force.
-                Text(
-                    '${policy.policyKey}${policy.updatedBy != null ? ' · set by ${policy.updatedBy}' : ''}',
-                    style: text.bodySmall!.copyWith(fontSize: 11, color: AppColors.textMuted)),
-                if (policy.policyValue.isEmpty)
-                  Text('Not set: this is off until A2Z decides a value.',
-                      style: text.bodySmall!.copyWith(color: AppColors.warning)),
-              ],
+    final words = _plain[policy.policyKey];
+    final title = words?.title ?? _humanise(policy.policyKey);
+    final yesNo = policy.dataType == 'bool';
+    // A list of phone numbers needs the room a number does not.
+    final wide = policy.dataType == 'string';
+    final Widget field = yesNo
+        ? Align(
+            alignment: Alignment.centerLeft,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Switch(
+                value: controller.text.trim().toLowerCase() == 'true',
+                onChanged: (on) => setState(() => controller.text = on ? 'true' : 'false'),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(controller.text.trim().toLowerCase() == 'true' ? 'Yes' : 'No', style: text.bodyMedium),
+            ]),
+          )
+        : TextField(
+            controller: controller,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _save(policy),
+            minLines: 1,
+            maxLines: wide ? 3 : 1,
+            // Named by the row's Semantics (its title), not a label in the
+            // box: an empty box says "Not set".
+            decoration: InputDecoration(
+              hintText: 'Not set',
+              suffixText: _unit(policy.policyKey),
             ),
-          ),
-          const SizedBox(width: AppSpacing.lg),
-          SizedBox(
-            width: 180,
-            child: TextField(
-              controller: controller,
-              onSubmitted: (_) => _save(policy),
-              decoration: InputDecoration(
-                hintText: 'Not set',
-                suffixText: _unit(policy.policyKey),
+          );
+    return Semantics(
+      container: true,
+      label: title,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: text.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(words?.says ?? policy.description, style: text.bodySmall),
+                  if (policy.policyValue.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text('Not set: ${words?.unset ?? 'this is off until A2Z decides a value.'}',
+                          style: text.bodySmall!.copyWith(color: AppColors.warning)),
+                    ),
+                  // Who set the value in force (every decision is
+                  // attributable).
+                  if (policy.updatedBy != null)
+                    Text('Set by ${policy.updatedBy}', style: text.bodySmall),
+                ],
               ),
             ),
-          ),
-          IconButton(
-            tooltip: 'Earlier values',
-            onPressed: () => _history(policy),
-            icon: Icon(Icons.history, color: AppColors.textMuted),
-          ),
-          SizedBox(
-            width: 88,
-            child: saving
-                ? const Center(
-                    child: SizedBox(
-                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-                : OutlinedButton(onPressed: () => _save(policy), child: const Text('Save')),
-          ),
-        ],
+            const SizedBox(width: AppSpacing.lg),
+            SizedBox(width: wide ? 300 : 180, child: field),
+            IconButton(
+              tooltip: 'Earlier values of "$title"',
+              onPressed: () => _history(policy),
+              icon: Icon(Icons.history, color: AppColors.textMuted),
+            ),
+            // The slot is kept, so the fields stay in one column; Save shows
+            // only once the value differs from the one in force.
+            SizedBox(
+              width: 88,
+              child: saving
+                  ? const Center(
+                      child: SizedBox(
+                          width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                  : _changed(policy)
+                      ? OutlinedButton(onPressed: () => _save(policy), child: const Text('Save'))
+                      : null,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -211,7 +261,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
   Future<void> _history(Policy policy) => showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(_plain[policy.policyKey]?.$1 ?? _humanise(policy.policyKey)),
+          title: Text(_plain[policy.policyKey]?.title ?? _humanise(policy.policyKey)),
           content: SizedBox(
             width: 460,
             height: 320,
@@ -228,7 +278,11 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
                   for (final (i, p) in snap.data!.indexed)
                     ListTile(
                       dense: true,
-                      title: Text(p.policyValue.isEmpty ? 'Not set' : '${p.policyValue} ${_unit(p.policyKey) ?? ''}'),
+                      title: Text(p.policyValue.isEmpty
+                          ? 'Not set'
+                          : p.dataType == 'bool'
+                              ? (p.policyValue.trim().toLowerCase() == 'true' ? 'Yes' : 'No')
+                              : '${p.policyValue} ${_unit(p.policyKey) ?? ''}'),
                       subtitle: Text('${i == 0 ? 'In force since' : 'From'} '
                           '${when.format(p.effectiveFrom ?? p.updatedAt)} · ${p.updatedBy ?? 'set at installation'}'),
                     ),
@@ -240,6 +294,8 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
         ),
       );
 
+  static const _advancedGroup = 'Advanced';
+
   static const _groupOrder = [
     'Booking and changes',
     'At the terminal',
@@ -250,45 +306,88 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     'Evidence and privacy',
     'Vans and tracking',
     'Safety',
-    'Other',
   ];
 
-  /// Plain title and group per stored key. A key not listed here still
-  /// shows, under "Other", with its name made readable.
-  static const _plain = <String, (String, String)>{
-    'advance_booking_open_days': ('How far ahead passengers can book', 'Booking and changes'),
-    'advance_booking_seat_cap': ('Seats that can be booked in advance', 'Booking and changes'),
-    'seat_hold_ttl_seconds': ('How long an unpaid seat is held', 'Booking and changes'),
-    'hold_sweep_interval_seconds': ('How often unpaid holds are released', 'Booking and changes'),
-    'cancel_cutoff_hours': ('Cancellation deadline before departure', 'Booking and changes'),
-    'reschedule_cutoff_hours': ('Trip-change deadline before departure', 'Booking and changes'),
-    'max_reschedules_per_booking': ('Times a passenger may change trips', 'Booking and changes'),
-    'refund_enabled': ('Refunds allowed', 'Booking and changes'),
-    'checkin_window_minutes': ('When check-in opens', 'At the terminal'),
-    'default_geofence_radius_m': ('Size of a terminal area (radius)', 'At the terminal'),
-    'walkin_info_required': ('Walk-in passengers must give details', 'At the terminal'),
-    'default_seat_capacity': ('Seats in a new van', 'Vans and tracking'),
-    'tracking_ping_interval_seconds': ('How often a van sends its location', 'Vans and tracking'),
-    'tracking_stale_after_seconds': ('Show "No signal" after', 'Vans and tracking'),
-    'licence_expiry_warning_days': ('Warn before an operator\'s licence expires', 'Vans and tracking'),
-    'sos_contact_numbers': ('Numbers texted on an emergency (SOS)', 'Safety'),
-    'start_opens_minutes': ('When Start opens before departure', 'Trips and payment'),
-    'remittance_rate_pct': ('A2Z\'s share of each van\'s fares', 'Trips and payment'),
-    'depart_zone_radius_m': ('Terminal zone for a GPS departure (radius)', 'Departure and home pickup'),
-    'depart_readings': ('Readings outside the zone that make a departure', 'Departure and home pickup'),
-    'home_pickup_wait_minutes': ('How long the van waits at a home pickup', 'Departure and home pickup'),
-    'home_pickup_max_route_m': ('Farthest a home pickup may be from the route', 'Departure and home pickup'),
-    'heartbeat_gap_seconds': ('A phone is silent after', 'Phones and camera'),
-    'match_window_seconds': ('A boarding matches a scan or cash entry within', 'Phones and camera'),
-    'overspeed_seconds': ('Above the limit this long is overspeed', 'Driving flags'),
-    'stop_seconds': ('Standing still longer than this is an unscheduled stop', 'Driving flags'),
-    'slow_tolerance_pct': ('A stretch is slow beyond its expected time by', 'Driving flags'),
-    'expected_speed_kmh': ('Average speed behind each stretch\'s expected time', 'Driving flags'),
-    'standstill_kmh': ('At or below this speed the van is standing still', 'Driving flags'),
-    'special_trip_speed_kmh': ('Speed limit for a special trip (no route of its own)', 'Driving flags'),
-    'retention_days': ('Days blurred stills and GPS logs are kept', 'Evidence and privacy'),
-    'chat_image_max_kb': ('Largest payment screenshot accepted', 'Evidence and privacy'),
-    'chat_image_retention_days': ('Days payment screenshots are kept', 'Evidence and privacy'),
+  /// Per stored key: the title, its group, what it does and what "not set"
+  /// means, in the office's words. A key not listed here still shows, under
+  /// Advanced, with its name made readable.
+  static const _plain = <String, _Words>{
+    'advance_booking_open_days': _Words('How far ahead passengers can book', 'Booking and changes',
+        'How many days ahead the app lets a passenger book a space.'),
+    'advance_booking_seat_cap': _Words('Spaces that can be booked ahead', 'Booking and changes',
+        'How many of a van\'s spaces the app may sell in advance. Set it to the van\'s spaces to open them all.'),
+    'seat_hold_ttl_seconds': _Words('How long an unpaid space is held', 'Booking and changes',
+        'A space a passenger picked but has not paid for goes back on sale after this long.'),
+    'hold_sweep_interval_seconds': _Words('How often unpaid holds are released', _advancedGroup,
+        'How often the system returns unpaid holds that ran out to sale.'),
+    'cancel_cutoff_hours': _Words('Cancellation deadline', 'Booking and changes',
+        'A passenger cannot cancel this close to departure. 0 means no deadline.'),
+    'reschedule_cutoff_hours': _Words('Trip-change deadline', 'Booking and changes',
+        'A passenger cannot move to another trip this close to departure.'),
+    'max_reschedules_per_booking': _Words('Times a passenger may change trips', 'Booking and changes',
+        'How many times one booking may be moved to another trip.'),
+    'refund_enabled': _Words('Refunds allowed', 'Booking and changes',
+        'A2Z\'s policy is no cash refunds: a passenger changes trips instead.'),
+    'checkin_window_minutes': _Words('When check-in opens', 'At the terminal',
+        'How long before departure a passenger at the terminal can check in from the app.'),
+    'default_geofence_radius_m': _Words('Size of a terminal area', 'At the terminal',
+        'How far from a terminal\'s position still counts as at the terminal, unless the terminal sets its own.'),
+    'walkin_info_required': _Words('Walk-in passengers must give details', 'At the terminal',
+        'No: the Dispatcher may leave a walk-in passenger\'s name out. The details are only for the receipt.'),
+    'default_seat_capacity': _Words('Spaces in a new van', 'Vans and tracking',
+        'The spaces a van is given when it is added. A2Z\'s rule is 14.'),
+    'tracking_ping_interval_seconds': _Words('How often a van sends its position', _advancedGroup,
+        'How often the phone in the van should report where it is.'),
+    'tracking_stale_after_seconds': _Words('Show "No signal" after', 'Vans and tracking',
+        'A van with no new position for this long shows "No signal", at its last known place.'),
+    'licence_expiry_warning_days': _Words('Warn before an operator\'s licence expires', 'Vans and tracking',
+        'How many days before an operator\'s licence expires the office is told.'),
+    'sos_contact_numbers': _Words('Numbers texted on an emergency (SOS)', 'Safety',
+        'Mobile numbers texted when crew or a passenger presses SOS. Separate them with commas, starting '
+            'with +63, e.g. +639171234567.',
+        unset: 'an SOS is recorded on Emergencies, but nobody is texted.'),
+    'start_opens_minutes': _Words('When Start opens', 'Trips and payment',
+        'How long before departure the Start button appears on a trip.'),
+    'remittance_rate_pct': _Words('A2Z\'s share of the fares', 'Trips and payment',
+        'The part of the fares on each trip\'s passenger list that is handed to the Cashier before Start.'),
+    'depart_zone_radius_m': _Words('Terminal zone for a GPS departure', 'Departure and home pickup',
+        'The area around the terminal that holds the queue and loading bay. A van that leaves it has departed.',
+        unset: 'a departure is tapped by the Dispatcher or the office, never read from GPS.'),
+    'depart_readings': _Words('Readings that make a GPS departure', 'Departure and home pickup',
+        'How many position readings in a row, outside the terminal zone and moving, count as a departure.',
+        unset: 'a departure is tapped by the Dispatcher or the office, never read from GPS.'),
+    'home_pickup_wait_minutes': _Words('How long the van waits at a home pickup', 'Departure and home pickup',
+        'The longest the van waits at a home-pickup pin.'),
+    'home_pickup_max_route_m': _Words('Farthest a home pickup may be from the route', 'Departure and home pickup',
+        'How far from the route a home-pickup pin may be.',
+        unset: 'home pickup is not offered.'),
+    'heartbeat_gap_seconds': _Words('A phone is silent after', 'Phones and camera',
+        'A phone in a van that sends no report for this long is silent, and its trip may go Unaudited.'),
+    'match_window_seconds': _Words('A boarding matches a scan within', 'Phones and camera',
+        'A person counted at the door is on the list if a ticket was scanned, or a cash passenger entered, '
+            'this close before or after.'),
+    'overspeed_seconds': _Words('Above the limit this long is overspeed', 'Driving flags',
+        'How long a van must stay above a stretch\'s speed limit before it is flagged.'),
+    'stop_seconds': _Words('An unscheduled stop is longer than', 'Driving flags',
+        'A van standing still away from every stop for longer than this is flagged. A shorter stop is '
+            'recorded, not flagged.'),
+    'slow_tolerance_pct': _Words('A slow stretch is over its expected time by', 'Driving flags',
+        'A stretch that takes this much longer than expected, less any home-pickup wait, is flagged as slow.'),
+    'expected_speed_kmh': _Words('Speed behind each stretch\'s expected time', 'Driving flags',
+        'The average speed that gives a stretch its expected time when the stretch is saved.'),
+    'standstill_kmh': _Words('Standing still is at or below', _advancedGroup,
+        'At or below this speed the van counts as standing still.'),
+    'special_trip_speed_kmh': _Words('Speed limit on a special trip', 'Driving flags',
+        'A special trip has no route of its own, so this limit applies to it.',
+        unset: 'special trips are not flagged for overspeed.'),
+    'retention_days': _Words('Days blurred stills and GPS logs are kept', 'Evidence and privacy',
+        'After this many days the blurred stills and GPS readings are deleted, except those still under '
+            'review or in a dispute.',
+        unset: 'everything is kept.'),
+    'chat_image_max_kb': _Words('Largest payment screenshot accepted', _advancedGroup,
+        'The largest picture a passenger may send in a chat message.'),
+    'chat_image_retention_days': _Words('Days payment screenshots are kept', 'Evidence and privacy',
+        'Pictures sent in chat are deleted after this many days.'),
   };
 
   /// The unit is part of the stored name (`_hours`, `_days`...), so it is
@@ -314,4 +413,17 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     final words = key.replaceAll('_', ' ');
     return words.isEmpty ? key : words[0].toUpperCase() + words.substring(1);
   }
+}
+
+/// A setting in the office's words.
+class _Words {
+  const _Words(this.title, this.group, this.says, {this.unset});
+  final String title;
+  final String group;
+
+  /// What it does, in one sentence.
+  final String says;
+
+  /// What "not set" means, when it means something particular.
+  final String? unset;
 }

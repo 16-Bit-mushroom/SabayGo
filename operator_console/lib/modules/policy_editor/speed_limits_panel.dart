@@ -106,7 +106,10 @@ class _SpeedLimitsPanelState extends State<SpeedLimitsPanel> {
             'unscheduled stops; with them, overspeed and slow stretches too.', style: text.bodySmall),
         const SizedBox(height: AppSpacing.md),
         if (_routes == null && _error == null) const LinearProgressIndicator(),
-        if (_routes != null)
+        if (_routes != null && _routes!.isEmpty)
+          Text('Limits are set per route. There is no route in service yet.',
+              style: Theme.of(context).textTheme.bodySmall),
+        if (_routes != null && _routes!.isNotEmpty)
           DropdownButton<String>(
             value: _route?.routeId,
             items: [

@@ -1,0 +1,105 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Pila Board · Setup</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1440px;height:900px;overflow:hidden;font-family:Roboto,sans-serif;background:#F3F6F3;color:#121712;display:flex;font-size:14px}
+.side{width:248px;background:#0B5D35;color:#fff;display:flex;flex-direction:column;padding:16px 10px}
+.plate{background:#fff;border-radius:12px;height:52px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#121712;letter-spacing:1px}
+.plate b{color:#C8151D}
+.sub{font-size:12px;color:#CFE3D6;margin:8px 8px 18px}
+.nav a{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:10px;color:#E6F1EA;font-weight:500;text-decoration:none;position:relative}
+.nav a i{width:18px;height:18px;border:2px solid #9CC7AE;border-radius:5px}
+.nav a.on{background:#17784A;color:#fff;font-weight:700}
+.nav a.on:before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:4px;border-radius:2px;background:#fff}
+.nav a.on i{background:#fff;border-color:#fff}
+.nav .n{margin-left:auto;background:#F5B841;color:#121712;font-size:11px;font-weight:700;border-radius:99px;padding:1px 7px}
+.sos{margin-top:auto;border-top:1px solid #2C7A52;padding-top:10px}
+.sos a{color:#fff}.sos a i{border-color:#FF8A8F;background:#C8151D}
+.main{flex:1;display:flex;flex-direction:column}
+.top{height:64px;background:#fff;border-bottom:1px solid #DCE4DE;display:flex;align-items:center;padding:0 24px;gap:10px}
+.chip{border:1px solid #DCE4DE;border-radius:99px;padding:6px 12px;font-size:12.5px;color:#4E5A52}
+.chip b{color:#121712;margin-left:6px;font-variant-numeric:tabular-nums}
+.me{margin-left:auto;display:flex;align-items:center;gap:8px;font-weight:600}
+.me span{width:32px;height:32px;border-radius:50%;background:#0B5D35;color:#fff;display:grid;place-items:center;font-weight:700}
+.page{padding:24px;display:flex;flex-direction:column;gap:18px;flex:1}
+h1{font-size:24px;font-weight:700;letter-spacing:-.3px}
+.lead{color:#4E5A52;margin-top:4px}
+.grid{display:grid;grid-template-columns:320px 1fr 420px;gap:18px;flex:1;min-height:0}
+.pila{background:#fff;border:1px solid #DCE4DE;border-radius:14px;padding:14px}
+.pila h3,.panel h3{font-size:12px;letter-spacing:.6px;color:#4E5A52;text-transform:uppercase;margin-bottom:10px}
+.slot{display:flex;gap:12px;align-items:center;padding:9px 10px;border-radius:10px;border:1px solid transparent}
+.tile{width:34px;height:34px;border:2px solid #121712;border-radius:6px;display:grid;place-items:center;font-weight:900;font-variant-numeric:tabular-nums;background:#fff}
+.slot .t{font-weight:600}.slot .s{font-size:12.5px;color:#4E5A52}
+.slot.done .tile{background:#0B5D35;border-color:#0B5D35;color:#fff}
+.slot.head{background:#E7F2EB;border-color:#0B5D35;padding:14px 10px}
+.slot.head .tile{width:44px;height:44px;font-size:20px;border-color:#0B5D35;color:#0B5D35}
+.slot.head .now{font-size:11px;font-weight:700;color:#0B5D35;letter-spacing:.6px}
+.slot.head .t{font-size:17px}
+.slot.next{border-color:#DCE4DE;border-style:dashed}
+.slot.lock{opacity:1}.slot.lock .tile{border-color:#9AA79E;color:#7A867C}
+.panel{background:#fff;border:1px solid #DCE4DE;border-radius:14px;padding:16px}
+table{width:100%;border-collapse:collapse}
+th{background:#EEF3EF;text-align:left;font-size:12px;color:#4E5A52;padding:10px 12px}
+td{padding:12px;border-top:1px solid #E4EBE6}
+.badge{display:inline-flex;gap:6px;align-items:center;background:#E3F1E7;color:#0B5D35;border-radius:99px;padding:3px 9px;font-size:12px;font-weight:700}
+.badge:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+label{display:block;font-size:12.5px;color:#4E5A52;margin:10px 0 4px}
+.f{height:40px;border:1px solid #7A867C;border-radius:8px;padding:0 12px;display:flex;align-items:center;color:#121712}
+.f.ph{color:#7A867C}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btns{display:flex;gap:8px;margin-top:16px}
+.b{height:40px;border-radius:8px;padding:0 16px;display:inline-flex;align-items:center;font-weight:600}
+.b.p{background:#0B5D35;color:#fff}.b.o{border:1px solid #7A867C;color:#0B5D35}
+.hint{font-size:12.5px;color:#4E5A52;margin-top:6px}
+</style></head><body>
+<aside class="side">
+  <div class="plate">SABAY<b>GO</b></div>
+  <div class="sub">A2Z cooperative office</div>
+  <nav class="nav">
+    <a><i></i>Overview</a><a><i></i>Trips</a><a><i></i>Reviews<span class="n">3</span></a>
+    <a><i></i>Money</a><a><i></i>Messages</a><a class="on"><i></i>Setup</a>
+  </nav>
+  <nav class="nav sos"><a><i></i>Emergencies (SOS)</a></nav>
+</aside>
+<div class="main">
+  <div class="top">
+    <span class="chip">Vans on the road<b>0</b></span><span class="chip">Trips today<b>0</b></span>
+    <span class="chip">Open emergencies<b>0</b></span>
+    <div class="me"><span>J</span>Juan Osong</div>
+  </div>
+  <div class="page">
+    <div><h1>Setup</h1><p class="lead">Everything A2Z needs before the first trip, in the order the system needs it.</p></div>
+    <div class="grid">
+      <div class="pila">
+        <h3>Set-up queue · 0 of 7 done</h3>
+        <div class="slot head"><div class="tile">1</div><div><div class="now">NOW</div><div class="t">Terminals</div><div class="s">1 open · a route needs 2</div></div></div>
+        <div class="slot next lock"><div class="tile">2</div><div><div class="t">Route</div><div class="s">Waits for a second terminal</div></div></div>
+        <div class="slot lock"><div class="tile">3</div><div><div class="t">Fares</div><div class="s">Waits for a route</div></div></div>
+        <div class="slot"><div class="tile">4</div><div><div class="t">Operators &amp; vans</div><div class="s">No validated van yet</div></div></div>
+        <div class="slot"><div class="tile">5</div><div><div class="t">Staff</div><div class="s">Needs a Dispatcher and a Cashier</div></div></div>
+        <div class="slot lock"><div class="tile">6</div><div><div class="t">Timetable</div><div class="s">Waits for a route</div></div></div>
+        <div class="slot"><div class="tile">7</div><div><div class="t">Phones</div><div class="s">No phone in the pool</div></div></div>
+        <div class="slot"><div class="tile">·</div><div><div class="t">Rules &amp; Settings</div><div class="s">Optional · defaults apply</div></div></div>
+      </div>
+      <div class="panel">
+        <h3>Terminals · 1</h3>
+        <table><tr><th>Terminal</th><th>City</th><th>Zone</th><th>Staffed</th><th>State</th></tr>
+          <tr><td><b>Ecoland Terminal</b></td><td>Davao City</td><td>Default</td><td>Yes</td><td><span class="badge">Open</span></td></tr>
+        </table>
+        <p class="hint">Add every terminal the route stops at, in any order. Use the loading bay's Google Maps pin.</p>
+      </div>
+      <div class="panel">
+        <h3>Add terminal</h3>
+        <label>Name</label><div class="f">Toril Terminal</div>
+        <label>City</label><div class="f">Davao City</div>
+        <div class="row2"><div><label>Latitude</label><div class="f">7.0186</div></div><div><label>Longitude</label><div class="f">125.4952</div></div></div>
+        <label>Terminal zone (metres)</label><div class="f ph">Empty uses the default</div>
+        <label>Staffed</label><div class="f">On</div>
+        <div class="btns"><span class="b p">Save and add another</span><span class="b o">Save</span></div>
+        <p class="hint">Next in the queue: Route, once two terminals are open.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,731 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T10:30:27+08:00",
+  "title": "Design System: SabayGo operator console",
+  "extensions": {
+    "colorMeta": {
+      "terminal-green": {
+        "role": "primary",
+        "displayName": "Terminal Green",
+        "tonalRamp": [
+          "#022814",
+          "#063D22",
+          "#0B5D35",
+          "#18784A",
+          "#3E9468",
+          "#7DBB97",
+          "#BFDDCA",
+          "#E3F1E7"
+        ],
+        "note": "AppColors.primary and AppColors.sidebar. White on it 7.98:1."
+      },
+      "terminal-green-pressed": {
+        "role": "primary",
+        "displayName": "Terminal Green, Pressed",
+        "tonalRamp": [
+          "#022814",
+          "#063D22",
+          "#0B5D35",
+          "#18784A",
+          "#3E9468",
+          "#7DBB97",
+          "#BFDDCA",
+          "#E3F1E7"
+        ]
+      },
+      "green-tint": {
+        "role": "primary",
+        "displayName": "Green Tint",
+        "tonalRamp": [
+          "#022814",
+          "#063D22",
+          "#0B5D35",
+          "#18784A",
+          "#3E9468",
+          "#7DBB97",
+          "#BFDDCA",
+          "#E3F1E7"
+        ],
+        "note": "Queue head, selected record row. Green on it 6.84:1."
+      },
+      "sidebar-selected": {
+        "role": "primary",
+        "displayName": "Sidebar Selected",
+        "tonalRamp": [
+          "#022814",
+          "#063D22",
+          "#0B5D35",
+          "#18784A",
+          "#3E9468",
+          "#7DBB97",
+          "#BFDDCA",
+          "#E3F1E7"
+        ],
+        "note": "White on it 5.49:1; never the only selection cue."
+      },
+      "sidebar-edge": {
+        "role": "primary",
+        "displayName": "Sidebar Edge",
+        "tonalRamp": [
+          "#022814",
+          "#063D22",
+          "#0B5D35",
+          "#18784A",
+          "#3E9468",
+          "#7DBB97",
+          "#BFDDCA",
+          "#E3F1E7"
+        ],
+        "note": "Decorative."
+      },
+      "on-sidebar-muted": {
+        "role": "primary",
+        "displayName": "Sidebar Muted",
+        "tonalRamp": [
+          "#022814",
+          "#063D22",
+          "#0B5D35",
+          "#18784A",
+          "#3E9468",
+          "#7DBB97",
+          "#BFDDCA",
+          "#E3F1E7"
+        ],
+        "note": "5.93:1 on the rail."
+      },
+      "on-fill": {
+        "role": "neutral",
+        "displayName": "On Fill",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ]
+      },
+      "marker-ink": {
+        "role": "neutral",
+        "displayName": "Marker Ink",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n900; also AppColors.highlight (map selection). 18.15:1."
+      },
+      "marker-red": {
+        "role": "secondary",
+        "displayName": "Marker Red",
+        "tonalRamp": [
+          "#3F0508",
+          "#6E0A0F",
+          "#9C1016",
+          "#C8151D",
+          "#E2525A",
+          "#EF9599",
+          "#F7C9CB",
+          "#FBE7E8"
+        ],
+        "note": "AppColors.brand: route geometry and pins only. 5.86:1."
+      },
+      "marker-red-tint": {
+        "role": "secondary",
+        "displayName": "Marker Red Tint",
+        "tonalRamp": [
+          "#3F0508",
+          "#6E0A0F",
+          "#9C1016",
+          "#C8151D",
+          "#E2525A",
+          "#EF9599",
+          "#F7C9CB",
+          "#FBE7E8"
+        ]
+      },
+      "logo-plate": {
+        "role": "neutral",
+        "displayName": "Logo Plate",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Success Green",
+        "tonalRamp": [
+          "#00230F",
+          "#003A1C",
+          "#00552C",
+          "#00713C",
+          "#2F9461",
+          "#6FBA92",
+          "#B5DCC6",
+          "#E0EEE8"
+        ],
+        "note": "6.13:1; 5.12:1 on container."
+      },
+      "success-container": {
+        "role": "tertiary",
+        "displayName": "Success Tint",
+        "tonalRamp": [
+          "#00230F",
+          "#003A1C",
+          "#00552C",
+          "#00713C",
+          "#2F9461",
+          "#6FBA92",
+          "#B5DCC6",
+          "#E0EEE8"
+        ]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Ochre Warning",
+        "tonalRamp": [
+          "#2B1C00",
+          "#4A3000",
+          "#6A4500",
+          "#8A5A00",
+          "#B07D22",
+          "#CFA75E",
+          "#E8D3A6",
+          "#F6EEDC"
+        ],
+        "note": "5.93:1; 5.13:1 on container."
+      },
+      "warning-container": {
+        "role": "tertiary",
+        "displayName": "Ochre Tint",
+        "tonalRamp": [
+          "#2B1C00",
+          "#4A3000",
+          "#6A4500",
+          "#8A5A00",
+          "#B07D22",
+          "#CFA75E",
+          "#E8D3A6",
+          "#F6EEDC"
+        ]
+      },
+      "attention": {
+        "role": "tertiary",
+        "displayName": "Attention Amber",
+        "tonalRamp": [
+          "#3D2A00",
+          "#6B4C05",
+          "#A57514",
+          "#D99A26",
+          "#F5B841",
+          "#F8CB73",
+          "#FBE0A9",
+          "#FDF2DC"
+        ],
+        "note": "Sidebar count pill only, ink on it 10.21:1."
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Danger Red",
+        "tonalRamp": [
+          "#3A0A07",
+          "#5E110D",
+          "#891B15",
+          "#B3261E",
+          "#CF5049",
+          "#E38A85",
+          "#F0C1BE",
+          "#F6E5E4"
+        ],
+        "note": "6.54:1; 5.37:1 on container."
+      },
+      "danger-container": {
+        "role": "secondary",
+        "displayName": "Danger Tint",
+        "tonalRamp": [
+          "#3A0A07",
+          "#5E110D",
+          "#891B15",
+          "#B3261E",
+          "#CF5049",
+          "#E38A85",
+          "#F0C1BE",
+          "#F6E5E4"
+        ]
+      },
+      "info": {
+        "role": "neutral",
+        "displayName": "Info (Marker Ink)",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "Resolves to marker ink: no blue in the world."
+      },
+      "info-container": {
+        "role": "neutral",
+        "displayName": "Info Tint",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ]
+      },
+      "enamel-white": {
+        "role": "neutral",
+        "displayName": "Enamel White",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n0"
+      },
+      "whiteboard-canvas": {
+        "role": "neutral",
+        "displayName": "Whiteboard Canvas",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n50"
+      },
+      "sunken-step": {
+        "role": "neutral",
+        "displayName": "Sunken Step",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n100"
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Divider",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n200"
+      },
+      "disabled": {
+        "role": "neutral",
+        "displayName": "Disabled",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n400"
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Control Border",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n500, 3.80:1"
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "AppRamp.n700, 7.22:1"
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Scrim",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "Marker ink at 45 % behind dialogs and the notification sheet."
+      },
+      "map-shadow": {
+        "role": "neutral",
+        "displayName": "Map Shadow",
+        "tonalRamp": [
+          "#121712",
+          "#4E5A52",
+          "#7A867C",
+          "#9AA79E",
+          "#DCE4DE",
+          "#EEF3EF",
+          "#F3F6F3",
+          "#FFFFFF"
+        ],
+        "note": "Black at 40 %: shadows over map tiles only."
+      }
+    },
+    "typographyMeta": {
+      "headline-large": {
+        "displayName": "Headline Large",
+        "purpose": "Declared in the theme; the largest heading."
+      },
+      "headline-medium": {
+        "displayName": "Page Title",
+        "purpose": "Every page title, worded as its menu entry or tab."
+      },
+      "headline-small": {
+        "displayName": "Headline Small",
+        "purpose": "Top bar and app bar titles."
+      },
+      "title-large": {
+        "displayName": "Step Title",
+        "purpose": "A Setup step title (compact page header); dialog titles at 700."
+      },
+      "title-medium": {
+        "displayName": "Title Medium",
+        "purpose": "Sub-headings."
+      },
+      "title-small": {
+        "displayName": "Panel Heading",
+        "purpose": "Panel headings and queue step names."
+      },
+      "body-large": {
+        "displayName": "Body Large",
+        "purpose": "Longer reading text."
+      },
+      "body-medium": {
+        "displayName": "Body",
+        "purpose": "Table cells, form text, the sentence under a title."
+      },
+      "body-small": {
+        "displayName": "Caption",
+        "purpose": "Muted lines under a record, captions."
+      },
+      "label-large": {
+        "displayName": "Button Label",
+        "purpose": "Buttons and tabs."
+      },
+      "label-medium": {
+        "displayName": "Small Label",
+        "purpose": "Stat tile labels."
+      },
+      "label-small": {
+        "displayName": "Micro Label",
+        "purpose": "Smallest labels."
+      },
+      "table-head": {
+        "displayName": "Table Head",
+        "purpose": "Data table column heads on the sunken header row."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "A stat tile number; top-bar figures at 14px."
+      }
+    },
+    "shadows": [
+      {
+        "name": "map-float",
+        "value": "0 0 24px rgba(0,0,0,0.4)",
+        "purpose": "A card or filter bar floating over map tiles."
+      },
+      {
+        "name": "map-marker",
+        "value": "0 0 3px rgba(0,0,0,0.4)",
+        "purpose": "A van marker over map tiles (blur 3 to 6)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "instant",
+        "value": "100ms",
+        "purpose": "Hover and press feedback."
+      },
+      {
+        "name": "quick",
+        "value": "180ms ease-out",
+        "purpose": "Queue slot state changes; dropped under reduced motion."
+      },
+      {
+        "name": "normal",
+        "value": "240ms",
+        "purpose": "The longest transition; anything longer reads as lag."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stacked",
+        "value": "660px",
+        "purpose": "Below: Setup side panel stacks above the list."
+      },
+      {
+        "name": "side-narrow",
+        "value": "820px",
+        "purpose": "Below: side panel 360px instead of 400px."
+      },
+      {
+        "name": "queue-wide",
+        "value": "1100px",
+        "purpose": "At and above: Setup queue 272px instead of 248px."
+      }
+    ],
+    "sizing": [
+      {
+        "name": "minTouchTarget",
+        "value": "48px"
+      },
+      {
+        "name": "buttonMinHeight",
+        "value": "40px"
+      },
+      {
+        "name": "focusOutline",
+        "value": "2px"
+      },
+      {
+        "name": "sidebar",
+        "value": "248px / 76px folded"
+      },
+      {
+        "name": "topBar",
+        "value": "64px"
+      },
+      {
+        "name": "tabBar",
+        "value": "46px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action of a form or page; \"Save and add another\" on an add form.",
+      "html": "<button class=\"ds-btn-primary\">Save and add another</button>",
+      "css": ".ds-btn-primary { font-family: Roboto, sans-serif; background: #0B5D35; color: #FFFFFF; font-size: 14px; font-weight: 600; min-height: 40px; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; transition: background 0.18s ease-out; } .ds-btn-primary:hover { background: #0E6E40; } .ds-btn-primary:focus-visible { outline: 2px solid #121712; outline-offset: 2px; } .ds-btn-primary:disabled { background: #DCE4DE; color: #7A867C; }"
+    },
+    {
+      "name": "Outlined Button",
+      "kind": "button",
+      "refersTo": "button-outlined",
+      "description": "Secondary actions: Refresh, Import, Export, a second Save.",
+      "html": "<button class=\"ds-btn-outlined\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z\"/></svg>Refresh</button>",
+      "css": ".ds-btn-outlined { font-family: Roboto, sans-serif; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; color: #0B5D35; font-size: 14px; font-weight: 600; min-height: 40px; padding: 12px 20px; border: 1px solid #7A867C; border-radius: 8px; cursor: pointer; transition: background 0.18s ease-out; } .ds-btn-outlined:hover { background: #E3F1E7; } .ds-btn-outlined:focus-visible { outline: 2px solid #0B5D35; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Outlined, dense, white; 2px green outline on focus.",
+      "html": "<label class=\"ds-field\"><span>Email</span><input value=\"second.cashier@sabaygo.dev\"></label>",
+      "css": ".ds-field { font-family: Roboto, sans-serif; position: relative; display: block; width: 320px; } .ds-field span { position: absolute; top: -8px; left: 10px; padding: 0 4px; background: #FFFFFF; font-size: 12px; color: #4E5A52; } .ds-field input { font-family: Roboto, sans-serif; width: 100%; box-sizing: border-box; font-size: 14px; color: #121712; background: #FFFFFF; padding: 12px; border: 1px solid #7A867C; border-radius: 8px; outline: none; } .ds-field input:hover { border-color: #4E5A52; } .ds-field input:focus { border: 2px solid #0B5D35; padding: 11px; } .ds-field:focus-within span { color: #121712; }"
+    },
+    {
+      "name": "Sidebar",
+      "kind": "nav",
+      "refersTo": "sidebar",
+      "description": "Terminal-green rail; selected entry has a lighter fill, its icon on a white plate tile and a bold label; Emergencies pinned at the foot on a red tile.",
+      "html": "<nav class=\"ds-side\"><a class=\"ds-item\"><span class=\"ds-ico\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5a.5.5 0 0 0 .5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5a.5.5 0 0 0-.5-.5zM15 19l-6-2.11V5l6 2.11V19z\"/></svg></span>Overview</a><a class=\"ds-item ds-sel\"><span class=\"ds-ico\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z\"/></svg></span>Setup</a><a class=\"ds-item\"><span class=\"ds-ico\">&#8203;</span>Reviews<b class=\"ds-count\">3</b></a><a class=\"ds-item ds-sos\"><span class=\"ds-ico\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M20.79 9.23l-2-3.46L14 8.54V3h-4v5.54L5.21 5.77l-2 3.46L8 12l-4.79 2.77 2 3.46L10 15.46V21h4v-5.54l4.79 2.77 2-3.46L16 12z\"/></svg></span>Emergencies (SOS)</a></nav>",
+      "css": ".ds-side { font-family: Roboto, sans-serif; width: 248px; background: #0B5D35; padding: 12px; display: flex; flex-direction: column; gap: 4px; } .ds-item { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 9px; border-radius: 12px; color: #FFFFFF; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.1s; } .ds-item:hover { background: rgba(255,255,255,0.1); } .ds-ico { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #CFE3D6; } .ds-sel { background: #18784A; font-weight: 700; } .ds-sel .ds-ico { background: #FFFFFF; color: #0B5D35; } .ds-sos { margin-top: 24px; } .ds-sos .ds-ico { background: #B3261E; color: #FFFFFF; } .ds-count { margin-left: auto; background: #F5B841; color: #121712; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; } .ds-item:focus-visible { outline: 2px solid #FFFFFF; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge-success",
+      "description": "A tinted pill with a dot and a word, never colour alone.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-ok\">Validated</span><span class=\"ds-badge ds-warn\">Not yet boarded</span><span class=\"ds-badge ds-bad\">No-show</span><span class=\"ds-badge ds-info\">Scheduled</span><span class=\"ds-badge ds-neu\">Completed</span></div>",
+      "css": ".ds-badges { display: flex; gap: 8px; flex-wrap: wrap; } .ds-badge { font-family: Roboto, sans-serif; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; } .ds-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; } .ds-ok { background: #E0EEE8; color: #00713C; } .ds-warn { background: #F6EEDC; color: #8A5A00; } .ds-bad { background: #F6E5E4; color: #B3261E; } .ds-info { background: #E6ECE8; color: #121712; } .ds-neu { background: #EEF3EF; color: #4E5A52; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "White, 16px corner, divider edge, flat; optional heading row.",
+      "html": "<section class=\"ds-panel\"><header>Staff <span>4</span></header><p>Everyone who signs in: Dispatchers, who ride the vans, and the office.</p></section>",
+      "css": ".ds-panel { font-family: Roboto, sans-serif; width: 360px; background: #FFFFFF; border: 1px solid #DCE4DE; border-radius: 16px; padding: 16px; color: #121712; } .ds-panel header { font-size: 14px; font-weight: 600; margin-bottom: 12px; } .ds-panel header span { color: #4E5A52; font-weight: 400; margin-left: 4px; } .ds-panel p { margin: 0; font-size: 14px; line-height: 1.45; color: #4E5A52; }"
+    },
+    {
+      "name": "Pila Strip",
+      "kind": "custom",
+      "refersTo": "queue-slot-head",
+      "description": "The set-up queue: plate tiles in order; the head raised with a green tint, a 44px tile and a Now pill; the open step outlined.",
+      "html": "<ol class=\"ds-pila\"><li class=\"ds-slot\"><span class=\"ds-tile ds-done\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z\"/></svg></span><span><b>Fares</b><small>Every drop-off has a fare</small></span></li><li class=\"ds-slot ds-head ds-open\"><span class=\"ds-tile ds-big\">5</span><span><b>Staff <em>Now</em></b><small>Needs a Cashier</small></span></li><li class=\"ds-slot\"><span class=\"ds-tile\">6</span><span><b>Timetable</b><small>To do</small></span></li><li class=\"ds-slot\"><span class=\"ds-tile ds-wait\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6-9h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zM8.9 6a3.1 3.1 0 0 1 6.2 0v2H8.9V6zM18 20H6V10h12v10z\"/></svg></span><span><b class=\"ds-m\">Phones</b><small>Waiting on Timetable</small></span></li></ol>",
+      "css": ".ds-pila { font-family: Roboto, sans-serif; list-style: none; margin: 0; padding: 12px; width: 272px; background: #FFFFFF; border: 1px solid #DCE4DE; border-radius: 16px; } .ds-slot { display: flex; align-items: center; gap: 12px; padding: 8px; margin-bottom: 4px; border: 1.5px solid transparent; border-radius: 12px; cursor: pointer; transition: background 0.18s ease-out, border-color 0.18s ease-out; } .ds-slot:hover { background: #EEF3EF; } .ds-head { background: #E3F1E7; padding: 12px 8px; } .ds-head:hover { background: #E3F1E7; } .ds-open { border-color: #0B5D35; } .ds-slot b { display: block; font-size: 14px; font-weight: 600; color: #121712; } .ds-slot small { font-size: 12.5px; color: #4E5A52; } .ds-m { color: #4E5A52 !important; } .ds-slot em { font-style: normal; margin-left: 8px; background: #0B5D35; color: #FFFFFF; font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 8px; border-radius: 999px; } .ds-tile { flex: none; width: 30px; height: 30px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; background: #FFFFFF; border: 1.5px solid #121712; border-radius: 6px; font-size: 14px; font-weight: 700; color: #121712; font-variant-numeric: tabular-nums; } .ds-big { width: 44px; height: 44px; border-width: 2px; border-radius: 8px; font-size: 20px; } .ds-done { background: #0B5D35; border-color: #0B5D35; color: #FFFFFF; } .ds-wait { border-color: #9AA79E; color: #4E5A52; } .ds-slot:focus-visible { outline: 2px solid #0B5D35; }"
+    },
+    {
+      "name": "Plate Tag",
+      "kind": "custom",
+      "refersTo": "plate-tag",
+      "description": "A van plate as the board magnet: white tag, ink edge, bold spaced capitals.",
+      "html": "<span class=\"ds-plate\">LAA 1234</span>",
+      "css": ".ds-plate { font-family: Roboto, sans-serif; display: inline-block; background: #FFFFFF; border: 1.5px solid #121712; border-radius: 5px; padding: 2px 8px; font-size: 13px; font-weight: 700; letter-spacing: 1px; color: #121712; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Tab Bar",
+      "kind": "nav",
+      "refersTo": "tab-bar",
+      "description": "Related pages as tabs under the top bar, with a count pill when above zero.",
+      "html": "<div class=\"ds-tabs\"><a class=\"ds-tab ds-on\">Review Starts</a><a class=\"ds-tab\">Boarding Audit <b>2</b></a><a class=\"ds-tab\">Driving Flags</a><a class=\"ds-tab\">Disputes</a></div>",
+      "css": ".ds-tabs { font-family: Roboto, sans-serif; display: flex; gap: 24px; height: 46px; align-items: stretch; padding: 0 24px; background: #FFFFFF; border-bottom: 1px solid #DCE4DE; } .ds-tab { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #4E5A52; cursor: pointer; border-bottom: 2px solid transparent; } .ds-tab:hover { color: #121712; } .ds-on { color: #0B5D35; font-weight: 700; border-bottom-color: #0B5D35; } .ds-tab b { background: #F6EEDC; color: #8A5A00; font-size: 11.5px; padding: 1px 7px; border-radius: 999px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pila Board",
+    "overview": "**Creative North Star: \"The Pila Board\"**\n\nThe console is the terminal's pila: the dispatch whiteboard where vans queue by plate number and the van at the head goes next. Every ordered list is a queue with a head, and the head is the thing to do now. Staff see what is next, do it in place, and watch the queue advance. The world is made of the board's own materials: whiteboard enamel for the page, painted terminal-green steel for the frame and the action colour, marker black for words, marker red only for alarms and route pins, and square plate-number tiles that sit on the board like magnets.\n\nIt is a desk tool for non-technical office staff working all day, sometimes on a projector, so it is light only, dense enough for a desk, and plain. Seven labelled menu entries replace sixteen flat ones; related pages sit as tabs under their entry. First-day set-up is one page: a queue of steps on the left, the step's records in the middle, the add or edit form beside them. Nothing on screen uses a system or table name; the console speaks in A2Z's words.\n\nThe dark \"Night Owl's Ledger\" console and the earlier deep purple are retired. There is no dark palette and no fourth hue.",
+    "keyCharacteristics": [
+      "White, green and black/red in a 60-30-10 split.",
+      "Light only, Roboto bundled, flat white panels on a faint green-white canvas.",
+      "A green sidebar with seven labelled hubs, Emergencies pinned at its foot.",
+      "The pila strip: an ordered column of plate tiles whose head is raised.",
+      "Every state carries a word and a mark, never colour alone.",
+      "Selection is marker ink on the map and green tint in lists."
+    ],
+    "rules": [
+      {
+        "name": "The 60-30-10 Rule",
+        "body": "White is the page (about 60 %), terminal green is the frame and the action colour (about 30 %), black and red are the ink (about 10 %). No other hue carries meaning or decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Red Is An Alarm Rule",
+        "body": "Red means SOS, danger or a route pin. It is never a primary button, so a red SOS never sits beside a red Save. The only red fill on a button is a destructive confirmation.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Blue Rule",
+        "body": "Informational status is marker ink on a grey-green tint, not a fourth hue. Blue is out of the world.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Ramp Rule",
+        "body": "Every grey is a step of the green-grey ramp. No screen mixes its own grey.",
+        "section": "colors"
+      },
+      {
+        "name": "The Measured Pair Rule",
+        "body": "Every text and control pairing is measured against WCAG 2.1 AA, and anything drawn on a filled colour uses on-fill white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Title Is The Label Rule",
+        "body": "A page title matches its menu entry or tab word for word, and has one plain sentence under it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Office Words Rule",
+        "body": "System, table and column names never appear on screen. Statuses are shown in A2Z's words (\"Not yet boarded\", \"No longer working\"), not stored values.",
+        "section": "typography"
+      },
+      {
+        "name": "The Labelled Menu Rule",
+        "body": "Navigation is labelled, never icon-only. Staff never learn an icon to find a page; folded, the rail names each entry on hover.",
+        "section": "layout"
+      },
+      {
+        "name": "The In Place Rule",
+        "body": "Records are added and edited beside their list, not in a dialog, so first-day set-up never leaves the page.",
+        "section": "layout"
+      },
+      {
+        "name": "The Map-Only Shadow Rule",
+        "body": "Shadows exist only on things floating over map tiles. Everywhere else, surfaces are flat at rest.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Plate Tile Rule",
+        "body": "The square, ink-edged tile with a bold tabular figure is the world's signature object: queue steps, the sidebar's icon plate, van plates. It is kept for things that have an order or an identity, not used as decoration.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** keep the 60-30-10 split: white page, terminal-green frame and actions, black text with red only for SOS, danger and route pins.",
+      "**Do** take every grey from the green-grey ramp and every value from `tokens.dart`.",
+      "**Do** pair every status colour with a word and a mark (badge dot, check, lock, number).",
+      "**Do** title each page exactly as its menu entry or tab, with one plain sentence under it.",
+      "**Do** put new pages under one of the seven entries as a tab before adding a menu entry.",
+      "**Do** add and edit records beside their list, with \"Save and add another\" as the primary on an add form.",
+      "**Do** raise the head of an ordered queue with the green tint, a 44px tile and a Now pill, and outline the open item.",
+      "**Do** draw map selection in marker ink.",
+      "**Do** give anything a pointer lands on a hit area of at least 48px (`AppSizing.minTouchTarget`), and honour reduced motion."
+    ],
+    "donts": [
+      "**Don't** add a dark palette or a theme toggle; the console is light only.",
+      "**Don't** introduce blue or any fourth hue; info is marker ink.",
+      "**Don't** use red for a primary or Save button, or for decoration.",
+      "**Don't** put a system, table or column name on screen.",
+      "**Don't** make navigation icon-only; the folded 76px rail is the one exception, and it names every entry on hover.",
+      "**Don't** add shadows outside things floating over map tiles.",
+      "**Don't** use the pila strip for a list with no real order.",
+      "**Don't** apply this system to the mobile app; it has its own `mobile/DESIGN.md`.",
+      "**Don't** declare a font family other than bundled Roboto."
+    ]
+  }
+}

@@ -65,9 +65,8 @@ class _BoardingAuditScreenState extends State<BoardingAuditScreen> {
         children: [
           PageHeader(
             title: 'Boarding Audit',
-            technicalNote: 'Passenger_Events · hash chain',
             description: 'Boardings the phone counted that were not on the passenger list, what the '
-                'Dispatcher did about each, and every time a van carried more than its seats.',
+                'Dispatcher did about each, and every time a van carried more than its spaces.',
             actions: [
               DayPicker(day: _day, onShift: _shift),
               RefreshButton(onPressed: _load, busy: _loading),
@@ -79,11 +78,15 @@ class _BoardingAuditScreenState extends State<BoardingAuditScreen> {
                 : _error != null
                     ? LoadError(message: _error!, onRetry: _load)
                     : trips.isEmpty
+                        // Says only what the phones reported: a trip whose
+                        // phone sent nothing is Unaudited, never cleared.
                         ? const EmptyState(
-                            icon: Icons.verified_outlined,
+                            icon: Icons.fact_check_outlined,
                             title: 'Nothing to review on this day',
-                            hint: 'Every boarding matched the passenger list, and no van carried '
-                                'more than its seats.')
+                            hint: 'No phone reported a boarding that was not on the list, a van '
+                                'over its spaces, or a departure with more aboard than listed. '
+                                'A trip whose phone sent nothing is Unaudited, not cleared: its '
+                                'status is on Trips.')
                         : ListView.separated(
                             itemCount: trips.length,
                             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
@@ -136,11 +139,11 @@ class _TripAuditPanel extends StatelessWidget {
           ],
           if (a.capacityAlerts.isNotEmpty) ...[
             const Divider(height: AppSpacing.xl),
-            Text('Above the van\'s seats (${a.capacityAlerts.length})', style: text.titleSmall),
+            Text('Above the van\'s spaces (${a.capacityAlerts.length})', style: text.titleSmall),
             const SizedBox(height: AppSpacing.xs),
             for (final c in a.capacityAlerts)
               FactLine(Icons.groups_outlined,
-                  '${_time.format(c.at)}: ${c.aboard} aboard, ${c.capacity} seats, ${c.place ?? 'place not known'}',
+                  '${_time.format(c.at)}: ${c.aboard} aboard, ${c.capacity} spaces, ${c.place ?? 'place not known'}',
                   colour: AppColors.warning),
           ],
         ],

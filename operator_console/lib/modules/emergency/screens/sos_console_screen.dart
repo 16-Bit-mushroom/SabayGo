@@ -187,14 +187,31 @@ class _AlertCard extends StatelessWidget {
   final VoidCallback onAcknowledge;
   final VoidCallback onResolve;
 
-  static final _time = DateFormat('MMM d, HH:mm');
+  // 12-hour, as every other time on the console.
+  static final _time = DateFormat('MMM d, h:mm a');
+
+  /// Stored words in the office's words: "medical_emergency" reads
+  /// "Medical emergency", a role id reads as the job.
+  static String _words(String s) {
+    final t = s.replaceAll('_', ' ').trim();
+    return t.isEmpty ? t : t[0].toUpperCase() + t.substring(1);
+  }
+
+  static String _role(String r) => switch (r) {
+        'dispatcher' => 'Dispatcher',
+        'passenger' => 'Passenger',
+        'terminal_manager' => 'Terminal Manager',
+        'cashier' => 'Cashier',
+        _ => _words(r),
+      };
 
   @override
   Widget build(BuildContext context) {
     final urgent = alert.isOpen;
+    // Flat like every panel; an open alert is marked by its red edge.
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: urgent ? 3 : 1,
+      elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         side: BorderSide(
@@ -211,17 +228,14 @@ class _AlertCard extends StatelessWidget {
               children: [
                 _StatusPill(status: alert.status),
                 const SizedBox(width: 8),
-                Text(
-                  alert.category.toUpperCase(),
-                  style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
-                ),
+                Text(_words(alert.category), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                 const SizedBox(width: 12),
                 Text(_time.format(alert.raisedAt),
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
             const SizedBox(height: 10),
-            Text('${alert.raisedBy} · ${alert.raisedByRole}',
+            Text('${alert.raisedBy} · ${_role(alert.raisedByRole)}',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
             if (alert.raisedByPhone != null)
               Text(alert.raisedByPhone!,

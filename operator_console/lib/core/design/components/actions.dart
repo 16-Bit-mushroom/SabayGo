@@ -6,21 +6,57 @@ import '../tokens.dart';
 
 /// Run one call and report it through the app-wide messenger: [done] on
 /// success, the server's own sentence on a refusal. True when it worked.
+///
+/// One at a time: a second click while a call is still out (a double click
+/// on Validate, Start, Record payment) is dropped, not sent twice.
 Future<bool> runAction(BuildContext context, Future<void> Function() call, String done) async {
+  if (_actionRunning) return false;
+  _actionRunning = true;
   final messenger = ScaffoldMessenger.of(context);
+  void refused(String message) => messenger.showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.danger,
+        behavior: SnackBarBehavior.floating,
+      ));
   try {
     await call();
     messenger.showSnackBar(SnackBar(content: Text(done), behavior: SnackBarBehavior.floating));
     return true;
   } on ApiException catch (e) {
-    messenger.showSnackBar(SnackBar(
-      content: Text(e.message),
-      backgroundColor: AppColors.danger,
-      behavior: SnackBarBehavior.floating,
-    ));
+    refused(e.message);
     return false;
+  } catch (_) {
+    // The request may have gone through before the reply failed to read:
+    // say so, rather than claim it failed.
+    refused('That did not finish cleanly. Refresh to see whether it was saved.');
+    return false;
+  } finally {
+    _actionRunning = false;
   }
 }
+
+bool _actionRunning = false;
+
+/// Asks before a step that takes someone or something out of service.
+/// True only when [confirmLabel] was pressed.
+Future<bool> askConfirm(
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String confirmLabel,
+}) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(width: 440, child: Text(body)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(confirmLabel)),
+        ],
+      ),
+    ) ==
+    true;
 
 /// A dialog that asks for a sentence: a reason, a note, the operator's
 /// words. Null when cancelled; '' when the text is optional and left empty.

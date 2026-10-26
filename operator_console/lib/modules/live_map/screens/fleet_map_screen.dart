@@ -175,7 +175,15 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
               borderRadius: BorderRadius.circular(AppRadius.xl),
               child: Stack(
                 children: [
-                  Positioned.fill(child: _mapView()),
+                  // Named for a screen reader as what it shows, not as the
+                  // map package; the vans are listed by the filter bar.
+                  Positioned.fill(
+                    child: Semantics(
+                      label: 'Map of the vans on a trip',
+                      container: true,
+                      child: _mapView(),
+                    ),
+                  ),
                   // Filters, top left over the map (the reference's chips).
                   Positioned(
                     left: AppSpacing.lg,
@@ -229,7 +237,6 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
             userAgentPackageName: 'ph.edu.umindanao.sabaygo',
             // flutter_map's own inversion matrix: OSM's tiles, darkened --
             // in the dark palette only.
-            tileBuilder: AppColors.isDark ? darkModeTileBuilder : null,
           ),
           PolylineLayer(polylines: _polylines()),
           MarkerLayer(markers: _markers()),
@@ -303,12 +310,19 @@ class _FilterChips extends StatelessWidget {
     final (all, live, silent) = counts;
     Widget chip(_Filter f, String label, int n) {
       final on = f == value;
+      // A filter: a button that says whether it is the one in force.
       return Padding(
         padding: const EdgeInsets.only(right: AppSpacing.xs),
-        child: Material(
+        child: Semantics(
+          button: true,
+          selected: on,
+          child: Material(
           color: on ? AppColors.primary : Colors.transparent,
           shape: const StadiumBorder(),
-          child: InkWell(
+          child: FocusRing(
+            radius: AppRadius.full,
+            color: on ? AppColors.textPrimary : null,
+            child: InkWell(
             customBorder: const StadiumBorder(),
             onTap: () => onChanged(f),
             child: Padding(
@@ -320,6 +334,8 @@ class _FilterChips extends StatelessWidget {
                       fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
             ),
           ),
+          ),
+        ),
         ),
       );
     }
@@ -353,7 +369,7 @@ class _Floating extends StatelessWidget {
           color: AppColors.surfaceRaised.withValues(alpha: 0.96),
           borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: AppColors.divider),
-          boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 24)],
+          boxShadow: [BoxShadow(color: AppColors.mapShadow, blurRadius: 24)],
         ),
         clipBehavior: Clip.antiAlias,
         child: child,
@@ -370,14 +386,25 @@ class _VanList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (empty) {
-      return const Align(
+      // A note sized to its words: the map behind it stays the page.
+      final text = Theme.of(context).textTheme;
+      return Align(
         alignment: Alignment.topLeft,
         child: _Floating(
-          child: EmptyState(
-            icon: Icons.airport_shuttle_outlined,
-            title: 'No van is on a trip right now',
-            hint: 'A van appears here once its Dispatcher opens boarding or departs, '
-                'and its phone sends a location.',
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.airport_shuttle_outlined, color: AppColors.textMuted),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text('No van is on a trip right now', style: text.titleSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('A van appears here once its Dispatcher opens boarding or departs, '
+                      'and its phone sends a location.', style: text.bodySmall),
+                ]),
+              ),
+            ]),
           ),
         ),
       );
@@ -638,7 +665,7 @@ class _SpeedTile extends StatelessWidget {
                 children: [
                   Text(kph == null ? '—' : '${kph!.round()}',
                       style: TextStyle(
-                          color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
+                          color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
                   Text('km/h', style: text.bodySmall),
                 ],
               ),
@@ -683,8 +710,8 @@ class _AboardTile extends StatelessWidget {
                 children: [
                   Text(known ? '$aboard' : '—',
                       style: TextStyle(
-                          color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
-                  Text(known ? 'of $seats seats' : 'no data', style: text.bodySmall),
+                          color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
+                  Text(known ? 'of $seats spaces' : 'no data', style: text.bodySmall),
                 ],
               ),
             ],
@@ -778,7 +805,7 @@ class _NodePin extends StatelessWidget {
           color: AppColors.primary,
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.surface, width: 2),
-          boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 3)],
+          boxShadow: [BoxShadow(color: AppColors.mapShadow, blurRadius: 3)],
         ),
         child: Center(
           child: Text(
@@ -812,7 +839,7 @@ class _VanPin extends StatelessWidget {
         color: fill,
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.surface, width: 2),
-        boxShadow: const [BoxShadow(color: Color(0x88000000), blurRadius: 6)],
+        boxShadow: [BoxShadow(color: AppColors.mapShadow, blurRadius: 6)],
       ),
       // No rotation: /tracking/fleet carries no heading, and an arrow
       // pointing an arbitrary way would invent a direction of travel.

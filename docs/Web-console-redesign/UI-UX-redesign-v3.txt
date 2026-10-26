@@ -1,0 +1,42 @@
+UI Redesign
+
+color palette white green black/red, 60 30 10 rule.
+
+The current UI UX of the web console is not user friendly. The learnability and usability is poor. It probably miss or violate some of the concepts, theories, principles, and laws in Human Computer Interaction.
+
+The current worflow of the system in terms or in situation of first day operation and setting up the system like entering data to set up the system is not smooth. You almost always change screens just to set up the admin web console. Although its expected that changing screen is must since some of the functionality or feature of the system is on different screen but overall the workflow is not well designed. 
+
+I hope we can redesign the UI UX into a more user friendly way while keeping all the features and functionality intact.
+
+I also added screenshots of the issues we notice. ITs in this directory.
+
+
+This is the sample of the workflow on first setup of the system and probably includes the repeatable day to day operations:
+
+You're set up on a clean database. The backend runs on the new sabaygo_field with one account.
+
+Sign in: manager@sabaygo.dev, password sabaygo123. The name is a placeholder ("Terminal Manager"); change it under My profile (account menu, top right).
+Restart: your VS Code terminal shows the old backend stopped. The new one logs to logs/backend-field.log. If you ever restart it by hand, prefix the command with DATABASE_URL=…/sabaygo_field, or it goes back to the dev database.
+Not touched: the dev database, the console server and the phones' apps.
+The whole journey, in the order the system needs it. Office set-up first, then the trip itself:
+
+Terminals: this terminal, plus every other terminal on the route.
+Route: its stops in order.
+Fares: from this terminal to each drop-off.
+Operator and van: Member Records. A van needs its four photos before it can be validated.
+Staff: a Dispatcher (validated) and a Cashier.
+Timetable: a departure later today, so a trip is made for it.
+Phone: add the Realme, give it its token, run the Checklist, and check it out to the van and Dispatcher.
+Trip: assign the van and Dispatcher, then draw the door line on the Realme.
+Passengers: an app booking with payment, a QR scan, a cash walk-in, and the door count against the list.
+The Cashier records A2Z's share, then Start, Depart and Arrived, and the money and audit pages afterwards.
+Step 1: terminals. On the laptop:
+
+Open http://127.0.0.1:3001. If it was already open, sign out first: its saved sign-in belongs to the dev database.
+Sign in as manager@sabaygo.dev.
+Open Routes & Fares (under Setup), then Add terminal, and fill in:
+Name and city: e.g. "Ecoland Terminal", "Davao City".
+Latitude and longitude: on a phone, open Google Maps, long-press the loading bay and copy the two numbers it shows. The phone's own reading is hidden from adb, so I can't fill them in for you.
+Terminal zone: leave it empty to use the default from Rules & Settings.
+Staffed: on, for this terminal.
+Repeat for each terminal the route stops at, in any order. For terminals you aren't at, use their Google Maps pins.

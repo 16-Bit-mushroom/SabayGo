@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/design/components/components.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_exception.dart';
+import '../setup/step_frame.dart';
 import '../../data/repositories/dispatch_repository.dart';
 import '../../data/repositories/rental_repository.dart';
 import '../trip_monitor/trip_lifecycle_panel.dart';
@@ -98,7 +99,6 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         PageHeader(
           title: 'Special Trips',
-          technicalNote: 'Special_Trip_Requests',
           description: 'Requests to rent the whole van. Agree the fee by pickup and destination, then '
               'assign a van and a Dispatcher. The fee is paid before the van leaves.',
           actions: [
@@ -132,7 +132,18 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
               : _error != null
                   ? LoadError(message: _error!, onRetry: _load)
                   : list.isEmpty
-                      ? const EmptyState(icon: Icons.airport_shuttle_outlined, title: 'No requests here')
+                      ? EmptyState(
+                          icon: Icons.airport_shuttle_outlined,
+                          title: switch (_view) {
+                            'requested' => 'No requests waiting',
+                            'approved' => 'No approved trips',
+                            _ => 'No closed requests',
+                          },
+                          hint: _view == 'requested'
+                              ? 'Requests from the passenger app land here. Someone at the counter: '
+                                  'use "Walk-in request".'
+                              : null,
+                        )
                       : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           SizedBox(
                             width: 400,
@@ -204,7 +215,7 @@ class _RequestPanel extends StatelessWidget {
             ? 'Requested in the app'
             : 'Walk-in: ${r.customerName ?? '—'}, ${r.customerContact ?? '—'}'),
         FactLine(Icons.place_outlined, '${r.pickupAddress} → ${r.destinationAddress}'),
-        FactLine(Icons.groups_outlined, '${r.passengerCount} passengers (the van seats 14)'),
+        FactLine(Icons.groups_outlined, '${r.passengerCount} passengers (a van has 14 spaces)'),
         if (r.fee != null)
           FactLine(Icons.payments_outlined, 'Fee ${peso.format(r.fee)}${r.feeNote != null ? ': ${r.feeNote}' : ''}'
               ' · ${r.paymentStatus == 'paid' ? 'paid' : 'not paid yet: Start waits for it'}'),
@@ -351,13 +362,19 @@ class _WalkInDialogState extends State<_WalkInDialog> {
     super.dispose();
   }
 
-  bool get _ok =>
-      _name.text.trim().length >= 2 &&
-      _contact.text.trim().length >= 7 &&
-      _pickup.text.trim().length >= 3 &&
-      _destination.text.trim().length >= 3 &&
-      _when != null &&
-      _feeOk(_fee, _note);
+  /// What is still missing, in a sentence: shown beside the disabled
+  /// button, so it never just greys out.
+  String? get _missing {
+    if (_name.text.trim().length < 2) return 'Give the customer\'s name.';
+    if (_contact.text.trim().length < 7) return 'Give a contact number.';
+    if (_when == null) return 'Choose the pickup date and time.';
+    if (_pickup.text.trim().length < 3) return 'Give the pickup address.';
+    if (_destination.text.trim().length < 3) return 'Give the destination.';
+    if (!_feeOk(_fee, _note)) return 'Agree the fee, and say what it is based on.';
+    return null;
+  }
+
+  bool get _ok => _missing == null;
 
   Future<void> _pickWhen() async {
     final now = DateTime.now();
@@ -402,17 +419,22 @@ class _WalkInDialogState extends State<_WalkInDialog> {
         width: 480,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: AppSpacing.xs),
             TextField(controller: _name, onChanged: (_) => changed(), decoration: const InputDecoration(labelText: 'Customer name')),
+            const SizedBox(height: AppSpacing.md),
             TextField(
                 controller: _contact,
                 onChanged: (_) => changed(),
                 decoration: const InputDecoration(labelText: 'Contact number')),
+            const SizedBox(height: AppSpacing.xs),
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(_when == null ? 'Pickup date and time' : DateFormat('EEE d MMM yyyy, h:mm a').format(_when!)),
               trailing: TextButton(onPressed: _pickWhen, child: Text(_when == null ? 'Choose' : 'Change')),
             ),
+            const SizedBox(height: AppSpacing.xs),
             TextField(controller: _pickup, onChanged: (_) => changed(), decoration: const InputDecoration(labelText: 'Pickup address')),
+            const SizedBox(height: AppSpacing.md),
             TextField(
                 controller: _destination,
                 onChanged: (_) => changed(),
@@ -423,7 +445,10 @@ class _WalkInDialogState extends State<_WalkInDialog> {
               Text('$_count'),
               IconButton(onPressed: _count < 14 ? () => setState(() => _count++) : null, icon: const Icon(Icons.add)),
             ]),
+            const SizedBox(height: AppSpacing.sm),
             _FeeFields(fee: _fee, note: _note, onChanged: changed),
+            if (_missing != null)
+              Align(alignment: Alignment.centerLeft, child: FormProblem(_missing!)),
           ]),
         ),
       ),

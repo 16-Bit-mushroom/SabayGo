@@ -8,6 +8,7 @@ import '../../core/design/components/components.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_exception.dart';
 import '../../data/repositories/oversight_repository.dart';
+import '../setup/step_frame.dart';
 
 /// The Van Status Board (brief 8): every van travelling, on site, not on
 /// a trip or out of service, from the trip status and GPS readings already
@@ -25,6 +26,10 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
   List<VanStatus>? _vans;
   bool _loading = true;
   String? _error;
+
+  /// A quiet refresh failed: the board still shows the last reading, and
+  /// says so, rather than passing old positions off as now.
+  DateTime? _staleSince;
   Timer? _timer;
 
   static const _order = ['travelling', 'on_site', 'not_on_trip', 'out_of_service'];
@@ -53,9 +58,15 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
     }
     try {
       final vans = await _oversight.vanBoard();
-      if (mounted) setState(() => _vans = vans);
+      if (mounted) {
+        setState(() {
+          _vans = vans;
+          _staleSince = null;
+        });
+      }
     } on ApiException catch (e) {
       if (mounted && !quiet) setState(() => _error = e.message);
+      if (mounted && quiet) setState(() => _staleSince ??= DateTime.now());
     } finally {
       if (mounted && !quiet) setState(() => _loading = false);
     }
@@ -64,7 +75,8 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
   static (String, Tone, IconData) state(String s) => switch (s) {
         'travelling' => ('Travelling', Tone.warning, Icons.near_me_outlined),
         'on_site' => ('On site', Tone.success, Icons.local_parking),
-        'out_of_service' => ('Out of service', Tone.danger, Icons.build_outlined),
+        // Red is for alarms; a van being repaired is not one.
+        'out_of_service' => ('Out of service', Tone.neutral, Icons.build_outlined),
         _ => ('Not on a trip', Tone.neutral, Icons.remove_circle_outline),
       };
 
@@ -84,6 +96,13 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
                 'seconds.',
             actions: [RefreshButton(onPressed: _load, busy: _loading)],
           ),
+          if (_staleSince != null && _error == null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: FactLine(Icons.sync_problem,
+                  'Could not refresh since ${DateFormat.jm().format(_staleSince!)}. This is the last reading.',
+                  colour: AppColors.warning),
+            ),
           if (_vans != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.lg),
@@ -93,7 +112,7 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
                       label: state(s).$1, value: '${count(s)}', icon: state(s).$3)),
                 SizedBox(width: 200, child: StatTile(
                     label: 'Owe A2Z\'s share', value: '$owing',
-                    icon: Icons.money_off, color: owing > 0 ? AppColors.danger : null,
+                    icon: Icons.money_off, color: owing > 0 ? AppColors.warning : null,
                     caption: 'From their last trip')),
               ]),
             ),
@@ -103,14 +122,23 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
                 : _error != null
                     ? LoadError(message: _error!, onRetry: _load)
                     : vans.isEmpty
-                        ? const EmptyState(icon: Icons.airport_shuttle_outlined, title: 'No vans yet')
+                        ? const EmptyState(
+                            icon: Icons.airport_shuttle_outlined,
+                            title: 'No vans yet',
+                            hint: 'Vans are added under Setup, Operators & vans.')
                         : Panel(
                             fill: true,
-                            child: ListView.separated(
-                              itemCount: vans.length,
-                              separatorBuilder: (_, _) => const Divider(height: 1),
-                              itemBuilder: (_, i) => _VanRow(van: vans[i]),
-                            ),
+                            child: Column(children: [
+                              const _VanRow.heads(),
+                              const Divider(height: 1),
+                              Expanded(
+                                child: ListView.separated(
+                                  itemCount: vans.length,
+                                  separatorBuilder: (_, _) => const Divider(height: 1),
+                                  itemBuilder: (_, i) => _VanRow(van: vans[i]),
+                                ),
+                              ),
+                            ]),
                           ),
           ),
         ],
@@ -120,15 +148,40 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
 }
 
 class _VanRow extends StatelessWidget {
-  const _VanRow({required this.van});
-  final VanStatus van;
+  const _VanRow({required VanStatus this.van});
+
+  /// The column heads, in the row's own widths.
+  const _VanRow.heads() : van = null;
+
+  final VanStatus? van;
+
+  static Widget _cols(List<Widget> c) => Row(children: [
+        SizedBox(width: 110, child: c[0]),
+        SizedBox(width: 140, child: c[1]),
+        SizedBox(width: 220, child: c[2]),
+        Expanded(child: c[3]),
+        SizedBox(width: 170, child: Align(alignment: Alignment.centerRight, child: c[4])),
+      ]);
 
   static final _time = DateFormat.jm();
 
   @override
   Widget build(BuildContext context) {
-    final v = van;
     final text = Theme.of(context).textTheme;
+    final v = van;
+    if (v == null) {
+      final head = text.labelMedium;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: _cols([
+          Text('Van', style: head),
+          Text('Status', style: head),
+          Text('Operator', style: head),
+          Text('Where and with whom', style: head),
+          Text('A2Z\'s share', style: head),
+        ]),
+      );
+    }
     final (label, tone, _) = _VanBoardScreenState.state(v.state);
     final where = switch (v.state) {
       'travelling' => [
@@ -147,23 +200,14 @@ class _VanRow extends StatelessWidget {
     };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: Row(children: [
-        SizedBox(width: 110, child: Text(v.plateNumber, style: text.titleSmall)),
-        SizedBox(width: 140, child: Align(alignment: Alignment.centerLeft, child: StatusBadge(label, tone: tone))),
-        SizedBox(
-          width: 220,
-          child: Text('${v.operatorName}\n${v.operatorLicence}', style: text.bodySmall),
-        ),
-        Expanded(child: Text(where, style: text.bodyMedium)),
-        SizedBox(
-          width: 170,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: v.owes > 0
-                ? StatusBadge('Owes ${peso.format(v.owes)}', tone: Tone.danger)
-                : Text('Nothing owed', style: text.bodySmall),
-          ),
-        ),
+      child: _cols([
+        Align(alignment: Alignment.centerLeft, child: PlateTag(v.plateNumber)),
+        Align(alignment: Alignment.centerLeft, child: StatusBadge(label, tone: tone)),
+        Text('${v.operatorName}\n${v.operatorLicence}', style: text.bodySmall),
+        Text(where, style: text.bodyMedium),
+        v.owes > 0
+            ? StatusBadge('Owes ${peso.format(v.owes)}', tone: Tone.warning)
+            : Text('Nothing owed', style: text.bodySmall),
       ]),
     );
   }

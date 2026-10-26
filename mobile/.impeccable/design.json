@@ -1,0 +1,555 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-19T12:40:39+00:00",
+  "title": "Design System: SabayGo (Passenger and Dispatcher app)",
+  "extensions": {
+    "colorMeta": {
+      "owl-ink": {
+        "role": "primary",
+        "displayName": "Owl Ink",
+        "canonical": "oklch(20.3% 0.014 285.1)",
+        "tonalRamp": [
+          "#0A0A11",
+          "#24242C",
+          "#414149",
+          "#606069",
+          "#81818B",
+          "#A4A4AE",
+          "#C8C8D2",
+          "#EDEDF8"
+        ]
+      },
+      "owl-ink-soft": {
+        "role": "primary",
+        "displayName": "Owl Ink Soft",
+        "canonical": "oklch(35.2% 0.017 285.5)",
+        "tonalRamp": [
+          "#0A0A12",
+          "#24242D",
+          "#41414B",
+          "#60606B",
+          "#81818D",
+          "#A4A4B0",
+          "#C8C8D4",
+          "#EDEDFA"
+        ]
+      },
+      "ink-mist": {
+        "role": "primary",
+        "displayName": "Ink Mist",
+        "canonical": "oklch(94.4% 0.005 286.3)",
+        "tonalRamp": [
+          "#0B0B0D",
+          "#252528",
+          "#424245",
+          "#616164",
+          "#828285",
+          "#A4A4A8",
+          "#C9C9CC",
+          "#EEEEF2"
+        ]
+      },
+      "pin-red": {
+        "role": "secondary",
+        "displayName": "Pin Red",
+        "canonical": "oklch(53.0% 0.207 26.8)",
+        "tonalRamp": [
+          "#1F0001",
+          "#4D0104",
+          "#80030B",
+          "#B70A16",
+          "#E43A36",
+          "#FD756A",
+          "#FDB4AB",
+          "#FEE9E6"
+        ]
+      },
+      "pin-red-mist": {
+        "role": "secondary",
+        "displayName": "Pin Red Mist",
+        "canonical": "oklch(94.4% 0.022 14.1)",
+        "tonalRamp": [
+          "#130708",
+          "#2F2122",
+          "#4D3D3E",
+          "#6D5C5D",
+          "#8F7D7E",
+          "#B2A0A1",
+          "#D7C4C5",
+          "#FDE9EA"
+        ]
+      },
+      "paid-green": {
+        "role": "tertiary",
+        "displayName": "Paid Green",
+        "canonical": "oklch(48.1% 0.122 153.8)",
+        "tonalRamp": [
+          "#000F05",
+          "#012E15",
+          "#035029",
+          "#09743F",
+          "#3B975F",
+          "#61BB81",
+          "#86E1A4",
+          "#C7FED7"
+        ]
+      },
+      "paid-green-mist": {
+        "role": "tertiary",
+        "displayName": "Paid Green Mist",
+        "canonical": "oklch(93.7% 0.017 168.5)",
+        "tonalRamp": [
+          "#050D0A",
+          "#1D2824",
+          "#3A4540",
+          "#58645F",
+          "#798680",
+          "#9BA9A3",
+          "#BFCDC7",
+          "#E4F2EC"
+        ]
+      },
+      "ochre": {
+        "role": "tertiary",
+        "displayName": "Ochre",
+        "canonical": "oklch(50.8% 0.108 73.3)",
+        "tonalRamp": [
+          "#130900",
+          "#352001",
+          "#5B3A02",
+          "#845706",
+          "#A9772E",
+          "#CE9A53",
+          "#F4BE77",
+          "#FFEBD3"
+        ]
+      },
+      "ochre-mist": {
+        "role": "tertiary",
+        "displayName": "Ochre Mist",
+        "canonical": "oklch(94.2% 0.016 82.8)",
+        "tonalRamp": [
+          "#0E0B04",
+          "#29241C",
+          "#464138",
+          "#666157",
+          "#878278",
+          "#AAA49A",
+          "#CEC8BE",
+          "#F4EEE3"
+        ]
+      },
+      "sos-red": {
+        "role": "tertiary",
+        "displayName": "SOS Red",
+        "canonical": "oklch(50.1% 0.178 28.7)",
+        "tonalRamp": [
+          "#1F0000",
+          "#4D0101",
+          "#800304",
+          "#B0221B",
+          "#D84C3F",
+          "#FD7565",
+          "#FDB4A9",
+          "#FEE9E5"
+        ]
+      },
+      "sos-red-mist": {
+        "role": "tertiary",
+        "displayName": "SOS Red Mist",
+        "canonical": "oklch(93.5% 0.019 21.6)",
+        "tonalRamp": [
+          "#120808",
+          "#2E2221",
+          "#4C3E3E",
+          "#6C5D5C",
+          "#8D7E7D",
+          "#B1A1A0",
+          "#D5C5C4",
+          "#FBEAE9"
+        ]
+      },
+      "terminal-blue": {
+        "role": "tertiary",
+        "displayName": "Terminal Blue",
+        "canonical": "oklch(51.3% 0.160 255.7)",
+        "tonalRamp": [
+          "#000A20",
+          "#01244E",
+          "#044082",
+          "#0A5FB9",
+          "#3782E0",
+          "#64A7FE",
+          "#A6CCFF",
+          "#E4F0FF"
+        ]
+      },
+      "terminal-blue-mist": {
+        "role": "tertiary",
+        "displayName": "Terminal Blue Mist",
+        "canonical": "oklch(93.4% 0.013 251.6)",
+        "tonalRamp": [
+          "#070C11",
+          "#20262B",
+          "#3D4349",
+          "#5C6269",
+          "#7D838A",
+          "#9FA6AD",
+          "#C3CAD2",
+          "#E8EFF7"
+        ]
+      },
+      "morning-paper": {
+        "role": "neutral",
+        "displayName": "Morning Paper",
+        "canonical": "oklch(97.7% 0.004 286.3)",
+        "tonalRamp": [
+          "#0B0B0D",
+          "#252527",
+          "#424244",
+          "#616163",
+          "#828285",
+          "#A5A5A7",
+          "#C9C9CC",
+          "#EEEEF1"
+        ]
+      },
+      "white-card": {
+        "role": "neutral",
+        "displayName": "White Card",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "night-text": {
+        "role": "neutral",
+        "displayName": "Night Text",
+        "canonical": "oklch(22.8% 0.038 282.9)",
+        "tonalRamp": [
+          "#09081B",
+          "#222337",
+          "#3F4056",
+          "#5E5F77",
+          "#7F8099",
+          "#A1A2BD",
+          "#C5C7E2",
+          "#ECEDFF"
+        ]
+      },
+      "slate-note": {
+        "role": "neutral",
+        "displayName": "Slate Note",
+        "canonical": "oklch(47.5% 0.032 285.1)",
+        "tonalRamp": [
+          "#0A0918",
+          "#232334",
+          "#404053",
+          "#5F5F73",
+          "#808095",
+          "#A2A3B9",
+          "#C6C7DE",
+          "#ECEDFE"
+        ]
+      },
+      "control-edge": {
+        "role": "neutral",
+        "displayName": "Control Edge",
+        "canonical": "oklch(62.2% 0.036 285.3)",
+        "tonalRamp": [
+          "#0A0819",
+          "#232336",
+          "#403F55",
+          "#5F5F75",
+          "#808098",
+          "#A2A2BB",
+          "#C6C6E0",
+          "#ECEDFE"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(90.0% 0.011 286.2)",
+        "tonalRamp": [
+          "#0B0B10",
+          "#24242A",
+          "#414148",
+          "#606067",
+          "#818189",
+          "#A4A4AC",
+          "#C8C8D0",
+          "#EEEEF6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline-large": {
+        "displayName": "Headline Large",
+        "purpose": "A screen's single heading; used sparingly."
+      },
+      "headline-medium": {
+        "displayName": "Headline Medium",
+        "purpose": "Screen headings and the headline figure on the trip details sheet."
+      },
+      "app-bar-title": {
+        "displayName": "App Bar Title",
+        "purpose": "Left-aligned on the 16 px gutter."
+      },
+      "title-large": {
+        "displayName": "Title Large",
+        "purpose": "Sheet and empty-state titles."
+      },
+      "title-medium": {
+        "displayName": "Title Medium",
+        "purpose": "Section headers, status band titles."
+      },
+      "body-large": {
+        "displayName": "Body Large",
+        "purpose": "Primary reading text; values and stop names at 600."
+      },
+      "body-medium": {
+        "displayName": "Body Medium",
+        "purpose": "Standard body text."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Notes and subtitles, in Slate Note."
+      },
+      "label-button": {
+        "displayName": "Button Label",
+        "purpose": "Filled and outlined buttons."
+      },
+      "label-small": {
+        "displayName": "Micro Label",
+        "purpose": "Status chips and uppercase micro-labels, tracked +0.8 px."
+      }
+    },
+    "shadows": [
+      {
+        "name": "raised-card",
+        "value": "0 5px 15px rgba(0,0,0,0.04)",
+        "purpose": "A summary card that heads a screen."
+      },
+      {
+        "name": "raised-group",
+        "value": "0 4px 10px rgba(0,0,0,0.02)",
+        "purpose": "A group of settings rows."
+      },
+      {
+        "name": "raised-row",
+        "value": "0 4px 8px rgba(0,0,0,0.02)",
+        "purpose": "A single raised row, such as a saved destination."
+      },
+      {
+        "name": "bottom-bar-lift",
+        "value": "0 -5px 10px rgba(0,0,0,0.05)",
+        "purpose": "A fixed action bar at the foot of a form."
+      },
+      {
+        "name": "map-marker",
+        "value": "0 0 5px rgba(0,0,0,0.38)",
+        "purpose": "Van and stop markers over map tiles (3-8 px blur, 12-38 % black)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "instant",
+        "value": "100ms",
+        "purpose": "Immediate feedback."
+      },
+      {
+        "name": "quick",
+        "value": "180ms",
+        "purpose": "Default state change."
+      },
+      {
+        "name": "normal",
+        "value": "240ms",
+        "purpose": "Larger transitions; never longer. Honour reduce motion."
+      },
+      {
+        "name": "press",
+        "value": "InkSparkle",
+        "purpose": "Material ink sparkle on press."
+      }
+    ],
+    "breakpoints": [],
+    "sizing": [
+      {
+        "name": "min-touch-target",
+        "value": "48px",
+        "purpose": "Nothing tappable is smaller."
+      },
+      {
+        "name": "primary-action-height",
+        "value": "52px",
+        "purpose": "One-handed use at a van door."
+      },
+      {
+        "name": "focus-outline",
+        "value": "2px",
+        "purpose": "Focus and error outlines."
+      },
+      {
+        "name": "navigation-bar-height",
+        "value": "68px",
+        "purpose": "Bottom navigation."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "One Owl Ink slab per decision: full width, 52 px, white 16/600 label.",
+      "html": "<button class=\"ds-btn-primary\">Pay ₱180.00</button>",
+      "css": ".ds-btn-primary { font-family: Roboto, system-ui, sans-serif; display:block; width:100%; height:52px; border:none; border-radius:12px; background:#16161D; color:#fff; font-size:16px; font-weight:600; cursor:pointer; transition:background-color 180ms ease-out; } .ds-btn-primary:hover { background:#3A3A44; } .ds-btn-primary:active { background:#3A3A44; } .ds-btn-primary:focus-visible { outline:2px solid #16161D; outline-offset:2px; }"
+    },
+    {
+      "name": "Outlined Button",
+      "kind": "button",
+      "refersTo": "button-outlined",
+      "description": "The second choice beside a primary: Owl Ink label, Control Edge outline.",
+      "html": "<button class=\"ds-btn-outlined\">Reschedule</button>",
+      "css": ".ds-btn-outlined { font-family: Roboto, system-ui, sans-serif; display:block; width:100%; height:52px; border:1px solid #84849C; border-radius:12px; background:transparent; color:#16161D; font-size:16px; font-weight:600; cursor:pointer; transition:background-color 180ms ease-out; } .ds-btn-outlined:hover { background:#ECECF0; } .ds-btn-outlined:focus-visible { outline:2px solid #16161D; outline-offset:2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Filled white, Control Edge outline at 3:1, 2 px Owl Ink on focus, SOS Red on error.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Contact number</span><input class=\"ds-field-input\" placeholder=\"09XX XXX XXXX\"></label>",
+      "css": ".ds-field { font-family: Roboto, system-ui, sans-serif; display:block; } .ds-field-label { display:block; font-size:13px; color:#5A5A6E; margin-bottom:4px; } .ds-field-input { font-family: Roboto, system-ui, sans-serif; width:100%; box-sizing:border-box; padding:16px; font-size:16px; color:#1A1A2E; background:#FFFFFF; border:1px solid #84849C; border-radius:12px; outline:none; } .ds-field-input::placeholder { color:#5A5A6E; } .ds-field-input:focus-visible, .ds-field-input:focus { border:2px solid #16161D; padding:15px; }"
+    },
+    {
+      "name": "Status Chips",
+      "kind": "chip",
+      "refersTo": "chip-status-success",
+      "description": "Status as a meaning: each tone's text on its own container, in small bold capitals.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-chip-success\">Paid</span><span class=\"ds-chip ds-chip-info\">At terminal</span><span class=\"ds-chip ds-chip-warning\">Awaiting payment</span><span class=\"ds-chip ds-chip-danger\">Cancelled</span><span class=\"ds-chip ds-chip-brand\">Scheduled</span><span class=\"ds-chip ds-chip-muted\">Completed</span></div>",
+      "css": ".ds-chips { display:flex; flex-wrap:wrap; gap:8px; } .ds-chip { font-family: Roboto, system-ui, sans-serif; display:inline-block; padding:6px 10px; border-radius:999px; font-size:11px; line-height:1.3; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; } .ds-chip-success { background:#E0EEE8; color:#00713C; } .ds-chip-info { background:#E3EAF2; color:#1565C0; } .ds-chip-warning { background:#F1EBE0; color:#8A5A00; } .ds-chip-danger { background:#F6E5E4; color:#B3261E; } .ds-chip-brand { background:#ECECF0; color:#16161D; } .ds-chip-muted { background:#F7F7FA; color:#5A5A6E; }"
+    },
+    {
+      "name": "Status Band",
+      "kind": "custom",
+      "refersTo": "status-band",
+      "description": "A full-width statement of state: icon, tone headline, one plain sentence.",
+      "html": "<div class=\"ds-band\" role=\"status\"><span class=\"ds-band-icon\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z\"/></svg></span><div><div class=\"ds-band-title\">Paid and confirmed</div><div class=\"ds-band-body\">Show this pass at the van door. The Dispatcher scans it.</div></div></div>",
+      "css": ".ds-band { font-family: Roboto, system-ui, sans-serif; display:flex; gap:12px; align-items:flex-start; padding:16px; border-radius:12px; background:#E0EEE8; border:1px solid rgba(0,113,60,0.30); } .ds-band-icon { color:#00713C; flex:none; display:flex; } .ds-band-title { font-size:16px; line-height:1.4; font-weight:600; color:#00713C; } .ds-band-body { margin-top:4px; font-size:14px; line-height:1.5; color:#1A1A2E; }"
+    },
+    {
+      "name": "Outlined Card",
+      "kind": "card",
+      "refersTo": "card-outlined",
+      "description": "The default container: white, 16 px radius, Hairline outline, no shadow.",
+      "html": "<div class=\"ds-card\" tabindex=\"0\"><div class=\"ds-card-label\">Fare</div><div class=\"ds-card-value\">₱180.00</div></div>",
+      "css": ".ds-card { font-family: Roboto, system-ui, sans-serif; padding:16px; border-radius:16px; background:#FFFFFF; border:1px solid #DDDDE5; display:flex; justify-content:space-between; align-items:baseline; transition:background-color 180ms ease-out; } .ds-card:hover { background:#F7F7FA; } .ds-card:focus-visible { outline:2px solid #16161D; outline-offset:2px; } .ds-card-label { font-size:14px; color:#5A5A6E; } .ds-card-value { font-size:16px; font-weight:600; color:#1A1A2E; font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Raised Card",
+      "kind": "card",
+      "refersTo": "card-raised",
+      "description": "Grouped settings or a profile summary: a whisper shadow instead of an outline.",
+      "html": "<div class=\"ds-raised\"><div class=\"ds-raised-title\">Juan Dela Cruz</div><div class=\"ds-raised-note\">Passenger · 0917 000 0000</div></div>",
+      "css": ".ds-raised { font-family: Roboto, system-ui, sans-serif; padding:20px; border-radius:20px; background:#FFFFFF; box-shadow:0 5px 15px rgba(0,0,0,0.04); } .ds-raised-title { font-size:18px; line-height:1.35; font-weight:600; color:#1A1A2E; } .ds-raised-note { margin-top:4px; font-size:13px; line-height:1.45; color:#5A5A6E; }"
+    },
+    {
+      "name": "Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-bar",
+      "description": "68 px, labels always; selected = Ink Mist pill + Owl Ink label at 700.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item is-active\" href=\"#\"><span class=\"ds-nav-pill\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z\"/></svg></span>Home</a><a class=\"ds-nav-item\" href=\"#\"><span class=\"ds-nav-pill\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z\"/></svg></span>Trips</a><a class=\"ds-nav-item\" href=\"#\"><span class=\"ds-nav-pill\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z\"/></svg></span>Alerts</a><a class=\"ds-nav-item\" href=\"#\"><span class=\"ds-nav-pill\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z\"/></svg></span>Profile</a></nav>",
+      "css": ".ds-nav { font-family: Roboto, system-ui, sans-serif; display:flex; height:68px; background:#FFFFFF; border-top:1px solid #DDDDE5; } .ds-nav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; text-decoration:none; font-size:12px; font-weight:500; color:#5A5A6E; } .ds-nav-pill { display:flex; align-items:center; justify-content:center; width:56px; height:32px; border-radius:999px; transition:background-color 180ms ease-out; } .ds-nav-item:hover .ds-nav-pill { background:#F7F7FA; } .ds-nav-item.is-active { color:#16161D; font-weight:700; } .ds-nav-item.is-active .ds-nav-pill { background:#ECECF0; } .ds-nav-item:focus-visible { outline:2px solid #16161D; outline-offset:-2px; }"
+    },
+    {
+      "name": "Journey Strip",
+      "kind": "custom",
+      "description": "Signature: Pin Red ring where you board, Pin Red square where you get off, a Control Edge rail between.",
+      "html": "<div class=\"ds-journey\" aria-label=\"From Davao Ecoland Terminal. To Tagum.\"><div class=\"ds-j-node\"><span class=\"ds-j-ring\"></span><div><div class=\"ds-j-name\">Davao Ecoland Terminal</div><div class=\"ds-j-note\">Board here</div></div></div><div class=\"ds-j-rail\"></div><div class=\"ds-j-node\"><span class=\"ds-j-square\"></span><div><div class=\"ds-j-name\">Tagum</div><div class=\"ds-j-note\">Get off here</div></div></div></div>",
+      "css": ".ds-journey { font-family: Roboto, system-ui, sans-serif; } .ds-j-node { display:flex; gap:12px; align-items:flex-start; } .ds-j-ring, .ds-j-square { flex:none; width:13px; height:13px; margin-top:5.5px; box-sizing:border-box; } .ds-j-ring { border:2.5px solid #C8151D; border-radius:50%; } .ds-j-square { background:#C8151D; border-radius:3px; } .ds-j-rail { width:2px; height:24px; margin-left:5.5px; background:#84849C; } .ds-j-name { font-size:16px; line-height:1.5; font-weight:600; color:#1A1A2E; } .ds-j-note { font-size:13px; line-height:1.45; color:#5A5A6E; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Owl's Ledger",
+    "overview": "The logo is an ink-black owl with a red eye, beside a route line that ends in a red pin. The app takes its two jobs from it. Ink is the hand that writes the record: every action, every selected state, every line of text someone acts on. Red is the eye on the route: it marks where a passenger boards and where they get off, and nothing else. The ledger part is the discipline: figures line up, each status is stated in a word, and nothing shows a fact the system does not have.\n\nThe app is clean and minimal, built to be read in sunlight at a van door. Paper-grey screens with white cards, one ink action per decision, status said in words on a tinted chip. It is calm and exact rather than expressive. Weight, spacing and alignment carry the hierarchy. The interface stays quiet, so a warning or an SOS stands out the moment it appears. Light theme only; the app has no dark theme.\n\nThe September purple (`#2D2059`) is retired. Anything still purple, or anything that describes a \"purple brand\", is out of date.",
+    "keyCharacteristics": [
+      "Ink (`#16161D`) does every action. Red marks route geometry only.",
+      "Status is a meaning (`StatusTone`), never a loose colour, and always comes with a word or an icon.",
+      "Every colour pair is measured against WCAG 2.1 AA; control edges clear 3:1.",
+      "Roboto bundled at 400 / 500 / 700, so type is identical on every phone.",
+      "Full-width 52 px primary actions, 48 px minimum targets, one-handed reach.",
+      "Flat by default; soft ambient shadows only on raised cards."
+    ],
+    "rules": [
+      {
+        "name": "The One Meaning for Red Rule",
+        "body": "Pin Red marks route geometry and is never a button fill. On an action, red means stop or danger, and that is SOS Red. A red Book beside a red Cancel beside a red SOS would make all three look equally alarming.",
+        "section": "colors"
+      },
+      {
+        "name": "The Pair Rule",
+        "body": "A status colour is chosen as a `StatusTone`, which hands over its text colour and container together, both verified. Never pick a foreground on its own, and never let hue alone carry the status: the label or an icon goes with it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Edge Rule",
+        "body": "If a user must locate it to operate it, its boundary is Control Edge (3:1 or more). Hairline is for decoration, where nothing needs to be found.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Money Rule",
+        "body": "Every peso amount goes through `Money`, with tabular figures, so a fare that changes never makes its column jump. Lists that are scanned show whole pesos (₱1,180); receipts show centavos (₱1,180.00).",
+        "section": "typography"
+      },
+      {
+        "name": "The Uncapped Rule",
+        "body": "No text size is capped and no single-line height is hardcoded. Text must survive 200 % system scaling (WCAG 1.4.4), which is why headline sizes stay restrained.",
+        "section": "typography"
+      },
+      {
+        "name": "The Carried Type Rule",
+        "body": "The family is bundled, never fetched and never borrowed from the phone. The app is used in connectivity dead zones, and a font that arrives over the network is missing exactly when it matters.",
+        "section": "typography"
+      },
+      {
+        "name": "The Whisper Shadow Rule",
+        "body": "A card shadow is black at 5 % or less, 8 to 15 px blur, 4 to 5 px offset. No hard, coloured or stacked shadows. Map markers are the only stronger ones.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Border or Shadow Rule",
+        "body": "A card has a Hairline outline (outlined card) or a soft shadow (raised card), not both.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** take every colour from `AppColors` or the theme, and every status colour through `StatusTone`.",
+      "**Do** state a status in words (Label Small capitals) or with an icon, never by colour alone.",
+      "**Do** make the primary action an Owl Ink slab, full width, 52 px tall, within thumb reach.",
+      "**Do** keep every tappable target at 48 × 48 px or more.",
+      "**Do** outline every control a user must find in Control Edge (3:1 or more).",
+      "**Do** route every peso amount through `Money` (tabular figures).",
+      "**Do** start titles and content on the 16 px gutter, titles left-aligned.",
+      "**Do** keep motion at 100 / 180 / 240 ms and honour reduce motion."
+    ],
+    "donts": [
+      "**Don't** fill a button with Pin Red, or use Pin Red for anything other than route geometry.",
+      "**Don't** bring back the retired purple (`#2D2059`) or a coloured app bar.",
+      "**Don't** write raw `Colors.*` or `Color(0x…)` in a screen. About 40 such uses remain in the profile, messages and notification screens; they are drift, not precedent.",
+      "**Don't** use amber or yellow as text; it fails on white. Use Ochre.",
+      "**Don't** use gradients.",
+      "**Don't** give a card both an outline and a shadow, or a shadow heavier than 5 % black.",
+      "**Don't** centre an app bar title or hide navigation labels.",
+      "**Don't** fetch a font at runtime or cap text size."
+    ]
+  }
+}

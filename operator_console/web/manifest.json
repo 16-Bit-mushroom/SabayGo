@@ -1,11 +1,11 @@
 {
-    "name": "SabayGo Cooperative Office",
+    "name": "SabayGo A2Z office",
     "short_name": "SabayGo Office",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0E0F12",
-    "theme_color": "#131418",
-    "description": "A new Flutter project.",
+    "background_color": "#F3F6F3",
+    "theme_color": "#0B5D35",
+    "description": "The A2Z office console: trips, reviews, money and set-up.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

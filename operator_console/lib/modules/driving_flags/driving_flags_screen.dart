@@ -69,7 +69,6 @@ class _DrivingFlagsScreenState extends State<DrivingFlagsScreen> {
         children: [
           PageHeader(
             title: 'Driving Flags',
-            technicalNote: 'Driving_Events · NAHGM',
             description: 'Overspeed, slow stretches and unscheduled stops found in each trip\'s GPS '
                 'readings. Each is for review, not proof of misconduct.',
             actions: [
@@ -105,8 +104,8 @@ class _DrivingFlagsScreenState extends State<DrivingFlagsScreen> {
                         ? const EmptyState(
                             icon: Icons.speed,
                             title: 'No flags',
-                            hint: 'Overspeed and slow stretches need the route\'s speed limits, set '
-                                'in Rules & Settings.')
+                            hint: 'Overspeed and slow stretches need the route\'s speed limits, which '
+                                'the Terminal Manager sets under Setup, Rules & Settings.')
                         : ListView.separated(
                             itemCount: flags.length,
                             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),

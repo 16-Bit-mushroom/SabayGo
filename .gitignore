@@ -35,3 +35,7 @@ docs/*.pdf
 
 # Launcher logs (run.sh)
 logs/
+
+# Impeccable session state: live-mode sessions and question logs
+.impeccable/live/
+.impeccable/questions/

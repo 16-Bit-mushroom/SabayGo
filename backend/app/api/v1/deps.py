@@ -37,14 +37,28 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+_ROLE_WORDS = {
+    Role.PASSENGER: "a passenger",
+    Role.DISPATCHER: "the Dispatcher",
+    Role.TERMINAL_MANAGER: "the Terminal Manager",
+    Role.CASHIER: "the Cashier",
+}
+
+
 def require_roles(*roles: Role):
     """Route guard: 403 unless the caller holds one of these roles."""
 
+    # Said in the office's words: the console and the app show this
+    # sentence as it is, and a stored role name means nothing to staff.
+    named = [_ROLE_WORDS[r] for r in roles if r in _ROLE_WORDS]
+    who = (
+        " or ".join([", ".join(named[:-1]), named[-1]] if len(named) > 1 else named)
+        or "the development team"
+    )
+
     async def _guard(user: CurrentUser) -> User:
         if user.role not in {r.value for r in roles}:
-            raise PermissionDeniedError(
-                f"This action requires: {', '.join(r.value for r in roles)}."
-            )
+            raise PermissionDeniedError(f"Only {who} can do this.")
         return user
 
     return _guard

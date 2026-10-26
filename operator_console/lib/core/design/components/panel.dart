@@ -119,7 +119,7 @@ class StatTile extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(value,
               style: TextStyle(
-                  color: color ?? AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800, height: 1.2)),
+                  color: color ?? AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w700, height: 1.2)),
           if (caption != null) ...[
             const SizedBox(height: 2),
             Text(caption!, style: text.bodySmall),

@@ -18,9 +18,10 @@ class NotificationBell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final unread = context.select<NotificationProvider, int>((p) => p.unreadCount);
-    return Tooltip(
-      message: unread == 0 ? 'Notifications' : '$unread unread',
-      child: IconButton(
+    // The tooltip is the button's own, so it is also its name for a
+    // screen reader; a Tooltip around the button named a node with no role.
+    return IconButton(
+        tooltip: unread == 0 ? 'Notifications' : 'Notifications, $unread unread',
         onPressed: () => _openPanel(context),
         icon: Badge(
           isLabelVisible: unread > 0,
@@ -31,7 +32,6 @@ class NotificationBell extends StatelessWidget {
             color: unread > 0 ? AppColors.warning : AppColors.textMuted,
           ),
         ),
-      ),
     );
   }
 
@@ -39,7 +39,7 @@ class NotificationBell extends StatelessWidget {
     final provider = context.read<NotificationProvider>();
     return showDialog<void>(
       context: context,
-      barrierColor: Colors.black45,
+      barrierColor: AppColors.scrim,
       builder: (_) => ChangeNotifierProvider<NotificationProvider>.value(
         value: provider,
         child: _NotificationPanel(onOpen: onOpen),
@@ -61,10 +61,15 @@ class _NotificationPanel extends StatelessWidget {
       alignment: Alignment.topRight,
       child: Padding(
         padding: const EdgeInsets.only(right: AppSpacing.lg, top: 64),
+        // Flat, edged like every panel: shadows belong to things over the
+        // map, and the scrim already lifts this off the page.
         child: Material(
           color: AppColors.surfaceRaised,
-          elevation: 12,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            side: BorderSide(color: AppColors.divider),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: SizedBox(
             width: 420,
             height: 560,
@@ -119,8 +124,11 @@ class _NotificationPanel extends StatelessWidget {
     }
     if (p.items.isEmpty) {
       return Center(
-        child: Text('Nothing yet. A camera check that needs review, or an SOS, shows up here.',
-            style: TextStyle(color: AppColors.textMuted)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+          child: Text('Nothing yet. A camera check that needs review, or an SOS, shows up here.',
+              textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
+        ),
       );
     }
     return ListView.separated(

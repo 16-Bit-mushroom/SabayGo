@@ -30,6 +30,16 @@ enum UserRole {
   /// Records A2Z's share. The Terminal Manager does not (separation of
   /// duties); the server's guard is the same.
   bool get isCashier => this == UserRole.cashier || this == UserRole.admin;
+
+  /// The job, as the office says it: shown under the signed-in name, so a
+  /// shared PC says whose desk it is.
+  String get title => switch (this) {
+        UserRole.terminalManager => 'Terminal Manager',
+        UserRole.cashier => 'Cashier',
+        UserRole.dispatcher => 'Dispatcher',
+        UserRole.admin => 'Development team',
+        UserRole.passenger => 'Passenger',
+      };
 }
 
 class AuthSession {

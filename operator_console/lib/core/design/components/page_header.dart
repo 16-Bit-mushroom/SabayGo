@@ -18,24 +18,24 @@ class PageHeader extends StatelessWidget {
     super.key,
     required this.title,
     required this.description,
-    this.technicalNote,
     this.actions = const [],
+    this.compact = false,
   });
 
   final String title;
   final String description;
 
-  /// The term the thesis and the panel use ("YOLOv8 camera"), shown small
-  /// beside the plain title so neither audience has to translate.
-  final String? technicalNote;
-
   final List<Widget> actions;
+
+  /// A step inside a page (Setup's Terminals, Timetable, ...): the title a
+  /// size down, under the page's own.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      padding: EdgeInsets.only(bottom: compact ? AppSpacing.lg : AppSpacing.xl),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -43,24 +43,13 @@ class PageHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: AppSpacing.md,
-                  runSpacing: AppSpacing.xs,
-                  children: [
-                    Text(title, style: text.headlineMedium),
-                    if (technicalNote != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceSunken,
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                          border: Border.all(color: AppColors.divider),
-                        ),
-                        child: Text(technicalNote!, style: text.labelMedium),
-                      ),
-                  ],
+                // The office's words only: system and table names belong to
+                // the code and the manuscript, not the page (UI redesign v3).
+                // A heading to a screen reader, so a page can be found by
+                // its title.
+                Semantics(
+                  header: true,
+                  child: Text(title, style: compact ? text.titleLarge : text.headlineMedium),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(description, style: text.bodyMedium!.copyWith(color: AppColors.textMuted)),

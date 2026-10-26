@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -6,6 +7,7 @@ import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/schedule_repository.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
+import '../../setup/step_frame.dart';
 
 /// Recurring departures.
 ///
@@ -21,7 +23,13 @@ import '../../../core/design/tokens.dart';
 /// a "New Template" button, which hid the timetable while the office was
 /// deciding where a new slot fits in it.
 class ScheduleScreen extends StatefulWidget {
-  const ScheduleScreen({super.key});
+  const ScheduleScreen({super.key, this.onChanged, required this.onOpenRoute});
+
+  /// Setup's queue counts again when a departure is added or paused.
+  final VoidCallback? onChanged;
+
+  /// A departure needs a route in service: the way there when none is.
+  final VoidCallback onOpenRoute;
 
   @override
   State<ScheduleScreen> createState() => _ScheduleScreenState();
@@ -95,6 +103,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       await _schedule.setTemplateActive(template.templateId, active);
       _showSnack('${template.tripLabel ?? 'Regular departure'} is now ${active ? 'in use' : 'paused'}.');
       await _load();
+      widget.onChanged?.call();
     } on ApiException catch (e) {
       _showSnack(e.message, isError: true);
     }
@@ -103,6 +112,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _onTemplateCreated() async {
     _showSnack('Regular departure added.');
     await _load();
+    widget.onChanged?.call();
   }
 
   Future<void> _generateTrips() async {
@@ -132,7 +142,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 for (final r in reports)
                   if (r.warnings.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text('${r.serviceDate.toIso8601String().split('T').first}:',
+                    Text('${DateFormat('EEE d MMM yyyy').format(r.serviceDate)}:',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     for (final w in r.warnings)
                       Text('• $w', style: TextStyle(color: AppColors.warning, fontSize: 12.5)),
@@ -155,23 +165,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           PageHeader(
+            compact: true,
             title: 'Timetable',
             description: 'Regular departures that repeat each week. Press "Create upcoming '
                 'trips" to turn them into trips passengers can book.',
             actions: [
-              FilledButton.icon(
+              // Outlined: the form's "Add regular departure" is the one
+              // filled button on this step.
+              OutlinedButton.icon(
                 onPressed: _generating ? null : _generateTrips,
                 icon: _generating
-                    ? SizedBox(
+                    ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
+                        child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.event_available, size: 18),
                 label: const Text('Create upcoming trips'),
               ),
@@ -190,17 +201,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           const SizedBox(width: 24),
                           SizedBox(
                             width: 380,
-                            child: _NewTemplateCard(
-                              schedule: _schedule,
-                              routes: _routes,
-                              onCreated: _onTemplateCreated,
-                            ),
+                            // Like Route and Fares: a step that waits says
+                            // why and how to get there, not an empty form.
+                            child: _routes.any((r) => r.isActive)
+                                ? _NewTemplateCard(
+                                    schedule: _schedule,
+                                    routes: _routes,
+                                    onCreated: _onTemplateCreated,
+                                  )
+                                : SidePanel(
+                                    title: 'Add a regular departure',
+                                    child: BlockedNotice(
+                                      message: 'A regular departure runs on a route in service, and there '
+                                          'is none yet.',
+                                      action: 'Go to Route',
+                                      onAction: widget.onOpenRoute,
+                                    ),
+                                  ),
                           ),
                         ],
                       ),
           ),
         ],
-      ),
     );
   }
 
@@ -235,10 +257,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         border: Border.all(color: AppColors.divider),
       ),
       child: templates.isEmpty
-          ? const EmptyState(
+          ? EmptyState(
               icon: Icons.calendar_month_outlined,
               title: 'No regular departures yet',
-              hint: 'Add the first one with the form on the right.',
+              hint: _routes.any((r) => r.isActive)
+                  ? 'Add the first one with the form on the right.'
+                  : 'A departure needs a route in service first.',
             )
           : LayoutBuilder(builder: (context, c) {
               final width = c.maxWidth < _minTableWidth ? _minTableWidth : c.maxWidth;
@@ -528,7 +552,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
                     onSelected: (v) => setState(() => _days[i] = v),
                     labelStyle: TextStyle(
                       color: _days[i] ? AppColors.onFill : AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 );

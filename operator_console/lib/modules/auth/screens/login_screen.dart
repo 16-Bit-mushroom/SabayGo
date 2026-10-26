@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../viewmodels/auth_provider.dart';
 import '../../../core/design/components/brand_logo.dart';
+import '../../../core/design/components/password_field.dart';
 import '../../../core/design/tokens.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -16,7 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscure = true;
 
   @override
   void dispose() {
@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const Center(child: BrandPlate(height: 80)),
                         const SizedBox(height: AppSpacing.md),
                         Text(
-                          'Cooperative office console. Sign in with your office account.',
+                          'A2Z office console. Sign in with your office account.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                         ),
@@ -92,22 +92,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           onFieldSubmitted: (_) => _submit(),
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        PasswordField(
                           controller: _passwordController,
-                          style: TextStyle(color: AppColors.textPrimary),
-                          obscureText: _obscure,
-                          decoration: _inputDecoration('Password', Icons.lock_outline).copyWith(
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                                color: AppColors.textMuted,
-                              ),
-                              onPressed: () => setState(() => _obscure = !_obscure),
-                            ),
-                          ),
+                          label: 'Password',
+                          prefixIcon: Icons.lock_outline,
                           validator: (v) =>
                               (v == null || v.isEmpty) ? 'Password is required' : null,
-                          onFieldSubmitted: (_) => _submit(),
+                          onSubmitted: (_) => _submit(),
                         ),
                         const SizedBox(height: 28),
                         SizedBox(

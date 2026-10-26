@@ -29,14 +29,12 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>SabayGo — Cooperative Office</title>
+  <title>SabayGo — A2Z office</title>
   <link rel="manifest" href="manifest.json">
 </head>
-<body style="background-color: #0E0F12">
-  <script>
-    // Paint the saved palette's canvas before Flutter loads (appearance.dart).
-    try { if (localStorage.getItem('sabaygo.console.appearance') === 'light') document.body.style.backgroundColor = '#F7F7FA'; } catch (e) {}
-  </script>
+<!-- The whiteboard canvas (AppColors.surface), painted before Flutter
+     loads so the light-only console never flashes another colour. -->
+<body style="background-color: #F3F6F3">
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

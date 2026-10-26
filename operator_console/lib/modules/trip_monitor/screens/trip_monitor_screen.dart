@@ -7,7 +7,9 @@ import 'package:provider/provider.dart';
 import '../../../core/design/components/components.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/dispatch_repository.dart';
+import '../../../viewmodels/auth_provider.dart';
 import '../trip_lifecycle_panel.dart';
 
 /// The office's view of every trip on a day, as each Dispatcher sees it.
@@ -22,6 +24,10 @@ import '../trip_lifecycle_panel.dart';
 ///
 /// Stops are named, not numbered: "Toril → Bangkal" rather than "Stop 1 →
 /// 3", from the trip's own stop list (`GET /trips/{id}/stops`).
+///
+/// The names on the list are the Dispatcher's and the Terminal Manager's
+/// (the server's guard on the list): the Cashier sees the trip's counts
+/// and records the share on Money.
 class TripMonitorScreen extends StatefulWidget {
   const TripMonitorScreen({super.key});
 
@@ -31,6 +37,7 @@ class TripMonitorScreen extends StatefulWidget {
 
 class _TripMonitorScreenState extends State<TripMonitorScreen> {
   late final DispatchRepository _dispatch = context.read<DispatchRepository>();
+  late final bool _readsList = context.read<AuthProvider>().profile?.role == UserRole.terminalManager;
 
   /// Boarding and departures change minute to minute; the Dispatcher is
   /// scanning while the office watches.
@@ -42,6 +49,9 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
   TripManifest? _manifest;
   Map<int, String> _stopNames = const {};
   String? _error;
+
+  /// The passenger list failed to load; the trip itself did not.
+  String? _listError;
   Timer? _timer;
 
   @override
@@ -101,13 +111,17 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
         if (mounted) setState(() => _stopNames = const {});
       }
     }
+    if (!_readsList) return;
     try {
       final m = await _dispatch.manifest(id);
       if (!mounted || _selectedId != id) return;
-      setState(() => _manifest = m);
+      setState(() {
+        _manifest = m;
+        _listError = null;
+      });
     } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.message);
+      if (!mounted || _selectedId != id) return;
+      setState(() => _listError = e.message);
     }
   }
 
@@ -115,6 +129,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
     setState(() {
       _selectedId = id;
       _manifest = null;
+      _listError = null;
       _stopNames = const {};
     });
     _loadManifest(withStops: true);
@@ -126,6 +141,7 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       _trips = null;
       _selectedId = null;
       _manifest = null;
+      _listError = null;
       _stopNames = const {};
     });
     _load();
@@ -139,6 +155,9 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
       final detail = _TripDetail(
         trip: _trips?.where((t) => t.tripId == _selectedId).firstOrNull,
         manifest: _manifest,
+        readsList: _readsList,
+        listError: _listError,
+        onRetryList: _loadManifest,
         stopNames: _stopNames,
         onLifecycleChanged: _load,
       );
@@ -151,19 +170,24 @@ class _TripMonitorScreenState extends State<TripMonitorScreen> {
             PageHeader(
               title: 'Trips',
               description: 'Every trip on the chosen day, as its Dispatcher sees it. Pick a '
-                  'trip to see who is aboard. Updates every ${_refreshEvery.inSeconds} seconds.',
+                  'trip to see ${_readsList ? 'who is' : 'how many are'} aboard. Updates every '
+                  '${_refreshEvery.inSeconds} seconds.',
               actions: [
                 DayPicker(day: _day, onShift: _shiftDay),
                 RefreshButton(onPressed: _load),
               ],
             ),
-            if (_error != null)
+            // A day that never loaded is an error page, not a spinner; a
+            // later refresh that fails keeps the last list under the line.
+            if (_error != null && _trips != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: Text(_error!, style: TextStyle(color: AppColors.danger)),
               ),
             Expanded(
-              child: wide
+              child: _error != null && _trips == null
+                  ? LoadError(message: _error!, onRetry: _load)
+                  : wide
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -226,7 +250,8 @@ class _TripList extends StatelessWidget {
                         side: BorderSide(
                             color: selected ? AppColors.textMuted : Colors.transparent),
                       ),
-                      child: InkWell(
+                      child: FocusRing(
+                        child: InkWell(
                         borderRadius: BorderRadius.circular(AppRadius.md),
                         onTap: () => onSelect(trip.tripId),
                         child: Padding(
@@ -246,7 +271,7 @@ class _TripList extends StatelessWidget {
                                     Text(trip.routeName,
                                         overflow: TextOverflow.ellipsis,
                                         style: text.bodyMedium!
-                                            .copyWith(fontWeight: FontWeight.w600)),
+                                            .copyWith(fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 2),
                                     Text(
                                       [
@@ -257,7 +282,7 @@ class _TripList extends StatelessWidget {
                                       style: text.bodySmall,
                                     ),
                                     Text(
-                                      '${trip.booked} of ${trip.seatCapacity} seats booked · '
+                                      '${trip.booked} of ${trip.seatCapacity} spaces booked · '
                                       '${trip.boarded} aboard'
                                       '${trip.checkedIn > 0 ? ' · ${trip.checkedIn} at terminal' : ''}',
                                       style: text.bodySmall,
@@ -271,6 +296,7 @@ class _TripList extends StatelessWidget {
                           ),
                         ),
                       ),
+                      ),
                     );
                   },
                 ),
@@ -283,11 +309,17 @@ class _TripDetail extends StatelessWidget {
   const _TripDetail({
     required this.trip,
     required this.manifest,
+    required this.readsList,
+    required this.listError,
+    required this.onRetryList,
     required this.stopNames,
     required this.onLifecycleChanged,
   });
   final TripBoardEntry? trip;
   final TripManifest? manifest;
+  final bool readsList;
+  final String? listError;
+  final VoidCallback onRetryList;
   final Map<int, String> stopNames;
   final VoidCallback onLifecycleChanged;
 
@@ -347,8 +379,34 @@ class _TripDetail extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              if (m == null)
+              if (m == null && readsList && listError == null)
                 const LinearProgressIndicator()
+              else if (m == null)
+                // Without the list (the Cashier, or a list that failed to
+                // load): the day's own counts, which every office role reads.
+                Row(
+                  children: [
+                    Expanded(
+                      child: StatTile(
+                          label: 'Aboard', value: '${t.boarded}', color: AppColors.success,
+                          caption: 'scanned or listed'),
+                    ),
+                    if (t.doorAboard != null) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: StatTile(label: 'Camera count', value: '${t.doorAboard}',
+                            caption: 'from the phone at the door'),
+                      ),
+                    ],
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: StatTile(
+                          label: 'At terminal', value: '${t.checkedIn}', color: AppColors.info),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: StatTile(label: 'Booked', value: '${t.booked}')),
+                  ],
+                )
               else
                 Row(
                   children: [
@@ -413,7 +471,22 @@ class _TripDetail extends StatelessWidget {
         Panel(
           title: m == null ? 'Passenger list' : 'Passenger list (${m.passengers.length})',
           icon: Icons.people_alt_outlined,
-          child: m == null
+          child: !readsList
+              ? Text(
+                  'The names on this list are for the Dispatcher and the Terminal Manager. '
+                  'The share owed for this trip is on Money.',
+                  style: text.bodySmall)
+              : listError != null
+                  ? Row(children: [
+                      Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text('The list did not load: $listError',
+                            style: text.bodySmall!.copyWith(color: AppColors.danger)),
+                      ),
+                      TextButton(onPressed: onRetryList, child: const Text('Try again')),
+                    ])
+              : m == null
               ? const Padding(
                   padding: EdgeInsets.all(AppSpacing.md),
                   child: LinearProgressIndicator(),
@@ -468,7 +541,7 @@ class _SeatsPanel extends StatelessWidget {
           ),
         );
     return Panel(
-      title: 'Seats',
+      title: 'Spaces',
       icon: Icons.event_seat_outlined,
       child: Column(
         children: [

@@ -58,7 +58,6 @@ class _DisputesScreenState extends State<DisputesScreen> {
         children: [
           PageHeader(
             title: 'Disputes',
-            technicalNote: 'Disputes',
             description: 'An operator\'s contest of a fare line or a driving flag. Record one from '
                 'Remittance or Driving Flags; the Terminal Manager decides each, with a note.',
             actions: [

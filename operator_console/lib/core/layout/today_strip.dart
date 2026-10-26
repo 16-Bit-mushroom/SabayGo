@@ -8,6 +8,7 @@ import '../../data/repositories/dispatch_repository.dart';
 import '../../data/repositories/oversight_repository.dart';
 import '../../data/repositories/sos_repository.dart';
 import '../../data/repositories/tracking_repository.dart';
+import '../design/components/focus_ring.dart';
 import '../design/components/status_badge.dart';
 import '../design/tokens.dart';
 import '../../viewmodels/auth_provider.dart';
@@ -96,13 +97,18 @@ class _TodayStripState extends State<TodayStrip> {
     final review = _review;
     final sos = _emergencies;
 
-    return SingleChildScrollView(
+    // Narrow, the chips keep their figures and give their words to a
+    // tooltip, so the last chip (open emergencies) never scrolls away.
+    return LayoutBuilder(builder: (context, c) {
+      final compact = c.maxWidth < 720;
+      return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           _Chip(
             icon: Icons.airport_shuttle_outlined,
             label: 'Vans on the road',
+            compact: compact,
             value: vans == null ? '—' : '${vans.length}',
             note: silent > 0 ? '$silent no signal' : null,
             tone: silent > 0 ? Tone.warning : Tone.success,
@@ -111,6 +117,7 @@ class _TodayStripState extends State<TodayStrip> {
           _Chip(
             icon: Icons.departure_board_outlined,
             label: 'Trips today',
+            compact: compact,
             value: trips == null ? '—' : '${trips.length}',
             note: underWay > 0 ? '$underWay under way' : null,
             tone: Tone.info,
@@ -119,6 +126,7 @@ class _TodayStripState extends State<TodayStrip> {
           _Chip(
             icon: _manager ? Icons.how_to_reg_outlined : Icons.money_off,
             label: _manager ? 'Boardings to review' : 'Vans owing the share',
+            compact: compact,
             value: review == null ? '—' : '$review',
             tone: (review ?? 0) > 0 ? Tone.warning : Tone.neutral,
             onTap: () => widget.onOpen(TodayTarget.review),
@@ -126,6 +134,7 @@ class _TodayStripState extends State<TodayStrip> {
           _Chip(
             icon: Icons.emergency_outlined,
             label: 'Open emergencies',
+            compact: compact,
             value: sos == null ? '—' : '$sos',
             tone: (sos ?? 0) > 0 ? Tone.danger : Tone.neutral,
             onTap: () => widget.onOpen(TodayTarget.emergencies),
@@ -133,6 +142,7 @@ class _TodayStripState extends State<TodayStrip> {
         ],
       ),
     );
+    });
   }
 }
 
@@ -143,6 +153,7 @@ class _Chip extends StatelessWidget {
     required this.value,
     required this.tone,
     required this.onTap,
+    required this.compact,
     this.note,
   });
 
@@ -152,11 +163,13 @@ class _Chip extends StatelessWidget {
   final String? note;
   final Tone tone;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final (fg, _) = StatusBadge.colours(tone);
-    return Padding(
+    final said = '$label: $value${note == null ? '' : ', $note'}';
+    final chip = Padding(
       padding: const EdgeInsets.only(right: AppSpacing.sm),
       child: Material(
         color: AppColors.surfaceRaised,
@@ -164,7 +177,9 @@ class _Chip extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.full),
           side: BorderSide(color: AppColors.divider),
         ),
-        child: InkWell(
+        child: FocusRing(
+          radius: AppRadius.full,
+          child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
           child: Padding(
@@ -174,13 +189,15 @@ class _Chip extends StatelessWidget {
               children: [
                 Icon(icon, size: 16, color: AppColors.textMuted),
                 const SizedBox(width: AppSpacing.sm),
-                Text(label,
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                const SizedBox(width: AppSpacing.sm),
+                if (!compact) ...[
+                  Text(label,
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
                 Text(value,
                     style: TextStyle(color: fg == AppColors.textMuted ? AppColors.textPrimary : fg,
-                        fontSize: 14, fontWeight: FontWeight.w800)),
-                if (note != null) ...[
+                        fontSize: 14, fontWeight: FontWeight.w700)),
+                if (note != null && !compact) ...[
                   const SizedBox(width: AppSpacing.sm),
                   Text(note!, style: TextStyle(color: fg, fontSize: 12)),
                 ],
@@ -188,7 +205,15 @@ class _Chip extends StatelessWidget {
             ),
           ),
         ),
+        ),
       ),
+    );
+    return Semantics(
+      button: true,
+      label: said,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: compact ? Tooltip(message: said, excludeFromSemantics: true, child: chip) : chip,
     );
   }
 }
