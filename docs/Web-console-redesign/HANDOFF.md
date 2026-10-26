@@ -1,163 +1,205 @@
-# Handoff: console redesign v3, the three passes
+# Handoff: the operator console after redesign v3
 
-Written 25 Oct 2026 at the end of the session that built the redesign, for
-the session that runs **critique, then harden, then polish** on it, in that
-order. Critique can still change structure, so it goes first.
+Updated 26 Oct 2026, for the teammate taking over the console. Read this
+first, then `docs/PROGRESS_LOG.md`: the entries "Console redesign v3" and
+"Console v3: critique, harden, polish" say what was built and why.
 
-## What is built (read these, do not re-derive)
+## Where the work is
 
-- `docs/PROGRESS_LOG.md`, entry "Console redesign v3": what changed and
-  where.
-- `DESIGN.md` and `.impeccable/design.json`: the new system ("The Pila
-  Board"), written from the build.
-- `.impeccable/surfaces/operator-console-lib.md`: the direction contract.
-  The world is fixed; the passes refine it and must not replace it.
-- `PRODUCT.md`: product truth. It records the owner's 25 Oct decisions:
-  - white / green / black-red, 60-30-10;
-  - light only;
-  - seven menu hubs;
-  - no system or table names on screen.
-- The owner's brief: `docs/Web-console-redesign/UI-UX-redesign-v3.txt`,
-  plus the three annotated screenshots beside it.
+Everything is on the branch **`console-v3`**, in four commits on top of
+`main`:
 
-The code lives under `operator_console/lib/`:
+| Commit | What |
+|---|---|
+| `feat(edge)` | The phone app: the door layout drawn one step at a time |
+| `feat(backend)` | Routes & Fares endpoints; the tracking ping for development only |
+| `feat(console)` | Redesign v3, with critique, harden and polish |
+| `docs` | Progress log and known issues moved out of `CLAUDE.md` |
 
-- shell: `core/layout/operator_shell.dart`;
-- tokens and theme: `core/design/`;
-- Setup: `modules/setup/`;
-- validation panel: `modules/fleet_management/roster_parts.dart`.
+The branch goes to `main` through a pull request. Check whether it has been
+merged before you start; if not, work on top of `console-v3`.
 
-## State of review
+## Run it
 
-The finish review passed (ship), but only for the eight fixes it scored:
+```fish
+./run.sh                      # database, backend, console at http://localhost:3001
+```
 
-- the head of the queue versus the open step;
-- no blue;
-- subtitles that wrap;
-- one filled button per view;
-- the Overview empty note;
-- the title chips removed;
-- and two evidence fixes.
+That runs on the **dev database** (`sabaygo`, demo data). Two things to
+know about that database:
 
-Captures live in `.impeccable/review/`. The review did **not** cover the
-whole surface.
+- Its live trips are dated from the last reset.
+- After a day or two, Trips and the journey tests find no trips for
+  today. Run `./run.sh --reset-db` to fix that; it rebuilds the demo
+  data.
 
-**Never captured or reviewed:** Van Status Board, Special Trips, Money
-(Remittance), Messages, Emergencies (SOS), Review Starts and Boarding
-Audit with real rows, Timetable, Phones, Rules & Settings, and the
-Operators list.
+To see the **real set-up** the owner entered, run it on the field
+database. Never run tests or a reset against it:
 
-## What each pass should take on
+```fish
+set -x DATABASE_URL (string replace -r '/sabaygo$' /sabaygo_field (grep '^DATABASE_URL=' backend/.env | cut -d= -f2-))
+./run.sh --no-gps
+```
 
-**Critique.** The brief says the old console had poor learnability and
-usability. Nothing has scored the new one against usability heuristics yet.
-Cover:
-- the menu and tabs;
-- Setup's queue and its inline forms;
-- the role differences (Terminal Manager vs Cashier);
-- the pages listed above that nobody has looked at.
+In bash: `DATABASE_URL=…/sabaygo_field ./run.sh --no-gps`. Use `--no-gps`
+because the GPS simulator reads trips from the dev database.
 
-**Harden.** Known untested paths:
-- a truly empty database: every capture so far was a nearly set-up copy;
-- long names and many records in the Setup lists;
-- slow or failed requests in the middle of a form;
-- a server refusal shown inside a form (`FormProblem`, refused);
-- keyboard-only use and focus order;
-- the narrow layout, where the content area is under 980 px and the queue
-  becomes a horizontal strip, which nobody has captured.
+**Accounts:**
+- Dev database: `manager@`, `cashier@`, `dispatcher@` and `passenger@sabaygo.dev`, password `sabaygo123`.
+- Field database: `manager@sabaygo.dev` (password `sabaygo123`) and the Cashier `chris@gmail.com`.
 
-**Polish.** Older drift the documenter found and left alone:
-- the notification sheet has `elevation: 12`
-  (`core/layout/notification_bell.dart:66`), against the map-only-shadow
-  rule;
-- the SOS card's category label is uppercase at weight 900
-  (`modules/emergency/screens/sos_console_screen.dart:215`), and 900 is
-  not bundled;
-- the theme asks for weights 600 and 800, but only Roboto 400, 500 and 700
-  are bundled;
-- theme buttons are 40 px high, against the 48 px `minTouchTarget` rule in
-  the tokens.
+## What the console is now
 
-Also the gaps the review noted against the contract:
-- a done step loses its number, so the order cannot be read once the
-  queue is finished;
-- the pila strip is not yet used where order is real (a van's turn on the
-  Van Status Board).
+The design system is **`DESIGN.md`** ("The Pila Board"). Product truth is
+**`PRODUCT.md`**: the owner's decisions, the words to use, and the rules
+the screens must keep. In short:
 
-## How to see it running (proven in the last session)
+- One light palette:
+  - white page;
+  - terminal-green sidebar and buttons;
+  - black text;
+  - red only for SOS, danger and route pins.
+- Seven menu entries, with related pages as tabs: Overview, Trips, Reviews,
+  Money, Messages, Setup, and Emergencies at the foot.
+- Setup is one page.
+  - On the left, a queue of steps in the order the system needs them. The
+    first unfinished step is raised and marked **Now**.
+  - Each step's records are added and edited beside its list, never in a
+    dialog.
+- **The code:**
+  - shell: `operator_console/lib/core/layout/operator_shell.dart`;
+  - tokens and theme: `core/design/`;
+  - Setup: `modules/setup/`;
+  - shared pieces: `core/design/components/`.
 
-The commands below are written for Claude's **bash** tool. The owner's own
-shell is fish.
+**Rules that are easy to break** (the full list is in `PRODUCT.md`):
 
-**Never write to `sabaygo_field`**: it is the owner's real set-up. Work on a
-copy instead:
+- Never show a number nobody measured. Missing evidence shows as missing:
+  Unaudited, Not set, last known. Boarding Audit's empty day was saying
+  "every boarding matched" on days with no trips. That is fixed; don't
+  bring it back.
+- No system or table names on screen. Settings show a title in A2Z's
+  words, not `refund_enabled`.
+- Say **Dispatcher**, never Conductor. Say **spaces**, never seats. Say
+  **passenger list**, never manifest.
+- One filled (green) button per view, and it is the next step. A disabled
+  button is never the filled one.
+- Red means an alarm. Money owed is ochre (cash in hand is not missing
+  money).
+- Roboto is bundled at 400, 500 and 700 only. Do not ask for 600 or 800;
+  the browser draws them as 700.
+- Anything clickable that is not a standard button wraps its `InkWell` in
+  `FocusRing` (`core/design/components/focus_ring.dart`). Otherwise a
+  keyboard user cannot see where they are.
+
+## What was checked, and what was not
+
+**Checked on 25–26 Oct:**
+- `flutter analyze` is clean, and the widget test passes.
+- `test_office_journey.sh` passed 61 of 62. The one failure is the stale
+  dev seed described above.
+- A live build was used:
+  - as the Terminal Manager and as a Cashier;
+  - at 1440 and 1000 px wide;
+  - with the keyboard only;
+  - on a database built from the migrations alone;
+  - with 39 long-named terminals;
+  - with the server stopped in the middle of a form.
+
+**Not checked:**
+- A real screen reader. Only Flutter's accessibility tree was read.
+- Any browser other than Chromium.
+- A projector.
+- The edge app's unit tests (`edge_app`, `./gradlew test`). They were
+  not run for the edge commit.
+
+## What is left, in order
+
+1. **Merge `console-v3`** once someone has looked at it.
+2. **The date resets on every tab.** Trips, Review Starts, Boarding Audit
+   and Remittance each start at today. A day picked on one page should
+   carry to the next. Share one selected day in the shell
+   (`operator_shell.dart`) and pass it to these pages.
+3. **Pointers to other pages are plain text.** Examples: "Trips come from
+   the Timetable", the Disputes and Driving Flags hints. Make each one a
+   button that opens that page. The shell's `_show()` already finds a page
+   by its screen type.
+4. **The validation panel never says who validated a record, or when.**
+   The server does not send it yet. This needs a field from
+   `api/v1/fleet.py` before the console can show it
+   (`modules/fleet_management/roster_parts.dart`).
+5. **The Van Status Board is not yet the pila.** The design wants vans in
+   turn order there, but the server stores no turn order. Ask the owner
+   whether A2Z keeps one. Don't invent an order.
+6. **Small ones:**
+   - The Staff form's Save buttons are enabled before the form is valid,
+     unlike the other steps.
+   - Speed limits shows "Stretch 1" with an empty box and no unit.
+   - A terminal name longer than two lines still cuts its end off.
+   - The Cashier's Setup says "3 of 3 done", though they set nothing up.
+   - There is no search on long lists, and no keyboard shortcuts.
+
+**Open questions for the owner (not decided):**
+- Should the Cashier land on today's Trips instead of the map?
+- Should the four development settings under Rules & Settings > Advanced
+  be hidden from the Terminal Manager altogether?
+- A2Z's real SOS numbers. Until they are set, Setup warns that emergency
+  texts are off.
+
+## Seeing the console in a script (for screenshots and checks)
+
+Flutter draws to a canvas, so you click by coordinates. A headless
+Chromium can be driven with `.impeccable/tools/shoot.mjs`:
 
 ```bash
-# 1. a scratch copy of the field database, with access for the app user
-docker exec sabaygo-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE sabaygo_redesign; GRANT ALL PRIVILEGES ON sabaygo_redesign.* TO '"'"'sabaygo_app'"'"'@'"'"'%'"'"'" 2>&1 | grep -v Warning; mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --routines --triggers sabaygo_field 2>/dev/null | mysql -uroot -p"$MYSQL_ROOT_PASSWORD" sabaygo_redesign 2>&1 | grep -v Warning'
-
-# 2. the backend on the copy (logs/backend-redesign.log)
-cd backend && set -a && . ./.env && set +a && export DATABASE_URL="${DATABASE_URL%/sabaygo}/sabaygo_redesign" && nohup ./venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../logs/backend-redesign.log 2>&1 &
-
-# 3. build the console (about 3.5 min) and serve it on 3001
-cd operator_console && $HOME/flutter/bin/flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 > ../logs/console-build-redesign.log 2>&1
-nohup python3 -m http.server 3001 --bind 127.0.0.1 --directory operator_console/build/web > logs/console-redesign.log 2>&1 &
-
-# 4. headless Chromium, driven over CDP
-nohup /usr/bin/chromium --headless=new --remote-debugging-port=9333 --user-data-dir=<scratchpad>/chrome --window-size=1440,900 --no-first-run --disable-gpu about:blank > /dev/null 2>&1 &
-node .impeccable/tools/shoot.mjs steps.json
+/usr/bin/chromium --headless=new --remote-debugging-port=9333 \
+  --user-data-dir=/tmp/sg-chrome --window-size=1440,900 about:blank &
+CDP_PORT=9333 node .impeccable/tools/shoot.mjs steps.json
 ```
 
-**The driver.** `shoot.mjs` takes a JSON list of steps:
+A steps file is a JSON list. The step types:
+`{"size":[w,h]}`, `{"go":url}`, `{"wait":ms}`, `{"click":[x,y]}`,
+`{"type":"text"}`, `{"key":"Tab"}`, `{"wheel":[x,y,dy]}`,
+`{"eval":"js"}`, `{"shot":"/path.png"}`.
 
-```
-{"size":[w,h]}  {"go":url}  {"wait":ms}  {"click":[x,y]}  {"type":"text"}
-{"key":"Enter"}  {"shot":"/path.png"}
-```
-
-Flutter draws to a canvas, so you click by coordinates. Take a shot first
-to find positions.
-
-**Known positions at 1440 × 900:**
-- sign-in: email field (720,474), password field (700,530), then press
-  Enter;
+**Positions at 1440 × 900:**
+- sign-in: email (720,474), password (700,530), then Enter;
 - sidebar entries at x=120: Overview y=132, Trips 180, Reviews 228,
-  Money 276, Messages 324, Setup 372; Emergencies at y=810;
-- account menu (1340,31), then Sign out (1320,140);
-- Setup queue slots move as the queue's state changes, so take a shot
-  first.
+  Money 276, Messages 324, Setup 372; Emergencies y=810;
+- account menu (1340,31), then Sign out (1320,140).
 
-**Gotchas.**
-- A reload sometimes signs the session out.
-- The scratch copy is nearly set up (7 of 7). To get a queue that is
-  part-way through, take the route out of service in Setup > Route, or
-  suspend the Cashiers in the copy with SQL.
-- For a truly empty database (a harden item), build one from the
-  migrations without the demo seed. Do not empty `sabaygo_field`.
+**Traps, each of which cost time:**
+- **Start every steps file with `{"size":[1440,900]}`.** The size resets
+  each time the script reconnects. Without it the page is 813 px tall
+  and every click lands in the wrong place.
+- **After a rebuild the browser keeps the old `main.dart.js`.** Before
+  looking, run
+  `{"eval":"fetch('main.dart.js',{cache:'reload'})"}`, then `{"go":…}`
+  again.
+- **A reload sometimes signs the session out.**
+- **Never write to `sabaygo_field`.** Make a scratch copy (bash, from
+  the repo root):
+  ```bash
+  set -a; . ./.env; set +a
+  docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" sabaygo-mysql sh -c \
+    'mysql -uroot -e "CREATE DATABASE sabaygo_scratch; GRANT ALL ON sabaygo_scratch.* TO '"'"'sabaygo_app'"'"'@'"'"'%'"'"'" && mysqldump -uroot --routines --triggers sabaygo_field | mysql -uroot sabaygo_scratch'
+  ```
+  Then run the backend with `DATABASE_URL=…/sabaygo_scratch`. When you
+  are done, revoke the grant and `DROP DATABASE sabaygo_scratch`.
+- **In a script, `pkill -f "uvicorn …"` also matches the shell running
+  it.** Kill by port instead: `ss -ltnp | grep :8000`.
 
-**Accounts in the copy:**
-- `manager@sabaygo.dev` / `sabaygo123`;
-- `test.cashier@sabaygo.dev` and `second.cashier@sabaygo.dev` /
-  `sabaygo123`. These two exist only in the copy; the last session made
-  them through the Add staff form.
+## The design tooling
 
-**Clean up when done.** Kill the three processes, then drop the copy:
-`REVOKE ALL ... ON sabaygo_redesign.*` and `DROP DATABASE
-sabaygo_redesign`.
+The design passes used the Impeccable skill. Its state lives in
+`.impeccable/` (committed):
 
-**Checks.**
-- `$HOME/flutter/bin/flutter analyze | grep -E "error|warning"` must be
-  empty.
-- The widget test passes only with
-  `CHROME_EXECUTABLE=/usr/bin/chromium flutter test --platform chrome`.
-  On the VM it cannot load `package:web`; that was already true before
-  the redesign.
+- `design.json`;
+- the direction brief in `surfaces/`;
+- the critique snapshot in `critique/`;
+- the screenshots of the first review in `review/`.
 
-## Housekeeping
-
-- Nothing from the redesign is committed.
-- `modules/routes_fares/routes_fares_screen.dart` was never committed and
-  was removed, because its forms now live in the Setup steps. A copy is in
-  `.impeccable/tools/removed-routes-fares/`.
-- After any edit, record the step at the end of `docs/PROGRESS_LOG.md`.
-  If the system itself changes, update `DESIGN.md`.
+The skill itself (`.claude/skills/impeccable`) is installed on the owner's
+machine only and is not in the repository. To run another critique or
+polish with Claude Code, install it the same way, or ask the owner for
+the folder.
