@@ -71,31 +71,36 @@
         android:orientation="vertical"
         android:visibility="gone">
         <TextView
+            android:id="@+id/edit_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Drag the yellow line's ends across the doorway and the red box over the driver's seat. The arrow points into the cabin."
-            android:textSize="13sp" />
+            android:textSize="16sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/edit_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minLines="3"
+            android:paddingVertical="4dp"
+            android:textSize="14sp" />
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
             <Button
-                android:id="@+id/flip"
+                android:id="@+id/back"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Flip cabin side" />
+                android:layout_weight="1" />
             <Button
-                android:id="@+id/save"
+                android:id="@+id/extra"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Save" />
+                android:layout_weight="1" />
             <Button
-                android:id="@+id/cancel"
+                android:id="@+id/next"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Cancel" />
+                android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

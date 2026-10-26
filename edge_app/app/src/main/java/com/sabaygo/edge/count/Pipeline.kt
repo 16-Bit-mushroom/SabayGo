@@ -1,6 +1,7 @@
 package com.sabaygo.edge.count
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.camera.core.ImageProxy
@@ -41,6 +42,9 @@ class Pipeline(context: Context, private val config: Config, private val outbox:
     private var lastShown = 0L
     private var lastLens = 0L
     private val runs = ArrayDeque<Long>()
+    private val trace = if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+        Trace(File(context.getExternalFilesDir(null), "trace").apply { mkdirs() })
+    } else null
 
     fun onFrame(image: ImageProxy) {
         val now = SystemClock.elapsedRealtime()
@@ -56,7 +60,7 @@ class Pipeline(context: Context, private val config: Config, private val outbox:
         val counting = Live.shouldCount()
         followTrip(counting)
         Live.counting = counting
-        val show = Live.screenOn && now - lastShown >= 500
+        val show = Live.screenOn && now - lastShown >= if (Live.editing) EDIT_SHOW_MS else SHOW_MS
         val layout = Live.session?.layout
         Live.note = when {
             counting && layout == null -> "No door line for this van yet: draw it, or nothing is counted."
@@ -71,7 +75,9 @@ class Pipeline(context: Context, private val config: Config, private val outbox:
             if (counter?.layout != layout) counter = layout?.let(::DoorCounter)
             val people = if (layout == null) det.boxes else det.boxes.filterNot(layout::masked)
             val tracks = tracker.update(people, now / 1000.0)
-            counter?.update(tracks)?.forEach { record(it, frame, rotation, det.boxes, layout) }
+            val crossings = counter?.update(tracks).orEmpty()
+            crossings.forEach { record(it, frame, rotation, det.boxes, layout) }
+            trace?.frame(people, tracks, counter, crossings)
             if (show) show(frame, rotation, tracks, det.boxes, now)
         } else {
             noteRun(null)
@@ -82,6 +88,7 @@ class Pipeline(context: Context, private val config: Config, private val outbox:
     }
 
     fun close() {
+        trace?.close()
         detector?.close()
         detector = null
     }
@@ -158,6 +165,8 @@ class Pipeline(context: Context, private val config: Config, private val outbox:
         const val THREADS = 4             // as benchmarked (docs/benchmarks/edge_sweep_2026-10-18.md)
         const val STILL_PX = 640
         const val SCREEN_PX = 480
+        const val SHOW_MS = 500L          // the screen's picture, a few a second
+        const val EDIT_SHOW_MS = 100L     // while the door line is drawn
         const val FIX_FRESH_MS = 10_000L
         const val RATE_WINDOW_MS = 30_000L
     }

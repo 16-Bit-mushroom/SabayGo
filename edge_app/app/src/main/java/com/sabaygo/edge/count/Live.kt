@@ -2,6 +2,7 @@ package com.sabaygo.edge.count
 
 import android.graphics.Bitmap
 import android.location.Location
+import com.sabaygo.edge.bench.DeviceState
 import com.sabaygo.edge.link.Outbox
 import com.sabaygo.edge.link.SessionInfo
 import com.sabaygo.edge.link.Uploader
@@ -18,6 +19,8 @@ class Frame(val image: Bitmap, val tracks: List<Pair<Int, Box>>, val boxes: List
 object Live {
     @Volatile var running = false
     @Volatile var screenOn = false
+    /** The door line is being drawn: the screen's picture refreshes faster. */
+    @Volatile var editing = false
 
     @Volatile var session: SessionInfo? = null
     @Volatile var sessionOkAt = 0L
@@ -38,6 +41,9 @@ object Live {
     @Volatile var frame: Frame? = null
 
     @Volatile var outbox: Outbox? = null
+    @Volatile var device: DeviceState? = null
+    /** When the service started (elapsed realtime): the detection rate means something 30 s after. */
+    @Volatile var startedAt = 0L
     @Volatile var uploader: Uploader? = null
 
     /** The server stops answering for this long: keep counting for the van rather than lose what boards. */

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.InputType
 import android.view.View
 import android.view.WindowManager
@@ -52,6 +53,11 @@ class HomeActivity : ComponentActivity() {
     private lateinit var startStop: Button
     private lateinit var mainRow: View
     private lateinit var editRow: View
+    private lateinit var editTitle: TextView
+    private lateinit var editHint: TextView
+    private lateinit var back: Button
+    private lateinit var extra: Button
+    private lateinit var next: Button
     private val ui = Handler(Looper.getMainLooper())
 
     private val ask = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -64,7 +70,8 @@ class HomeActivity : ComponentActivity() {
             overlay.invalidate()
             status.text = statusText()
             startStop.text = if (Live.running) "Stop" else "Start"
-            ui.postDelayed(this, 500)
+            // Faster while the door line is drawn, so the picture follows the camera.
+            ui.postDelayed(this, if (Live.editing) 100 else 500)
         }
     }
 
@@ -78,8 +85,13 @@ class HomeActivity : ComponentActivity() {
         startStop = findViewById(R.id.start_stop)
         mainRow = findViewById(R.id.main_row)
         editRow = findViewById(R.id.edit_row)
+        editTitle = findViewById(R.id.edit_title)
+        editHint = findViewById(R.id.edit_hint)
+        back = findViewById(R.id.back)
+        extra = findViewById(R.id.extra)
+        next = findViewById(R.id.next)
 
-        startStop.setOnClickListener { if (Live.running) CountingService.stop(this) else startCounting() }
+        startStop.setOnClickListener { if (Live.running) confirmStop() else startCounting() }
         findViewById<Button>(R.id.door_line).setOnClickListener { editLine() }
         findViewById<Button>(R.id.setup).setOnClickListener { setupDialog() }
         findViewById<Button>(R.id.checklist).setOnClickListener { startActivity(Intent(this, ChecklistActivity::class.java)) }
@@ -87,11 +99,16 @@ class HomeActivity : ComponentActivity() {
             CountingService.stop(this)   // one camera user at a time
             startActivity(Intent(this, BenchActivity::class.java))
         }
-        findViewById<Button>(R.id.flip).setOnClickListener {
-            overlay.editing = overlay.editing?.let { it.copy(inside = -it.inside) }
+        back.setOnClickListener {
+            if (overlay.step == EditStep.LINE) endEdit() else showStep(EditStep.entries[overlay.step.ordinal - 1])
         }
-        findViewById<Button>(R.id.save).setOnClickListener { saveLine() }
-        findViewById<Button>(R.id.cancel).setOnClickListener { endEdit() }
+        next.setOnClickListener {
+            if (overlay.step == EditStep.SEAT) saveLine() else showStep(EditStep.entries[overlay.step.ordinal + 1])
+        }
+        extra.setOnClickListener {
+            overlay.editing = overlay.editing?.let { it.copy(seatMask = if (it.seatMask == null) DoorLayout.DEFAULT.seatMask else null) }
+            showStep(EditStep.SEAT)
+        }
 
         takeSetupExtras(intent)
         if (config.ready) startCounting() else setupDialog()
@@ -112,6 +129,16 @@ class HomeActivity : ComponentActivity() {
         Live.screenOn = false
         ui.removeCallbacks(tick)
         super.onPause()
+    }
+
+    /** Asked first: a stopped phone counts nothing, and the trip goes unaudited. */
+    private fun confirmStop() {
+        AlertDialog.Builder(this)
+            .setTitle("Stop counting?")
+            .setMessage("Nothing at the door is counted until you tap Start again.")
+            .setPositiveButton("Stop") { _, _ -> CountingService.stop(this) }
+            .setNegativeButton("Keep counting", null)
+            .show()
     }
 
     private fun hasCamera() = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -192,12 +219,42 @@ class HomeActivity : ComponentActivity() {
             Toast.makeText(this, "Start the camera first.", Toast.LENGTH_LONG).show(); return
         }
         overlay.editing = Live.session?.layout ?: DoorLayout.DEFAULT
+        Live.editing = true
         mainRow.visibility = View.GONE
         editRow.visibility = View.VISIBLE
+        showStep(EditStep.LINE)
+    }
+
+    /** One thing at a time: the line, which side is the cabin, the driver's seat. */
+    private fun showStep(s: EditStep) {
+        overlay.step = s
+        val noSeat = overlay.editing?.seatMask == null
+        editTitle.text = when (s) {
+            EditStep.LINE -> "Step 1 of 3 · The door line"
+            EditStep.INSIDE -> "Step 2 of 3 · Inside the van"
+            EditStep.SEAT -> "Step 3 of 3 · The driver's seat"
+        }
+        editHint.text = when (s) {
+            EditStep.LINE -> "Drag the two blue dots so the yellow line crosses the doorway where the middle of " +
+                "a person passes, about waist height in the picture, not at their feet, and across the whole " +
+                "path people walk. A person is counted when the green dot on their body clears the pale strip " +
+                "on the other side."
+            EditStep.INSIDE -> "Tap the side of the line that is inside the van; it turns green. Crossing " +
+                "towards it is a boarding, crossing away an alighting."
+            EditStep.SEAT -> if (noSeat) "The driver's seat is not in view, so nobody in the picture is left out. " +
+                "Tap Mark driver's seat if it is in view."
+            else "Drag the red box over the driver's seat: its middle moves it, a blue dot resizes it. " +
+                "Whoever sits there is never counted."
+        }
+        back.text = if (s == EditStep.LINE) "Cancel" else "Back"
+        next.text = if (s == EditStep.SEAT) "Save" else "Next"
+        extra.visibility = if (s == EditStep.SEAT) View.VISIBLE else View.INVISIBLE
+        extra.text = if (noSeat) "Mark driver's seat" else "Driver not in view"
     }
 
     private fun endEdit() {
         overlay.editing = null
+        Live.editing = false
         editRow.visibility = View.GONE
         mainRow.visibility = View.VISIBLE
     }
@@ -244,15 +301,26 @@ class HomeActivity : ComponentActivity() {
                 Live.counting -> "Counting (no answer from the server; kept until it returns)"
                 else -> "Paused: no trip assigned to this van"
             }
-            lines += "Door count ${Live.aboard}  (in ${Live.boards}, out ${Live.alights})" +
+            lines += "Inside now ${Live.aboard}  ·  so far ${Live.boards} in, ${Live.alights} out" +
                 (Live.lastEvent?.let { "  ·  last $it" } ?: "")
             val fix = Live.lastFix
             lines += "Camera ${ok(now - Live.lastFrameAt < 5_000)}  ·  GPS ${
                 if (fix != null && now - Live.lastFixAt < 10_000) "ok ±${fix.accuracy.toInt()} m" else "no fix"
             }  ·  lens ${if (Live.lensBlocked) "COVERED" else "clear"}  ·  ${
                 String.format(Locale.US, "%.1f", Live.detectionRateHz)} detections/s"
+            val dev = Live.device
+            dev?.batteryPct?.let { pct ->
+                lines += "Battery $pct %${if (dev.plugged == "none") ", not charging" else ", charging"}" +
+                    (dev.batteryC?.let { String.format(Locale.US, "  ·  %.0f °C", it) } ?: "")
+            }
+            // A person takes about a second to step through: a few frames is too few to track them.
+            if (Live.counting && SystemClock.elapsedRealtime() - Live.startedAt > SLOW_AFTER_MS &&
+                Live.detectionRateHz < SLOW_HZ) {
+                lines += "⚠ Only ${String.format(Locale.US, "%.0f", Live.detectionRateHz)} detections/s: people " +
+                    "can be missed. The phone may be too hot or low: cool it and plug it in."
+            }
         } else {
-            lines += "Stopped."
+            lines += "Stopped: nothing is counted. Tap Start."
         }
         val waiting = Live.outbox?.waiting().orEmpty()
         val up = Live.uploader
@@ -267,4 +335,9 @@ class HomeActivity : ComponentActivity() {
 
     private fun ok(b: Boolean) = if (b) "ok" else "NOT REPORTING"
     private fun clock(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalTime().withNano(0).toString()
+
+    private companion object {
+        const val SLOW_HZ = 10.0              // detections/s below which a crossing can be missed
+        const val SLOW_AFTER_MS = 40_000L     // the rate's 30 s window, filled
+    }
 }

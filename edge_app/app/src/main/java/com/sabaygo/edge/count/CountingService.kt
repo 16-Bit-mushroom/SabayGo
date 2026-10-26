@@ -13,6 +13,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.HandlerThread
+import android.os.SystemClock
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -76,6 +77,8 @@ class CountingService : LifecycleService() {
         pipeline = Pipeline(this, config, outbox)
         Live.outbox = outbox
         Live.uploader = uploader
+        Live.device = device
+        Live.startedAt = SystemClock.elapsedRealtime()
         Live.running = true
         startCamera()
         startGps()
@@ -87,6 +90,9 @@ class CountingService : LifecycleService() {
     override fun onDestroy() {
         Live.running = false
         Live.counting = false
+        // The last picture would look live: the screen says the camera is off instead.
+        Live.frame = null
+        Live.device = null
         locations?.removeUpdates(onFix)
         gpsThread.quitSafely()
         timer.shutdownNow()

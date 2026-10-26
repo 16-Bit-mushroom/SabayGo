@@ -116,4 +116,12 @@ class TrackingTest {
         val flipped = door.copy(inside = 1)
         assertTrue(flipped.cabinward(0.5f, 0.9f) > 0)
     }
+
+    @Test fun `tapping a side of the line makes it the cabin`() {
+        val above = door.withCabinAt(0.5f, 0.3f)
+        val below = door.withCabinAt(0.5f, 0.9f)
+        assertTrue(above.cabinward(0.5f, 0.3f) > 0)
+        assertTrue(below.cabinward(0.5f, 0.9f) > 0)
+        assertEquals(-above.inside, below.inside)
+    }
 }

@@ -30,6 +30,12 @@ data class DoorLayout(
     /** The driver: a box centred in the seat mask is never tracked (brief 5.2 item 2). */
     fun masked(b: Box) = seatMask?.contains(b.cx, b.cy) == true
 
+    /** The same line with the cabin on the side of (x, y): the Dispatcher taps the inside of the van. */
+    fun withCabinAt(x: Float, y: Float): DoorLayout {
+        val side = (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1)
+        return if (side == 0f) this else copy(inside = if (side > 0) 1 else -1)
+    }
+
     companion object {
         /** A start for a van with none yet: across the lower part of the frame, cabin above. */
         val DEFAULT = DoorLayout(0.2f, 0.8f, 0.8f, 0.8f, inside = -1, seatMask = Box(0.0f, 0.0f, 0.3f, 0.4f))
@@ -50,8 +56,11 @@ data class Crossing(val trackId: Int, val boarding: Boolean, val box: Box)
  * segment counts (with [endSlack] beyond each end), not someone passing
  * the line's extension elsewhere in the frame.
  */
-class DoorCounter(val layout: DoorLayout, private val margin: Float = 0.03f, private val endSlack: Float = 0.1f) {
+class DoorCounter(val layout: DoorLayout, private val margin: Float = MARGIN, private val endSlack: Float = 0.1f) {
     private val side = HashMap<Int, Int>()   // track id -> 1 cabin, -1 outside
+
+    /** The side held for a track, for the debug trace. */
+    fun sideOf(id: Int): Int? = side[id]
 
     fun update(tracks: List<Track>): List<Crossing> {
         val out = ArrayList<Crossing>()
@@ -77,9 +86,12 @@ class DoorCounter(val layout: DoorLayout, private val margin: Float = 0.03f, pri
         return out
     }
 
-    private companion object {
+    companion object {
+        /** How far past the line a box's middle must be, each side: the strip drawn along the line. */
+        const val MARGIN = 0.03f
+
         // Tracks briefly unseen keep their side so a lost-and-found track does not recount;
         // the map is bounded so a long trip does not grow it without end.
-        const val MAX_REMEMBERED = 256
+        private const val MAX_REMEMBERED = 256
     }
 }
