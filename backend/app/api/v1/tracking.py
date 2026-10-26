@@ -5,14 +5,14 @@ from __future__ import annotations
 import datetime as dt
 import logging
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from app.api.v1.deps import SessionDep, require_roles
 from app.application.tracking.flags import DrivingFlags
 from app.application.tracking.nahgm import TrackingService
 from app.config import settings
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import NotFoundError
 from app.domain.enums import Role
 
 log = logging.getLogger(__name__)
@@ -60,19 +60,15 @@ class PositionOut(BaseModel):
     etas: list[StopEtaOut]
 
 
-def verify_tracker(x_tracker_key: str | None = Header(default=None)) -> None:
-    """Authenticate an in-vehicle unit.
-
-    Devices cannot hold a user session, so a shared key authenticates the
-    fleet the same way the YOLOv8 node is authenticated. A per-device key
-    stored against `vans.camera_device_id` would be stronger and is worth
-    noting as future work -- with one shared key, a leak means re-keying
-    every unit.
+def development_only() -> None:
+    """The ping endpoint exists in development only, for
+    `scripts/tracking_simulator.py` (the demo's moving vans) and the test
+    scripts. The in-van phone reports through `POST /edge/fixes` with its
+    own device token, so nothing in a deployed system posts here, and an
+    unauthenticated position could depart a trip or raise driving flags.
     """
-    if not settings.tracker_api_key:
-        return  # unset in development; the endpoint stays open
-    if x_tracker_key != settings.tracker_api_key:
-        raise AuthenticationError("Invalid tracker key.")
+    if settings.environment != "development":
+        raise NotFoundError("Not found.")
 
 
 @router.post("/trips/{trip_id}/ping", status_code=201)
@@ -80,14 +76,9 @@ async def record_ping(
     trip_id: str,
     payload: PingRequest,
     session: SessionDep,
-    _: None = Depends(verify_tracker),
+    _: None = Depends(development_only),
 ) -> dict:
-    """Accept one position report from an in-vehicle unit.
-
-    Deliberately source-agnostic: the same endpoint serves a GPS dongle on
-    the edge computer, a crew handset, or the replay simulator used for
-    demonstration. Where the reading came from is not the API's concern.
-    """
+    """Accept one simulated position report (development only)."""
     stored = await TrackingService(session).record_ping(
         trip_id=trip_id,
         latitude=payload.latitude,

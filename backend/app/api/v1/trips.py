@@ -15,7 +15,6 @@ from app.core.exceptions import NotFoundError, PolicyViolationError
 from app.domain.enums import Role, TripStatus
 from app.domain.value_objects import Segment
 from app.infrastructure.models import (
-    FareMatrix,
     Operator,
     Route,
     RouteStop,
@@ -23,6 +22,7 @@ from app.infrastructure.models import (
     Terminal,
     Trip,
 )
+from app.infrastructure.repositories.fare_repository import FareRepository
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
@@ -216,24 +216,15 @@ async def search_trips(
 
     stop_names = await _stop_name_map(session)
     seats = SeatRepository(session)
+    fares = FareRepository(session)
     out: list[TripSummary] = []
 
     for trip in trips:
         if segment_by_route is not None:
             boarding_stop, alighting_stop = segment_by_route[trip.route_id]
         segment = Segment(boarding_stop, alighting_stop)
-        fare = await session.execute(
-            select(FareMatrix)
-            .where(
-                FareMatrix.route_id == trip.route_id,
-                FareMatrix.from_stop_sequence == boarding_stop,
-                FareMatrix.to_stop_sequence == alighting_stop,
-            )
-            .order_by(FareMatrix.effective_from.desc())
-            .limit(1)
-        )
-        fare_row = fare.scalar_one_or_none()
-        if fare_row is None:
+        fare = await fares.fare(trip.route_id, boarding_stop, alighting_stop, trip.service_date)
+        if fare is None:
             continue  # route does not serve this pair
 
         available = await seats.count_available(trip_id=trip.trip_id, segment=segment)
@@ -248,7 +239,7 @@ async def search_trips(
                 alighting_stop=alighting_stop,
                 boarding_terminal=stop_names.get((trip.route_id, boarding_stop), ""),
                 alighting_terminal=stop_names.get((trip.route_id, alighting_stop), ""),
-                fare_amount=fare_row.fare_amount,
+                fare_amount=fare,
                 seats_available=available,
                 plate_number=trip.van.plate_number if trip.van else None,
                 is_special_trip=trip.is_special_trip,
@@ -398,35 +389,20 @@ async def trip_fares(trip_id: str, session: SessionDep) -> list[TripFareOut]:
     the passenger, the way any till shows a total before taking money --
     it used to appear only on the confirmation, after the booking existed.
 
-    Same rule as `ReserveSeatUseCase._resolve_fare`: per pair, the row with
-    the latest `effective_from`. If the two ever disagreed, the screen
-    would quote one price and the receipt would charge another, so keep
-    them in step. The server still computes the charged fare itself; this
-    is a preview, never an input.
+    The fares in force on the trip's date, read through `FareRepository`
+    as the charge is, so the screen and the receipt agree. The server
+    still computes the charged fare itself; this is a preview, never an
+    input.
     """
     trip = await session.get(Trip, trip_id)
     if trip is None:
         raise NotFoundError("Trip not found.")
 
-    result = await session.execute(
-        select(FareMatrix)
-        .where(FareMatrix.route_id == trip.route_id)
-        .order_by(
-            FareMatrix.from_stop_sequence,
-            FareMatrix.to_stop_sequence,
-            FareMatrix.effective_from.desc(),
-        )
-    )
-    latest: dict[tuple[int, int], TripFareOut] = {}
-    for f in result.scalars():
-        key = (f.from_stop_sequence, f.to_stop_sequence)
-        if key not in latest:  # first row per pair is the newest
-            latest[key] = TripFareOut(
-                from_stop_sequence=f.from_stop_sequence,
-                to_stop_sequence=f.to_stop_sequence,
-                fare_amount=f.fare_amount,
-            )
-    return list(latest.values())
+    fares = await FareRepository(session).in_force(trip.route_id, trip.service_date)
+    return [
+        TripFareOut(from_stop_sequence=a, to_stop_sequence=b, fare_amount=amount)
+        for (a, b), amount in fares.items()
+    ]
 
 
 async def _stop_name_map(session: SessionDep) -> dict[tuple[str, int], str]:

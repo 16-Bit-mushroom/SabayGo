@@ -22,6 +22,7 @@ from app.application.scheduling.generate_trips import (
     GenerateDailyTripsUseCase,
 )
 from app.application.tracking.geometry import haversine_m
+from app.core.db import commit_or_conflict
 from app.core.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.core.timezone import APP_TZ
 from app.infrastructure.models import (
@@ -122,8 +123,8 @@ async def update_policy(
 # Terminals and routes
 # ===================================================================
 class TerminalIn(BaseModel):
-    terminal_name: str
-    city: str
+    terminal_name: str = Field(min_length=2, max_length=255)
+    city: str = Field(min_length=2, max_length=100)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     location_address: str | None = None
@@ -131,25 +132,119 @@ class TerminalIn(BaseModel):
     is_staffed: bool = True
 
 
+class TerminalEditIn(TerminalIn):
+    is_active: bool = True
+
+
+class TerminalOut(BaseModel):
+    terminal_id: str
+    terminal_name: str
+    city: str
+    location_address: str | None
+    latitude: float
+    longitude: float
+    # NULL: the `default_geofence_radius_m` setting applies.
+    geofence_radius_m: int | None
+    is_staffed: bool
+    is_active: bool
+    # Codes of the active routes that stop here.
+    routes: list[str]
+
+
+def _terminal_taken(payload: TerminalIn) -> str:
+    return f"A terminal named {payload.terminal_name.strip()} in {payload.city.strip()} already exists."
+
+
+def _place(t: Terminal, payload: TerminalIn) -> None:
+    t.terminal_name = payload.terminal_name.strip()
+    t.city = payload.city.strip()
+    t.location_address = (payload.location_address or "").strip() or None
+    t.latitude = Decimal(str(round(payload.latitude, 6)))
+    t.longitude = Decimal(str(round(payload.longitude, 6)))
+    t.geofence_radius_m = payload.geofence_radius_m
+    t.is_staffed = payload.is_staffed
+
+
+async def _active_routes_at(session, terminal_ids: list[str] | None = None) -> dict[str, list[str]]:
+    """terminal_id -> codes of the active routes that stop there."""
+    query = (select(RouteStop.terminal_id, Route.route_code)
+             .join(Route, Route.route_id == RouteStop.route_id)
+             .where(Route.is_active.is_(True)).order_by(Route.route_code))
+    if terminal_ids is not None:
+        query = query.where(RouteStop.terminal_id.in_(terminal_ids))
+    out: dict[str, list[str]] = {}
+    for terminal_id, code in (await session.execute(query)).all():
+        out.setdefault(terminal_id, []).append(code)
+    return out
+
+
+def _terminal_out(t: Terminal, routes: list[str]) -> TerminalOut:
+    return TerminalOut(
+        terminal_id=t.terminal_id, terminal_name=t.terminal_name, city=t.city,
+        location_address=t.location_address, latitude=float(t.latitude),
+        longitude=float(t.longitude), geofence_radius_m=t.geofence_radius_m,
+        is_staffed=t.is_staffed, is_active=t.is_active, routes=routes,
+    )
+
+
+@router.get("/terminals", response_model=list[TerminalOut], dependencies=[Depends(OFFICE)])
+async def list_config_terminals(session: SessionDep) -> list[TerminalOut]:
+    """Every terminal, closed ones too. The passengers' picker is
+    `GET /trips/terminals` (open terminals on active routes only)."""
+    routes = await _active_routes_at(session)
+    rows = (await session.execute(
+        select(Terminal).order_by(Terminal.city, Terminal.terminal_name))).scalars()
+    return [_terminal_out(t, routes.get(t.terminal_id, [])) for t in rows]
+
+
 @router.post("/terminals", status_code=201, dependencies=[Depends(MANAGER)])
 async def create_terminal(payload: TerminalIn, session: SessionDep) -> dict:
-    terminal_id = str(uuid.uuid4())
-    session.add(
-        Terminal(
-            terminal_id=terminal_id,
-            terminal_name=payload.terminal_name.strip(),
-            city=payload.city.strip(),
-            location_address=payload.location_address,
-            latitude=Decimal(str(round(payload.latitude, 6))),
-            longitude=Decimal(str(round(payload.longitude, 6))),
-            geofence_radius_m=payload.geofence_radius_m,
-            is_staffed=payload.is_staffed,
-            is_active=True,
-            created_at=dt.datetime.now(APP_TZ),
-        )
-    )
-    await session.commit()
-    return {"terminal_id": terminal_id, "terminal_name": payload.terminal_name}
+    terminal = Terminal(terminal_id=str(uuid.uuid4()), is_active=True,
+                        created_at=dt.datetime.now(APP_TZ))
+    _place(terminal, payload)
+    session.add(terminal)
+    await commit_or_conflict(session, _terminal_taken(payload))
+    return {"terminal_id": terminal.terminal_id, "terminal_name": terminal.terminal_name}
+
+
+@router.put("/terminals/{terminal_id}", response_model=TerminalOut,
+            dependencies=[Depends(MANAGER)])
+async def edit_terminal(
+    terminal_id: str, payload: TerminalEditIn, session: SessionDep,
+) -> TerminalOut:
+    """Correct a terminal, or close it.
+
+    A terminal closes only while no active route stops there: a route's
+    stops are fixed once it exists, so the route is deactivated first.
+    Moving a terminal re-measures the stretches of every route through it,
+    keeping their speed limits, because a stretch is measured terminal to
+    terminal and a stale length would time a slow stretch wrongly.
+    """
+    terminal = await session.get(Terminal, terminal_id)
+    if terminal is None:
+        raise NotFoundError("Terminal not found.")
+    routes = (await _active_routes_at(session, [terminal_id])).get(terminal_id, [])
+    if not payload.is_active and routes:
+        raise ConflictError(
+            f"Active routes stop here ({', '.join(routes)}). Deactivate them before closing "
+            "the terminal.")
+    before = (terminal.latitude, terminal.longitude)
+    _place(terminal, payload)
+    terminal.is_active = payload.is_active
+    if (terminal.latitude, terminal.longitude) != before:
+        await session.flush()
+        through = (await session.execute(
+            select(RouteStop.route_id).where(RouteStop.terminal_id == terminal_id))).scalars()
+        for route_id in through:
+            stretches = (await session.execute(
+                select(RouteStretch).where(RouteStretch.route_id == route_id)
+                .order_by(RouteStretch.stretch_no))).scalars().all()
+            if stretches:
+                await _measure_stretches(session, route_id, await _stop_points(session, route_id),
+                                         [s.speed_limit_kmh for s in stretches],
+                                         stretches[0].stop_zone_radius_m)
+    await commit_or_conflict(session, _terminal_taken(payload))
+    return _terminal_out(terminal, routes)
 
 
 class RouteStopIn(BaseModel):
@@ -159,39 +254,56 @@ class RouteStopIn(BaseModel):
 
 
 class RouteIn(BaseModel):
-    route_code: str = Field(max_length=32)
-    route_name: str
-    ltfrb_case_no: str | None = None
+    route_code: str = Field(min_length=2, max_length=32)
+    route_name: str = Field(min_length=2, max_length=255)
+    ltfrb_case_no: str | None = Field(default=None, max_length=64)
     stops: list[RouteStopIn] = Field(min_length=2)
+
+
+class RouteEditIn(BaseModel):
+    route_name: str = Field(min_length=2, max_length=255)
+    ltfrb_case_no: str | None = Field(default=None, max_length=64)
+    is_active: bool
+
+
+class RouteStopOut(BaseModel):
+    stop_sequence: int
+    terminal_id: str
+    terminal_name: str
+    offset_minutes: int
 
 
 class RouteOut(BaseModel):
     route_id: str
     route_code: str
     route_name: str
+    ltfrb_case_no: str | None
     is_active: bool
     stop_count: int
+    stops: list[RouteStopOut]
+
+
+def _route_out(r: Route) -> RouteOut:
+    return RouteOut(
+        route_id=r.route_id, route_code=r.route_code, route_name=r.route_name,
+        ltfrb_case_no=r.ltfrb_case_no, is_active=r.is_active, stop_count=len(r.stops),
+        stops=[RouteStopOut(stop_sequence=s.stop_sequence, terminal_id=s.terminal_id,
+                            terminal_name=s.terminal.terminal_name,
+                            offset_minutes=s.offset_minutes) for s in r.stops],
+    )
 
 
 @router.get("/routes", response_model=list[RouteOut],
             dependencies=[Depends(OFFICE)])
 async def list_routes(session: SessionDep) -> list[RouteOut]:
-    """Routes for pickers -- dispatching a special trip, assigning a van.
+    """Routes with their stops in order, for the pickers and the Routes
+    and Fares page.
 
-    `stops` is eager-loaded (see the Route model), so this is one query,
-    not N+1.
+    `stops` is eager-loaded with each stop's terminal (see the Route
+    model), so this is two queries, not N+1.
     """
     result = await session.execute(select(Route).order_by(Route.route_name))
-    return [
-        RouteOut(
-            route_id=r.route_id,
-            route_code=r.route_code,
-            route_name=r.route_name,
-            is_active=r.is_active,
-            stop_count=len(r.stops),
-        )
-        for r in result.scalars()
-    ]
+    return [_route_out(r) for r in result.scalars()]
 
 
 @router.post("/routes", status_code=201, dependencies=[Depends(MANAGER)])
@@ -200,9 +312,12 @@ async def create_route(payload: RouteIn, session: SessionDep) -> dict:
 
     The sequence must be contiguous and start at 1 -- leg k is defined as
     spanning stop k to k+1, so a gap would silently create a leg nobody can
-    book across.
+    book across. Stop 1 is the departure (offset 0) and no later stop is
+    reached before the one ahead of it. The stops are fixed once the route
+    exists: bookings and fares are numbered by them.
     """
-    sequences = sorted(s.stop_sequence for s in payload.stops)
+    stops = sorted(payload.stops, key=lambda s: s.stop_sequence)
+    sequences = [s.stop_sequence for s in stops]
     if sequences != list(range(1, len(sequences) + 1)):
         raise ConflictError(
             "Stop sequences must be contiguous and start at 1 "
@@ -210,6 +325,17 @@ async def create_route(payload: RouteIn, session: SessionDep) -> dict:
         )
     if len({s.terminal_id for s in payload.stops}) != len(payload.stops):
         raise ConflictError("A terminal cannot appear twice on one route.")
+    offsets = [s.offset_minutes for s in stops]
+    if offsets[0] != 0 or offsets != sorted(offsets):
+        raise InvalidInputError(
+            "Stop 1 is the departure (0 minutes), and each later stop is reached no "
+            "earlier than the one before it.")
+    for stop in stops:
+        terminal = await session.get(Terminal, stop.terminal_id)
+        if terminal is None:
+            raise NotFoundError(f"Terminal {stop.terminal_id} not found.")
+        if not terminal.is_active:
+            raise ConflictError(f"{terminal.terminal_name} is closed. Reopen it first.")
 
     code = payload.route_code.upper().strip()
     existing = await session.execute(select(Route).where(Route.route_code == code))
@@ -222,16 +348,14 @@ async def create_route(payload: RouteIn, session: SessionDep) -> dict:
             route_id=route_id,
             route_code=code,
             route_name=payload.route_name.strip(),
-            ltfrb_case_no=payload.ltfrb_case_no,
+            ltfrb_case_no=(payload.ltfrb_case_no or "").strip() or None,
             is_active=True,
             created_at=dt.datetime.now(APP_TZ),
         )
     )
     await session.flush()
 
-    for stop in payload.stops:
-        if await session.get(Terminal, stop.terminal_id) is None:
-            raise NotFoundError(f"Terminal {stop.terminal_id} not found.")
+    for stop in stops:
         session.add(
             RouteStop(
                 route_stop_id=str(uuid.uuid4()),
@@ -242,14 +366,38 @@ async def create_route(payload: RouteIn, session: SessionDep) -> dict:
             )
         )
 
-    await session.commit()
+    await commit_or_conflict(session, f"Route code {code} is already in use.")
     return {
         "route_id": route_id,
         "route_code": code,
         "stops": len(payload.stops),
         "legs": len(payload.stops) - 1,
-        "fare_pairs_required": len(payload.stops) * (len(payload.stops) - 1) // 2,
+        # Every passenger boards at stop 1 (rev 603): one fare per drop-off.
+        "fares_required": len(payload.stops) - 1,
     }
+
+
+@router.put("/routes/{route_id}", response_model=RouteOut, dependencies=[Depends(MANAGER)])
+async def edit_route(route_id: str, payload: RouteEditIn, session: SessionDep) -> RouteOut:
+    """Rename a route, record its LTFRB case, or take it out of service.
+
+    An inactive route is not offered to passengers and the timetable
+    generates no trips on it; trips already generated keep their bookings
+    (void them on the Trips page if they will not run). It returns to
+    service only while every terminal it stops at is open.
+    """
+    route = await session.get(Route, route_id)
+    if route is None:
+        raise NotFoundError("Route not found.")
+    if payload.is_active and not route.is_active:
+        closed = [s.terminal.terminal_name for s in route.stops if not s.terminal.is_active]
+        if closed:
+            raise ConflictError(f"{', '.join(closed)} is closed. Reopen it first.")
+    route.route_name = payload.route_name.strip()
+    route.ltfrb_case_no = (payload.ltfrb_case_no or "").strip() or None
+    route.is_active = payload.is_active
+    await session.commit()
+    return _route_out(route)
 
 
 # ===================================================================
@@ -258,7 +406,7 @@ async def create_route(payload: RouteIn, session: SessionDep) -> dict:
 class FareIn(BaseModel):
     from_stop_sequence: int = Field(ge=1)
     to_stop_sequence: int = Field(ge=2)
-    fare_amount: Decimal = Field(ge=0)
+    fare_amount: Decimal = Field(ge=0, max_digits=10, decimal_places=2)
     effective_from: dt.date | None = None
 
 
@@ -275,8 +423,10 @@ async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     regulatory structure, not a pricing choice, which is why it is a table
     of pairs rather than a rate formula.
 
-    `effective_from` versions the matrix: raising fares adds rows rather
-    than overwriting, so historic trips keep the fares they were sold at.
+    `effective_from` versions the matrix (`FareRepository`): raising fares
+    adds rows dated when they take effect, today or later, so trips keep
+    the fare of their own day. Saving a pair again for the same date
+    corrects that row; a fare already sold is on its booking and keeps it.
     """
     if await session.get(Route, payload.route_id) is None:
         raise NotFoundError("Route not found.")
@@ -288,8 +438,8 @@ async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
     )
     max_seq = max((s.stop_sequence for s in stops.scalars()), default=0)
 
-    today = dt.date.today()
-    created = 0
+    today = dt.datetime.now(APP_TZ).date()
+    wanted: dict[tuple[int, int, dt.date], Decimal] = {}
     for fare in payload.fares:
         if fare.to_stop_sequence <= fare.from_stop_sequence:
             raise ConflictError(
@@ -301,24 +451,38 @@ async def set_fares(payload: FareBulkIn, session: SessionDep) -> dict:
                 f"Stop {fare.to_stop_sequence} is beyond this route "
                 f"(it has {max_seq} stops)."
             )
-        session.add(
-            FareMatrix(
-                fare_id=str(uuid.uuid4()),
-                route_id=payload.route_id,
-                from_stop_sequence=fare.from_stop_sequence,
-                to_stop_sequence=fare.to_stop_sequence,
-                fare_amount=fare.fare_amount,
-                effective_from=fare.effective_from or today,
-            )
-        )
-        created += 1
+        on = fare.effective_from or today
+        if on < today:
+            raise InvalidInputError("A fare takes effect today or later, never on a past day.")
+        key = (fare.from_stop_sequence, fare.to_stop_sequence, on)
+        if key in wanted:
+            raise InvalidInputError(
+                f"Fare {key[0]}->{key[1]} is given twice for {on:%d %b %Y}.")
+        wanted[key] = fare.fare_amount
 
-    await session.commit()
-    return {"route_id": payload.route_id, "fares_created": created}
+    existing = {
+        (f.from_stop_sequence, f.to_stop_sequence, f.effective_from): f
+        for f in (await session.execute(
+            select(FareMatrix).where(FareMatrix.route_id == payload.route_id,
+                                     FareMatrix.effective_from >= today)
+        )).scalars()
+    }
+    for (a, b, on), amount in wanted.items():
+        row = existing.get((a, b, on)) or FareMatrix(
+            fare_id=str(uuid.uuid4()), route_id=payload.route_id,
+            from_stop_sequence=a, to_stop_sequence=b, effective_from=on)
+        row.fare_amount = amount
+        session.add(row)
+
+    await commit_or_conflict(session, "These fares were changed at the same moment. Load them again.")
+    return {"route_id": payload.route_id, "fares_saved": len(wanted)}
 
 
 @router.get("/routes/{route_id}/fares", dependencies=[Depends(OFFICE)])
 async def list_fares(route_id: str, session: SessionDep) -> list[dict]:
+    """Every fare row of the route, newest first per pair. `status` says
+    what each row is today: `in_force`, `scheduled` (dated ahead) or
+    `replaced` (an older row of a pair)."""
     result = await session.execute(
         select(FareMatrix)
         .where(FareMatrix.route_id == route_id)
@@ -328,16 +492,27 @@ async def list_fares(route_id: str, session: SessionDep) -> list[dict]:
             FareMatrix.effective_from.desc(),
         )
     )
-    return [
-        {
+    today = dt.datetime.now(APP_TZ).date()
+    seen: set[tuple[int, int]] = set()
+    out = []
+    for f in result.scalars():
+        pair = (f.from_stop_sequence, f.to_stop_sequence)
+        if f.effective_from > today:
+            status = "scheduled"
+        elif pair in seen:
+            status = "replaced"
+        else:
+            status = "in_force"
+            seen.add(pair)
+        out.append({
             "fare_id": f.fare_id,
             "from_stop_sequence": f.from_stop_sequence,
             "to_stop_sequence": f.to_stop_sequence,
             "fare_amount": f.fare_amount,
             "effective_from": f.effective_from,
-        }
-        for f in result.scalars()
-    ]
+            "status": status,
+        })
+    return out
 
 
 class StretchesIn(BaseModel):
@@ -394,11 +569,7 @@ async def set_stretches(
     straight route line, as NAHGM snaps to it; each expected time is
     (length - the stop zone at each end) / `expected_speed_kmh` in force
     now, and stays with the stretch until it is saved again."""
-    stops = (await session.execute(
-        select(RouteStop.stop_sequence, Terminal.latitude, Terminal.longitude)
-        .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
-        .where(RouteStop.route_id == route_id).order_by(RouteStop.stop_sequence)
-    )).all()
+    stops = await _stop_points(session, route_id)
     if len(stops) < 2:
         raise NotFoundError("Route not found, or it has fewer than two stops.")
     if len(payload.speed_limits_kmh) != len(stops) - 1:
@@ -406,14 +577,32 @@ async def set_stretches(
             f"The route has {len(stops) - 1} stretches: give one speed limit for each.")
     if any(not 1 <= limit <= 200 for limit in payload.speed_limits_kmh):
         raise InvalidInputError("A speed limit is between 1 and 200 km/h.")
-    speed = await PolicyRepository(session).get_int("expected_speed_kmh")
-    radius = payload.stop_zone_radius_m
+    await _measure_stretches(session, route_id, stops, payload.speed_limits_kmh,
+                             payload.stop_zone_radius_m)
+    await session.commit()
+    return await _stretches(session, route_id)
 
+
+async def _stop_points(session, route_id: str) -> list:
+    """(stop_sequence, latitude, longitude) of each stop, in order."""
+    return (await session.execute(
+        select(RouteStop.stop_sequence, Terminal.latitude, Terminal.longitude)
+        .join(Terminal, Terminal.terminal_id == RouteStop.terminal_id)
+        .where(RouteStop.route_id == route_id).order_by(RouteStop.stop_sequence)
+    )).all()
+
+
+async def _measure_stretches(session, route_id: str, stops: list, limits: list[int],
+                             radius: int) -> None:
+    """Measure each stretch stop to stop along the straight route line and
+    save it with its speed limit and the stop-zone radius. The expected
+    time uses `expected_speed_kmh` in force now."""
+    speed = await PolicyRepository(session).get_int("expected_speed_kmh")
     existing = {s.stretch_no: s for s in (await session.execute(
         select(RouteStretch).where(RouteStretch.route_id == route_id)
     )).scalars()}
     travelled = 0.0
-    for (seq, alat, alon), (_, blat, blon), limit in zip(stops, stops[1:], payload.speed_limits_kmh):
+    for (seq, alat, alon), (_, blat, blon), limit in zip(stops, stops[1:], limits):
         length = haversine_m(float(alat), float(alon), float(blat), float(blon))
         row = existing.get(seq) or RouteStretch(stretch_id=str(uuid.uuid4()), route_id=route_id,
                                                 stretch_no=seq)
@@ -424,8 +613,6 @@ async def set_stretches(
         row.expected_time_s = max(0, round((length - 2 * radius) / (speed / 3.6)))
         session.add(row)
         travelled += length
-    await session.commit()
-    return await _stretches(session, route_id)
 
 
 # ===================================================================
@@ -465,8 +652,11 @@ async def list_templates(session: SessionDep) -> list[dict]:
 @router.post("/schedule-templates", status_code=201,
              dependencies=[Depends(MANAGER)])
 async def create_template(payload: TemplateIn, session: SessionDep) -> dict:
-    if await session.get(Route, payload.route_id) is None:
+    route = await session.get(Route, payload.route_id)
+    if route is None:
         raise NotFoundError("Route not found.")
+    if not route.is_active:
+        raise ConflictError(f"{route.route_name} is out of service.")
 
     template_id = str(uuid.uuid4())
     session.add(

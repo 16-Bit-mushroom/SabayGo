@@ -34,12 +34,6 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 12
 
-    # Shared key for in-vehicle tracking units. Devices cannot hold a
-    # user session, so they send a key instead. Unset in development
-    # leaves the ping endpoint open. (The in-van phone has its own
-    # per-device token, X-Device-Token, not this key.)
-    tracker_api_key: str | None = None
-
     # --- payments -------------------------------------------------------
     paymongo_secret_key: str | None = None
     paymongo_webhook_secret: str | None = None

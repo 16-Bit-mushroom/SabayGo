@@ -34,6 +34,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.core.timezone import APP_TZ
 from app.domain.enums import TripStatus
 from app.infrastructure.models import (
+    Route,
     RouteStop,
     ScheduleTemplate,
     Trip,
@@ -82,10 +83,14 @@ class GenerateDailyTripsUseCase:
         # Monday=0 in Python; days_of_week is a Monday-first 7-char mask.
         weekday_index = target.weekday()
 
+        # A route out of service runs no timetable (config `edit_route`).
         result = await self.session.execute(
-            select(ScheduleTemplate).where(
+            select(ScheduleTemplate)
+            .join(Route, Route.route_id == ScheduleTemplate.route_id)
+            .where(
                 ScheduleTemplate.is_active.is_(True),
                 ScheduleTemplate.valid_from <= target,
+                Route.is_active.is_(True),
             )
         )
         templates = [

@@ -238,8 +238,6 @@ if [ "$WITH_GPS" = 1 ]; then
   if [ ${#GPS_TRIPS[@]} -eq 0 ]; then
     ok "no trip is on the road today -- nothing to simulate"
   else
-    TRACKER_KEY_="$(read_env backend/.env TRACKER_API_KEY)"
-    if [ -n "$TRACKER_KEY_" ]; then export TRACKER_API_KEY="$TRACKER_KEY_"; fi
     export SABAYGO_API="http://127.0.0.1:$PORT_BACKEND/api/v1"
     for trip in "${GPS_TRIPS[@]}"; do
       # --speed 4: a 50 km route crosses the map in minutes, not an hour.

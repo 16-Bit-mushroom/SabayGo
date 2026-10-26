@@ -27,8 +27,9 @@ from app.domain.entities.booking import Booking as BookingEntity
 from app.domain.enums import BookingStatus, BookingType, TripStatus
 from app.domain.value_objects import Segment
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import FareMatrix, Trip
+from app.infrastructure.models import Trip
 from app.infrastructure.models import Payment as PaymentRow
+from app.infrastructure.repositories.fare_repository import FareRepository
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
@@ -232,23 +233,14 @@ class ReserveSeatUseCase:
         Nobody sets a fare by hand: a declared cash fare the Dispatcher
         could price would let the declared income be whatever they said.
         """
-        result = await self.session.execute(
-            select(FareMatrix)
-            .where(
-                FareMatrix.route_id == trip.route_id,
-                FareMatrix.from_stop_sequence == segment.boarding_stop,
-                FareMatrix.to_stop_sequence == segment.alighting_stop,
-            )
-            .order_by(FareMatrix.effective_from.desc())
-            .limit(1)
-        )
-        fare = result.scalar_one_or_none()
+        fare = await FareRepository(self.session).fare(
+            trip.route_id, segment.boarding_stop, segment.alighting_stop, trip.service_date)
         if fare is None:
             raise NotFoundError(
                 f"No approved fare for stops {segment.boarding_stop}"
                 f"->{segment.alighting_stop} on this route."
             )
-        return fare.fare_amount
+        return fare
 
     async def _assert_within_booking_window(self, trip: Trip) -> None:
         """Passengers cannot book arbitrarily far ahead."""

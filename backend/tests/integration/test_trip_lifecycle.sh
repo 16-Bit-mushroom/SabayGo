@@ -272,8 +272,15 @@ is "$(code PUT /trips/TRIP-A2Z-LIVE-BOARD/crew '{"aboard":true}' "$DT")" 200 "T2
 is "$(field crew_aboard)" True "CrewAboard set"
 is "$(code POST /trips/$TRIP1/depart "" "$D2T")" 403 "another Dispatcher cannot tap Depart"
 is "$(code POST /trips/$TAG6/depart "" "$OT")" 409 "a trip that has not started cannot depart"
+# The trip's own lines, not amount_due (which includes the van's other trips).
+trip_share() { code GET "/trips/$TRIP1/share" "" "$CT" >/dev/null
+  python3 -c "import json;print(sum(float(l['share_amount']) for l in json.load(open('/tmp/resp.json'))['lines']))"; }
+SHARE_BEFORE=$(trip_share)
 is "$(code POST /trips/$TRIP1/depart "" "$DT")" 200 "T12 the Dispatcher taps Depart"
 is "$(field departure_source)" dispatcher "DepartureSource dispatcher"
+is "$(code GET /bookings/$KEEP "" "$PT" >/dev/null; field status)" no_show \
+   "T8 the paid app passenger who never boarded is a no-show"
+is "$(trip_share)/$(field payment_status)" "$SHARE_BEFORE/paid" "T8 and the share is unchanged (P$SHARE_BEFORE), still paid"
 is "$(code POST /trips/$TRIP1/depart "" "$OT")" 409 "a trip departs once"
 is "$(code POST /trips/$TRIP2/depart "" "$CT")" 200 "on the other trip the cashier taps it"
 is "$(field departure_source)" staff "DepartureSource staff"

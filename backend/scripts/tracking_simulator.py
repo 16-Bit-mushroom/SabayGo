@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """GPS replay simulator — drives a virtual van along a real route.
 
-The in-vehicle tracking unit is a GPS dongle on the edge computer. Until
-that hardware exists, this script produces the same position reports by
-interpolating between the route's terminal coordinates and posting to the
-same endpoint.
+In a van, the phone reports its position through `POST /edge/fixes`. This
+script produces position reports without a van by interpolating between
+the route's terminal coordinates and posting to `POST /tracking/trips/
+{id}/ping`, which exists only when ENVIRONMENT=development (404
+elsewhere).
 
 This is not a stand-in for the API — the requests are real HTTP, the
 server does real map matching, and the database stores real rows. Only
@@ -33,7 +34,6 @@ from datetime import datetime, timezone
 import httpx
 
 API = os.getenv("SABAYGO_API", "http://127.0.0.1:8000/api/v1")
-TRACKER_KEY = os.getenv("TRACKER_API_KEY", "")
 
 EARTH_RADIUS_M = 6_371_000.0
 
@@ -130,8 +130,6 @@ def main() -> None:
     ap.add_argument("--loop", action="store_true", help="Restart on arrival")
     args = ap.parse_args()
 
-    headers = {"X-Tracker-Key": TRACKER_KEY} if TRACKER_KEY else {}
-
     with httpx.Client(timeout=15.0) as client:
         stops = stop_coordinates(client, fetch_route(client, args.trip))
 
@@ -165,7 +163,6 @@ def main() -> None:
                     try:
                         r = client.post(
                             f"{API}/tracking/trips/{args.trip}/ping",
-                            headers=headers,
                             json={
                                 "latitude": round(jlat, 6),
                                 "longitude": round(jlng, 6),
