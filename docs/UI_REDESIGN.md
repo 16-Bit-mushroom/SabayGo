@@ -1,5 +1,11 @@
 # UI redesign — state and next steps
 
+> **Superseded for the console (25 Oct 2026).** The operator console was
+> redesigned again (UI-UX redesign v3, `docs/Web-console-redesign/`): white,
+> terminal green and black/red, light only, seven menu entries and a Setup
+> page. Its system is `DESIGN.md`; this file's palette notes describe earlier
+> rounds.
+
 Started 28 September 2026. The goal, in the user's words: friendlier
 terminology, navigation that does not confuse, tasks completed without
 error, WCAG compliance, and a look that is **clean, minimalist, yet premium

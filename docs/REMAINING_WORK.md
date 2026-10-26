@@ -17,6 +17,9 @@ they appear).*
 | 3 | **A2Z's figures** | owner asks A2Z | These settings ship unset, which turns their feature off: `depart_zone_radius_m` + `depart_readings` (no GPS departure), `home_pickup_max_route_m` (no home pickup), `special_trip_speed_kmh` (no rental flagged), per-stretch speed limits (only stops flagged). Also the real routes, fares, timetable and SOS numbers in place of the `002_demo_dataset.sql` placeholders, and the questions below |
 | 4 | **Manuscript** | owner | Paste `MANUSCRIPT_CORRECTIONS.md` into the `.docx` |
 
+Step-by-step instructions for these four, plus the demo rehearsal:
+`docs/PRE_DEFENCE_TASKS.md` (19 Oct).
+
 Closed on 16 Oct, though older lists still carry them:
 
 - **Rev 468 leftovers** (`d57fd01`): the AI node (`ai_service/app.py`),
@@ -166,40 +169,32 @@ point.
   against `/edge/*`, as `tests/integration/test_edge_ingestion.sh` does:
   add a phone (`POST /devices`), check it out to a van, then post door
   events, fixes and heartbeats.
-- **GPS**: `backend/scripts/tracking_simulator.py` posts to the real
-  production `POST /tracking/trips/{trip}/ping` endpoint (not a mock
+- **GPS**: `backend/scripts/tracking_simulator.py` posts to
+  `POST /tracking/trips/{trip}/ping` (development only; not a mock
   table) — confirmed end to end: a simulated run against
   `TRIP-DEMO-00000001` produced 49 pings and `GET
-  .../position` correctly reflected the van's final location. A real GPS
-  unit authenticates the same way, with the same `X-Tracker-Key` header.
-  **When the kit arrives:** point it at the same ping endpoint with the
-  same header — no backend change needed.
-  **Open decision:** `TRACKER_API_KEY` is unset in `backend/.env`, so
-  `verify_tracker` currently accepts pings with no auth at all. Fine for
-  a laptop simulator on localhost; worth setting before a real device
-  pings the endpoint over a real network. Auth is also one shared secret
-  for every van, not per-device (`vans.camera_device_id` exists but isn't
-  wired to tracking auth) — flagged in `tracking.py` as its own future
-  work, not blocking.
+  .../position` correctly reflected the van's final location. In a van,
+  the phone's GPS reports through `POST /edge/fixes` (rev 603).
+  **Decided 19 Oct:** the ping endpoint is **development only** (404
+  when `ENVIRONMENT` is not `development`) and the shared
+  `TRACKER_API_KEY` is gone. The in-van phone reports through
+  `POST /edge/fixes` with its own device token, so nothing deployed
+  posts to the ping endpoint, and an unauthenticated reading there could
+  depart a trip or raise driving flags.
 
 ---
 
 ## Questions for A2Z
 
-The partner is reconciled, so these go to A2Z directly. Any dispatcher or
-conductor can answer them in five minutes. A printable version in plain
-English, Tagalog and Bisaya is in `QUESTIONS_FOR_COOPERATIVE.md`.
-
-1. **Do passengers GCash conductors directly?** If so it behaves like cash —
-   crew holds it, crew remits it — but the office counts a handover of
-   banknotes differently from one that is partly already in an e-wallet
-2. **Is a cancellation deadline useful, and how many hours?** Sets F.4's
-   `cancel_cutoff_hours`
-3. **Would knowing in advance who has arrived help you dispatch?** Group D
-   is built as a heads-up; this confirms whether dispatch will use it
-4. **How far across your compound might a waiting passenger be?** A terminal
-   is not a point — too tight a radius fails honest passengers, too loose
-   lets someone confirm from a nearby mall. Sets `default_geofence_radius_m`
+`QUESTIONS_FOR_COOPERATIVE.md` (updated 18 Oct), printable in English,
+Tagalog and Bisaya: Part A, four questions any dispatcher answers in a
+minute each (GCash to the Dispatcher, where passengers wait, check-in,
+where the vans line up); Part B, ten for the Terminal Manager or office
+(cancel cut-off, home pickup distance and wait, speed limits, starting
+trips at the counter, the 15 % and its override, rental fees, the phone
+pool, retention and the privacy contact, voided paid trips, SOS numbers);
+then the documents we need (routes, fares, timetable, vans, Dispatchers).
+Its last paragraph maps each answer to the setting it fills.
 
 ---
 
