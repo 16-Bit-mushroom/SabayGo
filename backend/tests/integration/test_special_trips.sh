@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Rev 603 R3b: special trips, a whole van rented (change brief 2.5;
-# T49-T52 in 12.2). A fee paid in cash (D) and through the gateway (V).
+# T49-T52 in 12.2). The fee is cash to the Dispatcher either way; a
+# rental requested in the app counts as booked, one entered at the
+# counter as walk-up.
 #
 #   ./db/reset-dev.sh --soon && ./tests/integration/test_special_trips.sh
 #
@@ -159,29 +161,25 @@ is "$(code POST /trips/$TW/payment '{"amount":"300.00","reference":"OR-RENT"}' "
 is "$(code POST /trips/$TW/start "" "$CT")" 200 "Start"
 
 # ╔═══════════════════════════════════════════════════════════════╗
-hdr "5b. The fee through the app: verified (V)"
-is "$(code POST /special-trips/$R2/checkout "" "$PT")" 409 "a rejected request is not paid"
-is "$(code POST /special-trips/$R1/checkout "" "$AT")" 404 "another passenger cannot pay it"
-is "$(code POST /special-trips/$RW/checkout "" "$PT")" 404 "nor a counter customer's"
-is "$(code POST /special-trips/$R1/checkout "" "$PT")" 201 "the renter starts the checkout"
-URL=$(field checkout_url)
-is "$(field amount)" 3500.00 "for the agreed ₱3,500"
-UNSIGNED='{"data":{"id":"evt_forged","attributes":{"type":"checkout_session.payment.paid","data":{"id":"cs_forged","attributes":{"metadata":{"request_id":"'"$R1"'"}}}}}}'
-code POST /payments/webhook "$UNSIGNED" >/dev/null
-is "$(field status)/$(sql "SELECT payment_status FROM special_trip_requests WHERE request_id = '$R1'")" rejected/unpaid \
-   "an unsigned webhook is refused: still unpaid"
-curl -s -X POST "$URL/pay" | grep -q "Payment received" && ok "paid on the sandbox page: the signed webhook settles it" \
-  || bad "sandbox pay"
-is "$(sql "SELECT CONCAT(payment_status, '/', LEFT(payment_reference, 11)) FROM special_trip_requests WHERE request_id = '$R1'")" \
-   paid/cs_sandbox_ "the fee is paid, with the gateway's reference"
+hdr "5b. A rental requested in the app: also cash, also to the Dispatcher"
+# Brief 2.5: the renter, or someone acting for them, pays the fee in
+# cash to the Dispatcher at the terminal before the van leaves. There is
+# no gateway. What the two routes still differ in is the income group:
+# a rental requested in the app counts as booked, one entered at the
+# counter as walk-up.
+is "$(code POST /special-trips/$R2/cash "" "$D2T")" 409 "a rejected request is not paid"
+is "$(code POST /special-trips/$R1/cash "" "$D3T")" 404 "a Dispatcher on another trip cannot log its fee"
+is "$(code POST /special-trips/$R1/cash "" "$D2T")" 200 \
+   "the trip's Dispatcher logs the ₱3,500 received in cash"
+is "$(field payment_status)" paid "the fee is paid"
+is "$(sql "SELECT CONCAT(COALESCE(paid_by, '-'), '/', paid_at IS NOT NULL) FROM special_trip_requests WHERE request_id = '$R1'")" \
+   USER-DISPATCHER-0002/1 "with the Dispatcher who took it and when; no gateway reference exists"
 code GET /trips/$RT1/share "" "$CT" >/dev/null
 python3 -c "import json;l=json.load(open('/tmp/st.json'))['lines'];assert len(l)==1 and l[0]['income_group']=='verified' and l[0]['share_amount']=='525.00'" \
-  && ok "one fare line: verified, share ₱525" || bad "lines: $(cat /tmp/st.json)"
-curl -s -X POST "$URL/pay" | grep -q "Nothing to pay" && ok "the page again: nothing to pay" || bad "second pay"
+  && ok "one fare line: booked, share ₱525" || bad "lines: $(cat /tmp/st.json)"
+is "$(code POST /special-trips/$R1/cash "" "$D2T")" 409 "logged once only"
 code GET /trips/$RT1/share "" "$CT" >/dev/null
 is "$(python3 -c "import json;print(len(json.load(open('/tmp/st.json'))['lines']))")" 1 "still one line"
-is "$(code POST /special-trips/$R1/checkout "" "$PT")" 409 "a paid fee is not checked out again"
-is "$(code POST /special-trips/$R1/cash "" "$D2T")" 409 "nor logged again in cash"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "6. A request closes with its trip"

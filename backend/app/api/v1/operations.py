@@ -18,7 +18,6 @@ from app.application.messaging.service import STORAGE_DIR
 from app.application.operations.boarding import (
     DepartTripUseCase,
     ManifestUseCase,
-    ScanTicketUseCase,
 )
 from app.application.operations.check_in import (
     CheckInCommand,
@@ -108,58 +107,17 @@ async def undo_check_in(
     )
 
 
-# --------------------------------------------------------------------- scan
-class ScanRequest(BaseModel):
-    qr_payload: str
-    trip_id: str
-    stop_sequence: int = Field(ge=1)
-    # Set by an offline client so queued scans can be ordered on sync.
-    client_recorded_at: dt.datetime | None = None
-
-
-class ScanResponse(BaseModel):
-    scan_id: str
-    result: str
-    accepted: bool
-    booking_id: str | None
-    ticket_number: str | None
-    boarding_stop: int | None
-    alighting_stop: int | None
-    message: str
-
-
-@router.post("/scans", response_model=ScanResponse, dependencies=[Depends(CREW)])
-async def scan_ticket(
-    payload: ScanRequest, session: SessionDep, user: CurrentUser
-) -> ScanResponse:
-    """Validate a QR code at the van door.
-
-    Always 200, even for an invalid ticket -- the Dispatcher needs a verdict
-    on screen, not an error dialog, while a queue waits. Read `accepted`.
-    """
-    # A Dispatcher may only scan the trip they are rostered to. Without
-    # this the remittance record is meaningless: the fares a person is
-    # accountable for would not match the runs they actually worked.
-    await assert_assigned_to_trip(session, trip_id=payload.trip_id, user=user)
-    result = await ScanTicketUseCase(session).execute(
-        qr_payload=payload.qr_payload,
-        trip_id=payload.trip_id,
-        stop_sequence=payload.stop_sequence,
-        scanned_by_user_id=user.user_id,
-        client_recorded_at=payload.client_recorded_at,
-    )
-    return ScanResponse(**{k: v for k, v in result.__dict__.items()
-                           if k not in ("passenger_name", "seat_number")})
-
-
 # ----------------------------------------------------------------- manifest
 class ManifestPassenger(BaseModel):
     booking_id: str
-    ticket_number: str
+    booking_code: str
     boarding_stop: int
     alighting_stop: int
     booking_type: str
     status: str
+    # Only a paid seat is on the passenger list (brief 2.1).
+    payment_status: str
+    paid_at: dt.datetime | None
     fare_amount: Decimal
     name: str | None
 

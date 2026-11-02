@@ -41,8 +41,8 @@ OFF=$(j "['access_token']" < /tmp/resp.json)
 S=$(code GET /auth/me "" "$CT")
 [ "$S" = "200" ] && ok "profile: $(j "['display_name']" < /tmp/resp.json)" || bad "me gave $S"
 
-# ── set up a paid passenger to scan
-hdr "   (setting up a paid passenger)"
+# ── set up a passenger whose cash the Dispatcher will take
+hdr "   (setting up a reservation to collect)"
 S=$(code POST /auth/register "{\"email\":\"pax${STAMP}@sabaygo.dev\",
   \"phone_number\":\"0916${STAMP: -7}\",\"password\":\"sabaygo123\",
   \"first_name\":\"Scan\",\"last_name\":\"Target\"}")
@@ -50,57 +50,102 @@ PT=$(j "['access_token']" < /tmp/resp.json)
 code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
 BID=$(j "['booking_id']" < /tmp/resp.json)
-QR=$(j "['qr_payload']" < /tmp/resp.json)
-python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1 \
-  && ok "passenger booked and paid" || gap "webhook secret not set -- ticket stays unpaid"
+CODE=$(j "['booking_code']" < /tmp/resp.json)
+[ -n "$CODE" ] && ok "passenger reserved a seat ($CODE), unpaid" \
+  || bad "reservation carried no booking code"
 
-# A second ticket, deliberately left unpaid. Reserved here rather than at
-# the scan below because APP_BOOKABLE is {scheduled} -- once boarding
-# opens, reserve is correctly refused and the QR came back empty, which
-# made the unpaid scan look like wrong_trip and tested nothing.
+# A second reservation, deliberately left unpaid to the end. Reserved
+# here rather than later because APP_BOOKABLE is {scheduled}: once
+# boarding opens, reserve is correctly refused.
 code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
-UNPAID_QR=$(j "['qr_payload']" < /tmp/resp.json)
+UNPAID_BID=$(j "['booking_id']" < /tmp/resp.json)
+UNPAID_CODE=$(j "['booking_code']" < /tmp/resp.json)
+
+# Two more, reserved now because APP_BOOKABLE is {scheduled}: one to
+# cancel after its cash is taken, one for the offline-time mark.
+code POST /bookings/reserve \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
+SPARE=$(j "['booking_id']" < /tmp/resp.json)
+code POST /bookings/reserve \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
+OFFLINE_BID=$(j "['booking_id']" < /tmp/resp.json)
 
 # ═══════════════════════════════════════════════ 2. BOARDING
 hdr "2. Boarding"
 
+# Cancellation closes when the Cashier records the payment or the van
+# departs (brief 2.1), so the Dispatcher's two cancellations are
+# exercised first, while the list is still open.
+S=$(code POST "/bookings/$UNPAID_BID/dispatcher-cancel" \
+  '{"reason":"forgot_to_cancel"}' "$CT")
+[ "$S" = "200" ] && ok "Dispatcher cleared an unpaid reservation nobody came for" \
+  || bad "forgot_to_cancel gave $S"
+
+code POST "/bookings/$SPARE/mark-paid" '{}' "$CT" >/dev/null
+S=$(code POST "/bookings/$SPARE/dispatcher-cancel" '{"reason":"forgot_to_cancel"}' "$CT")
+[ "$S" = "409" ] && ok "a paid seat cannot be cleared as forgotten (409)" \
+  || bad "forgot_to_cancel on a paid seat gave $S"
+
+S=$(code POST "/bookings/$SPARE/dispatcher-cancel" \
+  '{"reason":"passenger_asked_dispatcher"}' "$CT")
+[ "$S" = "200" ] && ok "Dispatcher cancelled a paid seat, cash returned" \
+  || bad "dispatcher-cancel gave $S"
+
+# The Dispatcher takes the cash at the door. There is no QR to scan:
+# the seat is found by name or booking code and marked Paid (brief 2.1).
+S=$(code GET "/bookings/trip/$TRIP/seats" "" "$CT")
+if [ "$S" = "200" ]; then
+  ok "the Dispatcher reads the trip's seat list ($(j "[0]['payment_status']" < /tmp/resp.json) first)"
+else bad "seat list gave $S"; fi
+
+S=$(code GET "/bookings/trip/$TRIP/seats?q=Scan" "" "$CT")
+FOUND=$(python3 -c "
+import json;d=json.load(open('/tmp/resp.json'))
+print(sum(1 for b in d if b['booking_id']=='$BID'))" 2>/dev/null)
+[ "$S" = "200" ] && [ "$FOUND" = "1" ] && ok "found by passenger name" \
+  || bad "search by name gave $S, matched $FOUND"
+
+S=$(code POST "/bookings/$BID/mark-paid" '{}' "$CT")
+R=$(j "['payment_status']" < /tmp/resp.json)
+[ "$S" = "200" ] && [ "$R" = "paid" ] && ok "cash taken, seat marked paid" \
+  || bad "mark-paid gave $S/$R"
+
+# The offline queue on the Dispatcher's phone may send the same mark
+# twice; the second is not an error.
+S=$(code POST "/bookings/$BID/mark-paid" '{}' "$CT")
+[ "$S" = "200" ] && ok "a replayed paid mark changes nothing" \
+  || bad "replayed mark-paid gave $S"
+
+S=$(code POST "/bookings/BKG-DOES-NOT-EXIST/mark-paid" '{}' "$CT")
+[ "$S" = "404" ] && ok "unknown booking -> 404" || bad "unknown booking gave $S"
+
+# A mark recorded on the device while it was offline keeps its own time.
+S=$(code POST "/bookings/$OFFLINE_BID/mark-paid" \
+  '{"paid_at":"2026-11-02T05:10:00"}' "$CT")
+PAID_AT=$(j "['paid_at']" < /tmp/resp.json)
+if [ "$S" = "200" ] && [ "${PAID_AT:0:10}" = "2026-11-02" ]; then
+  ok "an offline mark keeps the time the device recorded"
+else bad "offline mark gave $S, paid_at $PAID_AT"; fi
+
+# ── the Dispatcher has built the list; now the money moves
+hdr "   (handing the share to the Cashier)"
+
 code GET "/trips/$TRIP/share" "" "$OFF" >/dev/null
-S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$(j "['amount_due']" < /tmp/resp.json)\",\"reference\":\"OR-$STAMP\"}" "$OFF")
-[ "$S" = "200" ] && ok "the cashier records the 15 % share" || bad "payment gave $S"
+DUE=$(j "['amount_due']" < /tmp/resp.json)
+[ "$DUE" != "0.00" ] && ok "the share is computed from the paid seats (P$DUE)" \
+  || bad "amount due is $DUE with paid seats on the list"
+S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$DUE\",\"reference\":\"OR-$STAMP\"}" "$OFF")
+[ "$S" = "200" ] && ok "the cashier records the share" || bad "payment gave $S"
+
+# The list locks when the payment is recorded (brief 2.1).
+S=$(code POST "/bookings/$BID/dispatcher-cancel" \
+  '{"reason":"passenger_asked_dispatcher"}' "$CT")
+[ "$S" = "422" ] && ok "no cancellation once the list is locked (422)" \
+  || bad "cancel after the lock gave $S"
+
 S=$(code POST "/trips/$TRIP/start" "" "$OFF")
 [ "$S" = "200" ] && ok "the cashier starts the trip" || bad "start gave $S"
-
-S=$(code POST /scans \
-  "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
-R=$(j "['result']" < /tmp/resp.json)
-[ "$R" = "valid" ] && ok "valid ticket accepted" \
-                   || bad "valid scan returned $R"
-
-S=$(code POST /scans \
-  "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
-R=$(j "['result']" < /tmp/resp.json)
-[ "$R" = "already_boarded" ] && ok "duplicate scan flagged (already_boarded)" \
-                            || bad "duplicate scan returned $R"
-
-S=$(code POST /scans \
-  "{\"qr_payload\":\"SBG-does-not-exist\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
-R=$(j "['result']" < /tmp/resp.json)
-# 200 on purpose: a Dispatcher with a queue needs a verdict, not an exception.
-[ "$S" = "200" ] && [ "$R" = "wrong_trip" ] \
-  && ok "unknown QR rejected without raising ($R)" || bad "unknown QR: $S/$R"
-
-S=$(code POST /scans \
-  "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":3}" "$CT")
-R=$(j "['result']" < /tmp/resp.json)
-[ "$R" = "already_boarded" ] || [ "$R" = "wrong_stop" ] \
-  && ok "wrong stop handled ($R)" || bad "wrong stop returned $R"
-
-# unpaid ticket -- reserved in section 1, while the trip was still scheduled
-S=$(code POST /scans \
-  "{\"qr_payload\":\"$UNPAID_QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
-R=$(j "['result']" < /tmp/resp.json)
-[ "$R" = "unpaid" ] && ok "unpaid ticket refused (unpaid)" || bad "unpaid scan returned $R"
 
 # ═══════════════════════════════════════════════ 3. WALK-INS
 hdr "3. Cash walk-ins"

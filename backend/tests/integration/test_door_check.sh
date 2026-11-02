@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Rev 603 R5a: door events checked against the passenger list before
-# departure (change brief 2.4, 6.1; T22-T25).
+# Rev 721: door events checked against the passenger list before
+# departure (change brief 2.4, 5.2, 6.1; T22-T25, T57, T59).
 #
 #   ./db/reset-dev.sh --soon && ./tests/integration/test_door_check.sh
 #
 # Plays the phone in ABC-1234 on TRIP-DEMO-00000001 (dispatcher@, departs
-# in 20 min). Times are moved with SQL where a record must sit a known
-# distance from a boarding: the match window is 120 s.
+# in 20 min). Rev 721 removed the matching window: a boarding is listed
+# while an unmatched paid seat or cash entry remains on the list, oldest
+# first, so what the offsets below decide is which boarding is left over,
+# not whether one falls inside a window.
 set -uo pipefail
 
 API="http://127.0.0.1:8000/api/v1"
@@ -65,6 +67,17 @@ notes() {
   python3 -c "import json;print(sum(1 for n in json.load(open('/tmp/dc.json'))['items'] if n['type']=='$1' and n['related_entity_id']=='$TRIP'))"
 }
 board_status() { sql "SELECT status FROM trips WHERE trip_id = '$TRIP'"; }
+# The earliest boarding still waiting for the Dispatcher. With no
+# matching window the seats go to the earliest boardings, so which event
+# is left over is the system's answer, not the test's guess: the brief
+# makes the match a count, not an identity (5.2).
+pending_one() {
+  code GET /trips/$TRIP/door-check "" "$DT" >/dev/null
+  python3 -c "
+import json
+u = json.load(open('/tmp/dc.json'))['unlisted']
+print(u[0]['event_id'] if u else 'NONE')"
+}
 walkin() { code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":3${1:+,\"for_event_id\":\"$1\"}}" "${2:-$DT}"; }
 
 OT=$(login manager); CT=$(login cashier); DT=$(login dispatcher); D2T=$(login dispatcher2)
@@ -78,27 +91,34 @@ code POST /devices/$PHONE/checkout '{"van_id":"VAN-0001","dispatcher_id":"USER-D
 sql "UPDATE device_checkouts SET checked_out_at = NOW() - INTERVAL 40 MINUTE WHERE device_id = '$PHONE'"
 
 # ╔═══════════════════════════════════════════════════════════════╗
-hdr "1. The list: a QR ticket and a cash entry"
+hdr "1. The list: a paid reservation and a cash entry"
 code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
-BID=$(field booking_id); QR=$(field qr_payload)
-(cd "$BACKEND" && venv/bin/python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1)
-is "$(code POST /scans "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$DT")/$(field result)" 200/valid \
-   "the Dispatcher scans the ticket"
-sql "UPDATE boarding_scans SET scanned_at = scanned_at - INTERVAL 10 MINUTE WHERE booking_id = '$BID'"
+BID=$(field booking_id)
+is "$(code POST /bookings/$BID/mark-paid '{}' "$DT")/$(field payment_status)" 200/paid \
+   "the Dispatcher takes the cash and marks the seat paid"
 is "$(walkin)" 201 "and lists a cash passenger"
 is "$(chk)" 0/2/0 "T22 nobody counted aboard yet, 2 listed: fewer aboard is a no-show, nothing to do"
 
 # ╔═══════════════════════════════════════════════════════════════╗
-hdr "2. Boardings matched by time (6.1)"
+# Rev 721 removed the matching window: a boarding is listed while an
+# unmatched seat remains on the list, however long ago it was paid for.
+# Seats are used up oldest first, so the paid reservation takes the
+# earlier boarding and the cash entry the later one.
+hdr "2. Boardings matched to seats, with no time window (6.1)"
 EQ=$(uuid); EL=$(uuid)
 send "$EQ" -570; send "$EL" -60
-is "$(ev "$EQ")" matched_qr/not_needed "a boarding 30 s after the scan: Matched_QR"
-is "$(ev "$EL")" matched_log/not_needed "a boarding 1 min before the cash entry: Matched_Log"
+is "$(ev "$EQ")" matched_booking/not_needed "the first boarding uses up the paid seat: Matched_Booking"
+is "$(ev "$EL")" matched_log/not_needed "the second uses up the cash entry: Matched_Log"
 is "$(chk)" 2/2/0 "2 aboard, 2 listed"
-U1=$(uuid); send "$U1" -1200
-is "$(ev "$U1")" unlisted/pending "a boarding with no scan or entry within 2 min: Unlisted, pending"
+# Under the old rule this boarding sat outside a 120 s window. There is
+# no window now, so what makes it unlisted is that the list is used up:
+# three people through the door, two seats on it. The last one by
+# event_at is the one left over.
+U1=$(uuid); send "$U1" -30
+FIX=$(pending_one)
+is "$(ev "$FIX")" unlisted/pending "a third boarding with no seat left on the list: Unlisted, pending"
 is "$(chk)" 3/2/1 "3 aboard against 2 listed"
-python3 -c "import json;u=json.load(open('/tmp/dc.json'))['unlisted'];assert [x['event_id'] for x in u]==['$U1']" \
+python3 -c "import json;u=json.load(open('/tmp/dc.json'))['unlisted'];assert [x['event_id'] for x in u]==['$FIX']" \
   && ok "the Dispatcher's screen names the boarding" || bad "unlisted list"
 is "$(code GET /trips/$TRIP/door-check "" "$D2T")" 403 "another Dispatcher cannot read it"
 
@@ -111,8 +131,8 @@ is "$(code POST /trips/$TRIP/depart "" "$DT")" 409 "T23 Depart is refused"
 field detail | grep -q "3 aboard and 2 listed" && ok "and says 3 aboard, 2 listed" || bad "detail: $(field detail)"
 is "$(code POST /trips/$TRIP/depart "" "$CT")" 409 "the office's Depart too"
 is "$(walkin "$EQ")" 409 "a matched boarding needs no fix"
-is "$(walkin "$U1")" 201 "the Dispatcher lists the person, with a destination"
-is "$(ev "$U1")" unlisted/listed "ResolutionStatus Listed"
+is "$(walkin "$FIX")" 201 "the Dispatcher lists the person, with a destination"
+is "$(ev "$FIX")" unlisted/listed "ResolutionStatus Listed"
 is "$(chk)" 3/3/0 "3 aboard, 3 listed"
 code GET /trips/$TRIP/share "" "$CT" >/dev/null
 python3 -c "import json;s=json.load(open('/tmp/dc.json'));assert any(l['is_top_up'] for l in s['lines'])" \
@@ -120,16 +140,17 @@ python3 -c "import json;s=json.load(open('/tmp/dc.json'));assert any(l['is_top_u
 
 U2=$(uuid); send "$U2" -1500
 is "$(chk)" 4/3/1 "another boarding nobody listed"
-is "$(code POST /door-events/$U2/explain '{"note":"x"}' "$DT")" 422 "a reason needs words"
-is "$(code POST /door-events/$U2/explain '{"note":"Operator'"'"'s son, rides free to Toril"}' "$D2T")" 404 \
+EXP=$(pending_one)
+is "$(code POST /door-events/$EXP/explain '{"note":"x"}' "$DT")" 422 "a reason needs words"
+is "$(code POST /door-events/$EXP/explain '{"note":"Operator'"'"'s son, rides free to Toril"}' "$D2T")" 404 \
    "another Dispatcher cannot explain it"
-is "$(code POST /door-events/$U2/explain '{"note":"Operator'"'"'s son, rides free to Toril"}' "$DT")" 200 \
+is "$(code POST /door-events/$EXP/explain '{"note":"Operator'"'"'s son, rides free to Toril"}' "$DT")" 200 \
    "the Dispatcher types a reason"
-is "$(ev "$U2")" unlisted/explained "ResolutionStatus Explained"
-[ "$(sql "SELECT resolved_by FROM passenger_events WHERE event_id = '$U2'")" = USER-DISPATCHER-0001 ] \
+is "$(ev "$EXP")" unlisted/explained "ResolutionStatus Explained"
+[ "$(sql "SELECT resolved_by FROM passenger_events WHERE event_id = '$EXP'")" = USER-DISPATCHER-0001 ] \
   && ok "with who" || bad "resolved_by"
 is "$(chk)" 4/3/0 "nothing left to resolve"
-is "$(code POST /door-events/$U2/explain '{"note":"again"}' "$DT")" 409 "a resolved boarding is not resolved twice"
+is "$(code POST /door-events/$EXP/explain '{"note":"again"}' "$DT")" 409 "a resolved boarding is not resolved twice"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "4. The crew is not a passenger (2.3)"
@@ -150,7 +171,11 @@ is "$(chk)" 3/3/0 "and the before-departure count is unchanged"
 
 hdr "6. A phone that was offline shows the van left with more (T24)"
 LATE=$(uuid); send "$LATE" -1700
-is "$(ev "$LATE")" unlisted/pending "a boarding from before departure, uploaded now: Unlisted"
+# What matters is that it is counted as a boarding from before the van
+# left. Which of the trip's boardings ends up holding the last seat on
+# the list is not promised: the match is a count, not an identity (5.2).
+is "$(sql "SELECT pre_departure FROM passenger_events WHERE event_id = '$LATE'")" 1 \
+   "a boarding from before departure, uploaded now: counted as pre-departure"
 is "$(chk)/$(notes departed_more_than_listed)" 4/3/0/0 \
    "the count rules, not the event: 4 aboard = 3 listed + 1 explained, no alert"
 LATE2=$(uuid); send "$LATE2" -1750
@@ -229,11 +254,11 @@ is "$(code GET /boarding-audit "" "$CT")/$(code GET /boarding-audit "" "$DT")" 4
 is "$(audit "'/'.join(u['resolution_status'] for u in t['unlisted'])")" "pending/pending/pending/explained/listed/pending" \
    "every unlisted boarding before departure, in time order: 3 uploaded late, 1 reason, 1 fix, the crew"
 is "$(audit "t['crew_aboard']")" True "the Dispatcher marked themselves crew: the last boarding is theirs"
-is "$(audit "[u for u in t['unlisted'] if u['event_id']=='$U1'][0]['listed_destination']")" "$S3" \
+is "$(audit "[u for u in t['unlisted'] if u['event_id']=='$FIX'][0]['listed_destination']")" "$S3" \
    "the fix names the person's destination: $S3"
-is "$(audit "[u for u in t['unlisted'] if u['event_id']=='$U2'][0]['resolution_note']")" "Operator's son, rides free to Toril" \
+is "$(audit "[u for u in t['unlisted'] if u['event_id']=='$EXP'][0]['resolution_note']")" "Operator's son, rides free to Toril" \
    "the reason is kept"
-[ "$(audit "[u for u in t['unlisted'] if u['event_id']=='$U2'][0]['resolved_by']")" != None ] \
+[ "$(audit "[u for u in t['unlisted'] if u['event_id']=='$EXP'][0]['resolved_by']")" != None ] \
   && ok "with the Dispatcher who gave it" || bad "resolved_by"
 is "$(audit "' | '.join(f\"{c['aboard']} of {c['seat_capacity']} {c['place']}\" for c in t['capacity_alerts'])")" \
    "15 of 14 between $S2 and $S3 | 15 of 14 at $S3" "both capacity alerts, with the number aboard and the general place"

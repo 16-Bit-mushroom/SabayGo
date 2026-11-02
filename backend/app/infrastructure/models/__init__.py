@@ -466,7 +466,6 @@ class Trip(Base):
     advance_booking_seat_cap: Mapped[int] = mapped_column(
         TINYINT(unsigned=True), default=10
     )
-    reschedule_cutoff_hours: Mapped[int] = mapped_column(SmallInteger, default=6)
     status: Mapped[str] = mapped_column(String(16), default="scheduled")
     # How the trip was started; started_by is NULL when the system did it.
     start_mode: Mapped[str | None] = mapped_column(String(16))
@@ -541,7 +540,8 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     booking_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
-    ticket_number: Mapped[str] = mapped_column(String(32), unique=True)
+    # The short code the passenger reads out at the terminal (SG-XXXXXX).
+    booking_code: Mapped[str] = mapped_column(String(32), unique=True)
     trip_id: Mapped[str] = mapped_column(ForeignKey("trips.trip_id"))
     passenger_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     walkin_name: Mapped[str | None] = mapped_column(String(150))
@@ -562,31 +562,18 @@ class Booking(Base):
     seat_number: Mapped[int] = mapped_column(TINYINT(unsigned=True))
     fare_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     status: Mapped[str] = mapped_column(String(16), default="pending")
-    qr_payload: Mapped[str | None] = mapped_column(String(255), unique=True)
-    rescheduled_from_booking_id: Mapped[str | None] = mapped_column(String(36))
-    reschedule_count: Mapped[int] = mapped_column(TINYINT(unsigned=True), default=0)
+    # Cash only (brief 2.1): the Dispatcher sets 'paid' at the terminal.
+    # An unpaid reservation is not on the passenger list and is released
+    # at the cutoff before departure.
+    payment_status: Mapped[str] = mapped_column(String(8), default="unpaid")
+    paid_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    paid_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     booked_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     cancelled_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    cancelled_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    cancel_reason: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
-
-
-class Payment(Base):
-    __tablename__ = "payments"
-
-    payment_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
-    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.booking_id"))
-    provider: Mapped[str] = mapped_column(String(20))
-    method: Mapped[str | None] = mapped_column(String(20))
-    # Set when this fare is included in an end-of-trip cash handover.
-    remittance_id: Mapped[str | None] = mapped_column(String(36))
-    provider_ref_id: Mapped[str | None] = mapped_column(String(128))
-    provider_event_id: Mapped[str | None] = mapped_column(String(128), unique=True)
-    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    status: Mapped[str] = mapped_column(String(16), default="pending")
-    paid_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
-    raw_payload: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
 class CheckIn(Base):
@@ -605,19 +592,6 @@ class CheckIn(Base):
     rejection_reason: Mapped[str | None] = mapped_column(String(255))
     checked_in_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
     undone_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
-
-
-class BoardingScan(Base):
-    __tablename__ = "boarding_scans"
-
-    scan_id: Mapped[str] = mapped_column(UUID_PK, primary_key=True)
-    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.booking_id"))
-    scanned_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
-    stop_sequence: Mapped[int] = mapped_column(SmallInteger)
-    result: Mapped[str] = mapped_column(String(24))
-    scanned_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
-    client_recorded_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
-    synced_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
 
 
 # ======================================================================
@@ -684,7 +658,7 @@ class Message(Base):
     sender_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"))
     sender_role: Mapped[str] = mapped_column(String(16))
     body: Mapped[str] = mapped_column(String(1000))
-    # An image, for a home pickup's payment proof only (brief 2.6).
+    # An image: the landmark photo of a home pickup (brief 2.6).
     attachment_url: Mapped[str | None] = mapped_column(String(255))
     attachment_type: Mapped[str | None] = mapped_column(String(8))
     attachment_size_kb: Mapped[int | None]
@@ -763,7 +737,9 @@ class SpecialTripRequest(Base):
     rental_fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     fee_note: Mapped[str | None] = mapped_column(String(255))
     payment_status: Mapped[str] = mapped_column(String(8), default="unpaid")
-    payment_reference: Mapped[str | None] = mapped_column(String(64))
+    paid_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    # The Dispatcher who took the cash at the terminal (brief 2.5).
+    paid_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     status: Mapped[str] = mapped_column(String(16), default="requested")
     trip_id: Mapped[str | None] = mapped_column(ForeignKey("trips.trip_id"))
     reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
@@ -856,12 +832,10 @@ class AssistedPickup(Base):
     beneficiary_name: Mapped[str] = mapped_column(String(150))
     beneficiary_contact: Mapped[str] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(16), default="requested")
-    activation_mode: Mapped[str | None] = mapped_column(String(16))
     activated_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     activated_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
-    proof_message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.message_id"))
-    proof_confirmed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
-    proof_confirmed_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    # A landmark photo, not payment proof (brief 2.6).
+    photo_message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.message_id"))
     arrived_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     left_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     closed_early: Mapped[bool] = mapped_column(Boolean, default=False)

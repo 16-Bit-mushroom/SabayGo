@@ -19,11 +19,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.v1.deps import OFFICE, SessionDep, require_roles
-from app.application.booking.payments import StartCheckoutUseCase
 from app.application.operations.special_trips import Place, SpecialTrips
 from app.core import timezone as app_tz
 from app.domain.enums import Role
-from app.infrastructure.clients.sandbox_checkout import checkout_client
 from app.infrastructure.models import SpecialTripRequest, User
 
 router = APIRouter(prefix="/special-trips", tags=["special-trips"])
@@ -122,24 +120,10 @@ async def withdraw_special_trip(
     return RequestOut.of(await SpecialTrips(session).withdraw(request_id, by=user))
 
 
-class CheckoutOut(BaseModel):
-    checkout_url: str
-    amount: Decimal
-
-
-@router.post("/{request_id}/checkout", response_model=CheckoutOut, status_code=201)
-async def pay_rental_fee(
-    request_id: str, session: SessionDep, user: Annotated[User, Depends(PASSENGER)],
-    request: Request,
-) -> CheckoutOut:
-    """The renter pays the agreed fee through the gateway. Only the
-    verified webhook marks it paid, as for a ticket."""
-    checkout = checkout_client(
-        lambda cs_id: str(request.url_for("sandbox_checkout_page", checkout_session_id=cs_id))
-    )
-    result = await StartCheckoutUseCase(session, checkout).for_rental(
-        request_id=request_id, passenger_user_id=user.user_id)
-    return CheckoutOut(checkout_url=result.checkout_url, amount=result.amount)
+# The gateway path for a rental fee went with brief rev 721: the renter,
+# or someone acting for them, pays the Dispatcher in cash at the terminal
+# before the van leaves, and the Dispatcher marks it paid. That flow is
+# built in step S7 (docs/GAP_REPORT.md 10.4).
 
 
 @router.get("", response_model=list[RequestOut], dependencies=[Depends(OFFICE)])

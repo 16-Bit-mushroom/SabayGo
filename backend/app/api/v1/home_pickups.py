@@ -58,13 +58,14 @@ class PickupOut(BaseModel):
     pickup_note: str | None
     route_distance_m: int
     status: str
-    activation_mode: str | None
+    activated_by: str | None
     activated_at: dt.datetime | None
     arrived_at: dt.datetime | None
     left_at: dt.datetime | None
     closed_early: bool
-    proof_message_id: str | None
-    proof_confirmed_at: dt.datetime | None
+    # A photo of a landmark at the pickup place. Not payment proof:
+    # nothing depends on it (brief 2.6).
+    photo_message_id: str | None
 
     @classmethod
     def of(cls, p: AssistedPickup) -> PickupOut:
@@ -83,9 +84,10 @@ class CloseIn(BaseModel):
 
 def _booking(r: ReserveSeatResult) -> BookingResponse:
     return BookingResponse(
-        booking_id=r.booking_id, ticket_number=r.ticket_number,
+        booking_id=r.booking_id, booking_code=r.booking_code,
         boarding_stop=r.boarding_stop, alighting_stop=r.alighting_stop,
-        fare_amount=r.fare_amount, status=r.status.value, qr_payload=r.qr_payload,
+        fare_amount=r.fare_amount, status=r.status.value,
+        payment_status=r.payment_status.value,
     )
 
 
@@ -141,34 +143,27 @@ async def close_home_pickup(
         pickup_id, boarded=payload.outcome == "boarded", by=user))
 
 
-@router.post("/{pickup_id}/proof", response_model=PickupOut, status_code=201,
+@router.post("/{pickup_id}/photo", response_model=PickupOut, status_code=201,
              dependencies=[Depends(PASSENGER)])
-async def send_payment_proof(
+async def send_landmark_photo(
     pickup_id: str, session: SessionDep, user: CurrentUser,
     image: UploadFile = File(...),
 ) -> PickupOut:
-    """The relative's payment screenshot when the gateway is down (T31 b):
-    an image in their chat with the trip's Dispatcher, at most
-    `chat_image_max_kb` (T41 a). The unpaid seats are held until departure
-    while the Dispatcher looks."""
+    """A photo of a landmark at the pickup place (T41 c): an image in the
+    relative's chat with the trip's Dispatcher, at most
+    `chat_image_max_kb` (T41 a).
+
+    It helps the Dispatcher find the gate. It is not payment proof and
+    nothing depends on it: the fare is cash at the terminal.
+    """
     limit_kb = await PolicyRepository(session).get_int("chat_image_max_kb")
     data = await image.read(limit_kb * 1024 + 1)
-    return PickupOut.of(await HomePickups(session).send_proof(pickup_id, by=user, image=data))
+    return PickupOut.of(await HomePickups(session).send_photo(pickup_id, by=user, image=data))
 
 
-@router.get("/{pickup_id}/proof")
-async def payment_proof(pickup_id: str, session: SessionDep, user: CurrentUser) -> FileResponse:
-    """The screenshot, for the relative, the trip's Dispatcher and the
+@router.get("/{pickup_id}/photo")
+async def landmark_photo(pickup_id: str, session: SessionDep, user: CurrentUser) -> FileResponse:
+    """The photo, for the relative, the trip's Dispatcher and the
     Terminal Manager."""
-    msg = await HomePickups(session).proof(pickup_id, by=user)
+    msg = await HomePickups(session).photo(pickup_id, by=user)
     return FileResponse(MessagingService.attachment_path(msg))
-
-
-@router.post("/{pickup_id}/proof/confirm", response_model=PickupOut,
-             dependencies=[Depends(require_roles(Role.DISPATCHER))])
-async def confirm_payment_proof(
-    pickup_id: str, session: SessionDep, user: CurrentUser
-) -> PickupOut:
-    """The trip's Dispatcher confirms the screenshot to the Terminal
-    Manager: the unpaid seats are paid ('Home Pickup Proof')."""
-    return PickupOut.of(await HomePickups(session).confirm_proof(pickup_id, by=user))

@@ -173,7 +173,7 @@ async def search_trips(
     sense once a route is known. `boarding_stop`/`alighting_stop` remain
     for the older client and the test scripts and apply the same pair to
     every route -- fine with one route, ambiguous with several -- unless
-    `route_id` pins them, which is what reschedule does: same journey,
+    `route_id` pins them: same journey,
     same route, different departure.
 
     `seats_available` is a non-locking read -- a display hint, not a

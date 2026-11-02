@@ -11,18 +11,16 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import CurrentUser, SessionDep, require_roles
-from app.application.booking.reschedule import (
-    CancelBookingUseCase,
-    RescheduleBookingUseCase,
-)
+from app.application.booking.cash import CashDesk, SeatOnList
 from app.application.booking.reserve_seat import (
     ReserveSeatCommand,
     ReserveSeatUseCase,
 )
 from app.application.edge.checking import ListCheck
+from app.application.operations.guards import assert_assigned_to_trip
 from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError, PolicyViolationError
-from app.domain.enums import BookingType, Role
+from app.domain.enums import BookingType, CancelReason, Role
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import AssistedPickup, RouteStop, Terminal, Trip
 from app.infrastructure.repositories.policy_repository import PolicyRepository
@@ -62,7 +60,8 @@ class WalkInRequest(BaseModel):
 
 class BookingResponse(BaseModel):
     booking_id: str
-    ticket_number: str
+    # The short code the passenger gives the Dispatcher at the terminal.
+    booking_code: str
     # No seat number: UV Express does not assign seats. The system tracks
     # capacity per section internally, but a passenger is never told where
     # to sit.
@@ -70,7 +69,8 @@ class BookingResponse(BaseModel):
     alighting_stop: int
     fare_amount: Decimal
     status: str
-    qr_payload: str | None
+    # 'unpaid' until the Dispatcher takes the cash at the terminal.
+    payment_status: str
 
 
 class AvailabilityResponse(BaseModel):
@@ -101,12 +101,12 @@ async def reserve(
     )
     return BookingResponse(
         booking_id=result.booking_id,
-        ticket_number=result.ticket_number,
+        booking_code=result.booking_code,
         boarding_stop=result.boarding_stop,
         alighting_stop=result.alighting_stop,
         fare_amount=result.fare_amount,
         status=result.status.value,
-        qr_payload=result.qr_payload,
+        payment_status=result.payment_status.value,
     )
 
 
@@ -154,15 +154,16 @@ async def log_walk_in(
         if row is not None:
             return BookingResponse(
                 booking_id=row.booking_id,
-                ticket_number=row.ticket_number,
+                booking_code=row.booking_code,
                 boarding_stop=row.boarding_stop_sequence,
                 alighting_stop=row.alighting_stop_sequence,
                 fare_amount=row.fare_amount,
                 status=row.status,
-                qr_payload=row.qr_payload,
+                payment_status=row.payment_status,
             )
 
     checks = ListCheck(session)
+    event = None
     if payload.for_event_id is not None:
         event = await checks.pending_event(payload.for_event_id, by=user)
         if event.trip_id != payload.trip_id:
@@ -180,16 +181,16 @@ async def log_walk_in(
             client_request_id=payload.client_request_id,
         )
     )
-    if payload.for_event_id is not None:
-        await checks.mark_listed(payload.for_event_id, booking_id=result.booking_id, by=user)
+    if event is not None:
+        await checks.mark_listed(event, booking_id=result.booking_id, by=user)
     return BookingResponse(
         booking_id=result.booking_id,
-        ticket_number=result.ticket_number,
+        booking_code=result.booking_code,
         boarding_stop=result.boarding_stop,
         alighting_stop=result.alighting_stop,
         fare_amount=result.fare_amount,
         status=result.status.value,
-        qr_payload=result.qr_payload,
+        payment_status=result.payment_status.value,
     )
 
 
@@ -210,19 +211,6 @@ async def availability(
     )
 
 
-class RescheduleRequest(BaseModel):
-    new_trip_id: str
-
-
-class RescheduleResponse(BaseModel):
-    old_booking_id: str
-    new_booking_id: str
-    new_ticket_number: str
-    new_trip_id: str
-    reschedule_count: int
-    qr_payload: str | None
-
-
 class HomePickupRef(BaseModel):
     pickup_id: str
     beneficiary_name: str
@@ -230,13 +218,14 @@ class HomePickupRef(BaseModel):
     # relative's own seat (boards at the terminal).
     is_passenger_seat: bool
     status: str
-    proof_sent: bool
-    proof_confirmed: bool
+    # Whether the relative sent a photo of a landmark at the pickup
+    # place. Nothing depends on it (brief 2.6).
+    photo_sent: bool
 
 
 class MyBookingOut(BaseModel):
     booking_id: str
-    ticket_number: str
+    booking_code: str
     trip_id: str
     departure_datetime: datetime
     route_id: str
@@ -247,9 +236,13 @@ class MyBookingOut(BaseModel):
     alighting_terminal: str
     fare_amount: Decimal
     status: str
-    qr_payload: str | None
-    can_reschedule: bool
-    reschedule_deadline: datetime | None
+    # Cash only: 'unpaid' until the Dispatcher marks the seat Paid at the
+    # terminal. An unpaid reservation is not on the passenger list.
+    payment_status: str
+    paid_at: datetime | None
+    # A passenger cancels only an unpaid seat, and only before the
+    # trip's list locks. A paid one goes through the Dispatcher.
+    can_cancel: bool
     # D.1: when the van is due at the passenger's OWN stop, and when
     # check-in there opens. The app shows these; the server enforces them.
     boarding_due_at: datetime
@@ -264,9 +257,9 @@ async def _render_bookings(
     """Shape booking rows for the passenger. Shared by `/mine` and
     `/{booking_id}` so the ticket screen sees one identical object either way.
 
-    `can_reschedule` and `reschedule_deadline` are computed server-side so
-    the app never has to reimplement the policy -- it just enables or
-    disables the button. The server re-checks on the actual request.
+    `can_cancel` is computed server-side so the app never has to
+    reimplement the policy -- it just enables or disables the button. The
+    server re-checks on the actual request.
     """
     # One name lookup for every route on the page, rather than one per booking.
     route_ids = {trip.route_id for _, trip in rows}
@@ -304,13 +297,11 @@ async def _render_bookings(
                 pickups[booking_id] = HomePickupRef(
                     pickup_id=p.pickup_id, beneficiary_name=p.beneficiary_name,
                     is_passenger_seat=passenger, status=p.status,
-                    proof_sent=p.proof_message_id is not None,
-                    proof_confirmed=p.proof_confirmed_at is not None,
+                    photo_sent=p.photo_message_id is not None,
                 )
 
     for booking, trip in rows:
         departure = app_tz.localize(trip.departure_datetime)
-        deadline = departure - timedelta(hours=trip.reschedule_cutoff_hours)
         boarding_due_at = departure + timedelta(
             minutes=stop_offsets.get((trip.route_id, booking.boarding_stop_sequence), 0)
         )
@@ -318,7 +309,7 @@ async def _render_bookings(
         out.append(
             MyBookingOut(
                 booking_id=booking.booking_id,
-                ticket_number=booking.ticket_number,
+                booking_code=booking.booking_code,
                 trip_id=booking.trip_id,
                 departure_datetime=trip.departure_datetime,
                 route_id=trip.route_id,
@@ -333,11 +324,13 @@ async def _render_bookings(
                 ),
                 fare_amount=booking.fare_amount,
                 status=booking.status,
-                qr_payload=booking.qr_payload,
-                # Neither seat of a home pickup moves to another trip.
-                can_reschedule=booking.status in active and now < deadline
-                and booking.booking_id not in pickups,
-                reschedule_deadline=deadline,
+                payment_status=booking.payment_status,
+                paid_at=booking.paid_at,
+                can_cancel=(
+                    booking.status in active
+                    and booking.payment_status == "unpaid"
+                    and trip.list_locked_at is None
+                ),
                 boarding_due_at=boarding_due_at,
                 checkin_opens_at=boarding_due_at - checkin_window,
                 home_pickup=pickups.get(booking.booking_id),
@@ -384,33 +377,150 @@ async def my_booking(
     return (await _render_bookings(session, [row]))[0]
 
 
-@router.post("/{booking_id}/reschedule", response_model=RescheduleResponse)
-async def reschedule(
+# ===================================================================
+# The Dispatcher's cash desk at the terminal (brief rev 721, 2.1)
+# ===================================================================
+class SeatOnListOut(BaseModel):
+    booking_id: str
+    booking_code: str
+    passenger_name: str | None
+    contact_number: str | None
+    alighting_stop: int
+    fare_amount: Decimal
+    booking_type: str
+    status: str
+    payment_status: str
+    is_home_pickup_seat: bool
+    paid_at: datetime | None
+
+
+class MarkPaidRequest(BaseModel):
+    # The moment the Dispatcher's device recorded, so a mark queued
+    # offline keeps when it happened rather than when it synced.
+    paid_at: datetime | None = None
+
+
+class DispatcherCancelRequest(BaseModel):
+    reason: CancelReason
+
+
+class CancelResponse(BaseModel):
+    booking_id: str
+    booking_code: str
+    status: str
+    payment_status: str
+    cancel_reason: str | None
+    message: str
+
+
+def _seat_out(seat: SeatOnList) -> SeatOnListOut:
+    return SeatOnListOut(**seat.__dict__)
+
+
+@router.get(
+    "/trip/{trip_id}/seats",
+    response_model=list[SeatOnListOut],
+    dependencies=[Depends(require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER))],
+)
+async def seats_on_trip(
+    trip_id: str, session: SessionDep, user: CurrentUser, q: str | None = None
+) -> list[SeatOnListOut]:
+    """The trip's reservations, searched by name or booking code.
+
+    One box for both, because at the van door the Dispatcher has
+    whatever the passenger offers. Unpaid seats sort first: those are the
+    ones with cash still to collect.
+    """
+    await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
+    return [_seat_out(s) for s in await CashDesk(session).find(trip_id=trip_id, query=q)]
+
+
+@router.post(
+    "/{booking_id}/mark-paid",
+    response_model=SeatOnListOut,
+    dependencies=[Depends(require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER))],
+)
+async def mark_paid(
     booking_id: str,
-    payload: RescheduleRequest,
+    payload: MarkPaidRequest,
     session: SessionDep,
     user: CurrentUser,
-) -> RescheduleResponse:
-    """Move a booking to another trip on the same route.
+) -> SeatOnListOut:
+    """The passenger handed the fare to the Dispatcher in cash.
 
-    Cooperative policy: no refunds, but a move is allowed inside the
-    cutoff window. The segment stays the same; only the trip changes.
+    This is what puts the seat on the passenger list, counts it into
+    Booked income and stops the cutoff releasing it. Marking an
+    already-paid seat is accepted and changes nothing, so an offline
+    queue can replay safely.
     """
-    result = await RescheduleBookingUseCase(session).execute(
-        booking_id=booking_id,
-        new_trip_id=payload.new_trip_id,
-        passenger_user_id=user.user_id,
-    )
-    return RescheduleResponse(
-        **{k: v for k, v in result.__dict__.items() if k != "seat_number"}
-    )
+    desk = CashDesk(session)
+    booking = await desk.booking(booking_id)
+    await assert_assigned_to_trip(session, trip_id=booking.trip_id, user=user)
+    await desk.mark_paid(booking_id=booking_id, by=user, at=payload.paid_at)
+    await session.commit()
+    seats = await desk.find(trip_id=booking.trip_id, query=booking.booking_code)
+    return _seat_out(seats[0])
 
 
-@router.post("/{booking_id}/cancel")
+@router.post("/{booking_id}/cancel", response_model=CancelResponse)
 async def cancel(
     booking_id: str, session: SessionDep, user: CurrentUser
-) -> dict[str, str]:
-    """Cancel a booking and release its seat. No refund is issued."""
-    return await CancelBookingUseCase(session).execute(
-        booking_id=booking_id, passenger_user_id=user.user_id
+) -> CancelResponse:
+    """The passenger cancels their own reservation, in the app.
+
+    Only while it is unpaid: once the cash is in the Dispatcher's hand it
+    has to be handed back by a person, so a paid seat is cancelled by the
+    Dispatcher instead. No refund and no credit either way.
+    """
+    booking = await CashDesk(session).cancel_by_passenger(
+        booking_id=booking_id, user=user
+    )
+    await session.commit()
+    return CancelResponse(
+        booking_id=booking.booking_id,
+        booking_code=booking.booking_code,
+        status=booking.status,
+        payment_status=booking.payment_status,
+        cancel_reason=booking.cancel_reason,
+        message="Reservation cancelled and the seat released.",
+    )
+
+
+@router.post(
+    "/{booking_id}/dispatcher-cancel",
+    response_model=CancelResponse,
+    dependencies=[Depends(require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER))],
+)
+async def dispatcher_cancel(
+    booking_id: str,
+    payload: DispatcherCancelRequest,
+    session: SessionDep,
+    user: CurrentUser,
+) -> CancelResponse:
+    """The Dispatcher cancels a seat (brief 2.1).
+
+    Either the passenger asked in the chat -- and the Dispatcher hands
+    back any cash already taken, which happens between them and is not
+    money the system moves -- or an unpaid reservation was forgotten and
+    nobody came for it.
+    """
+    desk = CashDesk(session)
+    booking = await desk.booking(booking_id)
+    await assert_assigned_to_trip(session, trip_id=booking.trip_id, user=user)
+    await desk.cancel_by_dispatcher(
+        booking_id=booking_id, reason=payload.reason, by=user
+    )
+    await session.commit()
+    returned = (
+        " Hand back the cash you took for it."
+        if payload.reason is CancelReason.PASSENGER_ASKED_DISPATCHER
+        else ""
+    )
+    return CancelResponse(
+        booking_id=booking.booking_id,
+        booking_code=booking.booking_code,
+        status=booking.status,
+        payment_status=booking.payment_status,
+        cancel_reason=booking.cancel_reason,
+        message=f"Seat released.{returned}",
     )

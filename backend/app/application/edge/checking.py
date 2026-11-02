@@ -1,16 +1,26 @@
-"""Checking door events against the passenger list (rev 603, change
-brief 2.4, 6.1; phase 3 of 6.2).
+"""Checking door events against the passenger list (rev 721, change
+brief 2.4, 5.2, 6.1; phase 3 of 6.2).
 
-Before departure. A boarding the phone saw is *listed* when a QR scan or
-a Dispatcher's cash entry on the trip was made within `match_window_
-seconds` before or after it and was not already used for another
-boarding: 'matched_qr' or 'matched_log'. Otherwise it is 'unlisted', and
-its resolution is 'pending' until the Dispatcher either fixes the list
-(lists the person with a destination, `mark_listed`) or types a reason
-(`explain`). Matching is by time and recomputed from the stored rows on
-every check, so the order in which scans, entries and a phone's offline
-uploads arrive does not change the result; the Dispatcher's fixes and
-reasons are kept.
+Before departure. A boarding the phone saw is *listed* while an unmatched
+**seat the Dispatcher marked as paid** ('matched_booking') or an
+unmatched **walk-up entry the Dispatcher listed** ('matched_log') remains
+on the trip's list. Each seat or entry is used up by one boarding only.
+Otherwise the boarding is 'unlisted', and its resolution is 'pending'
+until the Dispatcher either fixes the list (lists the person with a
+destination, `mark_listed`) or types a reason (`explain`).
+
+**There is no matching window.** Rev 721 removed it along with the QR
+scan: with no ticket to scan there is no moment to match against, and a
+passenger may hand over the cash long before or long after stepping
+aboard. What remains is a count -- so many paid seats, so many boardings
+-- not an identity. `matched_booking_id` names the seat that was used up,
+not the person who walked through the door.
+
+Seats are consumed oldest first (a paid seat by `paid_at`, a walk-up
+entry by when it was logged) so that the result is the same however the
+phone's offline uploads arrive. Which kind is taken first does not
+matter: the paper does not say, and the amount owed does not depend on
+it. The Dispatcher's fixes and reasons are kept across a recheck.
 
 The count that gates Depart is the brief's comparison: aboard (door
 boardings minus alightings before departure, minus the Dispatcher once
@@ -29,25 +39,23 @@ a fare: the camera's count alone prices no one.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.finance.statement import CASH, LISTED
+from app.application.finance.statement import CASH, PAID_SEAT
 from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import BookingStatus, Role, TripStatus
 from app.infrastructure.models import (
     Booking,
-    BoardingScan,
     Notification,
     PassengerEvent,
     Trip,
     User,
 )
-from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 BEFORE_DEPARTURE = (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value)
 
@@ -92,18 +100,22 @@ class ListCheck:
 
         # A booking the Dispatcher added to fix the list is that boarding's.
         fixes = {e.matched_booking_id for e in boards if e.resolution_status == "listed"}
-        window = timedelta(seconds=await PolicyRepository(self.session).get_int(
-            "match_window_seconds"))
         free = [c for c in await self._records(trip) if c[2] not in fixes]
         for e in boards:
-            if e.resolution_status == "listed":
+            # A boarding the Dispatcher has already resolved keeps what
+            # they recorded. Without this, a seat marked paid afterwards
+            # would be handed to an explained boarding on the next
+            # recheck and wipe the reason they typed -- and with no
+            # matching window that is no longer a remote coincidence but
+            # the ordinary case, because any free seat goes to the
+            # earliest unmatched boarding.
+            if e.resolution_status in ("listed", "explained"):
                 continue
-            near = [c for c in free if abs(c[0] - e.event_at) <= window]
-            if near:
-                best = min(near, key=lambda c: abs(c[0] - e.event_at))
-                free.remove(best)
+            if free:
+                # No window: take the oldest seat still on the list.
+                taken = free.pop(0)
                 self._clear(e)
-                e.match_status, e.matched_booking_id = best[1], best[2]
+                e.match_status, e.matched_booking_id = taken[1], taken[2]
             else:
                 e.match_status, e.matched_booking_id = "unlisted", None
                 if e.resolution_status == "not_needed":
@@ -130,29 +142,38 @@ class ListCheck:
         e.resolution_note = None
 
     async def _records(self, trip: Trip) -> list[tuple[datetime, str, str]]:
-        """(time, kind, booking) of each QR scan and cash entry on the
-        trip: the first valid scan of a ticket, the entry of a cash seat."""
-        scans = (await self.session.execute(
-            select(func.min(BoardingScan.scanned_at), BoardingScan.booking_id)
-            .join(Booking, Booking.booking_id == BoardingScan.booking_id)
-            .where(Booking.trip_id == trip.trip_id, BoardingScan.result == "valid")
-            .group_by(BoardingScan.booking_id)
-        )).all()
-        entries = (await self.session.execute(
-            select(Booking.created_at, Booking.booking_id).where(
+        """(when, kind, booking) of every seat on the trip's list.
+
+        A reservation the Dispatcher marked Paid is 'matched_booking';
+        a walk-up the Dispatcher listed is 'matched_log'. Oldest first,
+        so a recheck gives the same answer every time. An unpaid
+        reservation is not here at all: it is not on the list, so a
+        passenger who boards on one is an unlisted boarding until the
+        Dispatcher takes the cash or types a reason (brief 6.1).
+        """
+        rows = (await self.session.execute(
+            select(
+                Booking.paid_at, Booking.created_at,
+                Booking.booking_type, Booking.booking_id,
+            ).where(
                 Booking.trip_id == trip.trip_id,
-                Booking.booking_type.in_(CASH),
-                Booking.status.in_(LISTED),
+                *PAID_SEAT,
             )
         )).all()
-        return ([(_naive(at), "matched_qr", b) for at, b in scans]
-                + [(_naive(at), "matched_log", b) for at, b in entries])
+        records = [
+            (_naive(paid_at or created_at),
+             "matched_log" if kind in CASH else "matched_booking",
+             booking_id)
+            for paid_at, created_at, kind, booking_id in rows
+        ]
+        records.sort(key=lambda r: r[0])
+        return records
 
     async def _listed(self, trip: Trip) -> int:
         return (await self.session.execute(
             select(func.count()).select_from(Booking).where(
                 Booking.trip_id == trip.trip_id,
-                Booking.status.in_(LISTED),
+                *PAID_SEAT,
                 # A home-pickup seat counts once its passenger is aboard.
                 (Booking.is_home_pickup_seat.is_(False))
                 | (Booking.status == BookingStatus.BOARDED.value),
@@ -173,9 +194,21 @@ class ListCheck:
             raise ConflictError("This boarding needs nothing: it is on the list or resolved.")
         return event
 
-    async def mark_listed(self, event_id: str, *, booking_id: str, by: User) -> None:
-        """The Dispatcher listed the person this boarding was (brief 2.4)."""
-        event = await self.pending_event(event_id, by=by)
+    async def mark_listed(
+        self, event: PassengerEvent, *, booking_id: str, by: User
+    ) -> None:
+        """The Dispatcher listed the person this boarding was (brief 2.4).
+
+        Takes the event the caller already validated with `pending_event`,
+        and deliberately does not re-validate. With no matching window a
+        seat on the list is taken by the earliest unmatched boarding, so
+        the seat just created to fix *this* boarding would be consumed by
+        it on the next recheck -- and a second `pending_event` would then
+        report, correctly but uselessly, that there is nothing left to
+        resolve. The fix is recorded first; from then on `recheck` keeps
+        the pairing, because a boarding whose resolution is 'listed'
+        holds its booking and neither is offered to anything else.
+        """
         event.resolution_status = "listed"
         event.matched_booking_id = booking_id
         event.resolved_by, event.resolved_at = by.user_id, _now()

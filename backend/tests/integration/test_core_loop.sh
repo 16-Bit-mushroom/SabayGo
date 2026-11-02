@@ -49,13 +49,18 @@ echo "$BOOKING" | python3 -m json.tool
 BOOKING_ID=$(echo "$BOOKING" | j "['booking_id']")
 
 echo
-echo "== 6. checkout (needs PAYMONGO_SECRET_KEY) =============="
-curl -s -X POST "$API/payments/checkout" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "{\"booking_id\":\"$BOOKING_ID\"}" | python3 -m json.tool
+echo "== 6. the Dispatcher takes the cash at the terminal ====="
+DT=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
+  -d '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
+curl -s -X POST "$API/bookings/$BOOKING_ID/mark-paid" \
+  -H "Authorization: Bearer $DT" -H "Content-Type: application/json" \
+  -d '{}' | python3 -m json.tool
 
 echo
-echo "== 7. unsigned webhook must be rejected ================="
-curl -s -X POST "$API/payments/webhook" -H "Content-Type: application/json" \
-  -d '{"data":{"id":"evt_fake","attributes":{"type":"checkout_session.payment.paid"}}}'
+echo "== 7. the seat is now on the passenger list ============="
+curl -s "$API/bookings/trip/$TRIP_ID/seats" -H "Authorization: Bearer $DT" \
+  | python3 -c "
+import json,sys
+for b in json.load(sys.stdin):
+    print(f\"  {b['booking_code']:<12} {b['payment_status']:<8} {b['booking_type']}\")"
 echo

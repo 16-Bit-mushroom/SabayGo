@@ -25,7 +25,6 @@ from app.api.v1 import (
     fleet,
     home_pickups,
     operations,
-    payments,
     roster,
     sos,
     special_trips,
@@ -118,7 +117,6 @@ async def health() -> dict[str, str]:
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(bookings.router, prefix="/api/v1")
 app.include_router(trips.router, prefix="/api/v1")
-app.include_router(payments.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(messaging.router, prefix="/api/v1")

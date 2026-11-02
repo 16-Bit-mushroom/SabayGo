@@ -18,11 +18,7 @@ B=$(curl -s -X POST "$API/bookings/reserve" -H "Authorization: Bearer $PTOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}")
 echo "$B" | python3 -m json.tool
-BID=$(echo "$B" | j "['booking_id']"); QR=$(echo "$B" | j "['qr_payload']")
-
-echo
-echo "== confirm payment via simulated webhook ================"
-python tests/integration/simulate_webhook.py --booking-id "$BID" | tail -2
+BID=$(echo "$B" | j "['booking_id']")
 
 echo
 echo "== check-in AT the terminal (should pass) ==============="
@@ -40,16 +36,14 @@ OTOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
   -d '{"email":"manager@sabaygo.dev","password":"sabaygo123"}' | j "['access_token']")
 curl -s -X POST "$API/trips/$TRIP/start" -H "Authorization: Bearer $OTOKEN" >/dev/null
 
-echo "== scan the QR (valid) ================================="
-curl -s -X POST "$API/scans" -H "Authorization: Bearer $CTOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" | python3 -m json.tool
+echo "== the Dispatcher takes the cash and marks the seat paid ="
+curl -s -X POST "$API/bookings/$BID/mark-paid" -H "Authorization: Bearer $CTOKEN" \
+  -H "Content-Type: application/json" -d '{}' | python3 -m json.tool
 
 echo
-echo "== scan again (already_boarded) ========================"
-curl -s -X POST "$API/scans" -H "Authorization: Bearer $CTOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" | j "['result']"
+echo "== a replayed offline mark changes nothing =============="
+curl -s -X POST "$API/bookings/$BID/mark-paid" -H "Authorization: Bearer $CTOKEN" \
+  -H "Content-Type: application/json" -d '{}' | j "['payment_status']"
 
 echo
 echo "== manifest ============================================"

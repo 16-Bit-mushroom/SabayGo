@@ -85,7 +85,7 @@ async def list_policies(session: SessionDep) -> list[PolicyOut]:
     """Every configurable cooperative policy, at the value in force now.
 
     These are rows precisely so a cooperative can revise them without a
-    deployment -- reschedule cutoff, advance-booking cap, geofence radius,
+    deployment -- advance-booking cap, geofence radius,
     hold TTL, variance threshold, start window, remittance rate.
     """
     return await _policies_out(session, await PolicyRepository(session).current_rows())
@@ -115,7 +115,7 @@ async def update_policy(
     await session.commit()
 
     # Existing trips are unaffected: seat capacity, advance cap and
-    # reschedule cutoff are snapshotted onto each trip at generation time.
+    # advance-booking cap are snapshotted onto each trip at generation time.
     return (await _policies_out(session, [policy]))[0]
 
 

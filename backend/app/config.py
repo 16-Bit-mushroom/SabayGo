@@ -34,14 +34,6 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 12
 
-    # --- payments -------------------------------------------------------
-    paymongo_secret_key: str | None = None
-    paymongo_webhook_secret: str | None = None
-    # Where PayMongo sends the passenger after checkout. Deep link in
-    # production; a plain page is fine for sandbox testing.
-    payment_success_url: str = "http://localhost:8000/payments/success"
-    payment_cancel_url: str = "http://localhost:8000/payments/cancel"
-
     # --- SMS for SOS emergency alerts (spec 2.3.5) ----------------------
     # Two providers, because the cooperative's two realistic options are
     # genuinely different purchases:

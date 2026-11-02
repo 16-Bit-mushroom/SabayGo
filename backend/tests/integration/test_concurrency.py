@@ -25,17 +25,47 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import pathlib
 import statistics
+import sys
 import time
 from collections import Counter
 from dataclasses import dataclass
 
 import httpx
+from sqlalchemy import text
+
+# Run from anywhere: the invariant is checked in the database, so the
+# backend package has to be importable even when this script is invoked
+# by path rather than as a module.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+
+from app.core.db import SessionFactory  # noqa: E402
 
 API = "http://127.0.0.1:8000/api/v1"
 TRIP_ID = "TRIP-DEMO-00000001"
 EMAIL = "passenger@sabaygo.dev"
 PASSWORD = "sabaygo123"
+
+
+async def double_sold(trip_id: str) -> list[tuple[int, int]]:
+    """Seat-legs of this trip held by more than one booking.
+
+    Read from the database, not from the reservation response: the API
+    deliberately never tells a passenger which internal slot they got,
+    because UV Express does not assign seats. The invariant lives in
+    `seat_inventory`, so that is where it is checked -- the same query
+    this script prints at the end for a reader to run by hand.
+    """
+    async with SessionFactory() as session:
+        rows = (await session.execute(text("""
+            SELECT seat_number, leg_sequence, COUNT(DISTINCT booking_id) AS bookings
+              FROM seat_inventory
+             WHERE trip_id = :trip AND booking_id IS NOT NULL
+             GROUP BY seat_number, leg_sequence
+            HAVING bookings > 1
+        """), {"trip": trip_id})).all()
+    return [(int(r[0]), int(r[1])) for r in rows]
 
 
 @dataclass
@@ -102,8 +132,7 @@ async def run(n: int, boarding: int, alighting: int, capacity: int) -> None:
         wall_ms = (time.perf_counter() - wall_start) * 1000
 
     successes = [a for a in results if a.status_code == 201]
-    seats = [a.seat_number for a in successes]
-    duplicates = [s for s, c in Counter(seats).items() if c > 1]
+    duplicates = await double_sold(TRIP_ID)
     codes = Counter(a.status_code for a in results)
     errors = Counter(a.error for a in results if a.error)
     latencies = sorted(a.elapsed_ms for a in results)
@@ -118,8 +147,7 @@ async def run(n: int, boarding: int, alighting: int, capacity: int) -> None:
     print(f"Trip seat capacity       : {capacity}")
     print(f"Successful bookings      : {len(successes)}")
     print(f"Rejected                 : {n - len(successes)}")
-    print(f"Distinct seats allocated : {len(set(seats))}")
-    print(f"DOUBLE-BOOKED SEATS      : {len(duplicates)}   <-- must be 0")
+    print(f"DOUBLE-SOLD SEAT-LEGS    : {len(duplicates)}   <-- must be 0")
     print()
     print("Response codes:")
     for code, count in sorted(codes.items()):
@@ -145,7 +173,7 @@ async def run(n: int, boarding: int, alighting: int, capacity: int) -> None:
 
     overbooked = len(successes) > capacity
     if duplicates:
-        print(f"FAIL: seats {duplicates} were allocated more than once.")
+        print(f"FAIL: seat-legs {duplicates} were sold more than once.")
     elif overbooked:
         print(f"FAIL: {len(successes)} bookings exceeded capacity {capacity}.")
     else:

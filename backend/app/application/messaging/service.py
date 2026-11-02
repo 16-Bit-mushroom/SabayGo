@@ -162,9 +162,7 @@ class MessagingService:
             .where(
                 Booking.trip_id == trip_id,
                 Booking.passenger_user_id == passenger_id,
-                Booking.status.notin_(
-                    [BookingStatus.CANCELLED.value, BookingStatus.RESCHEDULED.value]
-                ),
+                Booking.status!= BookingStatus.CANCELLED.value,
             )
             .limit(1)
         )
@@ -367,9 +365,7 @@ class MessagingService:
                 .join(Route, Route.route_id == Trip.route_id)
                 .where(
                     Booking.passenger_user_id == user.user_id,
-                    Booking.status.notin_(
-                        [BookingStatus.CANCELLED.value, BookingStatus.RESCHEDULED.value]
-                    ),
+                    Booking.status!= BookingStatus.CANCELLED.value,
                     Trip.dispatcher_id.is_not(None),
                     Trip.status != TripStatus.CANCELLED.value,
                 )
@@ -410,9 +406,7 @@ class MessagingService:
                     .where(
                         Booking.trip_id.in_(trip_ids),
                         Booking.passenger_user_id.is_not(None),
-                        Booking.status.notin_(
-                            [BookingStatus.CANCELLED.value, BookingStatus.RESCHEDULED.value]
-                        ),
+                        Booking.status!= BookingStatus.CANCELLED.value,
                     )
                     .distinct()
                 )

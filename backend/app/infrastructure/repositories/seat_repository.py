@@ -183,7 +183,7 @@ class SeatRepository:
         )
 
     async def release(self, *, booking_id: str) -> None:
-        """Cancellation or reschedule: return the seat-legs to the pool."""
+        """Cancellation or the cutoff release: seat-legs back to the pool."""
         await self.session.execute(
             update(SeatInventory)
             .where(SeatInventory.booking_id == booking_id)

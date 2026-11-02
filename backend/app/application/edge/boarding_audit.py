@@ -2,8 +2,9 @@
 (rev 603, change brief 9; replaces Passenger Count Checks).
 
 For each trip of the service date that has something to review:
-  unlisted   each boarding before departure that matched no QR scan or
-             cash entry (`checking.py`), with its time, whether its blurred
+  unlisted   each boarding before departure left over once every paid
+             seat and cash entry on the list was used up
+             (`checking.py`), with its time, whether its blurred
              still is kept, and the Dispatcher's fix (the person listed,
              with a destination) or reason, or neither ('pending');
   capacity   each crossing above the van's seat capacity that raised a

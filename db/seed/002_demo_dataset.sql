@@ -188,7 +188,7 @@ BEGIN
   INSERT INTO trips
     (trip_id, template_id, route_id, service_date, departure_datetime,
      van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
-     seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status,
+     seat_capacity, advance_booking_seat_cap, status,
      start_mode, started_by, started_at, departure_source,
      driver_name, driver_license_no, van_plate_number,
      departed_at, completed_at)
@@ -197,7 +197,7 @@ BEGIN
      p_van, p_dispatcher,
      IF(p_van IS NULL, NULL, 'USER-MANAGER-0001'),
      IF(p_van IS NULL, NULL, LEAST(NOW(6), p_departs - INTERVAL 40 MINUTE)),
-     p_label, 14, 10, 6, p_status,
+     p_label, 14, 10, p_status,
      IF(v_started, 'manual', NULL),
      IF(v_started, 'USER-CASHIER-0001', NULL),
      IF(v_started, p_departs - INTERVAL 20 MINUTE, NULL),
@@ -227,45 +227,40 @@ BEGIN
   WHERE l.trip_id = p_trip_id;
 END$$
 
--- A booking with its seat legs and payment row, as the API would have
--- left them. p_provider 'paymongo' => app payment (paid at booking);
--- 'cash' => walk-in, payment stays pending until the remittance is received.
+-- A booking with its seat legs, as the API would have left it. Under
+-- brief rev 721 there is no payment row: a seat is paid when the
+-- Dispatcher marks it Paid, which is bookings.payment_status. Every
+-- seeded booking is paid except where the caller says otherwise below.
 CREATE PROCEDURE seed_booking(
   IN p_booking_id CHAR(36), IN p_trip_id CHAR(36),
   IN p_pax CHAR(36), IN p_walkin_name VARCHAR(150), IN p_type VARCHAR(16),
   IN p_from SMALLINT, IN p_to SMALLINT, IN p_seat TINYINT, IN p_fare DECIMAL(10,2),
-  IN p_status VARCHAR(16), IN p_provider VARCHAR(16), IN p_method VARCHAR(8),
-  IN p_booked_at DATETIME)
+  IN p_status VARCHAR(16), IN p_booked_at DATETIME)
 BEGIN
   INSERT INTO bookings
-    (booking_id, ticket_number, trip_id, passenger_user_id, walkin_name, booking_type,
+    (booking_id, booking_code, trip_id, passenger_user_id, walkin_name, booking_type,
      boarding_stop_sequence, alighting_stop_sequence, seat_number, fare_amount, status,
-     qr_payload, booked_at, cancelled_at, created_at, updated_at)
+     payment_status, paid_at, booked_at, cancelled_at, created_at, updated_at)
   VALUES
     (p_booking_id,
-     CONCAT('SBG-', DATE_FORMAT(p_booked_at, '%Y%m%d'), '-', UPPER(LEFT(MD5(p_booking_id), 6))),
+     CONCAT('SG-', UPPER(LEFT(MD5(p_booking_id), 6))),
      p_trip_id, p_pax, p_walkin_name, p_type, p_from, p_to, p_seat, p_fare, p_status,
-     CONCAT('SBG-', p_booking_id), p_booked_at,
+     IF(p_status = 'cancelled', 'unpaid', 'paid'),
+     -- A walk-up pays as the Dispatcher lists it; a reservation is paid
+     -- at the terminal some time after it was made.
+     CASE WHEN p_status = 'cancelled' THEN NULL
+          WHEN p_type = 'app' THEN p_booked_at + INTERVAL 2 MINUTE
+          ELSE p_booked_at END,
+     p_booked_at,
      IF(p_status = 'cancelled', p_booked_at + INTERVAL 40 MINUTE, NULL),
      p_booked_at, p_booked_at);
 
-  IF p_status NOT IN ('cancelled', 'rescheduled') THEN
+  IF p_status <> 'cancelled' THEN
     UPDATE seat_inventory
        SET status = 'booked', booking_id = p_booking_id
      WHERE trip_id = p_trip_id AND seat_number = p_seat
        AND leg_sequence BETWEEN p_from AND p_to - 1;
   END IF;
-
-  INSERT INTO payments (payment_id, booking_id, provider, method, provider_ref_id, amount, status, paid_at, created_at)
-  VALUES
-    (UUID(), p_booking_id, p_provider, p_method,
-     IF(p_provider = 'paymongo', CONCAT('cs_demo_', LEFT(MD5(p_booking_id), 12)), NULL),
-     p_fare,
-     CASE WHEN p_status = 'cancelled' THEN 'voided'
-          WHEN p_provider = 'paymongo' THEN 'paid'
-          ELSE 'pending' END,
-     IF(p_provider = 'paymongo' AND p_status <> 'cancelled', p_booked_at + INTERVAL 2 MINUTE, NULL),
-     p_booked_at);
 END$$
 DELIMITER ;
 
@@ -304,15 +299,16 @@ UPDATE trips
  WHERE trip_id LIKE 'TRIP-A2Z-%' AND template_id IS NOT NULL AND status = 'scheduled';
 
 -- A few advance bookings on tomorrow's trips so the dispatcher is not blank.
-CALL seed_booking('BKG-A2Z-U001', 'TRIP-A2Z-TAG-D1-0600', 'USER-PAX-DEMO-0001', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', 'paymongo', 'gcash', NOW() - INTERVAL 3 HOUR);
-CALL seed_booking('BKG-A2Z-U002', 'TRIP-A2Z-TAG-D1-0600', 'USER-PAX-DEMO-0003', NULL, 'app', 1, 4, 2, 100.00, 'confirmed', 'paymongo', 'maya', NOW() - INTERVAL 2 HOUR);
-CALL seed_booking('BKG-A2Z-U003', 'TRIP-A2Z-DIG-D1-0630', 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 1, 110.00, 'confirmed', 'paymongo', 'gcash', NOW() - INTERVAL 5 HOUR);
-CALL seed_booking('BKG-A2Z-U004', 'TRIP-A2Z-MAT-D1-0700', 'USER-PAX-DEMO-0002', NULL, 'app', 1, 3, 1, 250.00, 'confirmed', 'paymongo', 'card', NOW() - INTERVAL 1 HOUR);
-CALL seed_booking('BKG-A2Z-U005', 'TRIP-A2Z-MAT-D1-0700', 'USER-PAX-DEMO-0006', NULL, 'app', 1, 3, 2, 250.00, 'pending',   'paymongo', NULL, NOW() - INTERVAL 4 MINUTE);
--- U005 is mid-checkout: hold the seat the way reserve() does.
-UPDATE seat_inventory SET status = 'held', hold_expires_at = NOW() + INTERVAL 6 MINUTE
+CALL seed_booking('BKG-A2Z-U001', 'TRIP-A2Z-TAG-D1-0600', 'USER-PAX-DEMO-0001', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', NOW() - INTERVAL 3 HOUR);
+CALL seed_booking('BKG-A2Z-U002', 'TRIP-A2Z-TAG-D1-0600', 'USER-PAX-DEMO-0003', NULL, 'app', 1, 4, 2, 100.00, 'confirmed', NOW() - INTERVAL 2 HOUR);
+CALL seed_booking('BKG-A2Z-U003', 'TRIP-A2Z-DIG-D1-0630', 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 1, 110.00, 'confirmed', NOW() - INTERVAL 5 HOUR);
+CALL seed_booking('BKG-A2Z-U004', 'TRIP-A2Z-MAT-D1-0700', 'USER-PAX-DEMO-0002', NULL, 'app', 1, 3, 1, 250.00, 'confirmed', NOW() - INTERVAL 1 HOUR);
+CALL seed_booking('BKG-A2Z-U005', 'TRIP-A2Z-MAT-D1-0700', 'USER-PAX-DEMO-0006', NULL, 'app', 1, 3, 2, 250.00, 'pending', NOW() - INTERVAL 4 MINUTE);
+-- U005 has reserved but not yet paid: the seat is held against the 14
+-- until the Dispatcher marks it Paid at the terminal, or the cutoff job
+-- releases it (brief 2.1). This is the seat the demo marks Paid.
+UPDATE bookings SET payment_status = 'unpaid', paid_at = NULL
  WHERE booking_id = 'BKG-A2Z-U005';
-UPDATE payments SET status = 'pending', paid_at = NULL WHERE booking_id = 'BKG-A2Z-U005';
 
 -- =========================================================== completed trips
 SET @p1 = CURRENT_DATE - INTERVAL 1 DAY;
@@ -329,23 +325,20 @@ CALL seed_trip('TRIP-A2Z-DIG-P2-0630', 'TMPL-ECO-DIG-0630', @r_dig, TIMESTAMP(@p
 --     app bookings, walk-ins listed before departure, one no-show, one
 --     cancel. Every passenger boards at Ecoland (rev 603).
 SET @t = 'TRIP-A2Z-TAG-P1-0600'; SET @dep = TIMESTAMP(@p1, '06:00:00');
-CALL seed_booking('BKG-A2Z-P101', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 1, 4, 1, 100.00, 'boarded',   'paymongo', 'gcash', @dep - INTERVAL 14 HOUR);
-CALL seed_booking('BKG-A2Z-P102', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 4, 2, 100.00, 'boarded',   'paymongo', 'maya', @dep - INTERVAL 9 HOUR);
-CALL seed_booking('BKG-A2Z-P103', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 2, 3,  60.00, 'boarded',   'paymongo', 'gcash', @dep - INTERVAL 20 HOUR);
-CALL seed_booking('BKG-A2Z-P104', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 4, 10, 100.00, 'boarded',   'paymongo', 'gcash', @dep - INTERVAL 3 HOUR);
-CALL seed_booking('BKG-A2Z-P105', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 4, 4, 100.00, 'no_show',   'paymongo', 'card', @dep - INTERVAL 30 HOUR);
-CALL seed_booking('BKG-A2Z-P106', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 5,  75.00, 'cancelled', 'paymongo', 'gcash', @dep - INTERVAL 26 HOUR);
-CALL seed_booking('BKG-A2Z-P107', @t, NULL, 'Rosa Alcantara', 'walk_in', 1, 4, 5, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 12 MINUTE);
-CALL seed_booking('BKG-A2Z-P108', @t, NULL, 'Dennis Uy',      'walk_in', 1, 4, 6, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 9 MINUTE);
-CALL seed_booking('BKG-A2Z-P109', @t, NULL, 'Mae Lumbao',     'walk_in', 1, 3, 7,  75.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 5 MINUTE);
-CALL seed_booking('BKG-A2Z-P110', @t, NULL, 'Arnel Bustamante', 'walk_in', 1, 4, 8, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 3 MINUTE);
-CALL seed_booking('BKG-A2Z-P111', @t, NULL, 'Junjun Sarabia', 'walk_in', 1, 4, 9, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 1 MINUTE);
+CALL seed_booking('BKG-A2Z-P101', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 1, 4, 1, 100.00, 'boarded', @dep - INTERVAL 14 HOUR);
+CALL seed_booking('BKG-A2Z-P102', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 4, 2, 100.00, 'boarded', @dep - INTERVAL 9 HOUR);
+CALL seed_booking('BKG-A2Z-P103', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 2, 3,  60.00, 'boarded', @dep - INTERVAL 20 HOUR);
+CALL seed_booking('BKG-A2Z-P104', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 4, 10, 100.00, 'boarded', @dep - INTERVAL 3 HOUR);
+CALL seed_booking('BKG-A2Z-P105', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 4, 4, 100.00, 'no_show', @dep - INTERVAL 30 HOUR);
+CALL seed_booking('BKG-A2Z-P106', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 5,  75.00, 'cancelled', @dep - INTERVAL 26 HOUR);
+CALL seed_booking('BKG-A2Z-P107', @t, NULL, 'Rosa Alcantara', 'walk_in', 1, 4, 5, 100.00, 'boarded', @dep - INTERVAL 12 MINUTE);
+CALL seed_booking('BKG-A2Z-P108', @t, NULL, 'Dennis Uy',      'walk_in', 1, 4, 6, 100.00, 'boarded', @dep - INTERVAL 9 MINUTE);
+CALL seed_booking('BKG-A2Z-P109', @t, NULL, 'Mae Lumbao',     'walk_in', 1, 3, 7,  75.00, 'boarded', @dep - INTERVAL 5 MINUTE);
+CALL seed_booking('BKG-A2Z-P110', @t, NULL, 'Arnel Bustamante', 'walk_in', 1, 4, 8, 100.00, 'boarded', @dep - INTERVAL 3 MINUTE);
+CALL seed_booking('BKG-A2Z-P111', @t, NULL, 'Junjun Sarabia', 'walk_in', 1, 4, 9, 100.00, 'boarded', @dep - INTERVAL 1 MINUTE);
 -- Remittance received in full: cash 100+100+75+100+100 = 475
 INSERT INTO cash_remittances (remittance_id, trip_id, collected_by_user_id, expected_amount, declared_amount, received_amount, variance, status, submitted_at, received_at, received_by_user_id, notes, created_at)
 VALUES ('REM-A2Z-P1-TAG0600', @t, 'USER-DISPATCHER-0002', 475.00, 475.00, 475.00, 0.00, 'received', @dep + INTERVAL 140 MINUTE, @dep + INTERVAL 150 MINUTE, 'USER-CASHIER-0001', NULL, @dep + INTERVAL 140 MINUTE);
-UPDATE payments p JOIN bookings b ON b.booking_id = p.booking_id
-   SET p.remittance_id = 'REM-A2Z-P1-TAG0600', p.status = 'paid', p.paid_at = @dep + INTERVAL 150 MINUTE
- WHERE b.trip_id = @t AND p.provider = 'cash';
 -- Audits: reconciled at the door, then a +1 on leg 2 the office already resolved.
 INSERT INTO yolov8_audit_logs (audit_id, trip_id, leg_sequence, triggered_by_user_id, trigger_type, visual_count, booked_count, variance, model_version, inference_ms, confidence_avg, resolution_status, resolved_by_user_id, resolved_at, resolution_notes, captured_at) VALUES
   ('AUD-A2Z-P1-TAG-01', @t, 1, 'USER-DISPATCHER-0002', 'door_close', 8, 8, 0, 'yolov8n-1.0', 131, 0.912, 'reconciled', NULL, NULL, NULL, @dep + INTERVAL 3 MINUTE),
@@ -355,74 +348,59 @@ INSERT INTO yolov8_audit_logs (audit_id, trip_id, leg_sequence, triggered_by_use
 --     Dispatcher has not remitted yet, so the office sees cash_in_hand, not
 --     unreconciled.
 SET @t = 'TRIP-A2Z-TAG-P1-0900'; SET @dep = TIMESTAMP(@p1, '09:00:00');
-CALL seed_booking('BKG-A2Z-P121', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 4, 1, 100.00, 'boarded', 'paymongo', 'gcash', @dep - INTERVAL 6 HOUR);
-CALL seed_booking('BKG-A2Z-P122', @t, NULL, 'Teodoro Mahinay', 'walk_in', 1, 4, 2, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 8 MINUTE);
-CALL seed_booking('BKG-A2Z-P123', @t, NULL, 'Cristy Bael',     'walk_in', 1, 2, 3,  60.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 6 MINUTE);
-CALL seed_booking('BKG-A2Z-P124', @t, NULL, 'Arnel Dizon',     'walk_in', 1, 4, 4, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 2 MINUTE);
-CALL seed_booking('BKG-A2Z-P125', @t, NULL, 'Josefa Lumanog', 'walk_in', 1, 4, 5, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 1 MINUTE);
+CALL seed_booking('BKG-A2Z-P121', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 4, 1, 100.00, 'boarded', @dep - INTERVAL 6 HOUR);
+CALL seed_booking('BKG-A2Z-P122', @t, NULL, 'Teodoro Mahinay', 'walk_in', 1, 4, 2, 100.00, 'boarded', @dep - INTERVAL 8 MINUTE);
+CALL seed_booking('BKG-A2Z-P123', @t, NULL, 'Cristy Bael',     'walk_in', 1, 2, 3,  60.00, 'boarded', @dep - INTERVAL 6 MINUTE);
+CALL seed_booking('BKG-A2Z-P124', @t, NULL, 'Arnel Dizon',     'walk_in', 1, 4, 4, 100.00, 'boarded', @dep - INTERVAL 2 MINUTE);
+CALL seed_booking('BKG-A2Z-P125', @t, NULL, 'Josefa Lumanog', 'walk_in', 1, 4, 5, 100.00, 'boarded', @dep - INTERVAL 1 MINUTE);
 INSERT INTO cash_remittances (remittance_id, trip_id, collected_by_user_id, expected_amount, declared_amount, received_amount, variance, status, submitted_at, received_at, received_by_user_id, notes, created_at)
 VALUES ('REM-A2Z-P1-TAG0900', @t, 'USER-DISPATCHER-0005', 360.00, NULL, NULL, NULL, 'pending', NULL, NULL, NULL, NULL, @dep + INTERVAL 100 MINUTE);
-UPDATE payments p JOIN bookings b ON b.booking_id = p.booking_id
-   SET p.remittance_id = 'REM-A2Z-P1-TAG0900'
- WHERE b.trip_id = @t AND p.provider = 'cash';
 
 -- --- Yesterday, Ecoland-Digos 06:30 (camera van). Remittance SHORT by 45:
 --     disputed. Plus an audit the model got wrong (ignored) and one still
 --     waiting in the queue.
 SET @t = 'TRIP-A2Z-DIG-P1-0630'; SET @dep = TIMESTAMP(@p1, '06:30:00');
-CALL seed_booking('BKG-A2Z-P131', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 1, 110.00, 'boarded', 'paymongo', 'gcash', @dep - INTERVAL 15 HOUR);
-CALL seed_booking('BKG-A2Z-P132', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 3, 2, 110.00, 'boarded', 'paymongo', 'gcash', @dep - INTERVAL 2 HOUR);
-CALL seed_booking('BKG-A2Z-P133', @t, NULL, 'Lorna Quijano',  'walk_in', 1, 3, 3, 110.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 10 MINUTE);
-CALL seed_booking('BKG-A2Z-P134', @t, NULL, 'Rey Bantilan',   'walk_in', 1, 3, 4, 110.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 7 MINUTE);
-CALL seed_booking('BKG-A2Z-P135', @t, NULL, 'Nina Cagas',     'walk_in', 1, 2, 5,  70.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 4 MINUTE);
-CALL seed_booking('BKG-A2Z-P136', @t, NULL, 'Bebot Ledesma',  'walk_in', 1, 3, 6, 110.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 1 MINUTE);
+CALL seed_booking('BKG-A2Z-P131', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 1, 110.00, 'boarded', @dep - INTERVAL 15 HOUR);
+CALL seed_booking('BKG-A2Z-P132', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 3, 2, 110.00, 'boarded', @dep - INTERVAL 2 HOUR);
+CALL seed_booking('BKG-A2Z-P133', @t, NULL, 'Lorna Quijano',  'walk_in', 1, 3, 3, 110.00, 'boarded', @dep - INTERVAL 10 MINUTE);
+CALL seed_booking('BKG-A2Z-P134', @t, NULL, 'Rey Bantilan',   'walk_in', 1, 3, 4, 110.00, 'boarded', @dep - INTERVAL 7 MINUTE);
+CALL seed_booking('BKG-A2Z-P135', @t, NULL, 'Nina Cagas',     'walk_in', 1, 2, 5,  70.00, 'boarded', @dep - INTERVAL 4 MINUTE);
+CALL seed_booking('BKG-A2Z-P136', @t, NULL, 'Bebot Ledesma',  'walk_in', 1, 3, 6, 110.00, 'boarded', @dep - INTERVAL 1 MINUTE);
 INSERT INTO cash_remittances (remittance_id, trip_id, collected_by_user_id, expected_amount, declared_amount, received_amount, variance, status, submitted_at, received_at, received_by_user_id, notes, created_at)
 VALUES ('REM-A2Z-P1-DIG0630', @t, 'USER-DISPATCHER-0004', 400.00, 400.00, 355.00, -45.00, 'disputed', @dep + INTERVAL 110 MINUTE, @dep + INTERVAL 125 MINUTE, 'USER-CASHIER-0001', 'Sta. Cruz walk-in fare missing from the envelope. Conductor to explain.', @dep + INTERVAL 110 MINUTE);
-UPDATE payments p JOIN bookings b ON b.booking_id = p.booking_id
-   SET p.remittance_id = 'REM-A2Z-P1-DIG0630', p.status = 'paid', p.paid_at = @dep + INTERVAL 125 MINUTE
- WHERE b.trip_id = @t AND p.provider = 'cash';
 INSERT INTO yolov8_audit_logs (audit_id, trip_id, leg_sequence, triggered_by_user_id, trigger_type, visual_count, booked_count, variance, model_version, inference_ms, confidence_avg, resolution_status, resolved_by_user_id, resolved_at, resolution_notes, captured_at) VALUES
   ('AUD-A2Z-P1-DIG-01', @t, 1, 'USER-DISPATCHER-0004', 'door_close', 6, 5, 1, 'yolov8n-1.0', 124, 0.731, 'ignored', 'USER-MANAGER-0001', @dep + INTERVAL 130 MINUTE, 'Child on a parent''s lap counted as a passenger. Model, not a stowaway.', @dep + INTERVAL 2 MINUTE),
   ('AUD-A2Z-P1-DIG-02', @t, 2, NULL, 'gps_node', 7, 5, 2, 'yolov8n-1.0', 119, 0.902, 'pending', NULL, NULL, NULL, @dep + INTERVAL 55 MINUTE);
 
 -- --- Yesterday, Ecoland-Mati 07:00 (no camera). Quiet, fully reconciled.
 SET @t = 'TRIP-A2Z-MAT-P1-0700'; SET @dep = TIMESTAMP(@p1, '07:00:00');
-CALL seed_booking('BKG-A2Z-P141', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 3, 1, 250.00, 'boarded', 'paymongo', 'card', @dep - INTERVAL 40 HOUR);
-CALL seed_booking('BKG-A2Z-P142', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 3, 2, 250.00, 'boarded', 'paymongo', 'gcash', @dep - INTERVAL 18 HOUR);
-CALL seed_booking('BKG-A2Z-P143', @t, NULL, 'Ismael Baguio',   'walk_in', 1, 3, 3, 250.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 11 MINUTE);
-CALL seed_booking('BKG-A2Z-P144', @t, NULL, 'Perla Manriquez', 'walk_in', 1, 2, 4, 180.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 3 MINUTE);
+CALL seed_booking('BKG-A2Z-P141', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 3, 1, 250.00, 'boarded', @dep - INTERVAL 40 HOUR);
+CALL seed_booking('BKG-A2Z-P142', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 3, 2, 250.00, 'boarded', @dep - INTERVAL 18 HOUR);
+CALL seed_booking('BKG-A2Z-P143', @t, NULL, 'Ismael Baguio',   'walk_in', 1, 3, 3, 250.00, 'boarded', @dep - INTERVAL 11 MINUTE);
+CALL seed_booking('BKG-A2Z-P144', @t, NULL, 'Perla Manriquez', 'walk_in', 1, 2, 4, 180.00, 'boarded', @dep - INTERVAL 3 MINUTE);
 INSERT INTO cash_remittances (remittance_id, trip_id, collected_by_user_id, expected_amount, declared_amount, received_amount, variance, status, submitted_at, received_at, received_by_user_id, notes, created_at)
 VALUES ('REM-A2Z-P1-MAT0700', @t, 'USER-DISPATCHER-0003', 430.00, 430.00, 430.00, 0.00, 'received', @dep + INTERVAL 260 MINUTE, @dep + INTERVAL 275 MINUTE, 'USER-CASHIER-0001', NULL, @dep + INTERVAL 260 MINUTE);
-UPDATE payments p JOIN bookings b ON b.booking_id = p.booking_id
-   SET p.remittance_id = 'REM-A2Z-P1-MAT0700', p.status = 'paid', p.paid_at = @dep + INTERVAL 275 MINUTE
- WHERE b.trip_id = @t AND p.provider = 'cash';
 
 -- --- Two days ago, Ecoland-Tagum 06:00. Camera unreachable at the door
 --     (failed audit -- the node refused to invent a number), then fine.
 SET @t = 'TRIP-A2Z-TAG-P2-0600'; SET @dep = TIMESTAMP(@p2, '06:00:00');
-CALL seed_booking('BKG-A2Z-P151', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 1, 4, 1, 100.00, 'boarded', 'paymongo', 'gcash', @dep - INTERVAL 10 HOUR);
-CALL seed_booking('BKG-A2Z-P152', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 4, 2, 100.00, 'boarded', 'paymongo', 'maya', @dep - INTERVAL 5 HOUR);
-CALL seed_booking('BKG-A2Z-P153', @t, NULL, 'Gina Pardillo',  'walk_in', 1, 4, 3, 100.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 9 MINUTE);
-CALL seed_booking('BKG-A2Z-P154', @t, NULL, 'Boyet Lacson',   'walk_in', 1, 3, 4,  75.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 4 MINUTE);
+CALL seed_booking('BKG-A2Z-P151', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 1, 4, 1, 100.00, 'boarded', @dep - INTERVAL 10 HOUR);
+CALL seed_booking('BKG-A2Z-P152', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 4, 2, 100.00, 'boarded', @dep - INTERVAL 5 HOUR);
+CALL seed_booking('BKG-A2Z-P153', @t, NULL, 'Gina Pardillo',  'walk_in', 1, 4, 3, 100.00, 'boarded', @dep - INTERVAL 9 MINUTE);
+CALL seed_booking('BKG-A2Z-P154', @t, NULL, 'Boyet Lacson',   'walk_in', 1, 3, 4,  75.00, 'boarded', @dep - INTERVAL 4 MINUTE);
 INSERT INTO cash_remittances (remittance_id, trip_id, collected_by_user_id, expected_amount, declared_amount, received_amount, variance, status, submitted_at, received_at, received_by_user_id, notes, created_at)
 VALUES ('REM-A2Z-P2-TAG0600', @t, 'USER-DISPATCHER-0002', 175.00, 175.00, 175.00, 0.00, 'received', @dep + INTERVAL 130 MINUTE, @dep + INTERVAL 140 MINUTE, 'USER-CASHIER-0001', NULL, @dep + INTERVAL 130 MINUTE);
-UPDATE payments p JOIN bookings b ON b.booking_id = p.booking_id
-   SET p.remittance_id = 'REM-A2Z-P2-TAG0600', p.status = 'paid', p.paid_at = @dep + INTERVAL 140 MINUTE
- WHERE b.trip_id = @t AND p.provider = 'cash';
 INSERT INTO yolov8_audit_logs (audit_id, trip_id, leg_sequence, triggered_by_user_id, trigger_type, visual_count, booked_count, variance, model_version, inference_ms, confidence_avg, resolution_status, resolved_by_user_id, resolved_at, resolution_notes, captured_at) VALUES
   ('AUD-A2Z-P2-TAG-01', @t, 1, 'USER-DISPATCHER-0002', 'door_close', 0, 3, 0, NULL, NULL, NULL, 'failed', NULL, NULL, 'Camera node unreachable (502). No count recorded.', @dep + INTERVAL 2 MINUTE),
   ('AUD-A2Z-P2-TAG-02', @t, 2, NULL, 'gps_node', 4, 4, 0, 'yolov8n-1.0', 127, 0.934, 'reconciled', NULL, NULL, NULL, @dep + INTERVAL 48 MINUTE);
 
 -- --- Two days ago, Ecoland-Digos 06:30. Reconciled.
 SET @t = 'TRIP-A2Z-DIG-P2-0630'; SET @dep = TIMESTAMP(@p2, '06:30:00');
-CALL seed_booking('BKG-A2Z-P161', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 3, 1, 110.00, 'boarded', 'paymongo', 'gcash', @dep - INTERVAL 7 HOUR);
-CALL seed_booking('BKG-A2Z-P162', @t, NULL, 'Vilma Sarmiento', 'walk_in', 1, 3, 2, 110.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 6 MINUTE);
-CALL seed_booking('BKG-A2Z-P163', @t, NULL, 'Oscar Tumulak',   'walk_in', 1, 2, 3,  70.00, 'boarded', 'cash', 'cash', @dep - INTERVAL 2 MINUTE);
+CALL seed_booking('BKG-A2Z-P161', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 3, 1, 110.00, 'boarded', @dep - INTERVAL 7 HOUR);
+CALL seed_booking('BKG-A2Z-P162', @t, NULL, 'Vilma Sarmiento', 'walk_in', 1, 3, 2, 110.00, 'boarded', @dep - INTERVAL 6 MINUTE);
+CALL seed_booking('BKG-A2Z-P163', @t, NULL, 'Oscar Tumulak',   'walk_in', 1, 2, 3,  70.00, 'boarded', @dep - INTERVAL 2 MINUTE);
 INSERT INTO cash_remittances (remittance_id, trip_id, collected_by_user_id, expected_amount, declared_amount, received_amount, variance, status, submitted_at, received_at, received_by_user_id, notes, created_at)
 VALUES ('REM-A2Z-P2-DIG0630', @t, 'USER-DISPATCHER-0004', 180.00, 180.00, 180.00, 0.00, 'received', @dep + INTERVAL 100 MINUTE, @dep + INTERVAL 110 MINUTE, 'USER-CASHIER-0001', NULL, @dep + INTERVAL 100 MINUTE);
-UPDATE payments p JOIN bookings b ON b.booking_id = p.booking_id
-   SET p.remittance_id = 'REM-A2Z-P2-DIG0630', p.status = 'paid', p.paid_at = @dep + INTERVAL 110 MINUTE
- WHERE b.trip_id = @t AND p.provider = 'cash';
 INSERT INTO yolov8_audit_logs (audit_id, trip_id, leg_sequence, triggered_by_user_id, trigger_type, visual_count, booked_count, variance, model_version, inference_ms, confidence_avg, resolution_status, resolved_by_user_id, resolved_at, resolution_notes, captured_at) VALUES
   ('AUD-A2Z-P2-DIG-01', @t, 1, 'USER-DISPATCHER-0004', 'door_close', 3, 3, 0, 'yolov8n-1.0', 122, 0.951, 'reconciled', NULL, NULL, NULL, @dep + INTERVAL 3 MINUTE);
 
@@ -463,11 +441,11 @@ SET @now_min = TIMESTAMP(DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:00'));
 CALL seed_trip('TRIP-A2Z-LIVE-BOARD', NULL, @r_tag, @now_min + INTERVAL 15 MINUTE,
                'VAN-0003', 'USER-DISPATCHER-0001', 'Live - Boarding', 'boarding');
 SET @t = 'TRIP-A2Z-LIVE-BOARD';
-CALL seed_booking('BKG-A2Z-L101', @t, 'USER-PASSENGER-0001', NULL, 'app', 1, 4, 1, 100.00, 'confirmed',  'paymongo', 'gcash', NOW() - INTERVAL 5 HOUR);
-CALL seed_booking('BKG-A2Z-L102', @t, 'USER-PAX-DEMO-0001',  NULL, 'app', 1, 4, 2, 100.00, 'checked_in', 'paymongo', 'maya', NOW() - INTERVAL 9 HOUR);
-CALL seed_booking('BKG-A2Z-L103', @t, 'USER-PAX-DEMO-0002',  NULL, 'app', 1, 2, 3,  60.00, 'boarded',    'paymongo', 'gcash', NOW() - INTERVAL 20 HOUR);
-CALL seed_booking('BKG-A2Z-L104', @t, 'USER-PAX-DEMO-0003',  NULL, 'app', 1, 4, 5, 100.00, 'confirmed',  'paymongo', 'gcash', NOW() - INTERVAL 2 HOUR);
-CALL seed_booking('BKG-A2Z-L105', @t, NULL, 'Nestor Abad', 'walk_in', 1, 4, 4, 100.00, 'boarded', 'cash', 'cash', NOW() - INTERVAL 6 MINUTE);
+CALL seed_booking('BKG-A2Z-L101', @t, 'USER-PASSENGER-0001', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', NOW() - INTERVAL 5 HOUR);
+CALL seed_booking('BKG-A2Z-L102', @t, 'USER-PAX-DEMO-0001',  NULL, 'app', 1, 4, 2, 100.00, 'checked_in', NOW() - INTERVAL 9 HOUR);
+CALL seed_booking('BKG-A2Z-L103', @t, 'USER-PAX-DEMO-0002',  NULL, 'app', 1, 2, 3,  60.00, 'boarded', NOW() - INTERVAL 20 HOUR);
+CALL seed_booking('BKG-A2Z-L104', @t, 'USER-PAX-DEMO-0003',  NULL, 'app', 1, 4, 5, 100.00, 'confirmed', NOW() - INTERVAL 2 HOUR);
+CALL seed_booking('BKG-A2Z-L105', @t, NULL, 'Nestor Abad', 'walk_in', 1, 4, 4, 100.00, 'boarded', NOW() - INTERVAL 6 MINUTE);
 -- L102 arrived at the terminal: the Dispatcher's manifest shows AT TERMINAL.
 INSERT INTO check_ins
   (check_in_id, booking_id, terminal_id, latitude, longitude, gps_accuracy_m,
@@ -479,12 +457,12 @@ VALUES
 CALL seed_trip('TRIP-A2Z-LIVE-DEPART', NULL, @r_dig, @now_min - INTERVAL 30 MINUTE,
                'VAN-0005', 'USER-DISPATCHER-0004', 'Live - On the road', 'departed');
 SET @t = 'TRIP-A2Z-LIVE-DEPART';
-CALL seed_booking('BKG-A2Z-L201', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 1, 110.00, 'boarded',   'paymongo', 'gcash', NOW() - INTERVAL 15 HOUR);
-CALL seed_booking('BKG-A2Z-L202', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 3, 2, 110.00, 'boarded',   'paymongo', 'gcash', NOW() - INTERVAL 3 HOUR);
-CALL seed_booking('BKG-A2Z-L203', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 2, 3,  70.00, 'boarded',   'paymongo', 'maya', NOW() - INTERVAL 8 HOUR);
-CALL seed_booking('BKG-A2Z-L204', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 1, 3, 6, 110.00, 'confirmed', 'paymongo', 'gcash', NOW() - INTERVAL 4 HOUR);
-CALL seed_booking('BKG-A2Z-L205', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 3, 4, 110.00, 'no_show',   'paymongo', 'card', NOW() - INTERVAL 30 HOUR);
-CALL seed_booking('BKG-A2Z-L206', @t, NULL, 'Lito Pacheco', 'walk_in', 1, 3, 5, 110.00, 'boarded', 'cash', 'cash', @now_min - INTERVAL 34 MINUTE);
+CALL seed_booking('BKG-A2Z-L201', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 3, 1, 110.00, 'boarded', NOW() - INTERVAL 15 HOUR);
+CALL seed_booking('BKG-A2Z-L202', @t, 'USER-PAX-DEMO-0004', NULL, 'app', 1, 3, 2, 110.00, 'boarded', NOW() - INTERVAL 3 HOUR);
+CALL seed_booking('BKG-A2Z-L203', @t, 'USER-PAX-DEMO-0002', NULL, 'app', 1, 2, 3,  70.00, 'boarded', NOW() - INTERVAL 8 HOUR);
+CALL seed_booking('BKG-A2Z-L204', @t, 'USER-PAX-DEMO-0001', NULL, 'app', 1, 3, 6, 110.00, 'confirmed', NOW() - INTERVAL 4 HOUR);
+CALL seed_booking('BKG-A2Z-L205', @t, 'USER-PAX-DEMO-0003', NULL, 'app', 1, 3, 4, 110.00, 'no_show', NOW() - INTERVAL 30 HOUR);
+CALL seed_booking('BKG-A2Z-L206', @t, NULL, 'Lito Pacheco', 'walk_in', 1, 3, 5, 110.00, 'boarded', @now_min - INTERVAL 34 MINUTE);
 -- Departure released the no-show's space, as DepartTripUseCase does.
 UPDATE seat_inventory SET status = 'available', booking_id = NULL
  WHERE booking_id = 'BKG-A2Z-L205';
@@ -492,8 +470,8 @@ UPDATE seat_inventory SET status = 'available', booking_id = NULL
 CALL seed_trip('TRIP-A2Z-LIVE-SOON', NULL, @r_tag, @now_min + INTERVAL 2 HOUR,
                'VAN-0004', 'USER-DISPATCHER-0005', 'Live - Later today', 'scheduled');
 SET @t = 'TRIP-A2Z-LIVE-SOON';
-CALL seed_booking('BKG-A2Z-L301', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', 'paymongo', 'gcash', NOW() - INTERVAL 1 HOUR);
-CALL seed_booking('BKG-A2Z-L302', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 2, 2,  60.00, 'confirmed', 'paymongo', 'maya', NOW() - INTERVAL 40 MINUTE);
+CALL seed_booking('BKG-A2Z-L301', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', NOW() - INTERVAL 1 HOUR);
+CALL seed_booking('BKG-A2Z-L302', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 2, 2,  60.00, 'confirmed', NOW() - INTERVAL 40 MINUTE);
 -- ------------------------------------------------------ A2Z's 15 % (rev 603)
 -- Every trip the seed started had its share handed to the Cashier and
 -- recorded before Start: one statement per van per day, fare lines by

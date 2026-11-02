@@ -5,7 +5,7 @@ stores naive DATETIME values in Manila local time. Python must attach the
 SAME zone when reading them back.
 
 Treating a Manila timestamp as UTC shifts every comparison by eight hours,
-which silently breaks the check-in window, the reschedule cutoff, and the
+which silently breaks the check-in window, the unpaid cutoff, and the
 "already departed" guard -- silently, because eight hours of skew still
 leaves most trips plausibly in the future. The failure only surfaces at a
 boundary, which is the worst kind of bug to find during a demo.

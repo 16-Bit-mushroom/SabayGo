@@ -67,12 +67,8 @@ S=$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"al
 is "$S" 201 "a booking from stop 1 is taken"
 grep -q seat_number /tmp/r.json && bad "reserve still returns seat_number" || ok "reserve has no seat number"
 BID=$(j "['booking_id']" < /tmp/r.json)
-python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1
-# A booking from before the rule; the seed's are all stop 1 now.
-sql "UPDATE bookings SET boarding_stop_sequence = 2 WHERE booking_id = 'BKG-A2Z-U002'"
-is "$(code POST /bookings/BKG-A2Z-U002/reschedule '{"new_trip_id":"TRIP-A2Z-TAG-D1-0900"}' "$AT")" 422 \
-   "a stored stop-2 booking cannot be moved to another trip"
-sql "UPDATE bookings SET boarding_stop_sequence = 1 WHERE booking_id = 'BKG-A2Z-U002'"
+is "$(code POST "/bookings/$BID/mark-paid" '{}' "$DT")" 200 \
+   "and the Dispatcher takes its fare in cash at the terminal"
 
 hdr "the Dispatcher lists cash passengers at stop 1"
 BEFORE=$(total)

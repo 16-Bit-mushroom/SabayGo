@@ -395,8 +395,8 @@ class TripLifecycle:
 
         With at least one boarding counted, a trip nobody started is
         started by the system, and a started trip departs as 'gps'. A
-        boarding is counted from the record (a QR scan or a logged fare)
-        or from the phone (a door event). An open 'Not a passenger trip'
+        boarding is counted from the record (a seat marked paid or a
+        logged cash fare) or from the phone (a door event). An open 'Not a passenger trip'
         move holds the fallback off (rule 10).
         """
         boarded = (await self.session.execute(

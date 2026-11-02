@@ -102,7 +102,6 @@ class GenerateDailyTripsUseCase:
 
         capacity = await self.policies.get_int("default_seat_capacity")
         default_cap = await self.policies.get_int("advance_booking_seat_cap")
-        default_cutoff = await self.policies.get_int("reschedule_cutoff_hours")
         now_naive = datetime.now(APP_TZ).replace(tzinfo=None)
 
         for template in templates:
@@ -159,7 +158,6 @@ class GenerateDailyTripsUseCase:
                     # passenger already booked under.
                     seat_capacity=capacity,
                     advance_booking_seat_cap=min(default_cap, capacity),
-                    reschedule_cutoff_hours=default_cutoff,
                     status=TripStatus.SCHEDULED.value,
                     created_at=now,
                     updated_at=now,
@@ -287,9 +285,6 @@ class CreateSpecialTripUseCase:
                 is_special_trip=True,
                 seat_capacity=capacity,
                 advance_booking_seat_cap=cap,
-                reschedule_cutoff_hours=await self.policies.get_int(
-                    "reschedule_cutoff_hours"
-                ),
                 status=TripStatus.SCHEDULED.value,
                 created_at=now,
                 updated_at=now,

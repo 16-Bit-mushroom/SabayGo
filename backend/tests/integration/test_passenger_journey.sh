@@ -106,7 +106,10 @@ S=$(code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$TOKEN")
 [ "$S" = "201" ] && ok "reserve seat $(j "['seat_number']" < /tmp/resp.json)" || bad "reserve gave $S"
 BID=$(j "['booking_id']" < /tmp/resp.json)
-QR=$(j "['qr_payload']" < /tmp/resp.json)
+CODE=$(j "['booking_code']" < /tmp/resp.json)
+[ -n "$CODE" ] && ok "booking code issued ($CODE)" || bad "no booking code on the reservation"
+PS=$(j "['payment_status']" < /tmp/resp.json)
+[ "$PS" = "unpaid" ] && ok "reservation starts unpaid" || bad "payment_status is $PS"
 
 S=$(code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":4,\"alighting_stop\":1}" "$TOKEN")
@@ -123,42 +126,63 @@ else bad "GET /bookings/{id} gave $S"; fi
 S=$(code GET "/bookings/BKG-DOES-NOT-EXIST" "" "$TOKEN")
 [ "$S" = "404" ] && ok "unknown booking id -> 404" || bad "unknown booking gave $S"
 
-# ═══════════════════════════════════════════════ 4. PAYMENT
-hdr "4. Payment"
+# ═══════════════════════════════════════════════ 4. PAYING AT THE TERMINAL
+# A2Z handles only cash (brief rev 721, 2.1). The passenger reserves in
+# the app and hands the fare to the Dispatcher at the terminal, who
+# finds the seat by name or booking code and marks it Paid. There is no
+# gateway and no QR ticket.
+hdr "4. Paying cash at the terminal"
 
-S=$(code POST /payments/checkout "{\"booking_id\":\"$BID\"}" "$TOKEN")
-if [ "$S" = "502" ]; then gap "checkout -- PAYMONGO_SECRET_KEY not set (expected)"
-elif [ "$S" = "201" ]; then ok "checkout session created"
-else bad "checkout gave $S"; fi
+S=$(code POST "/bookings/$BID/mark-paid" '{}' "$TOKEN")
+[ "$S" = "403" ] && ok "a passenger cannot mark their own seat paid (403)" \
+  || bad "passenger mark-paid gave $S"
 
-python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1 \
-  && ok "payment confirmed via signed webhook" \
-  || gap "webhook simulator -- set PAYMONGO_WEBHOOK_SECRET"
+S=$(code POST /auth/login '{"email":"dispatcher@sabaygo.dev","password":"sabaygo123"}')
+DT=$(j "['access_token']" < /tmp/resp.json)
+[ "$S" = "200" ] && ok "Dispatcher signed in" || bad "dispatcher login gave $S"
+
+S=$(code GET "/bookings/trip/$TRIP/seats?q=$CODE" "" "$DT")
+if [ "$S" = "200" ] && [ "$(j "[0]['booking_code']" < /tmp/resp.json)" = "$CODE" ]; then
+  ok "Dispatcher finds the seat by booking code"
+else bad "search by code gave $S"; fi
+
+S=$(code POST "/bookings/$BID/mark-paid" '{}' "$DT")
+if [ "$S" = "200" ] && [ "$(j "['payment_status']" < /tmp/resp.json)" = "paid" ]; then
+  ok "Dispatcher marked the seat paid"
+else bad "mark-paid gave $S"; fi
+
+# An offline queue may replay the same mark. It must not be an error.
+S=$(code POST "/bookings/$BID/mark-paid" '{}' "$DT")
+[ "$S" = "200" ] && ok "a replayed paid mark is accepted, not an error" \
+  || bad "replayed mark-paid gave $S"
 
 S=$(code GET /bookings/mine "" "$TOKEN")
 STATUS=$(python3 -c "
 import json;d=json.load(open('/tmp/resp.json'))
-print(next((b['status'] for b in d if b['booking_id']=='$BID'),'?'))")
-[ "$STATUS" = "confirmed" ] && ok "booking is now confirmed" || bad "status is $STATUS"
+print(next((b['payment_status'] for b in d if b['booking_id']=='$BID'),'?'))")
+[ "$STATUS" = "paid" ] && ok "the passenger sees the seat as paid" || bad "status is $STATUS"
 
 S=$(code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$TOKEN")
-# A hold the passenger walks away from before paying; section 5 cancels
-# it and checks the space comes back.
+# A reservation nobody pays for; section 5 cancels it and checks the
+# space comes back.
 ABANDON=$(j "['booking_id']" < /tmp/resp.json)
 
 # ═══════════════════════════════════════════════ 5. CHANGES
-# The seeded trip departs in 20 min; reset-dev.sh sets both cutoffs to 0
-# (policy and the trip's own copy) so this section can run.
+# Rev 721 has no reschedule: an unpaid reservation is cancelled and
+# booked again. A paid seat goes through the Dispatcher, because the
+# cash has to be handed back by a person.
 hdr "5. Changing plans"
 
-S=$(code POST "/bookings/$BID/reschedule" '{"new_trip_id":"TRIP-DEMO-00000002"}' "$TOKEN")
-if [ "$S" = "200" ]; then
-  ok "rescheduled to another trip"
-  BID=$(j "['new_booking_id']" < /tmp/resp.json)
-  QR=$(j "['qr_payload']" < /tmp/resp.json)
-elif [ "$S" = "404" ]; then gap "reschedule -- no second trip seeded"
-else bad "reschedule gave $S"; fi
+S=$(code POST "/bookings/$BID/cancel" "" "$TOKEN")
+[ "$S" = "422" ] && ok "a passenger cannot cancel a paid seat (422)" \
+  || bad "cancelling a paid seat gave $S"
+
+S=$(code POST "/bookings/$BID/dispatcher-cancel" \
+  '{"reason":"passenger_asked_dispatcher"}' "$DT")
+if [ "$S" = "200" ] && [ "$(j "['cancel_reason']" < /tmp/resp.json)" = "passenger_asked_dispatcher" ]; then
+  ok "the Dispatcher cancelled it and hands the cash back"
+else bad "dispatcher-cancel gave $S"; fi
 
 spaces() {
   code GET "/bookings/availability?trip_id=$TRIP&boarding_stop=1&alighting_stop=4" >/dev/null
@@ -168,7 +192,7 @@ BEFORE=$(spaces)
 S=$(code POST "/bookings/$ABANDON/cancel" "" "$TOKEN")
 AFTER=$(spaces)
 if [ "$S" = "200" ] && [ "$AFTER" = "$((BEFORE + 1))" ]; then
-  ok "unpaid hold cancelled, space released ($BEFORE -> $AFTER)"
+  ok "unpaid reservation cancelled, space released ($BEFORE -> $AFTER)"
 else bad "cancel gave $S, spaces $BEFORE -> $AFTER"; fi
 
 S=$(code POST "/bookings/$ABANDON/cancel" "" "$TOKEN")
@@ -176,6 +200,12 @@ S=$(code POST "/bookings/$ABANDON/cancel" "" "$TOKEN")
 
 # ═══════════════════════════════════════════════ 6. TRAVEL DAY
 hdr "6. Travel day"
+
+# Section 5 cancelled the first seat, so book and pay another one.
+S=$(code POST /bookings/reserve \
+  "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$TOKEN")
+BID=$(j "['booking_id']" < /tmp/resp.json)
+code POST "/bookings/$BID/mark-paid" '{}' "$DT" >/dev/null
 
 # D.2: nothing to undo yet -> 409, never 404/405
 S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
@@ -241,10 +271,11 @@ else ok "notifications listed"; fi
 # ═══════════════════════════════════════════════ 8. BOUNDARIES
 hdr "8. Passengers cannot act as crew"
 
-for ep in "POST /scans" "GET /trips/$TRIP/manifest" "GET /boarding-audit" \
-          "GET /fleet/vans" "GET /config/policies" "GET /statements"; do
+for ep in "GET /bookings/trip/$TRIP/seats" "GET /trips/$TRIP/manifest" \
+          "GET /boarding-audit" "GET /fleet/vans" "GET /config/policies" \
+          "GET /statements"; do
   m=${ep%% *}; p=${ep#* }
-  S=$(code "$m" "$p" '{"qr_payload":"x","trip_id":"x","stop_sequence":1}' "$TOKEN")
+  S=$(code "$m" "$p" "" "$TOKEN")
   [ "$S" = "403" ] && ok "$p blocked (403)" || bad "$p gave $S, expected 403"
 done
 

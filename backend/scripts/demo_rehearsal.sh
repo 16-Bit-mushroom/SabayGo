@@ -77,18 +77,13 @@ ok "terminal picker: $(python3 -c "import json;print(', '.join(t['terminal_name'
 
 S=$(code POST /bookings/reserve "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT")
 [ "$S" = "201" ] || die "reserve gave $S: $(j "['detail']" < /tmp/resp.json)"
-BID=$(j "['booking_id']" < /tmp/resp.json); QR=$(j "['qr_payload']" < /tmp/resp.json)
-ok "reserved -- ticket $(j "['ticket_number']" < /tmp/resp.json), ₱$(j "['fare_amount']" < /tmp/resp.json), status pending (space held 10 min)"
-
-S=$(code POST /payments/checkout "{\"booking_id\":\"$BID\"}" "$PT")
-if [ "$S" = "200" ]; then ok "PayMongo checkout URL issued -- on stage, open it on the phone"
-else warn "checkout gave $S (no live PayMongo key) -- simulating the signed webhook instead"; fi
-python tests/integration/simulate_webhook.py --booking-id "$BID" >/dev/null 2>&1 || die "webhook simulator failed -- venv active? .env exported?"
+BID=$(j "['booking_id']" < /tmp/resp.json); CODE=$(j "['booking_code']" < /tmp/resp.json)
+ok "reserved -- booking code $CODE, ₱$(j "['fare_amount']" < /tmp/resp.json), unpaid until the terminal"
 
 S=$(code GET "/bookings/$BID" "" "$PT")
-ST=$(j "['status']" < /tmp/resp.json)
-[ "$ST" = "confirmed" ] && ok "e-ticket: status confirmed, QR $QR, check-in opens $(j "['checkin_opens_at']" < /tmp/resp.json | cut -c12-16)" \
-  || die "booking is '$ST' after the webhook, expected confirmed"
+PS=$(j "['payment_status']" < /tmp/resp.json)
+[ "$PS" = "unpaid" ] && ok "the app shows code $CODE, unpaid, check-in opens $(j "['checkin_opens_at']" < /tmp/resp.json | cut -c12-16)" \
+  || die "booking is '$PS', expected unpaid"
 
 # ──────────────────────────────────────────────────────── 2. I'm here
 step "2. Passenger taps 'I'm here' at Ecoland"
@@ -97,29 +92,31 @@ if [ "$S" = "200" ]; then ok "checked in -- manifest will show AT TERMINAL"
 else warn "check-in refused ($S): $(j "['detail']" < /tmp/resp.json) -- fine to show as the 'too early' rejection, then continue"; fi
 
 # ─────────────────────────────────────────────────────── 3. dispatcher
-step "3. Cashier takes the share, office starts the trip; Dispatcher scans, logs a walk-in, reads the manifest"
+step "3. Dispatcher builds the list in cash; Cashier records the share; office starts the trip"
 S=$(code GET /trips/assigned "" "$CT")
 grep -q "$TRIP" /tmp/resp.json && ok "trip is on dispatcher@'s assigned list" || die "fixture trip not in /trips/assigned for dispatcher@"
 
-# Start waits for A2Z's 15 % share (rev 603, brief 2.1): the Dispatcher
-# hands it over and the Cashier records it. Either office role starts.
+# The list comes first (brief 4.2 rule 3): the Dispatcher takes each
+# fare in cash and marks the seat Paid, then hands the share over.
+S=$(code GET "/bookings/trip/$TRIP/seats?q=$CODE" "" "$CT")
+[ "$S" = "200" ] && ok "dispatcher@ finds the seat by booking code $CODE" || die "seat search gave $S"
+S=$(code POST "/bookings/$BID/mark-paid" '{}' "$CT")
+RES=$(j "['payment_status']" < /tmp/resp.json)
+[ "$RES" = "paid" ] && ok "cash taken: the seat is on the passenger list" \
+  || die "mark-paid gave '$RES', expected paid"
+
+S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
+[ "$S" = "201" ] && ok "cash walk-in logged -- ₱$(j "['fare_amount']" < /tmp/resp.json) in the Dispatcher's hand" \
+  || die "walk-in gave $S: $(j "['detail']" < /tmp/resp.json)"
+
+# Start waits for A2Z's share (brief 2.1): the Dispatcher hands it over
+# and the Cashier records it. Either office role starts.
 code GET "/trips/$TRIP/share" "" "$KT" >/dev/null
 DUE=$(j "['amount_due']" < /tmp/resp.json)
 S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$DUE\",\"reference\":\"OR-DEMO\"}" "$KT")
 [ "$S" = "200" ] && ok "cashier@ records the share, ₱$DUE -- the passenger list locks" || die "payment gave $S: $(j "['detail']" < /tmp/resp.json)"
 S=$(code POST "/trips/$TRIP/start" "" "$OT")
 [ "$S" = "200" ] && ok "manager@ starts the trip" || die "start gave $S: $(j "['detail']" < /tmp/resp.json)"
-
-S=$(code POST /scans "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
-RES=$(j "['result']" < /tmp/resp.json)
-[ "$RES" = "valid" ] && ok "scan: valid -- passenger boarded" || die "scan result '$RES', expected valid"
-S=$(code POST /scans "{\"qr_payload\":\"$QR\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
-[ "$(j "['result']" < /tmp/resp.json)" = "already_boarded" ] && ok "second scan: already_boarded (show this -- it is the anti-fraud beat)" \
-  || warn "second scan gave $(j "['result']" < /tmp/resp.json)"
-
-S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$CT")
-[ "$S" = "201" ] && ok "cash walk-in logged -- ₱$(j "['fare_amount']" < /tmp/resp.json) pending in the Dispatcher's hand" \
-  || die "walk-in gave $S: $(j "['detail']" < /tmp/resp.json)"
 
 S=$(code GET "/trips/$TRIP/manifest" "" "$CT")
 ok "manifest: $(python3 -c "

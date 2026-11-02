@@ -1,9 +1,15 @@
-"""Dispatcher operations: QR boarding validation and the trip manifest."""
+"""Dispatcher operations: the trip manifest and Depart.
+
+The QR scan at the van door went with brief rev 721: there is no
+ticket to scan. A seat is on the passenger list when the Dispatcher
+marks it Paid (`application/booking/cash.py`), and who actually
+stepped aboard is the camera's count, matched to the list as a
+count and not an identity (`application/edge/checking.py`).
+"""
 
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -17,7 +23,6 @@ from app.application.notifications.service import NotificationService, trip_labe
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import BookingStatus, DepartureSource, Role, TripStatus
-from app.infrastructure.models import BoardingScan
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
@@ -49,117 +54,6 @@ ABOARD = [
 ]
 
 
-@dataclass(frozen=True)
-class ScanResult:
-    scan_id: str
-    result: str
-    accepted: bool
-    booking_id: str | None
-    ticket_number: str | None
-    passenger_name: str | None
-    seat_number: int | None
-    boarding_stop: int | None
-    alighting_stop: int | None
-    message: str
-
-
-class ScanTicketUseCase:
-    """Validate a QR payload at the van door and mark the passenger boarded.
-
-    Never raises for an invalid ticket. A Dispatcher scanning in a queue
-    needs a fast verdict on screen, not an exception -- so every outcome
-    returns a `result` code that the app renders as green or red. The
-    outcome is recorded in `boarding_scans` either way, which is what
-    makes the boarding record auditable.
-    """
-
-    def __init__(self, session: AsyncSession):
-        self.session = session
-
-    async def execute(
-        self,
-        *,
-        qr_payload: str,
-        trip_id: str,
-        stop_sequence: int,
-        scanned_by_user_id: str,
-        client_recorded_at: datetime | None = None,
-    ) -> ScanResult:
-        now = app_tz.now()
-
-        result = await self.session.execute(
-            select(BookingRow).where(BookingRow.qr_payload == qr_payload)
-        )
-        booking = result.scalar_one_or_none()
-
-        async def record(code: str, message: str, accepted: bool) -> ScanResult:
-            scan_id = str(uuid.uuid4())
-            if booking is not None:
-                self.session.add(
-                    BoardingScan(
-                        scan_id=scan_id,
-                        booking_id=booking.booking_id,
-                        scanned_by_user_id=scanned_by_user_id,
-                        stop_sequence=stop_sequence,
-                        result=code,
-                        scanned_at=now,
-                        client_recorded_at=client_recorded_at,
-                        synced_at=now,
-                    )
-                )
-            await self.session.commit()
-            log.info("Scan %s -> %s", qr_payload[:16], code)
-            return ScanResult(
-                scan_id=scan_id,
-                result=code,
-                accepted=accepted,
-                booking_id=booking.booking_id if booking else None,
-                ticket_number=booking.ticket_number if booking else None,
-                passenger_name=None,
-                seat_number=booking.seat_number if booking else None,
-                boarding_stop=booking.boarding_stop_sequence if booking else None,
-                alighting_stop=booking.alighting_stop_sequence if booking else None,
-                message=message,
-            )
-
-        if booking is None:
-            return await record("wrong_trip", "Ticket not recognised.", False)
-        if booking.trip_id != trip_id:
-            return await record("wrong_trip", "This ticket is for another trip.", False)
-        if booking.status == BookingStatus.CANCELLED.value:
-            return await record("cancelled", "This booking was cancelled.", False)
-        if booking.status == BookingStatus.RESCHEDULED.value:
-            return await record(
-                "wrong_trip", "This ticket was moved to another trip.", False
-            )
-        if booking.status == BookingStatus.PENDING.value:
-            return await record("unpaid", "This booking has not been paid.", False)
-        if booking.status == BookingStatus.BOARDED.value:
-            return await record("already_boarded", "Already scanned aboard.", False)
-        if booking.is_home_pickup_seat:
-            return await record(
-                "wrong_stop", "This passenger is picked up at home: they board at the pin.",
-                False,
-            )
-        if booking.boarding_stop_sequence != stop_sequence:
-            return await record(
-                "wrong_stop",
-                f"This passenger boards at stop {booking.boarding_stop_sequence}.",
-                False,
-            )
-
-        booking.status = BookingStatus.BOARDED.value
-        booking.updated_at = now
-        # A relative's ticket activates their home pickup (brief 2.6).
-        pickup = await HomePickups(self.session).activate_by_scan(booking)
-        return await record(
-            "valid",
-            f"Valid - stops {booking.boarding_stop_sequence} to "
-            f"{booking.alighting_stop_sequence}." + (f" {pickup}" if pickup else ""),
-            True,
-        )
-
-
 class ManifestUseCase:
     """Who is aboard, and what the Terminal Manager should see."""
 
@@ -175,12 +69,7 @@ class ManifestUseCase:
             select(BookingRow)
             .where(
                 BookingRow.trip_id == trip_id,
-                BookingRow.status.notin_(
-                    [
-                        BookingStatus.CANCELLED.value,
-                        BookingStatus.RESCHEDULED.value,
-                    ]
-                ),
+                BookingRow.status != BookingStatus.CANCELLED.value,
             )
             .order_by(BookingRow.boarding_stop_sequence, BookingRow.booked_at)
         )
@@ -198,15 +87,19 @@ class ManifestUseCase:
                 b.status == BookingStatus.CHECKED_IN.value for b in bookings
             ),
             "awaiting": sum(b.status == BookingStatus.CONFIRMED.value for b in bookings),
-            "unpaid": sum(b.status == BookingStatus.PENDING.value for b in bookings),
+            # Reserved but the Dispatcher has not taken the cash yet, so
+            # the seat is not on the passenger list (brief 2.1).
+            "unpaid": sum(b.payment_status == "unpaid" for b in bookings),
             "passengers": [
                 {
                     "booking_id": b.booking_id,
-                    "ticket_number": b.ticket_number,
+                    "booking_code": b.booking_code,
                     "boarding_stop": b.boarding_stop_sequence,
                     "alighting_stop": b.alighting_stop_sequence,
                     "booking_type": b.booking_type,
                     "status": b.status,
+                    "payment_status": b.payment_status,
+                    "paid_at": b.paid_at,
                     "fare_amount": b.fare_amount,
                     # Walk-ins may legitimately be anonymous.
                     "name": b.walkin_name,

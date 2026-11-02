@@ -77,7 +77,6 @@ class BookingStatus(str, Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     NO_SHOW = "no_show"
-    RESCHEDULED = "rescheduled"
 
 
 class BookingType(str, Enum):
@@ -94,11 +93,28 @@ class SeatStatus(str, Enum):
 
 
 class PaymentStatus(str, Enum):
-    PENDING = "pending"
+    """Whether the Dispatcher has taken the cash for a seat.
+
+    A2Z handles only cash (brief rev 721, 2.1), so there is no gateway
+    state to track: a seat is unpaid until the Dispatcher marks it Paid
+    at the terminal, and there is no refund.
+    """
+
+    UNPAID = "unpaid"
     PAID = "paid"
-    FAILED = "failed"
-    REFUNDED = "refunded"
-    VOIDED = "voided"
+
+
+class CancelReason(str, Enum):
+    """Who ended a reservation, and why (brief 2.1, 4.2 rule 15)."""
+
+    # The passenger cancelled in the app. Only ever an unpaid seat.
+    PASSENGER = "passenger"
+    # Asked in the chat; the Dispatcher returned any cash already paid.
+    PASSENGER_ASKED_DISPATCHER = "passenger_asked_dispatcher"
+    # Unpaid, the passenger never came, the Dispatcher cleared it.
+    FORGOT_TO_CANCEL = "forgot_to_cancel"
+    # The cutoff job released it.
+    AUTO_RELEASE = "auto_release"
 
 
 class AuditResolution(str, Enum):

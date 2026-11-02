@@ -1,13 +1,14 @@
-"""Home pickup of a disabled or elderly passenger (rev 603, change brief
+"""Home pickup of a disabled or elderly passenger (rev 721, change brief
 2.6, Table 41): the one exception to "board at the starting terminal".
 
 Booking. A relative books in the app ('Book for someone else'): their own
 seat and the passenger's, both from stop 1 to one drop-off, in one
 transaction, with the passenger's name and contact and a pin with a
-note. Both bookings are the relative's, so they pay each one through the
-gateway (`POST /payments/checkout`); the passenger's seat is the one
-marked `booked_for_other` and `is_home_pickup_seat`. The relative rides
-from the terminal, so the van is never sent alone to a house.
+note. Both bookings are the relative's, and the relative **pays both
+fares in cash to the Dispatcher at the terminal**; the passenger's seat
+is the one marked `booked_for_other` and `is_home_pickup_seat`. The
+relative rides from the terminal, so the van is never sent alone to a
+house.
 
 The pin. Accepted automatically when it lies within
 `home_pickup_max_route_m` of the part of the route the pair rides (stop 1
@@ -15,23 +16,20 @@ to the drop-off), drawn straight stop to stop as NAHGM measures it
 (`tracking.geometry`); the distance is stored (T30). While the setting is
 unset no home pickup is offered.
 
-Paying when the gateway is down (T31 b). The relative sends a screenshot
-of the payment in the trip chat (their thread with the trip's Dispatcher,
-so a Dispatcher must be assigned); it becomes the pickup's proof, and a
-later screenshot replaces one not yet confirmed. A screenshot takes longer
-than a gateway checkout, so the unpaid seats it covers are held until
-departure instead of the usual ten minutes, and a hold that lapsed is
-taken again if a space is free. The trip's Dispatcher confirms it: every
-seat of the pair still unpaid is confirmed, counts as verified income (V)
-like any app seat, and the Terminal Manager is told ('Home Pickup Proof').
-Besides the verified webhook, this is the one way an app seat is
-confirmed, and it is a person's act recorded with who and when.
+The photo (T41 c). The relative may send a **photo of a landmark** at the
+pickup place into the trip chat, so the Dispatcher recognises the gate
+when the van arrives. It is not payment proof and nothing depends on it:
+it does not pay a seat, does not activate the pickup, and can be sent or
+not sent without changing anything. Under rev 603 this was a screenshot
+of a gateway payment that the Dispatcher confirmed; there is no gateway
+now, and no screenshot.
 
-Activation, at the terminal before departure (T32): a valid scan of the
-relative's ticket ('qr_scan'), or the trip's Dispatcher by hand
-('dispatcher_entry', with who), e.g. when the relative paid at the
-counter. Either needs the passenger's seat paid. The passenger's own
-ticket is refused at the door: they board at the pin.
+Activation, at the terminal before departure (T32): the Dispatcher
+**marks the seats Paid** after taking the two fares in cash, or enters
+the pickup by hand at the relative's request. There is no QR scan and no
+ActivationMode -- `activated_by` names whoever did it. Either way both
+seats must be paid first: the van does not set out for a house on an
+unpaid fare.
 
 On the trip, after departure: the Dispatcher marks the van at the pin
 (`arrived_at`), then closes the stop with the passenger boarded or a
@@ -77,7 +75,13 @@ from app.core.exceptions import (
     NotFoundError,
     PolicyViolationError,
 )
-from app.domain.enums import BookingStatus, BookingType, Role, TripStatus
+from app.domain.enums import (
+    BookingStatus,
+    BookingType,
+    PaymentStatus,
+    Role,
+    TripStatus,
+)
 from app.domain.value_objects import Segment
 from app.infrastructure.models import (
     AssistedPickup,
@@ -93,7 +97,10 @@ from app.infrastructure.repositories.seat_repository import SeatRepository
 
 log = logging.getLogger(__name__)
 
-PAID = {BookingStatus.CONFIRMED.value, BookingStatus.CHECKED_IN.value}
+# A seat that still stands: reserved or checked in, not cancelled, no
+# longer a payment state. Whether the cash has been handed over is
+# `payment_status` (brief rev 721, 2.1), which is a separate question.
+STANDING = {BookingStatus.CONFIRMED.value, BookingStatus.CHECKED_IN.value}
 # Still to happen: the stop at the pin has not been closed or cancelled.
 OPEN = ("requested", "activated", "arrived")
 BEFORE_DEPARTURE = {TripStatus.SCHEDULED.value, TripStatus.BOARDING.value}
@@ -187,9 +194,15 @@ class HomePickups:
             raise NotFoundError(f"This route has no stop {alighting_stop}.")
         return round(snap.offset_m)
 
-    # ------------------------------------------------- screenshot proof
-    async def send_proof(self, pickup_id: str, *, by: User, image: bytes) -> AssistedPickup:
-        """The relative's payment screenshot, into the trip chat (T31 b)."""
+    # ------------------------------------------------ the landmark photo
+    async def send_photo(self, pickup_id: str, *, by: User, image: bytes) -> AssistedPickup:
+        """The relative sends a photo of a landmark at the pickup place.
+
+        Brief 2.6: it is **not** payment proof and nothing depends on it.
+        It is there so the Dispatcher can recognise the gate when the van
+        arrives, which is why it goes into their chat thread and not into
+        any payment record. The fare is cash, handed over at the terminal.
+        """
         pickup = await self.session.get(AssistedPickup, pickup_id)
         own = pickup and await self.session.get(BookingRow, pickup.relative_booking_id)
         if own is None or own.passenger_user_id != by.user_id:
@@ -197,52 +210,29 @@ class HomePickups:
         trip = await self.session.get(Trip, pickup.trip_id)
         if trip.dispatcher_id is None:
             raise ConflictError(
-                "No Dispatcher is assigned to this trip yet: send the screenshot once one is.")
+                "No Dispatcher is assigned to this trip yet: send the photo once one is.")
         chat = MessagingService(self.session)
         # Their thread with the trip's Dispatcher; opening it commits.
         conv = await chat.start_conversation(by, peer_user_id=trip.dispatcher_id,
                                              trip_id=trip.trip_id)
 
         pickup, trip = await self._locked(pickup_id)
-        if trip.status not in BEFORE_DEPARTURE:
-            raise ConflictError(f"This trip is {trip.status}: seats are paid before departure.")
-        if pickup.status not in ("requested", "activated"):
+        if pickup.status not in OPEN:
             raise ConflictError(f"This home pickup is {pickup.status}.")
-        unpaid = await self._unpaid(pickup)
-        if not unpaid:
-            raise ConflictError("Both seats are paid: no screenshot is needed.")
 
-        await self._hold_until_departure(trip, unpaid)
         msg = await chat.add_image(
-            conv, by, image, f"Payment screenshot for the home pickup of {pickup.beneficiary_name}.")
+            conv, by,
+            image,
+            f"A landmark at the pickup place for {pickup.beneficiary_name}.",
+        )
         await self.session.flush()
-        pickup.proof_message_id = msg.message_id
+        pickup.photo_message_id = msg.message_id
         pickup.updated_at = _now()
         await self.session.commit()
         return pickup
 
-    async def _hold_until_departure(self, trip: Trip, seats_: list[BookingRow]) -> None:
-        """Hold each seat until the van leaves, taking it again (perhaps on
-        another internal slot) if its hold lapsed while the relative paid."""
-        seats = SeatRepository(self.session)
-        ttl = max(await PolicyRepository(self.session).get_int("seat_hold_ttl_seconds"),
-                  int((trip.departure_datetime - _now()).total_seconds()))
-        for booking in seats_:
-            segment = Segment(booking.boarding_stop_sequence, booking.alighting_stop_sequence)
-            await seats.release(booking_id=booking.booking_id)
-            try:
-                slot = await seats.allocate_seat(trip_id=trip.trip_id, segment=segment,
-                                                 hold_ttl_seconds=ttl)
-            except NoSeatAvailableError:
-                raise ConflictError(
-                    "A seat of this home pickup was released while unpaid, and the van is "
-                    "now full.") from None
-            await seats.bind_to_booking(trip_id=trip.trip_id, seat_number=slot,
-                                        segment=segment, booking_id=booking.booking_id)
-            booking.seat_number = slot
-
-    async def proof(self, pickup_id: str, *, by: User) -> Message:
-        """The screenshot: for the relative, the trip's Dispatcher and the
+    async def photo(self, pickup_id: str, *, by: User) -> Message:
+        """The landmark photo: the relative, the trip's Dispatcher, the
         Terminal Manager."""
         pickup = await self.session.get(AssistedPickup, pickup_id)
         if pickup is None:
@@ -252,71 +242,52 @@ class HomePickups:
             if by.role == Role.PASSENGER.value:
                 raise NotFoundError("Home pickup not found.")
             await assert_assigned_to_trip(self.session, trip_id=pickup.trip_id, user=by)
-        if pickup.proof_message_id is None:
-            raise NotFoundError("No payment screenshot has been sent.")
-        return await self.session.get(Message, pickup.proof_message_id)
-
-    async def confirm_proof(self, pickup_id: str, *, by: User) -> AssistedPickup:
-        """The trip's Dispatcher confirms the screenshot to the Terminal
-        Manager: the unpaid seats of the pair are paid (V)."""
-        pickup, trip = await self._for_crew(pickup_id, by)
-        if trip.status not in BEFORE_DEPARTURE:
-            raise ConflictError(f"This trip is {trip.status}: seats are paid before departure.")
-        if pickup.status not in ("requested", "activated"):
-            raise ConflictError(f"This home pickup is {pickup.status}.")
-        if pickup.proof_message_id is None:
-            raise ConflictError("No payment screenshot has been sent.")
-        unpaid = await self._unpaid(pickup)
-        if not unpaid:
-            raise ConflictError("Both seats are already paid.")
-
-        now = _now()
-        seats = SeatRepository(self.session)
-        for booking in unpaid:
-            booking.status = BookingStatus.CONFIRMED.value
-            booking.updated_at = now
-            await seats.confirm(booking_id=booking.booking_id)
-        pickup.proof_confirmed_by = by.user_id
-        pickup.proof_confirmed_at = now
-        pickup.updated_at = now
-        total = sum(b.fare_amount for b in unpaid)
-        await NotificationService(self.session).notify_trip(
-            trip=trip, type="home_pickup_proof", title="Home pickup proof",
-            message=(f"{display_name(by)} confirmed a payment screenshot for the home pickup "
-                     f"of {pickup.beneficiary_name} on {trip_label(trip)}: "
-                     f"{len(unpaid)} seat{'s' if len(unpaid) > 1 else ''}, ₱{total:,.2f}."),
-            roles=(Role.TERMINAL_MANAGER,),
-        )
-        await self.session.commit()
-        return pickup
+        if pickup.photo_message_id is None:
+            raise NotFoundError("No photo has been sent for this pickup.")
+        return await self.session.get(Message, pickup.photo_message_id)
 
     async def _unpaid(self, pickup: AssistedPickup) -> list[BookingRow]:
-        """The pair's unpaid seats, locked: a webhook settling one of them
-        waits until this is done."""
+        """The pair's seats whose cash the Dispatcher has not taken yet,
+        locked so that a paid mark landing on one waits until this is
+        done."""
         pair = (await self.session.execute(
             select(BookingRow).where(BookingRow.booking_id.in_(
                 (pickup.relative_booking_id, pickup.booking_id)))
             .with_for_update().execution_options(populate_existing=True)
         )).scalars().all()
-        return [b for b in pair if b.status == BookingStatus.PENDING.value]
+        return [
+            b for b in pair
+            if b.payment_status != PaymentStatus.PAID.value
+            and b.status in STANDING
+        ]
 
     # -------------------------------------------------------- activation
-    async def activate_by_scan(self, relative_seat: BookingRow) -> str | None:
-        """Called on a valid scan of a ticket at the door, before its commit.
-        None when the ticket is no relative's; otherwise what the
-        Dispatcher is told about the pickup."""
+    async def on_seat_paid(self, seat: BookingRow, *, by: str) -> str | None:
+        """Called when the Dispatcher marks a seat Paid, before the commit.
+
+        Brief 2.6: the relative pays **both seats** in cash at the
+        terminal, and marking the home-pickup seat Paid is what activates
+        the pickup -- there is no QR scan and no payment screenshot. The
+        mark on either seat is checked, because the Dispatcher takes the
+        two fares together and may mark them in either order; the pickup
+        activates once both are paid.
+
+        None when the seat belongs to no pickup; otherwise what the
+        Dispatcher is told.
+        """
         pickup = (await self.session.execute(
             select(AssistedPickup).where(
-                AssistedPickup.relative_booking_id == relative_seat.booking_id,
+                or_(AssistedPickup.booking_id == seat.booking_id,
+                    AssistedPickup.relative_booking_id == seat.booking_id),
                 AssistedPickup.status == "requested")
             .with_for_update()
         )).scalar_one_or_none()
         if pickup is None:
             return None
-        if not await self._seat_paid(pickup):
+        if not await self._both_seats_paid(pickup):
             return (f"Home pickup of {pickup.beneficiary_name} not activated: "
-                    "their seat is not paid.")
-        self._activate(pickup, mode="qr_scan", by=None)
+                    "the other seat is not paid yet.")
+        self._activate(pickup, by=by)
         return f"Home pickup of {pickup.beneficiary_name} activated."
 
     async def activate(self, pickup_id: str, *, by: User) -> AssistedPickup:
@@ -328,21 +299,31 @@ class HomePickups:
             raise ConflictError(f"This home pickup is {pickup.status}.")
         if not await self._seat_paid(pickup):
             raise ConflictError(f"{pickup.beneficiary_name}'s seat is not paid yet.")
-        self._activate(pickup, mode="dispatcher_entry", by=by.user_id)
+        self._activate(pickup, by=by.user_id)
         await self.session.commit()
         return pickup
 
-    def _activate(self, pickup: AssistedPickup, *, mode: str, by: str | None) -> None:
+    def _activate(self, pickup: AssistedPickup, *, by: str | None) -> None:
+        """Brief 2.6: there is no ActivationMode. Either the Dispatcher
+        marked the seats Paid or entered the pickup by hand, and either
+        way `activated_by` names them."""
         now = _now()
         pickup.status = "activated"
-        pickup.activation_mode = mode
         pickup.activated_by = by
         pickup.activated_at = now
         pickup.updated_at = now
 
     async def _seat_paid(self, pickup: AssistedPickup) -> bool:
         seat = await self.session.get(BookingRow, pickup.booking_id)
-        return seat.status in PAID
+        return seat.payment_status == PaymentStatus.PAID.value
+
+    async def _both_seats_paid(self, pickup: AssistedPickup) -> bool:
+        """The relative pays for themselves and for the passenger."""
+        for booking_id in (pickup.booking_id, pickup.relative_booking_id):
+            seat = await self.session.get(BookingRow, booking_id)
+            if seat is None or seat.payment_status != PaymentStatus.PAID.value:
+                return False
+        return True
 
     # ------------------------------------------------------ on the trip
     async def arrived(self, pickup_id: str, *, by: User) -> AssistedPickup:
@@ -435,7 +416,7 @@ class HomePickups:
         if pickup.relative_booking_id != booking.booking_id:
             return
         seat = await self.session.get(BookingRow, pickup.booking_id)
-        if seat.status in PAID | {BookingStatus.PENDING.value}:
+        if seat.status in STANDING:
             seat.status = BookingStatus.CANCELLED.value
             seat.cancelled_at = now
             seat.updated_at = now

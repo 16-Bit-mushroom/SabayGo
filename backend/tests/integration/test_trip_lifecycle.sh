@@ -136,19 +136,21 @@ PT=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" \
        \"password\":\"sabaygo123\",\"first_name\":\"Life\",\"last_name\":\"Cycle\"}" | j "['access_token']")
 code POST /bookings/reserve "{\"trip_id\":\"$TRIP1\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
 KEEP=$(field booking_id)
-(cd "$BACKEND" && "$PY" tests/integration/simulate_webhook.py --booking-id "$KEEP" >/dev/null 2>&1)
+code POST "/bookings/$KEEP/mark-paid" '{}' "$DT" >/dev/null
 code POST /bookings/reserve "{\"trip_id\":\"$TRIP1\",\"boarding_stop\":1,\"alighting_stop\":3}" "$PT" >/dev/null
 DROP=$(field booking_id)
-(cd "$BACKEND" && "$PY" tests/integration/simulate_webhook.py --booking-id "$DROP" >/dev/null 2>&1)
+code POST "/bookings/$DROP/mark-paid" '{}' "$DT" >/dev/null
 is "$(walkin $TRIP1)" 201 "the assigned Dispatcher lists a cash passenger on the scheduled trip"
 is "$(code GET /trips/$TRIP1/manifest "" "$DT")" 200 "and reads its passenger list"
 is "$(field status)" scheduled "the trip is still scheduled"
 is "$(code GET /trips/$TRIP1/share "" "$D2T")" 403 "another Dispatcher cannot read its share"
 code GET /trips/$TRIP1/share "" "$DT" >/dev/null
 python3 -c "import json;s=json.load(open('/tmp/resp.json'));g={l['income_group'] for l in s['lines']};assert g=={'verified','declared'} and s['amount_due']!='0.00'" \
-  && ok "the share has a verified (QR) and a declared (cash) line" || bad "share: $(cat /tmp/resp.json)"
+  && ok "the share has a verified (app) and a declared (cash) line" || bad "share: $(cat /tmp/resp.json)"
 DUE_ALL=$(share $TRIP1 amount_due)
-is "$(code POST /bookings/$DROP/cancel "" "$PT")" 200 "T6a a cancellation before the payment is accepted"
+# A paid seat is the Dispatcher's to cancel: the cash goes back by hand.
+is "$(code POST /bookings/$DROP/dispatcher-cancel '{"reason":"passenger_asked_dispatcher"}' "$DT")" 200 \
+   "T6b the Dispatcher cancels a paid seat before the payment is recorded"
 DUE=$(share $TRIP1 amount_due)
 python3 -c "assert float('$DUE') < float('$DUE_ALL')" && ok "and takes its share off the amount due (P$DUE_ALL -> P$DUE)" \
   || bad "due did not fall: $DUE_ALL -> $DUE"

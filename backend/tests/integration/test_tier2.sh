@@ -17,12 +17,12 @@ for p in json.load(sys.stdin):
     print(f\"  {p['policy_key']:<32} {p['policy_value']:<8} {p['description'][:44]}\")"
 
 echo
-echo "== change reschedule cutoff 6 -> 12 hours ==============="
-curl -s -X PUT "$API/config/policies/reschedule_cutoff_hours" -H "$AUTH" -H "$JSON" \
-  -d '{"policy_value":"12"}' | j "['policy_key'] + ' = ' + d['policy_value']"
+echo "== change the check-in window 45 -> 60 minutes =========="
+curl -s -X PUT "$API/config/policies/checkin_window_minutes" -H "$AUTH" -H "$JSON" \
+  -d '{"policy_value":"60"}' | j "['policy_key'] + ' = ' + d['policy_value']"
 
 echo "== reject an invalid value =============================="
-curl -s -X PUT "$API/config/policies/reschedule_cutoff_hours" -H "$AUTH" -H "$JSON" \
+curl -s -X PUT "$API/config/policies/checkin_window_minutes" -H "$AUTH" -H "$JSON" \
   -d '{"policy_value":"soon"}'
 echo
 

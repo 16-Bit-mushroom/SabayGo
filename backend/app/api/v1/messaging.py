@@ -37,7 +37,7 @@ class MessageOut(BaseModel):
     sender_role: str
     body: str
     # A home pickup's payment screenshot (brief 2.6); the image itself is
-    # served by GET /home-pickups/{id}/proof.
+    # served by GET /home-pickups/{id}/photo.
     attachment_type: str | None
     attachment_size_kb: int | None
     retain_until: dt.date | None

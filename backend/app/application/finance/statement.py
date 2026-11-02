@@ -7,12 +7,15 @@ the Dispatcher to the Cashier before Start. Equation (2):
 
     remittance owed = rate x (V + D)
 
-V is the seats paid through the gateway (QR tickets), D the cash seats
-the Dispatcher listed. A seat counts whether or not its passenger comes;
-the camera adds nothing. A special trip's rental fee, once paid, is one
-line of its own (`request_id`, no drop-off terminal): V through the
-gateway, D in cash the Dispatcher logged (2.2, 2.5). The system records the payment; it never holds
-the money.
+V is the seats reserved in the app that the Dispatcher marked as paid,
+D the cash walk-ups the Dispatcher listed. (Rev 721 renames these Booked
+and Walk-up; the columns still carry the old names until step S4.) Every
+fare is cash, handed to the Dispatcher at the terminal. A seat counts
+whether or not its passenger comes; the camera adds nothing. A special
+trip's rental fee, once paid, is one line of its own (`request_id`, no
+drop-off terminal): V when the trip was requested in the app, D when it
+was entered at the counter (2.2, 2.5). The system records the payment;
+it never holds the money.
 
 Fare lines follow the passenger list (`sync`). A line groups a trip's
 seats to one drop-off terminal, at one fare, in one income group. Before
@@ -61,7 +64,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
-from app.domain.enums import BookingStatus, BookingType, Role, StartReview, TripStatus
+from app.domain.enums import (
+    BookingStatus,
+    BookingType,
+    PaymentStatus,
+    Role,
+    StartReview,
+    TripStatus,
+)
 from app.infrastructure.models import (
     Booking,
     Dispute,
@@ -78,12 +88,17 @@ from app.infrastructure.repositories.policy_repository import PolicyRepository
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
 
-# Seats on the list: paid, whether or not the passenger came (brief 2.1).
-# A pending app booking is an unpaid hold and is not on it.
-LISTED = (
-    BookingStatus.CONFIRMED.value, BookingStatus.CHECKED_IN.value,
-    BookingStatus.BOARDED.value, BookingStatus.COMPLETED.value,
-    BookingStatus.NO_SHOW.value,
+# Seats on the passenger list (brief 2.1): the ones the Dispatcher
+# marked as paid in cash, whether or not the passenger came -- a paid
+# no-show still counts, because the seat was paid for. A reservation
+# that is not paid is not on the list and adds nothing to the amount
+# owed; a cancelled seat has left it.
+#
+# A tuple of predicates, spread into a .where() by every caller, so that
+# "on the list" has exactly one definition in the backend.
+PAID_SEAT = (
+    Booking.payment_status == PaymentStatus.PAID.value,
+    Booking.status != BookingStatus.CANCELLED.value,
 )
 CASH = (BookingType.WALK_IN.value, BookingType.DRIVER_ISSUED.value)
 BEFORE_DEPARTURE = (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value)
@@ -122,12 +137,18 @@ class Statements:
             )).scalar_one_or_none()
             if rental is None:
                 return {}
-            group = "verified" if rental.payment_reference else "declared"
+            # Brief 2.5: the fee is the whole income of the trip, and
+            # which group it falls in is where the rental came from --
+            # booked when the passenger requested it in the app,
+            # walk-up when it was entered at the counter. Until rev 721
+            # it was whether a gateway reference existed; there is no
+            # gateway now, and the Dispatcher takes the cash either way.
+            group = "verified" if rental.passenger_user_id else "declared"
             return {LineKey(None, Decimal(rental.rental_fee), group, rental.request_id): 1}
         terminal_at = await self._terminals(trip)
         rows = (await self.session.execute(
             select(Booking.alighting_stop_sequence, Booking.fare_amount, Booking.booking_type)
-            .where(Booking.trip_id == trip.trip_id, Booking.status.in_(LISTED))
+            .where(Booking.trip_id == trip.trip_id, *PAID_SEAT)
         )).all()
         out: dict[LineKey, int] = {}
         for alight, fare, kind in rows:

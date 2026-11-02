@@ -185,7 +185,6 @@ class SpecialTrips:
             seat_capacity=await policies.get_int("default_seat_capacity"),
             # Nobody books a seat on a rented van: the renter has it all.
             advance_booking_seat_cap=0,
-            reschedule_cutoff_hours=await policies.get_int("reschedule_cutoff_hours"),
             status=TripStatus.SCHEDULED.value,
             created_at=now,
             updated_at=now,
@@ -236,7 +235,14 @@ class SpecialTrips:
     # ------------------------------------------------------------ the fee
     async def log_cash(self, request_id: str, *, by: User) -> SpecialTripRequest:
         """The trip's Dispatcher received the agreed fee in cash at the
-        terminal: declared income (T51). Its share joins the statement."""
+        terminal (brief 2.5, T51). Its share joins the statement.
+
+        The only way a rental fee is paid: A2Z handles only cash, so the
+        renter, or someone acting for them, hands it over at the terminal
+        before the van leaves. Whether it counts as booked or walk-up
+        income follows from where the request came from, not from how it
+        was paid (`finance.statement`).
+        """
         request = await self._locked(request_id)
         if request.status != "approved":
             raise ConflictError(f"This request is {request.status}.")
@@ -248,46 +254,13 @@ class SpecialTrips:
         if trip.status not in (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value):
             raise ConflictError(f"This trip is {trip.status}.")
         request.payment_status = "paid"
-        request.payment_reference = None
+        request.paid_at = _now()
+        request.paid_by = by.user_id
         request.updated_at = _now()
         await self.session.flush()
         await Statements(self.session).sync(trip)
         await self.session.commit()
         return request
-
-    async def settle_gateway(self, request_id: str, *, reference: str,
-                             paid: bool) -> dict[str, str]:
-        """A verified webhook for a rental's checkout (verified income, V).
-        Reached only after the signature check (`booking.payments`); a
-        repeat changes nothing."""
-        request = (await self.session.execute(
-            select(SpecialTripRequest).where(SpecialTripRequest.request_id == request_id)
-            .with_for_update()
-        )).scalar_one_or_none()
-        if request is None:
-            log.error("Webhook for unknown special trip request %s", request_id)
-            return {"status": "ignored", "reason": "unknown request"}
-        if not paid:
-            log.info("Gateway payment failed for request %s; still unpaid.", request_id)
-            return {"status": "failed", "request_id": request_id}
-        if request.payment_status == "paid":
-            if request.payment_reference != reference:
-                log.warning("Request %s was already paid (%s) and was paid again through the "
-                            "gateway (%s).", request_id, request.payment_reference or "cash",
-                            reference)
-            return {"status": "duplicate", "request_id": request_id}
-        if request.status != "approved":
-            log.warning("Fee for request %s arrived while it was %s.", request_id, request.status)
-        request.payment_status = "paid"
-        request.payment_reference = reference
-        request.updated_at = _now()
-        await self.session.flush()
-        trip = await self.session.get(Trip, request.trip_id) if request.trip_id else None
-        if trip is not None:
-            await Statements(self.session).sync(trip)
-        await self.session.commit()
-        log.info("Rental fee of request %s paid through the gateway (%s).", request_id, reference)
-        return {"status": "confirmed", "request_id": request_id}
 
     # ------------------------------------------------------------ helpers
     async def _locked(self, request_id: str) -> SpecialTripRequest:

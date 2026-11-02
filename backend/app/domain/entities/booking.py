@@ -14,14 +14,15 @@ State transitions are guarded in both cases.
 
 from __future__ import annotations
 
+import secrets
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from decimal import Decimal
 
 from app.core.timezone import APP_TZ
 from app.core.exceptions import ConflictError, PolicyViolationError
-from app.domain.enums import BookingStatus, BookingType
+from app.domain.enums import BookingStatus, BookingType, PaymentStatus
 from app.domain.value_objects import Segment
 
 _ACTIVE = {
@@ -33,14 +34,18 @@ _TERMINAL = {
     BookingStatus.COMPLETED,
     BookingStatus.CANCELLED,
     BookingStatus.NO_SHOW,
-    BookingStatus.RESCHEDULED,
 }
+
+# The unambiguous half of the alphabet: no I, O, 0 or 1, because the
+# passenger reads the code out loud and the Dispatcher types it.
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_CODE_LENGTH = 6
 
 
 @dataclass
 class Booking:
     booking_id: str
-    ticket_number: str
+    booking_code: str
     trip_id: str
     segment: Segment
     seat_number: int
@@ -53,9 +58,7 @@ class Booking:
     walkin_phone: str | None = None
     walkin_wants_receipt: bool = False
 
-    qr_payload: str | None = None
-    rescheduled_from_booking_id: str | None = None
-    reschedule_count: int = 0
+    payment_status: PaymentStatus = PaymentStatus.UNPAID
     booked_at: datetime = field(default_factory=lambda: datetime.now(APP_TZ))
 
     # -- construction ---------------------------------------------------
@@ -84,26 +87,35 @@ class Booking:
         booking_id = str(uuid.uuid4())
         return cls(
             booking_id=booking_id,
-            ticket_number=cls._generate_ticket_number(),
+            booking_code=cls.generate_code(),
             trip_id=trip_id,
             segment=segment,
             seat_number=seat_number,
             fare_amount=fare_amount,
             booking_type=booking_type,
-            # A walk-in pays cash at the door and is aboard as it is
-            # logged. 'confirmed' would read as "not yet boarded" on the
+            # A reservation is confirmed the moment it is made: there is
+            # no payment round trip left to wait for. It is still UNPAID,
+            # which is what keeps it off the passenger list and exposes
+            # it to the cutoff release.
+            #
+            # A walk-up pays the Dispatcher as it is listed and is aboard
+            # already. 'confirmed' would read as "not yet boarded" on the
             # manifest, and departure would make the passenger a no-show
             # and release a space someone is sitting in.
             status=(
-                BookingStatus.PENDING
+                BookingStatus.CONFIRMED
                 if booking_type is BookingType.APP
                 else BookingStatus.BOARDED
+            ),
+            payment_status=(
+                PaymentStatus.UNPAID
+                if booking_type is BookingType.APP
+                else PaymentStatus.PAID
             ),
             passenger_user_id=passenger_user_id,
             walkin_name=walkin_name,
             walkin_phone=walkin_phone,
             walkin_wants_receipt=walkin_wants_receipt,
-            qr_payload=f"SBG-{booking_id}",
         )
 
     @classmethod
@@ -112,15 +124,30 @@ class Booking:
         return cls(**row)
 
     @staticmethod
-    def _generate_ticket_number() -> str:
-        stamp = datetime.now(APP_TZ).strftime("%y%m%d")
-        return f"SBG-{stamp}-{uuid.uuid4().hex[:6].upper()}"
+    def generate_code() -> str:
+        """A short code the passenger gives the Dispatcher (brief 2.1).
+
+        Short because it is spoken across a counter, not scanned: the
+        brief's example is SG-4821. Four digits would be 10,000 codes and
+        the column is UNIQUE, so collisions would surface as errors at
+        the busiest moment; six characters of a 32-letter alphabet is
+        about a billion. The caller retries on the unique constraint.
+        """
+        body = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(_CODE_LENGTH))
+        return f"SG-{body}"
 
     # -- transitions ----------------------------------------------------
-    def confirm_payment(self) -> None:
-        if self.status is not BookingStatus.PENDING:
-            raise ConflictError(f"Cannot confirm a booking that is {self.status.value}.")
-        self.status = BookingStatus.CONFIRMED
+    def mark_paid(self) -> None:
+        """The Dispatcher took the cash at the terminal (brief 2.1).
+
+        This, and only this, puts the seat on the passenger list and
+        stops the cutoff job releasing it. A check-in does not.
+        """
+        if self.payment_status is PaymentStatus.PAID:
+            raise ConflictError("This seat is already marked paid.")
+        if self.status in _TERMINAL:
+            raise ConflictError(f"Cannot take cash for a {self.status.value} booking.")
+        self.payment_status = PaymentStatus.PAID
 
     def check_in(self) -> None:
         if self.status is not BookingStatus.CONFIRMED:
@@ -146,36 +173,15 @@ class Booking:
             raise ConflictError("Cannot cancel a booking after boarding.")
         self.status = BookingStatus.CANCELLED
 
-    # -- policy ---------------------------------------------------------
-    def assert_can_reschedule(
-        self,
-        *,
-        departure: datetime,
-        cutoff_hours: int,
-        max_reschedules: int,
-        now: datetime | None = None,
-    ) -> None:
-        """Consultation policy: no refunds, reschedule allowed inside a window.
+    def assert_passenger_may_cancel(self) -> None:
+        """A passenger cancels only an unpaid reservation (brief 2.1).
 
-        Both limits come from cooperative_policies, snapshotted onto the
-        trip at generation time -- so a later policy change never alters
-        the terms a passenger already bought under.
+        Once the cash is in the Dispatcher's hand the money is outside
+        the system, so returning it has to be a person's act: the
+        passenger asks in the chat and the Dispatcher cancels.
         """
-        now = now or datetime.now(APP_TZ)
-        if departure.tzinfo is None:
-            departure = departure.replace(tzinfo=APP_TZ)
-
-        if self.status not in _ACTIVE:
-            raise ConflictError(f"A {self.status.value} booking cannot be rescheduled.")
-        if self.reschedule_count >= max_reschedules:
+        if self.payment_status is PaymentStatus.PAID:
             raise PolicyViolationError(
-                f"This booking has already been rescheduled {self.reschedule_count} "
-                f"time(s); the cooperative allows {max_reschedules}."
+                "This seat is paid. Ask the Dispatcher to cancel it so the "
+                "cash can be returned to you."
             )
-        if now > departure - timedelta(hours=cutoff_hours):
-            raise PolicyViolationError(
-                f"Reschedule closes {cutoff_hours} hour(s) before departure."
-            )
-
-    def mark_rescheduled(self) -> None:
-        self.status = BookingStatus.RESCHEDULED

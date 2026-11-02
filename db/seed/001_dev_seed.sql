@@ -113,12 +113,12 @@ VALUES
 INSERT INTO trips
   (trip_id, template_id, route_id, service_date, departure_datetime,
    van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
-   seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status)
+   seat_capacity, advance_booking_seat_cap, status)
 VALUES
   ('TRIP-DEMO-00000001', 'TMPL-ECO-COT-0530', @route,
    CURRENT_DATE, CONCAT(CURRENT_DATE, ' 05:30:00'),
    'VAN-0001', 'USER-DISPATCHER-0001', 'USER-MANAGER-0001', NOW(6), 'First Trip',
-   14, 10, 6, 'scheduled');
+   14, 10, 'scheduled');
 
 -- trip_legs: derived from the route's stop sequence (4 stops -> 3 legs)
 INSERT INTO trip_legs (trip_id, leg_sequence, from_stop_sequence, to_stop_sequence, departs_at)
@@ -149,12 +149,12 @@ WHERE l.trip_id = 'TRIP-DEMO-00000001';
 INSERT INTO trips
   (trip_id, template_id, route_id, service_date, departure_datetime,
    van_id, dispatcher_id, assigned_by, assigned_at, trip_label,
-   seat_capacity, advance_booking_seat_cap, reschedule_cutoff_hours, status)
+   seat_capacity, advance_booking_seat_cap, status)
 VALUES
   ('TRIP-DEMO-00000002', 'TMPL-ECO-COT-0730', @route,
    CURRENT_DATE, CONCAT(CURRENT_DATE, ' 07:30:00'),
    'VAN-0002', 'USER-DISPATCHER-0001', 'USER-MANAGER-0001', NOW(6), 'Second Trip',
-   14, 14, 6, 'scheduled');
+   14, 14, 'scheduled');
 
 INSERT INTO trip_legs (trip_id, leg_sequence, from_stop_sequence, to_stop_sequence, departs_at)
 SELECT 'TRIP-DEMO-00000002', rs.stop_sequence, rs.stop_sequence, rs.stop_sequence + 1,

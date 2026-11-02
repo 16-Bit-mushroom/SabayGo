@@ -13,7 +13,6 @@ section of road is oversold; it is never shown to a passenger.
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -24,11 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.core.timezone import APP_TZ
 from app.domain.entities.booking import Booking as BookingEntity
-from app.domain.enums import BookingStatus, BookingType, TripStatus
+from app.domain.enums import BookingStatus, BookingType, PaymentStatus, TripStatus
 from app.domain.value_objects import Segment
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import Trip
-from app.infrastructure.models import Payment as PaymentRow
 from app.infrastructure.repositories.fare_repository import FareRepository
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 from app.infrastructure.repositories.seat_repository import SeatRepository
@@ -76,10 +74,10 @@ class ReserveSeatCommand:
 @dataclass(frozen=True)
 class ReserveSeatResult:
     booking_id: str
-    ticket_number: str
+    booking_code: str
     fare_amount: Decimal
     status: BookingStatus
-    qr_payload: str | None
+    payment_status: PaymentStatus
     boarding_stop: int
     alighting_stop: int
 
@@ -133,10 +131,7 @@ class ReserveSeatUseCase:
         fare = await self._resolve_fare(trip, segment)
 
         # ---- the locked section -------------------------------------
-        hold_ttl = await self.policies.get_int("seat_hold_ttl_seconds")
-        slot = await self.seats.allocate_seat(
-            trip_id=cmd.trip_id, segment=segment, hold_ttl_seconds=hold_ttl
-        )
+        slot = await self.seats.allocate_seat(trip_id=cmd.trip_id, segment=segment)
 
         # The advance limit is checked INSIDE the lock. Outside it,
         # concurrent requests all read the same stale count and every one
@@ -163,7 +158,7 @@ class ReserveSeatUseCase:
         self.session.add(
             BookingRow(
                 booking_id=booking.booking_id,
-                ticket_number=booking.ticket_number,
+                booking_code=booking.booking_code,
                 trip_id=booking.trip_id,
                 passenger_user_id=booking.passenger_user_id,
                 walkin_name=booking.walkin_name,
@@ -179,8 +174,11 @@ class ReserveSeatUseCase:
                 seat_number=slot,
                 fare_amount=fare,
                 status=booking.status.value,
-                qr_payload=booking.qr_payload,
-                reschedule_count=0,
+                payment_status=booking.payment_status.value,
+                # A walk-up hands over the cash as the Dispatcher lists
+                # it; a reservation is unpaid until the terminal.
+                paid_at=now if is_cash else None,
+                paid_by=cmd.logged_by if is_cash else None,
                 booked_at=now,
                 created_at=now,
                 updated_at=now,
@@ -195,33 +193,19 @@ class ReserveSeatUseCase:
             booking_id=booking.booking_id,
         )
 
-        # Cash is in hand -- no payment round trip, so the space goes
-        # straight to taken rather than sitting on a hold that could lapse
-        # while the passenger is already aboard.
-        if is_cash:
-            await self.seats.confirm(booking_id=booking.booking_id)
-            # Record the fare as collected but NOT settled. Cash in a
-            # Dispatcher's pocket is a different state from money
-            # missing, and the revenue view separates the two. It
-            # settles when the crew remits at the end of the trip.
-            self.session.add(
-                PaymentRow(
-                    payment_id=str(uuid.uuid4()),
-                    booking_id=booking.booking_id,
-                    provider="cash",
-                    method="cash",
-                    amount=fare,
-                    status="pending",
-                    created_at=now,
-                )
-            )
+        # The space goes straight to taken. Under rev 721 nothing is
+        # waiting on a gateway, so there is no hold to lapse: an unpaid
+        # reservation keeps its seat until the cutoff job releases it
+        # (brief 2.1), which is a decision about the booking, not about
+        # an expiring lock on the inventory row.
+        await self.seats.confirm(booking_id=booking.booking_id)
 
         return ReserveSeatResult(
             booking_id=booking.booking_id,
-            ticket_number=booking.ticket_number,
+            booking_code=booking.booking_code,
             fare_amount=fare,
             status=booking.status,
-            qr_payload=booking.qr_payload,
+            payment_status=booking.payment_status,
             boarding_stop=segment.boarding_stop,
             alighting_stop=segment.alighting_stop,
         )
@@ -258,9 +242,7 @@ class ReserveSeatUseCase:
             .where(
                 BookingRow.trip_id == trip.trip_id,
                 BookingRow.booking_type == BookingType.APP.value,
-                BookingRow.status.notin_(
-                    [BookingStatus.CANCELLED.value, BookingStatus.RESCHEDULED.value]
-                ),
+                BookingRow.status != BookingStatus.CANCELLED.value,
             )
         )
         if int(result.scalar_one()) >= trip.advance_booking_seat_cap:

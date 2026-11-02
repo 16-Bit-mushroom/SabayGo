@@ -56,13 +56,13 @@ OTHER=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/json" \
 S=$(code POST "/trips/$TRIP/start" "" "$OT")
 [ "$S" = "200" ] && ok "the office starts the trip" || bad "gave $S"
 
-S=$(code POST /scans "{\"qr_payload\":\"x\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$OTHER")
-[ "$S" = "403" ] && ok "unassigned Dispatcher cannot scan (403)" || bad "scan gave $S"
+S=$(code GET "/bookings/trip/$TRIP/seats" "" "$OTHER")
+[ "$S" = "403" ] && ok "unassigned Dispatcher cannot read the seat list (403)" || bad "seat list gave $S"
 
-S=$(code POST /scans "{\"qr_payload\":\"x\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$CT")
+S=$(code GET "/bookings/trip/$TRIP/seats" "" "$CT")
 [ "$S" = "200" ] && ok "assigned Dispatcher can scan" || bad "assigned scan gave $S"
 
-S=$(code POST /scans "{\"qr_payload\":\"x\",\"trip_id\":\"$TRIP\",\"stop_sequence\":1}" "$OT")
+S=$(code GET "/bookings/trip/$TRIP/seats" "" "$OT")
 [ "$S" = "200" ] && ok "Terminal Manager can act on any trip (override)" || bad "Terminal Manager gave $S"
 
 hdr "F.1  a van cannot run overlapping trips"
