@@ -1,8 +1,8 @@
 # Handoff: the rev 721 refactor, steps S7 and S9–S11
 
-*Written 3 Nov 2026, at the end of S8. All the work is on branch
-**`console-v3`**, which is not merged into `main` yet: `main` is 13
-commits behind.*
+*Written 3 Nov 2026, at the end of S8. Everything through S8 is merged
+into **`main`** (fast-forward from `console-v3`). Start new work on a
+branch off `main`.*
 
 This picks up the cash-only refactor halfway. The backend is finished
 apart from S7. What is left is one small backend step, the two Flutter
@@ -45,7 +45,6 @@ each other forever. Run the suite in the foreground, or wait on its PID
 
 ```bash
 git clone https://github.com/16-Bit-mushroom/SabayGo.git && cd SabayGo
-git checkout console-v3
 ./setup.sh                       # .env files, venvs, Docker MySQL; docs/SETUP.md explains it
 ./db/reset-dev.sh --soon         # all 37 migrations + demo data; a trip departs in 20 min
 cd backend && source venv/bin/activate
@@ -67,13 +66,13 @@ It should end `69 passed, 0 failed`.
 Paste this as the first message:
 
 > Read `docs/HANDOFF_REV721.md`, then `CLAUDE.md` and
-> `docs/GAP_REPORT.md` §10. We are on branch `console-v3`, refactoring
+> `docs/GAP_REPORT.md` §10. We are on `main`, refactoring
 > SabayGo to brief rev 721 (`docs/SabayGo-Changes-for-Claude-Code.md`).
 > S1–S6 and S8 are done and the full journey suite was green (1061/0/0).
 > First confirm the state: `git log --oneline -8` should show the S8
 > commit `feat(backend): T60 sweep` on top. If `git status` shows it is
-> not on `origin/console-v3`, tell me before doing anything else. Then
-> do **S7 only** (special trips, brief §2.5, T49–T52), following the
+> not on `origin/main`, tell me before doing anything else. Make a
+> branch off `main` for the step. Then do **S7 only** (special trips, brief §2.5, T49–T52), following the
 > handoff's S7 checklist. Get `test_special_trips.sh` green after a
 > `./db/reset-dev.sh --soon`, record the step in its GAP_REPORT §10.4 row,
 > and commit it on its own. Do not start S9 until I say. Run the full
