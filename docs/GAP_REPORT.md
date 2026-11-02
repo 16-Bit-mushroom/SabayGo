@@ -556,3 +556,117 @@ before the next:
 | R8 | 4.5 | Retention job |
 | R9 | 6.3–6.4 | Driving flags with the home-pickup wait |
 | R10 | 9 | Screens |
+
+---
+
+## 10. Revision 721 delta (2 Nov)
+
+`docs/SabayGo-Changes-for-Claude-Code.md` (2026-11-02) replaces the rev
+603 brief (`(3).md`). The revised ACM PDF carries the same text — its
+filename still says rev 603, its content does not.
+
+One decision drives everything: **A2Z handles only cash.** The study
+takes no online payment. A passenger still reserves a seat in the app
+and gets a short **booking code**; the fare is paid in cash to the
+Dispatcher at the terminal, who **marks the seat Paid**. The gateway,
+the QR ticket and the e-ticket are gone, and T60 is an acceptance test
+that nothing of them survives.
+
+Two money changes follow. Income groups become **Booked (B)** and
+**Walk-up (W)**, so Equation (2) is `ρ × (B + W)`. And A2Z's paper trip
+ticket turns out to carry two fixed fees beside the 15 %: a **₱75 DCOTT
+ticket for each trip** and a **₱50 parking fee for each van each service
+day**, charged even when the van makes no trip. The three together are
+the **terminal fees**; what is left of the cash is the **operator's
+share**, handed to the operator at the counter and recorded by the
+Cashier.
+
+### 10.1 Built work that rev 721 reverses
+
+| # | Built (rev 603) | Rev 721 | Where |
+|---|---|---|---|
+| S1 | PayMongo checkout, sandbox checkout page, signed webhook settles the booking | **No online payment of any kind.** The Dispatcher takes cash and marks the seat Paid (`paid_at`, `paid_by`), offline and before Start | `clients/paymongo_client.py`, `clients/sandbox_checkout.py`, `booking/payments.py`, `api/v1/payments.py`, `config.py` |
+| S2 | `bookings.qr_payload`, QR scanned at the van door | **No QR.** The Dispatcher finds the reservation **by name or booking code**. `Bookings.BookingCode` is new | 005, `operations/boarding.py` (`ScanTicketUseCase`), `mobile/views/dispatcher/qr_scanner_screen.dart`, `mobile/views/ticket/` |
+| S3 | `payments` table (provider, method, provider_ref_id, provider_event_id, raw_payload); `v_trip_revenue` reads it for `cash_in_hand` | Dropped. `bookings.payment_status` / `paid_at` / `paid_by` is the only record of a paid seat; the view is rebuilt on it | 005, 013, 020 |
+| S4 | Seat held `seat_hold_ttl_seconds`, swept by `sweep_abandoned_holds` | **`HoldReleaseS` removed.** An unpaid reservation holds its seat until **`UnpaidCutoffMin` before departure** (default **30**), then is released: `cancel_reason = 'auto_release'`. A **check-in does not stop the release** | `operations/guards.py`, `main.py:60`, 021 |
+| S5 | Reschedule within a cutoff, `reschedule_count`, `rescheduled` status | **Removed.** Rev 721 never mentions it; cancellation of an unpaid reservation replaces it | `booking/reschedule.py`, `api/v1/bookings.py`, `mobile/views/reservations/reschedule_sheet.dart`, `test_reschedule.sh` |
+| S6 | Income groups `verified` / `declared` / `estimated`; `verified` meant a gateway reference existed | **`booked` / `walk_up`.** Booked is a seat reserved in the app and marked Paid, including a home-pickup seat and an app-requested special trip. Walk-up is a Dispatcher cash entry or a counter special trip | 018, `finance/statement.py:125`, `api/v1/statements.py` |
+| S7 | `remittances.estimated_income`, `amount_at_risk` | Dropped (already listed at R12; rev 721 repeats it) | 018 |
+| S8 | A boarding matches a paid seat or cash entry **within `match_window_seconds`** | **No time window.** A boarding is listed while an unmatched paid seat or walk-up entry remains on the list; each matches one boarding only | `edge/checking.py:96`, `domain/policies.py:27`, 021 |
+| S9 | Special trip fee paid through the gateway; `Special_Trip_Requests.PaymentReference` | **Cash to the Dispatcher at the terminal**, who marks it paid and hands the 15 % to the Cashier before Start | `api/v1/special_trips.py`, `operations/special_trips.py` |
+| S10 | Home pickup activated by a payment screenshot (`ProofMessageID`, `ProofConfirmedBy`) | The relative **pays both seats in cash**; marking the home-pickup seat Paid **is** the activation. The chat image is a **landmark photo** and nothing depends on it (`PhotoMessageID`) | `booking/home_pickup.py`, `api/v1/home_pickups.py`, 024 |
+| S11 | Start blocked until the 15 % is recorded | Blocked until the **full terminal fees due** are recorded: the 15 %, the ₱75 of the trip, and the day's ₱50 when unpaid (T66) | `operations/trip_lifecycle.py` |
+| S12 | Notification type `home_pickup_proof` | `home_pickup_photo`. New: `paid_after_release` [ADVICE] | 024 |
+
+S6 and S8 are the two that change behaviour quietly rather than loudly:
+the group label and the matching rule both used to depend on the gateway
+reference and the clock, and neither exists now.
+
+### 10.2 New in rev 721, not built
+
+- **Booking code.** `Bookings.BookingCode` VARCHAR(32) UNIQUE, generated
+  at reservation (`SG-4821` shape). It is what the passenger reads out
+  at the terminal and what the Dispatcher searches by.
+- **Mark as Paid and Cancel Reservation**, both the Dispatcher's, both
+  working **offline** and **before Start**. Cancellation closes when the
+  Cashier records the payment or the van departs (`list_locked_at`).
+  Reasons: `passenger`, `passenger_asked_dispatcher`, `forgot_to_cancel`,
+  `auto_release`.
+- **Release job** at `unpaid_cutoff_min`, with a pay-at-the-terminal
+  reminder before it, and the **restore path**: a Paid mark that syncs
+  after the release restores the seat if the trip still has one free,
+  otherwise alerts the Terminal Manager (T62, T63).
+- **Terminal fees.** `remittances.dcott_fees`, `parking_fee`,
+  `terminal_fees_owed`; settings `dcott_ticket_fee` (75.00) and
+  `parking_fee` (50.00), dated like the rate. The ₱50 is charged **once
+  per van per service day, even with no trip** — a Cashier records a
+  **parking-only charge** (T65).
+- **Operator's share.** `operator_share_owed` = (B + W) − terminal fees;
+  `operator_share_given`, `operator_share_given_at`,
+  `operator_share_recorded_by`. An **'Operator share differs'** flag when
+  the two disagree once every trip's list is locked. Monitoring only; it
+  blocks nothing.
+
+### 10.3 Unchanged
+
+The four roles, `operators` with no login, the phone pool
+(`edge_devices`, `device_checkouts`), disputes, `non_passenger_moves`,
+`assisted_pickups`, `messages`, `schedule_templates`, `sos_alerts`,
+`data_transfers`, the trip lifecycle columns of migration 024, the hash
+chain, NAHGM and the driving flags, the retention job, and the console
+modules for all of them.
+
+**The allocator is not touched again.** `Segment.from_starting_terminal`
+already refuses any boarding stop but 1, so every booking on a trip
+consumes leg 1 and the per-leg rows already enforce exactly 14 per trip
+— which is what rev 721 §2.3 asks for. The coarse `SELECT ... FOR
+UPDATE` and the `UNIQUE (trip_id, seat_number, leg_sequence)` stand.
+Only the prose changes.
+
+### 10.4 Decisions (2 Nov) and roadmap
+
+1. **Drop, with down scripts.** `payments`, `qr_payload`, the gateway
+   clients and the verified/declared/estimated columns go, per T60. Each
+   migration ships `db/migrations/down/` and a preflight that refuses
+   rather than silently discards (the 024 pattern).
+2. **Reschedule is removed**, not kept unused.
+3. **Backend first, frontend last**, one step at a time, each with its
+   journey script green and its own commit.
+4. The three amounts stay **settings**, never constants:
+   `dcott_ticket_fee`, `parking_fee`, `unpaid_cutoff_min`. Whether the
+   ₱75 applies to a special trip is [ASSUMED] in the brief — it ships as
+   a setting and goes on the list for A2Z.
+
+| Step | Brief | What |
+|---|---|---|
+| S1 | 0.2 | This section; CLAUDE.md re-pointed at the rev 721 brief |
+| S2 | 2.1, 7.3 | Migration 032: booking code, Paid/cancel columns, drop the gateway, QR, `payments` and reschedule; rebuild `v_trip_revenue`; Mark as Paid, Cancel, search endpoints |
+| S3 | 2.1, 4.2 r15 | Release of unpaid reservations at the cutoff, and the offline Paid mark (restore or alert) |
+| S4 | 2.1 | Income groups Booked and Walk-up |
+| S5 | 2.1 item 13 | Terminal fees, operator's share, parking-only charge, the Start block on the full fees |
+| S6 | 5.2, 6.1 | Matching with no time window |
+| S7 | 2.5, 2.6 | Special trips and home pickups paid in cash to the Dispatcher |
+| S8 | 12.2 T60 | Sweep for gateway, QR, window and estimate remnants; full journey suite |
+| S9 | 9 | Operator console: remittance, settings, Start block wording |
+| S10 | 9 | Flutter: booking code and pay-at-terminal notice, Mark as Paid, Cancel |
+| S11 | — | Progress log, known issues, manuscript corrections, questions for A2Z, demo script |

@@ -6,12 +6,18 @@ partner. BSIT, University of Mindanao.
 
 **Final defence moved: the date waits on endorsement (was 20 October).**
 
-**The spec is brief rev 603** (`docs/SabayGo-Changes-for-Claude-Code
-(3).md`, 15 Oct). It replaced rev 514 and reversed parts of rev 468
-(boarding at stop 1 only, no camera pricing, Dispatcher taps Depart, no
-grace timer, payment before Start). Its delta, decisions and roadmap
-R1–R10 are `docs/GAP_REPORT.md` §9. **Where anything conflicts with it,
-rev 603 wins.**
+**The spec is brief rev 721** (`docs/SabayGo-Changes-for-Claude-Code.md`,
+2 Nov), matching the revised ACM paper (the PDF's filename still says
+rev 603; its text does not). It replaced rev 603 and makes A2Z **cash
+only**: no online payment, no QR ticket. A passenger reserves a seat and
+gets a **booking code**, and the **Dispatcher marks the seat Paid** when
+the cash is handed over at the terminal. Income groups are **Booked (B)**
+and **Walk-up (W)**, and beside the 15 % A2Z charges a **₱75 DCOTT
+ticket for each trip** and a **₱50 parking fee for each van each service
+day** — the three are the **terminal fees**, and what is left of the cash
+is the **operator's share**. Its delta, decisions and roadmap S1–S11 are
+`docs/GAP_REPORT.md` §10. **Where anything conflicts with it, rev 721
+wins.**
 
 **What is built, and why, is `docs/PROGRESS_LOG.md`**: rev 468, rev 603
 R1–R10, the edge app and every step since. Before changing an area, read
@@ -63,13 +69,16 @@ runs from stop *k* to stop *k+1*. A route with N stops has N−1 legs.
 consumes every leg between them: `boarding ≤ leg < alighting`. A passenger
 riding 1→2 is **not** aboard on leg 2.
 
-**Space (not seat)** — capacity is counted per leg. UV Express does **not
-assign seat numbers**; `seat_number` in the database is an internal slot
-counter and is never shown to a passenger.
+**Space (not seat)** — UV Express does **not assign seat numbers**;
+`seat_number` in the database is an internal slot counter and is never
+shown to a passenger.
 
-This is why one space can carry two paying passengers on one trip when
-their journeys do not overlap — which is real revenue a paper logbook
-cannot capture.
+**Capacity is 14 per trip.** Passengers board **only at the starting
+terminal**, so every booking on a trip consumes leg 1 and the per-leg
+rows in `seat_inventory` already count per trip. Do not read the old
+claim that one space carries two paying passengers on one trip: it was
+true only while boarding at a middle stop was allowed, and it has not
+been since rev 603.
 
 ---
 
@@ -220,6 +229,8 @@ the whole candidate window rather than using a single
 and LIMIT depend on the query plan — poor ground for a correctness claim.
 Read the module docstring before "optimising" it.
 
+**Superseded by rev 721 — still true of the code until step S2 (`docs/GAP_REPORT.md` §10.4) removes it. Do not build on it.**
+
 **Sandbox payments in development.** With `ENVIRONMENT=development` and no
 `PAYMONGO_SECRET_KEY`, checkout returns a backend-served page
 (`/payments/sandbox/{cs_id}`) instead of PayMongo. Pay builds a
@@ -230,14 +241,16 @@ webhook, so the rule below still holds. References are prefixed
 or a real key, turns the sandbox off (404). See
 `infrastructure/clients/sandbox_checkout.py`.
 
+**Superseded by rev 721 — still true of the code until step S2 (`docs/GAP_REPORT.md` §10.4) removes it. Do not build on it.**
+
 **Only a verified webhook confirms a booking.** Never the client redirect.
 Signature is HMAC-SHA256 over `{timestamp}.{raw_body}` — the *raw* bytes,
 because re-serialising the parsed JSON changes key order and the signature
 never matches.
 
 **Policy values are snapshotted onto each trip at generation.** Changing a
-policy must not alter terms a passenger already booked under. The
-reschedule check reads `trips.reschedule_cutoff_hours`, not the live row.
+policy must not alter terms a passenger already booked under. A trip is
+read for the values it was generated with, never the live row.
 
 **The system never fabricates a count.** A trip with no phone reporting
 is marked Unaudited (`no_phone`, `silent_at_start`, `lens_blocked`,
@@ -266,6 +279,8 @@ check-in windows silently.
 **Seed emails must end `.dev`, not `.test`** — `.test` is an RFC 2606
 reserved TLD and Pydantic's `EmailStr` rejects it.
 
+**Superseded by rev 721 — still true of the code until step S2 (`docs/GAP_REPORT.md` §10.4) removes it. Do not build on it.**
+
 **Cash is not missing money.** A cash walk-in writes a `pending` payment
 row so the revenue view can separate `cash_in_hand` from `unreconciled`.
 Before this, every honest conductor appeared to be stealing.
@@ -277,21 +292,31 @@ Before this, every honest conductor appeared to be stealing.
 - Every booking has a fixed space. Terminal-based dispatch, not hail-and-ride.
 - Fares come from a pairwise terminal matrix per LTFRB approval. Not
   distance-based, not dynamic.
-- Reschedule keeps the same journey; only the trip changes. Follows from
-  no-refund — a cheaper journey would owe money back.
-- No refunds. Cooperative policy.
-- Roadside pickup is normal. Recorded from the **previous** terminal
-  passed, with a conductor-set fare. *(Superseded 13 Oct: roadside
-  logging is blocked; a roadside boarding is a camera-detected,
-  unrecorded boarding priced from the nearest stop.)* Anchoring forward would leave that
-  stretch of road looking empty while someone sits in it, and the camera
-  check would flag a real passenger as leakage.
+- Boarding is at the **starting terminal, before departure**, and the
+  only exception is the home pickup of a disabled or elderly passenger.
+- **Cash only.** The system holds and moves no money. It records which
+  seats the Dispatcher marked as paid, and the amounts handed to the
+  Cashier and to the operator. No refunds, and no reschedule — an unpaid
+  reservation is cancelled and booked again instead.
+- A **roadside pickup after the van leaves the terminal zone is neither
+  flagged nor priced**. It is a disclosed limitation of the study, not an
+  oversight: the camera's count sets no fare anywhere, so pricing one
+  here would be the fabrication the whole design refuses. *(This replaces
+  the rev 468 rule that a roadside pickup was recorded from the previous
+  terminal with a conductor-set fare, and the 13 Oct rule that priced it
+  from the nearest stop.)*
 
 Changing any of these is a schema migration, not a config change.
 
 ---
 
 ## Next
+
+**The rev 721 refactor is the current work** (2 Nov): cash only, booking
+code, terminal fees. Its eleven steps are `docs/GAP_REPORT.md` §10.4,
+backend first and the two Flutter apps last, one step at a time with its
+journey script green before the next. Everything below waits on it,
+except items the owner runs.
 
 In the order agreed on 16 Oct, one step at a time. The runner probes and
 the rev 468 retirement are done (`docs/PROGRESS_LOG.md`). Left:
