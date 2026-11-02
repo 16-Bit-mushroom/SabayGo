@@ -12,7 +12,7 @@ Who may do what is the API's guard (brief 3); the rules are here:
 
   assign       Terminal Manager, or the Cashier as backup, at the van's
                turn. Validated van, operator and Dispatcher only. Refused
-               while the van owes A2Z's share on any statement, unless
+               while the van owes terminal fees on any statement, unless
                the Terminal Manager overrode this trip's payment block
                (rule 2). A Cashier's assignment alerts the Terminal Manager.
   override     Terminal Manager only, with a written reason: lifts the
@@ -21,7 +21,8 @@ Who may do what is the API's guard (brief 3); the rules are here:
   start        Cashier or Terminal Manager, from `start_opens_minutes`
                before departure, once a van and a Dispatcher are assigned
                and the trip's statement owes nothing -- the Dispatcher
-               handed the 15 % over and the Cashier recorded it
+               handed the terminal fees over (the 15 %, the trip's DCOTT
+               ticket, the day's parking) and the Cashier recorded them
                (`finance.statement`) -- or after an override (rule 5).
                A rental (`special_trips`) also waits for its fee, which
                no override lifts (2.5).
@@ -153,7 +154,7 @@ class TripLifecycle:
                 owed = await Statements(self.session).van_balance(van_id)
                 if owed > 0:
                     raise ConflictError(
-                        f"{van.plate_number} still owes ₱{owed:,.2f} of A2Z's share from "
+                        f"{van.plate_number} still owes ₱{owed:,.2f} of terminal fees from "
                         "its last trip. The Cashier records the payment first, or the "
                         "Terminal Manager overrides with a written reason."
                     )
@@ -162,6 +163,7 @@ class TripLifecycle:
         await self._no_clash(trip, van_id=van_id, dispatcher_id=dispatcher_id)
 
         now = _now()
+        left_van = trip.van_id
         trip.van_id = van_id
         trip.dispatcher_id = dispatcher_id
         trip.assigned_by = by.user_id
@@ -169,8 +171,9 @@ class TripLifecycle:
         trip.updated_at = now
         await self.session.flush()
         await self.session.refresh(trip, ["van"])
-        # The listed seats' lines follow the trip to its new van.
-        await Statements(self.session).sync(trip)
+        # The listed seats' lines and the trip's DCOTT ticket follow the
+        # trip to its new van.
+        await Statements(self.session).sync(trip, left_van=left_van)
         # The van's phone counts for this trip from now on; what it
         # counted while the van had no trip is matched by time (rule 14).
         await release_held(self.session, trip, now)
@@ -216,16 +219,17 @@ class TripLifecycle:
                 f"The rental fee of ₱{rental.rental_fee:,.2f} is not paid. It is paid before "
                 "the van leaves: through the app, or in cash the Dispatcher logs."
             )
-        # The 15 % before Start (brief 2.1, hard block).
+        # The terminal fees before Start (brief 2.1, hard block): the 15 %,
+        # the trip's DCOTT ticket and the day's parking (T66).
         if trip.payment_override_by is None:
             money = Statements(self.session)
             statement = await money.sync(trip)
             due = await money.due(statement) if statement is not None else ZERO
             if due > 0:
                 raise ConflictError(
-                    f"₱{due:,.2f} of A2Z's share is due. The Dispatcher hands it to the "
-                    "Cashier, who records it; or the Terminal Manager overrides with a "
-                    "written reason."
+                    f"₱{due:,.2f} of terminal fees is due: the 15 %, the DCOTT ticket "
+                    "and the day's parking. The Dispatcher hands it to the Cashier, who "
+                    "records it; or the Terminal Manager overrides with a written reason."
                 )
 
         warnings = await self._begin(trip, mode=StartMode.MANUAL, by=by, now=now)
@@ -236,7 +240,7 @@ class TripLifecycle:
     # ---------------------------------------------------------- override
     async def override_payment(self, trip_id: str, *, by: User, note: str) -> Trip:
         """The Terminal Manager lifts this trip's payment block, with a
-        written reason (brief 2.1). The share stays owed."""
+        written reason (brief 2.1). The fees stay owed."""
         trip = await self._locked(trip_id)
         if trip.status not in (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value):
             raise ConflictError(f"This trip is {trip.status}; there is no block to lift.")
@@ -253,7 +257,7 @@ class TripLifecycle:
         await self.notifications.notify_trip(
             trip=trip, type="payment_block_override", title="Payment block overridden",
             message=f"{await self._name(by.user_id)} let {trip_label(trip)} go ahead without "
-                    f"A2Z's share recorded: {note}",
+                    f"its terminal fees recorded: {note}",
             roles=(Role.CASHIER, Role.TERMINAL_MANAGER), skip_user_id=by.user_id,
         )
         await self.session.commit()
@@ -472,12 +476,13 @@ class TripLifecycle:
         earlier = await self._earlier(trip)
 
         now = _now()
+        left_van = trip.van_id
         trip.van_id = van.van_id
         self._copy_roster(trip, van, operator)
         self._mark_changed(trip, by=by, now=now, note=f"Van changed: {reason.strip()}", earlier=earlier)
         await self.session.flush()
         await self.session.refresh(trip, ["van"])
-        await Statements(self.session).sync(trip)
+        await Statements(self.session).sync(trip, left_van=left_van)
 
     # -------------------------------------------------------------- void
     async def void(self, trip_id: str, *, by: User, reason: str) -> Trip:

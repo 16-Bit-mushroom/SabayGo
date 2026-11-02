@@ -683,6 +683,16 @@ class Remittance(Base):
     rate_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     remittance_owed: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
     held_share: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    # The fixed terminal fees (rev 721 item 13): the DCOTT ticket in force
+    # when the statement opened, kept like rate_pct, and what it adds up to.
+    dcott_ticket_fee: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    dcott_fees: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    parking_fee: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    terminal_fees_owed: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    operator_share_owed: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    operator_share_given: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    operator_share_given_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    operator_share_recorded_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     status: Mapped[str] = mapped_column(String(8), default="open")
     settled_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
     settled_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))

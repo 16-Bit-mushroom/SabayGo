@@ -472,13 +472,15 @@ CALL seed_trip('TRIP-A2Z-LIVE-SOON', NULL, @r_tag, @now_min + INTERVAL 2 HOUR,
 SET @t = 'TRIP-A2Z-LIVE-SOON';
 CALL seed_booking('BKG-A2Z-L301', @t, 'USER-PAX-DEMO-0006', NULL, 'app', 1, 4, 1, 100.00, 'confirmed', NOW() - INTERVAL 1 HOUR);
 CALL seed_booking('BKG-A2Z-L302', @t, 'USER-PAX-DEMO-0005', NULL, 'app', 1, 2, 2,  60.00, 'confirmed', NOW() - INTERVAL 40 MINUTE);
--- ------------------------------------------------------ A2Z's 15 % (rev 603)
--- Every trip the seed started had its share handed to the Cashier and
--- recorded before Start: one statement per van per day, fare lines by
+-- ------------------------------------------------- terminal fees (rev 721)
+-- Every trip the seed started had its terminal fees handed to the Cashier
+-- and recorded before Start: one statement per van per day, fare lines by
 -- drop-off terminal, fare and income group (brief 2.1-2.2), paid in full.
 INSERT INTO remittances (remittance_id, operator_id, van_id, service_date, rate_pct,
+                         dcott_ticket_fee, parking_fee, terminal_fees_owed,
                          created_at, updated_at)
-SELECT UUID(), v.operator_id, t.van_id, t.service_date, 15.00, MIN(t.started_at), MIN(t.started_at)
+SELECT UUID(), v.operator_id, t.van_id, t.service_date, 15.00, 75.00, 50.00, 50.00,
+       MIN(t.started_at), MIN(t.started_at)
   FROM trips t JOIN vans v ON v.van_id = t.van_id
  WHERE t.status IN ('boarding','departed','completed')
  GROUP BY t.van_id, t.service_date, v.operator_id;
@@ -501,19 +503,33 @@ SELECT UUID(), r.remittance_id, t.trip_id, o.terminal_id, d.terminal_id, g.incom
   JOIN route_stops o ON o.route_id = t.route_id AND o.stop_sequence = 1
   JOIN route_stops d ON d.route_id = t.route_id AND d.stop_sequence = g.alighting_stop_sequence;
 
+-- Each trip that has run pays its P75 DCOTT ticket, and the van's day
+-- its P50 parking (rev 721 item 13); the Dispatcher handed the rest to
+-- the operator, and the Cashier recorded both. A trip still scheduled
+-- adds its ticket when the backend next recomputes the statement.
 UPDATE remittances r
-  JOIN (SELECT l.remittance_id,
-               SUM(IF(l.income_group = 'booked', l.gross_fare, 0)) AS b,
-               SUM(IF(l.income_group = 'walk_up', l.gross_fare, 0)) AS w,
-               SUM(l.share_amount) AS owed,
-               MAX(l.created_at) AS paid_at
-          FROM remittance_lines l GROUP BY l.remittance_id) x
+  JOIN (SELECT r2.remittance_id,
+               COALESCE(SUM(IF(l.income_group = 'booked', l.gross_fare, 0)), 0) AS b,
+               COALESCE(SUM(IF(l.income_group = 'walk_up', l.gross_fare, 0)), 0) AS w,
+               COALESCE(SUM(l.share_amount), 0) AS owed,
+               COALESCE(MAX(l.created_at), r2.created_at) AS paid_at
+          FROM remittances r2
+          LEFT JOIN remittance_lines l ON l.remittance_id = r2.remittance_id
+         GROUP BY r2.remittance_id, r2.created_at) x
     ON x.remittance_id = r.remittance_id
+  JOIN (SELECT van_id, service_date, COUNT(*) AS trips FROM trips
+         WHERE status IN ('boarding','departed','completed')
+         GROUP BY van_id, service_date) n
+    ON n.van_id = r.van_id AND n.service_date = r.service_date
    SET r.booked_income = x.b, r.walk_up_income = x.w, r.remittance_owed = x.owed,
-       r.settled_amount = x.owed, r.settled_at = x.paid_at,
+       r.dcott_fees = 75.00 * n.trips,
+       r.terminal_fees_owed = x.owed + 75.00 * n.trips + 50.00,
+       r.operator_share_owed = GREATEST(x.b + x.w - x.owed - 75.00 * n.trips - 50.00, 0),
+       r.operator_share_given = GREATEST(x.b + x.w - x.owed - 75.00 * n.trips - 50.00, 0),
+       r.operator_share_given_at = x.paid_at,
+       r.operator_share_recorded_by = 'USER-CASHIER-0001',
+       r.settled_amount = x.owed + 75.00 * n.trips + 50.00, r.settled_at = x.paid_at,
        r.recorded_by = 'USER-CASHIER-0001', r.status = 'settled';
-DELETE r FROM remittances r
- WHERE NOT EXISTS (SELECT 1 FROM remittance_lines l WHERE l.remittance_id = r.remittance_id);
 
 UPDATE trips
    SET payment_status = 'paid', list_locked_at = started_at - INTERVAL 2 MINUTE,

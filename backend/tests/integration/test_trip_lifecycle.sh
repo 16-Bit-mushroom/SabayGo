@@ -265,7 +265,10 @@ is "$(field plate_number)" LCT-9042 "the new plate is on the trip"
 field change_note | grep -q "earlier van ABC-1234, operator Juan Dela Cruz" \
   && ok "the earlier van and operator are in the note" || bad "note: $(field change_note)"
 is "$(board $TRIP1 operator_name)" "Nestor Abellana" "the new operator is copied"
-is "$(stmt LCT-9042 amount_due)" "$(python3 -c "print(f'{float("$DUE")+float("$TOPUP"):.2f}')")"    "its fare lines move to the new van's statement; the payment stays where it was recorded"
+# DUE paid ABC-1234's 15 %, its DCOTT ticket and its day's P50; LCT-9042
+# paid its own parking in the seed, so the P50 does not move.
+is "$(stmt LCT-9042 amount_due)" "$(python3 -c "print(f'{float("$DUE")+float("$TOPUP")-50:.2f}')")" \
+   "its fare lines and DCOTT ticket move to the new van's statement; the payment stays where it was recorded"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "8. Depart, the assignment block, arrive (rules 2, 7; T5, T12)"
@@ -353,8 +356,8 @@ is "$(board $LIVE start_mode $LIVE_DAY)/$(board $LIVE start_review_status $LIVE_
    "T15 nobody started it: Auto_Assigned, held for review"
 is "$(board $LIVE payment_status $LIVE_DAY)" left_unpaid "nothing was recorded: Left_Unpaid"
 is "$(notes "$OT" left_unpaid $LIVE)/$(notes "$CT" left_unpaid $LIVE)" 1/1 "'Left Unpaid' to the manager and the cashier"
-is "$(stmt NBC-7788 held_share $LIVE_DAY)/$(stmt NBC-7788 remittance_owed $LIVE_DAY)" 33.00/0.00 \
-   "the share is held, off the statement: 15 % of P100 + P60 + P60"
+is "$(stmt NBC-7788 held_share $LIVE_DAY)/$(stmt NBC-7788 remittance_owed $LIVE_DAY)" 108.00/0.00 \
+   "its fees are held, off the statement: 15 % of P100 + P60 + P60, and the P75 DCOTT ticket"
 is "$(code PUT /trips/$TAG6/assignment '{"van_id":"VAN-0004"}' "$OT")" 409 "the held share still refuses the van's next assignment"
 is "$(code POST /trips/$LIVE/start-review "" "$OT")" 200 "T16 the manager reviews it"
 is "$(stmt NBC-7788 held_share $LIVE_DAY)/$(stmt NBC-7788 remittance_owed $LIVE_DAY)" 0.00/33.00 "its lines join the statement: held moves into owed"

@@ -1,9 +1,9 @@
-"""A2Z's 15 %: fare lines, the van's daily statement, and the payment
-before Start.
+"""The terminal fees: fare lines, the van's daily statement, the payment
+before Start, and the operator's share.
 
-Rev 603, change brief 2.1-2.2. The operator remits 15 % of the fares on
-the passenger list of each trip that boards at the terminal, handed by
-the Dispatcher to the Cashier before Start. Equation (2):
+Rev 721, change brief 2.1-2.2 and item 13. The operator remits 15 % of
+the fares on the passenger list of each trip that boards at the
+terminal, Equation (2):
 
     remittance owed = rate x (B + W)
 
@@ -15,8 +15,30 @@ from, not how it was paid. A seat counts whether or not its passenger
 comes; the camera adds nothing. A special trip's rental fee, once paid,
 is one line of its own (`request_id`, no drop-off terminal): B when the
 trip was requested in the app, W when it was entered at the counter
-(2.2, 2.5). The system records the payment;
-it never holds the money.
+(2.2, 2.5).
+
+Beside the 15 %, A2Z's trip ticket carries two fixed fees, settings
+dated like the rate: the DCOTT ticket (`dcott_ticket_fee`, P75) for each
+trip, and parking (`parking_fee`, P50) once per van per service day,
+even with no trip. The three are the terminal fees; the rest of the cash
+on the list is the operator's share:
+
+    terminal fees owed    = rate x (B + W) + dcott x trips + parking
+    operator's share owed = (B + W) - terminal fees owed, never below 0
+
+The Dispatcher hands the terminal fees to the Cashier before Start and
+the operator's share to the operator, at the counter in the same step,
+and the Cashier records both. The system records amounts; it never holds
+the money. The fixed fees are not fare lines, do not depend on the
+number of passengers, and cannot be disputed [ASSUMED].
+
+A trip counts on its van's statement for the day once it has a van and
+until it is voided -- with or without paid seats, because the DCOTT
+ticket is bought for the dispatch, not for the passengers. The parking
+is charged once, when the statement opens: for the van's first trip of
+the day, or by the Cashier's parking-only charge for a van with no trip
+(`charge_parking`). Both fees are read from the settings when the
+statement opens and kept on it, as the rate is.
 
 Fare lines follow the passenger list (`sync`). A line groups a trip's
 seats to one drop-off terminal, at one fare, in one income group. Before
@@ -27,14 +49,20 @@ first; after that it can only grow, and a seat added then is a top-up
 line (`is_top_up`), which sets the trip back to 'unpaid' until it is paid.
 
 The statement, one per van per service date, is recomputed from its
-lines whenever they change, so its totals cannot drift from them:
+lines and its trips whenever they change, so its totals cannot drift:
   - B, W and remittance_owed count the lines of trips that ran or will
-    run (not voided) and are not waiting for a review;
-  - held_share is the lines of trips the system started and the
-    Terminal Manager has not reviewed: off the statement, still owed;
-  - the balance is owed + held - settled. The share of an open fare-line
-    dispute waits: the undisputed balance leaves it out.
-Payments are recorded against a statement and add up in settled_amount.
+    run (not voided) and are not waiting for a review; dcott_fees counts
+    those trips;
+  - held_share is the 15 % and the DCOTT ticket of trips the system
+    started and the Terminal Manager has not reviewed: off the
+    statement, still owed;
+  - the balance is terminal fees + held - settled. The share of an open
+    fare-line dispute waits: the undisputed balance leaves it out.
+Payments are recorded against a statement and add up in settled_amount;
+the operator's share handed over adds up in operator_share_given. Once
+every trip's list on the statement is locked, a given share that differs
+from the owed one is flagged (`share_difference`). The flag blocks
+nothing: it is for the Terminal Manager to look at.
 
 A decided dispute (`application/finance/disputes.py`) changes its line's
 count here: upheld, the line leaves the statement (fares and share);
@@ -44,12 +72,14 @@ contested line is frozen as it was contested: the list no longer changes
 it, and seats of the same kind added later go on a line of their own.
 
 Two blocks read the undisputed balance (brief 2.1): Start waits for the
-trip's statement to reach 0, and a van with any balance is refused its
-next assignment. The Terminal Manager's override on a trip lifts both
+trip's statement to reach 0 -- the 15 %, the trip's DCOTT ticket and the
+day's parking -- and a van with any balance is refused its next
+assignment. The operator's share is never part of either. The Terminal Manager's override on a trip lifts both
 for that trip ([ASSUMED] one override covers both).
 
-A change of van after a payment moves the trip's lines to the new van's
-statement; the payment stays where it was recorded.
+A change of van after a payment moves the trip's lines and its DCOTT
+ticket to the new van's statement; the payment stays where it was
+recorded.
 """
 
 from __future__ import annotations
@@ -59,7 +89,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -110,6 +140,11 @@ BEFORE_DEPARTURE = (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value)
 
 def _now() -> datetime:
     return app_tz.now().replace(tzinfo=None)
+
+
+def _trips_of(statement: Remittance) -> tuple:
+    """The van's trips of the statement's day, voided ones included."""
+    return (Trip.van_id == statement.van_id, Trip.service_date == statement.service_date)
 
 
 def share_of(gross: Decimal, rate_pct: Decimal) -> Decimal:
@@ -174,12 +209,19 @@ class Statements:
         )).scalars().all())
 
     # ------------------------------------------------------------- sync
-    async def sync(self, trip: Trip) -> Remittance | None:
+    async def sync(self, trip: Trip, *, left_van: str | None = None) -> Remittance | None:
         """Bring the trip's fare lines in line with its passenger list and
         recompute the statements they touch. The caller commits.
 
+        `left_van` is the van the trip was just taken from: its statement
+        loses the trip's DCOTT ticket even when no line moves.
+
         Returns the trip's statement, or None when the trip has no van
-        (no operator to owe anything) and no lines."""
+        (no operator to owe anything)."""
+        if left_van is not None and left_van != trip.van_id:
+            left = await self._locked_statement(left_van, trip.service_date)
+            if left is not None:
+                await self.recompute(left)
         lines = await self.lines_of(trip.trip_id)
         if trip.van_id is None:
             # The van was taken off before Start: its lines go with it.
@@ -190,9 +232,12 @@ class Statements:
                 for remittance_id in touched:
                     await self.recompute(await self.session.get(Remittance, remittance_id))
             return None
-        if not lines and not await self.listed(trip):
-            # Nothing to owe: no statement is opened for it.
-            return await self._locked_statement(trip.van_id, trip.service_date)
+        if trip.status == TripStatus.CANCELLED.value and not lines:
+            # A voided trip opens nothing; one already counted leaves.
+            statement = await self._locked_statement(trip.van_id, trip.service_date)
+            if statement is not None:
+                await self.recompute(statement)
+            return statement
         statement = await self.statement_for(trip.van_id, trip.service_date)
         touched = {statement.remittance_id}
 
@@ -320,19 +365,26 @@ class Statements:
 
     # -------------------------------------------------------- statements
     async def statement_for(self, van_id: str, service_date: date) -> Remittance:
-        """The van's statement for the day, created on first use, locked."""
+        """The van's statement for the day, created on first use, locked.
+
+        Opening it charges the day's parking, and keeps the rate and the
+        DCOTT ticket in force for the rest of the day."""
         found = await self._locked_statement(van_id, service_date)
         if found is not None:
             return found
         van = await self.session.get(Van, van_id)
-        rate = await PolicyRepository(self.session).get_decimal("remittance_rate_pct")
+        policies = PolicyRepository(self.session)
+        rate = await policies.get_decimal("remittance_rate_pct")
+        dcott = await policies.get_decimal("dcott_ticket_fee")
+        parking = await policies.get_decimal("parking_fee")
         now = _now()
         try:
             async with self.session.begin_nested():
                 self.session.add(Remittance(
                     remittance_id=str(uuid.uuid4()), operator_id=van.operator_id,
                     van_id=van_id, service_date=service_date, rate_pct=rate,
-                    created_at=now, updated_at=now,
+                    dcott_ticket_fee=dcott, parking_fee=parking,
+                    terminal_fees_owed=parking, created_at=now, updated_at=now,
                 ))
         except IntegrityError:
             pass  # another request created it first
@@ -358,6 +410,16 @@ class Statements:
                    Trip.status != TripStatus.CANCELLED.value)
         )).all()
         booked = walk_up = owed = held = ZERO
+        counted = 0
+        for review, trips in (await self.session.execute(
+            select(Trip.start_review_status, func.count())
+            .where(*_trips_of(statement), Trip.status != TripStatus.CANCELLED.value)
+            .group_by(Trip.start_review_status)
+        )).all():
+            if review == StartReview.PENDING.value:
+                held += statement.dcott_ticket_fee * trips
+            else:
+                counted += trips
         for group, gross, share, review, outcome, adjusted in rows:
             if outcome == "upheld":
                 continue
@@ -374,8 +436,11 @@ class Statements:
         statement.booked_income = booked
         statement.walk_up_income = walk_up
         statement.remittance_owed = owed
+        statement.dcott_fees = statement.dcott_ticket_fee * counted
+        statement.terminal_fees_owed = owed + statement.dcott_fees + statement.parking_fee
+        statement.operator_share_owed = max(booked + walk_up - statement.terminal_fees_owed, ZERO)
         statement.held_share = held
-        settled = owed + held - statement.settled_amount <= 0
+        settled = statement.terminal_fees_owed + held - statement.settled_amount <= 0
         statement.status = "settled" if settled and statement.recorded_by else "open"
         statement.updated_at = _now()
 
@@ -394,27 +459,55 @@ class Statements:
         )).scalar_one())
 
     async def due(self, statement: Remittance) -> Decimal:
-        """What the Cashier should receive now: the undisputed balance."""
-        owing = (statement.remittance_owed + statement.held_share
+        """What the Cashier should receive now: the undisputed balance of
+        the terminal fees."""
+        owing = (statement.terminal_fees_owed + statement.held_share
                  - statement.settled_amount - await self.disputed(statement))
         return max(owing, ZERO)
 
     async def van_balance(self, van_id: str) -> Decimal:
-        """Everything the van owes, on every statement (the assignment block)."""
+        """Everything the van owes that has fallen due (the assignment block).
+
+        A statement for a day still to come is left out until one of its
+        trips runs: a trip assigned ahead -- a rental booked for Friday --
+        owes its DCOTT ticket and that day's parking on Friday, not today.
+        A trip that has already left owes now, whatever its date."""
+        ran = select(Trip.trip_id).where(
+            Trip.van_id == Remittance.van_id, Trip.service_date == Remittance.service_date,
+            Trip.status.notin_((TripStatus.SCHEDULED.value, TripStatus.CANCELLED.value)),
+        ).exists()
         total = ZERO
         for statement in (await self.session.execute(
-            select(Remittance).where(Remittance.van_id == van_id, Remittance.status == "open")
+            select(Remittance).where(
+                Remittance.van_id == van_id, Remittance.status == "open",
+                or_(Remittance.service_date <= app_tz.now().date(), ran),
+            )
         )).scalars():
             total += await self.due(statement)
         return total
+
+    async def share_difference(self, statement: Remittance) -> Decimal | None:
+        """The operator's share owed less the share given, once every
+        trip's list on the statement is locked; None before. Positive is
+        short, negative over (T68)."""
+        open_list = await self.session.scalar(
+            select(func.count()).select_from(Trip).where(
+                *_trips_of(statement), Trip.status != TripStatus.CANCELLED.value,
+                Trip.list_locked_at.is_(None),
+            ))
+        if open_list:
+            return None
+        return statement.operator_share_owed - statement.operator_share_given
 
     # ---------------------------------------------------------- payments
     async def record_payment(
         self, statement: Remittance, *, by: User, amount: Decimal,
         reference: str | None, handed_over_by: str | None,
+        operator_share: Decimal | None = None,
     ) -> Remittance:
-        """The Cashier records money the Dispatcher handed over. The caller
-        commits."""
+        """The Cashier records the terminal fees the Dispatcher handed
+        over and, in the same step, the operator's share handed to the
+        operator. The caller commits."""
         amount = Decimal(amount).quantize(CENT)
         due = await self.due(statement)
         if amount <= 0:
@@ -437,25 +530,61 @@ class Statements:
             refs = [r for r in (statement.settlement_ref or "").split("; ") if r]
             refs.append(reference.strip())
             statement.settlement_ref = "; ".join(refs)[-255:]
+        if operator_share:
+            self._give_share(statement, by=by, amount=operator_share, at=now)
         await self.recompute(statement)
 
         if await self.due(statement) == 0:
             for trip in (await self.session.execute(
-                select(Trip).join(RemittanceLine, RemittanceLine.trip_id == Trip.trip_id)
-                .where(RemittanceLine.remittance_id == statement.remittance_id,
-                       Trip.payment_status == "unpaid",
-                       Trip.status.in_(BEFORE_DEPARTURE))
-                .distinct()
+                select(Trip).where(*_trips_of(statement),
+                                   Trip.payment_status == "unpaid",
+                                   Trip.status.in_(BEFORE_DEPARTURE))
             )).scalars():
                 trip.payment_status = "paid"
+        return statement
+
+    async def record_operator_share(
+        self, statement: Remittance, *, by: User, amount: Decimal,
+    ) -> Remittance:
+        """The operator's share recorded on its own: a difference handed
+        over after the payment (T68). The caller commits."""
+        amount = Decimal(amount).quantize(CENT)
+        if amount <= 0:
+            raise ConflictError("Record an amount above zero.")
+        self._give_share(statement, by=by, amount=amount, at=_now())
+        await self.recompute(statement)
+        return statement
+
+    @staticmethod
+    def _give_share(statement: Remittance, *, by: User, amount: Decimal, at: datetime) -> None:
+        # Amounts only: the system never holds the money, and the operator
+        # has no account to confirm it ([ASSUMED] the operator does not sign).
+        statement.operator_share_given += Decimal(amount).quantize(CENT)
+        statement.operator_share_given_at = at
+        statement.operator_share_recorded_by = by.user_id
+
+    async def charge_parking(self, van_id: str, service_date: date) -> Remittance:
+        """The Cashier's parking-only charge for a van parked at the
+        terminal with no trip that day (T65): a statement with the P50,
+        no trip and no fare line. The caller commits."""
+        if service_date > app_tz.now().date():
+            raise ConflictError("Parking is charged for a day the van was at the terminal.")
+        if await self._locked_statement(van_id, service_date) is not None:
+            raise ConflictError(
+                "This van already has a statement for that day, and its parking is on it."
+            )
+        statement = await self.statement_for(van_id, service_date)
+        await self.recompute(statement)
         return statement
 
     async def pay_trip(
         self, trip: Trip, *, by: User, amount: Decimal,
         reference: str | None, handed_over_by: str | None,
+        operator_share: Decimal | None = None,
     ) -> Remittance:
-        """The share of the trip about to leave (brief 2.1): recorded on
-        its van's statement, and the list locks to cancellations."""
+        """The terminal fees of the trip about to leave (brief 2.1),
+        recorded on its van's statement with the operator's share, and the
+        list locks to cancellations."""
         if trip.status not in BEFORE_DEPARTURE:
             raise ConflictError(
                 f"This trip is {trip.status}. Record a payment for a departed trip "
@@ -467,13 +596,14 @@ class Statements:
         await self.record_payment(
             statement, by=by, amount=amount, reference=reference,
             handed_over_by=handed_over_by or trip.dispatcher_id,
+            operator_share=operator_share,
         )
         trip.list_locked_at = trip.list_locked_at or _now()
         return statement
 
     async def lock_at_departure(self, trip: Trip) -> Decimal:
-        """The van has left: the list is final. Returns the share it left
-        without paying ('left_unpaid', brief 2.1), or 0."""
+        """The van has left: the list is final. Returns the terminal fees it
+        left without paying ('left_unpaid', brief 2.1), or 0."""
         statement = await self.sync(trip)
         trip.list_locked_at = trip.list_locked_at or _now()
         if statement is None or trip.payment_status != "unpaid":

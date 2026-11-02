@@ -216,7 +216,7 @@ is "$(field "['subject']")/$(field "['amount_disputed']")" driving_flag/0.00 \
    "Driving_Flag, AmountDisputed 0.00"
 is "$(sql "SELECT CONCAT_WS('/', r.van_id, r.service_date) FROM disputes d JOIN remittances r ON r.remittance_id = d.remittance_id WHERE d.dispute_id = '$DF1'")" \
    "VAN-0003/$YDAY" "on the van's statement for that day"
-is "$(sql "SELECT CONCAT_WS('/', status, remittance_owed - settled_amount) FROM remittances r WHERE van_id = 'VAN-0003' AND service_date = '$YDAY'")" \
+is "$(sql "SELECT CONCAT_WS('/', status, terminal_fees_owed + held_share - settled_amount) FROM remittances r WHERE van_id = 'VAN-0003' AND service_date = '$YDAY'")" \
    "settled/0.00" "nothing is withheld: the statement stays settled"
 is "$(dispute "$CT" driving_flag FLAG-DSP-1 "Again")" 409 "one flag carries one dispute"
 is "$(decide "$OT" "$DF1" adjusted "Half" 0.00)" 409 "a driving flag cannot be adjusted"

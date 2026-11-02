@@ -191,7 +191,7 @@ class DepartTripUseCase:
         for booking in no_shows:
             booking.status = BookingStatus.NO_SHOW.value
             booking.updated_at = now
-            # The seat still counts in A2Z's share: it was paid (brief
+            # The seat still counts in the 15 %: it was paid (brief
             # 2.1). The space is released because it is empty; nobody
             # boards after departure (rev 603), so it is never resold.
             await seats.release(booking_id=booking.booking_id)
@@ -207,7 +207,7 @@ class DepartTripUseCase:
         if unpaid:
             await notifications.notify_trip(
                 trip=trip, type="left_unpaid", title="Left unpaid",
-                message=(f"{trip_label(trip)} departed with ₱{unpaid:,.2f} of A2Z's share "
+                message=(f"{trip_label(trip)} departed with ₱{unpaid:,.2f} of terminal fees "
                          "not recorded. It stays owed; the van's next assignment is refused "
                          "until it is paid or the Terminal Manager overrides."),
                 roles=(Role.TERMINAL_MANAGER, Role.CASHIER),

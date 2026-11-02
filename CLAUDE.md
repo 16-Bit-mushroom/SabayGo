@@ -249,6 +249,14 @@ Manager (`paid_after_release`) — there is real cash to settle either way.
 Migration 033 retired the gateway-era seat hold with its TTL, its sweeper
 and `seat_inventory.hold_expires_at`.
 
+**Start waits for the terminal fees, not the 15 %.** A trip owes the
+DCOTT ticket (`dcott_ticket_fee`, ₱75) once it has a van, even with
+nobody on the list, and the van's statement charges the day's parking
+(`parking_fee`, ₱50) when it opens. Start and the next assignment are
+blocked until the 15 %, the ticket and the parking are recorded; the
+operator's share is recorded beside them and blocks nothing
+(`application/finance/statement.py`).
+
 **Policy values are snapshotted onto each trip at generation.** Changing a
 policy must not alter terms a passenger already booked under. A trip is
 read for the values it was generated with, never the live row.

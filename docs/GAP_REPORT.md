@@ -669,6 +669,26 @@ Only the prose changes.
    setting brief §14 asks A2Z about, went in S2. Both questions stay on
    the list: what A2Z thought those two settings meant is worth knowing
    even though the code no longer has them.
+7. **A trip owes its ₱75 once it has a van, with or without paid seats**
+   (S5). The DCOTT ticket is bought for the dispatch, not the
+   passengers, and the brief blocks Start until "the terminal fees due
+   for the trip" are recorded. So an empty list no longer leaves the
+   terminal owing nothing — which closes the case of a Dispatcher who
+   lists nobody and pockets the fares. A voided trip drops out.
+8. **The ₱50 is charged when the statement opens, and stays** (S5),
+   which is the brief's own rule: for the van's first trip of the day,
+   or by the parking-only charge. A van taken off its only trip of the
+   day still owes the parking for being at its turn; the Terminal
+   Manager's override lifts the assignment block if that is wrong.
+   The assignment block counts statements **up to today**: a rental
+   assigned for Friday opens Friday's statement, and its ticket and
+   parking fall due on Friday, not as a debt that blocks the van today.
+9. **The ₱75 applies to a special trip** [ASSUMED in the brief], with no
+   setting of its own; T51 expects it. It stays on the list for A2Z.
+10. **A statement opened before 035 carries no fixed fees.** A2Z
+    collected them on paper then, and inventing them afterwards would
+    reopen settled statements and block vans. `reset-dev.sh` rebuilds
+    the demo with them.
 
 | Step | Brief | What |
 |---|---|---|
@@ -676,7 +696,7 @@ Only the prose changes.
 | S2 | 2.1, 7.3 | **Done 2 Nov** (`83bdbfd`). Migration 032: booking code, Paid/cancel columns; dropped the gateway, QR, `payments`, `boarding_scans`, the revenue view and reschedule; Mark as Paid, Cancel and search endpoints. Pulled in with it, because the schema change forced them: **S6 matching** (no window), home-pickup **activation by the paid mark** and the **landmark photo** in place of payment proof, and the rental fee's income group by request origin |
 | S3 | 2.1, 4.2 r15 | **Done 2 Nov.** Migration 033: `unpaid_cutoff_min` (30), notification type `paid_after_release`; retired `seat_hold_ttl_seconds`, `hold_sweep_interval_seconds`, `cancel_cutoff_hours` and `seat_inventory.hold_expires_at`. `application/booking/unpaid_release.py` replaces the hold sweeper on the same `PeriodicJob`: it reminds, then releases, and a check-in does not stop it. A Paid mark that syncs after a release restores the seat, or alerts the Terminal Manager when a walk-up has taken it. `test_unpaid_release.sh` (T53–T56, T61–T63) |
 | S4 | 2.1 | **Done 2 Nov.** Migration 034 renames `remittances.verified_income`/`declared_income` to `booked_income`/`walk_up_income` and maps `remittance_lines.income_group` to `('booked','walk_up')`, one to one: the grouping rule (the seat's origin, not a gateway reference) already changed in S2, so no total moves. `estimated_income` and `amount_at_risk` had gone in 024. The demo seed now builds its lines from paid seats only, the same definition as `PAID_SEAT`. `test_trip_lifecycle.sh` section 9 reads the live trip's own service date, which a run after 22:00 found on tomorrow's board |
-| S5 | 2.1 item 13 | Terminal fees, operator's share, parking-only charge, the Start block on the full fees |
+| S5 | 2.1 item 13 | **Done 2 Nov.** Migration 035: `remittances` gains `dcott_ticket_fee` (the ticket in force when the statement opened, kept like `rate_pct`), `dcott_fees`, `parking_fee`, `terminal_fees_owed`, `operator_share_owed`, `operator_share_given`, `operator_share_given_at`, `operator_share_recorded_by`; settings `dcott_ticket_fee` (75.00) and `parking_fee` (50.00). `finance/statement.py` counts the van's trips of the day for the ₱75, charges the ₱50 when the statement opens, holds a held trip's ₱75 with its 15 %, and flags an operator's share that differs once every list is locked. The Start and assignment blocks read the full terminal fees. The Cashier records the operator's share with the payment (`operator_share`), or alone for a difference (`POST /statements/{id}/operator-share`), and a parking-only charge (`POST /statements/parking`). `test_terminal_fees.sh` (sample trip ₱217.50 / ₱342.50 / ₱1,107.50; T1, T64–T69) |
 | ~~S6~~ | 5.2, 6.1 | ~~Matching with no time window~~ — done inside S2: it reads the table S2 dropped, so the two could not be separated without an intermediate rule no revision describes. Its tests (T57, T59) are in `test_door_check.sh` |
 | S7 | 2.5, 2.6 | Special trips: the walk-in fee basis and the counter flow. The **cash mark** (`/special-trips/{id}/cash`, `paid_at`, `paid_by`) and the whole **home-pickup** half landed in S2 |
 | S8 | 12.2 T60 | Sweep for gateway, QR, window and estimate remnants; full journey suite |

@@ -155,9 +155,21 @@ is "$(stmt LCT-9042 walk_up_income)/$(stmt LCT-9042 remittance_owed)" 2000.00/30
 
 hdr "   (the override is withdrawn to show the 15 % block too)"
 sql "UPDATE trips SET payment_override_by = NULL, payment_override_at = NULL, payment_override_note = NULL, payment_status = 'unpaid' WHERE trip_id = '$TW'"
-is "$(code POST /trips/$TW/start "" "$CT")" 409 "T51 Start is blocked until the Cashier records ₱300"
-field detail | grep -q "300.00" && ok "and says ₱300 is due" || bad "detail: $(field detail)"
+is "$(code POST /trips/$TW/start "" "$CT")" 409 "T51 Start is blocked until the Cashier records the terminal fees"
+field detail | grep -q "terminal fees" && ok "and says the terminal fees are due" || bad "detail: $(field detail)"
+# The ₱300 and the trip's ₱75 DCOTT ticket [ASSUMED for a special trip],
+# and LCT-9042's ₱50 parking if no trip has paid it yet today -- which
+# depends on the hour the fixture was reset at.
+code GET /trips/$TW/share "" "$CT" >/dev/null
+DUE=$(field amount_due)
+python3 -c "import sys;sys.exit(0 if float('$DUE') - 300 in (75, 125, 200) else 1)" \
+  && ok "₱300 plus the ₱75 DCOTT ticket (and the day's parking if unpaid): ₱$DUE" \
+  || bad "due before Start: ₱$DUE"
 is "$(code POST /trips/$TW/payment '{"amount":"300.00","reference":"OR-RENT"}' "$CT")" 200 "the Cashier records ₱300"
+is "$(code POST /trips/$TW/start "" "$CT")" 409 "the 15 % alone does not open Start (T66)"
+REST=$(python3 -c "print(f'{float(\"$DUE\") - 300:.2f}')")
+is "$(code POST /trips/$TW/payment "{\"amount\":\"$REST\",\"reference\":\"OR-FEES\"}" "$CT")" 200 \
+   "the Cashier records the fixed fees, ₱$REST"
 is "$(code POST /trips/$TW/start "" "$CT")" 200 "Start"
 
 # ╔═══════════════════════════════════════════════════════════════╗

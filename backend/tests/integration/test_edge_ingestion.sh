@@ -91,7 +91,10 @@ async def m():
 asyncio.run(m())" 2>&1 | grep -iE "error|traceback" || true)
 }
 board() {
+  # The seed dates its live trips from the reset, so after 22:00 the one
+  # two hours out is on tomorrow's board.
   code GET "/config/trips" "" "$OT" >/dev/null
+  grep -q "\"$1\"" /tmp/resp.json || code GET "/config/trips?date=$(date -d tomorrow +%F)" "" "$OT" >/dev/null
   python3 -c "import json;print({t['trip_id']:t for t in json.load(open('/tmp/resp.json'))}['$1']['$2'])"
 }
 notes() {  # notes TOKEN TYPE ENTITY_ID
@@ -201,6 +204,9 @@ is "$(up "$E1" "$TB" "$SNAP/one.jpg")" 404 "a phone cannot attach a still to ano
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "4. The phone at the start (4.4; T12)"
 edge POST /edge/heartbeats "$(reports 0 0 1)" "$TA" >/dev/null
+# Each trip owes its DCOTT ticket and its van's parking before Start,
+# even with nobody on the list (rev 721 item 13).
+pay $TRIP1 >/dev/null; pay $TRIP2 >/dev/null
 is "$(code POST /trips/$TRIP1/start "" "$CT")" 200 "cashier starts ABC-1234's trip"
 is "$(field audit_status)/$(field warnings)" "audited/[]" "its phone is reporting: Audited, no warning"
 edge POST /edge/heartbeats "$(reports -300 -300 1)" "$TB" >/dev/null

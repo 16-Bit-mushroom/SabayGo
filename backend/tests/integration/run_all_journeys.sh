@@ -182,6 +182,22 @@ else
   ./tests/integration/test_special_trips.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 721 S5: the terminal fees and the operator's share, on the sample
+# trip of brief 12.1 (T1, T64-T69). It voids the two fixture trips, so it
+# takes its own reset.
+{
+  echo
+  echo "==================================================================="
+  echo "  TERMINAL FEES (rev 721)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_terminal_fees.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_terminal_fees.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 # Rev 721 S3: release of unpaid reservations, and the Paid mark that
 # arrives after it (T53-T56, T61-T63). It fills the van to prove T63, so
 # it takes the reset before it rather than after.

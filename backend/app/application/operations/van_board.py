@@ -11,8 +11,8 @@ Each van is in one state, first match wins:
   on_site         a trip of today, scheduled or boarding, is assigned to it
                   (the earliest is shown);
   not_on_trip     neither.
-Every van also carries what it still owes of A2Z's share on its open
-statements (the amount that blocks its next assignment), so the Cashier
+Every van also carries what it still owes of the terminal fees on its
+open statements (the amount that blocks its next assignment), so the Cashier
 sees which vans are out and which still owe for their last trip.
 """
 
