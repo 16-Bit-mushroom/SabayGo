@@ -243,6 +243,12 @@ class MyBookingOut(BaseModel):
     # A passenger cancels only an unpaid seat, and only before the
     # trip's list locks. A paid one goes through the Dispatcher.
     can_cancel: bool
+    # Why the reservation ended, when it has: the passenger cancelled it,
+    # the Dispatcher did, or the cutoff job released it for being unpaid
+    # ('auto_release'). The app tells the passenger which, rather than
+    # showing a seat that silently stopped existing.
+    cancelled_at: datetime | None = None
+    cancel_reason: str | None = None
     # D.1: when the van is due at the passenger's OWN stop, and when
     # check-in there opens. The app shows these; the server enforces them.
     boarding_due_at: datetime
@@ -331,6 +337,8 @@ async def _render_bookings(
                     and booking.payment_status == "unpaid"
                     and trip.list_locked_at is None
                 ),
+                cancelled_at=booking.cancelled_at,
+                cancel_reason=booking.cancel_reason,
                 boarding_due_at=boarding_due_at,
                 checkin_opens_at=boarding_due_at - checkin_window,
                 home_pickup=pickups.get(booking.booking_id),
@@ -400,6 +408,20 @@ class MarkPaidRequest(BaseModel):
     paid_at: datetime | None = None
 
 
+class MarkPaidResponse(SeatOnListOut):
+    """The seat as it now stands, and what to tell the Dispatcher.
+
+    `restored` and `seat_gone` are only ever set on a mark that synced
+    after the cutoff job had released the seat (T62, T63); `seat_gone`
+    means the fare is in the Dispatcher's hand for a seat the trip no
+    longer has, and the Terminal Manager has been alerted to settle it.
+    """
+
+    restored: bool = False
+    seat_gone: bool = False
+    pickup_note: str | None = None
+
+
 class DispatcherCancelRequest(BaseModel):
     reason: CancelReason
 
@@ -437,7 +459,7 @@ async def seats_on_trip(
 
 @router.post(
     "/{booking_id}/mark-paid",
-    response_model=SeatOnListOut,
+    response_model=MarkPaidResponse,
     dependencies=[Depends(require_roles(Role.DISPATCHER, Role.TERMINAL_MANAGER))],
 )
 async def mark_paid(
@@ -445,21 +467,27 @@ async def mark_paid(
     payload: MarkPaidRequest,
     session: SessionDep,
     user: CurrentUser,
-) -> SeatOnListOut:
+) -> MarkPaidResponse:
     """The passenger handed the fare to the Dispatcher in cash.
 
     This is what puts the seat on the passenger list, counts it into
     Booked income and stops the cutoff releasing it. Marking an
     already-paid seat is accepted and changes nothing, so an offline
-    queue can replay safely.
+    queue can replay safely -- and so is a mark that reaches us after the
+    cutoff released the seat, which is restored if the trip still has a
+    seat to give.
     """
     desk = CashDesk(session)
     booking = await desk.booking(booking_id)
     await assert_assigned_to_trip(session, trip_id=booking.trip_id, user=user)
-    await desk.mark_paid(booking_id=booking_id, by=user, at=payload.paid_at)
+    result = await desk.mark_paid(booking_id=booking_id, by=user, at=payload.paid_at)
     await session.commit()
-    seats = await desk.find(trip_id=booking.trip_id, query=booking.booking_code)
-    return _seat_out(seats[0])
+    return MarkPaidResponse(
+        **(await desk.seat(booking_id)).__dict__,
+        restored=result.restored,
+        seat_gone=result.seat_gone,
+        pickup_note=result.pickup_note,
+    )
 
 
 @router.post("/{booking_id}/cancel", response_model=CancelResponse)

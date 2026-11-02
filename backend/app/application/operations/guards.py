@@ -1,16 +1,12 @@
-"""Crew assignment guard and the abandoned-hold sweep."""
+"""Crew assignment guard: a Dispatcher acts on their own trip only."""
 
 from __future__ import annotations
-
-import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.domain.enums import Role
 from app.infrastructure.models import Trip, User
-
-log = logging.getLogger(__name__)
 
 
 async def assert_assigned_to_trip(
@@ -46,20 +42,3 @@ async def assert_assigned_to_trip(
     raise PermissionDeniedError(
         "You are not assigned to this trip. Ask the office if this is wrong."
     )
-
-
-async def sweep_abandoned_holds(session_factory) -> None:
-    """Return abandoned payment holds to the pool (a `PeriodicJob` tick).
-
-    A passenger who starts paying and closes the app leaves their space
-    held. `sweep_expired_holds()` releases it, but nothing was calling it --
-    so the space only freed up when another booking happened to try that
-    exact slot, and search showed it as unavailable in the meantime.
-    """
-    from app.infrastructure.repositories.seat_repository import SeatRepository
-
-    async with session_factory() as session:
-        released = await SeatRepository(session).sweep_expired_holds()
-        if released:
-            await session.commit()
-            log.info("Released %d abandoned hold(s).", released)

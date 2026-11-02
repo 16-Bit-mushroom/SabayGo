@@ -204,15 +204,20 @@ class NotificationService:
 
     async def notify_passenger(
         self, *, user_id: str, title: str, message: str, entity: tuple[str, str],
+        type: str = "trip_update",
     ) -> None:
-        """One passenger, about something that is not yet a trip (a
-        special-trip request). Joins the caller's transaction."""
+        """One passenger, about one thing of theirs -- a special-trip
+        request, a reservation. Joins the caller's transaction.
+
+        The type defaults to the paper's general passenger notice; the
+        reminder to pay at the terminal passes 'departure_reminder', which
+        is also how the cutoff job knows it has already been sent."""
         self.session.add(
             Notification(
                 notification_id=str(uuid.uuid4()),
                 user_id=user_id,
                 audience=Role.PASSENGER.value,
-                type="trip_update",
+                type=type,
                 title=title[:100],
                 message=message[:500],
                 related_entity_type=entity[0],

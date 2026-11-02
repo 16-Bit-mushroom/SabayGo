@@ -194,9 +194,10 @@ python scripts/tracking_simulator.py --trip TRIP-DEMO-00000001 --speed 30
 Dev accounts: `passenger@` `dispatcher@` `manager@` `cashier@sabaygo.dev`,
 password `sabaygo123`.
 
-Journey tests need the backend venv on `PATH` (the webhook simulator is
-run as plain `python`) and `backend/.env` exported, or every payment step
-fails as "unpaid".
+Journey tests need the backend venv on `PATH` and `backend/.env`
+exported: `test_notifications.py` and the release sweep in
+`test_unpaid_release.sh` are run as plain `python` against the backend
+package.
 
 The shell is **fish**. `set VAR (cmd)` not `VAR=$(cmd)`; no heredocs —
 wrap them in `bash -c '...'`.
@@ -229,24 +230,24 @@ the whole candidate window rather than using a single
 and LIMIT depend on the query plan — poor ground for a correctness claim.
 Read the module docstring before "optimising" it.
 
-**Superseded by rev 721 — still true of the code until step S2 (`docs/GAP_REPORT.md` §10.4) removes it. Do not build on it.**
+**A seat is paid when the Dispatcher says so, and never before.** There
+is no gateway and no webhook to confirm one: `payment_status` goes to
+'paid' only through `CashDesk.mark_paid` (`application/booking/cash.py`),
+which records `paid_at` and `paid_by`. A check-in says where a phone is,
+not that money changed hands, so it neither pays a seat nor saves it from
+the cutoff. The sandbox checkout, the PayMongo client and the `payments`
+table were removed in migration 032.
 
-**Sandbox payments in development.** With `ENVIRONMENT=development` and no
-`PAYMONGO_SECRET_KEY`, checkout returns a backend-served page
-(`/payments/sandbox/{cs_id}`) instead of PayMongo. Pay builds a
-PayMongo-shaped event, signs it with `PAYMONGO_WEBHOOK_SECRET`, and sends
-it through the same `_receive_webhook` verify-then-settle path as the real
-webhook, so the rule below still holds. References are prefixed
-`cs_sandbox_` / `evt_sandbox_`; no payment method is recorded. Production,
-or a real key, turns the sandbox off (404). See
-`infrastructure/clients/sandbox_checkout.py`.
-
-**Superseded by rev 721 — still true of the code until step S2 (`docs/GAP_REPORT.md` §10.4) removes it. Do not build on it.**
-
-**Only a verified webhook confirms a booking.** Never the client redirect.
-Signature is HMAC-SHA256 over `{timestamp}.{raw_body}` — the *raw* bytes,
-because re-serialising the parsed JSON changes key order and the signature
-never matches.
+**An unpaid reservation is released before departure, and the release is
+a decision, not a timer.** `application/booking/unpaid_release.py` runs
+every 60 s: `unpaid_cutoff_min` (30) minutes before departure it cancels
+each unpaid seat with `cancel_reason='auto_release'` and `cancelled_by`
+NULL, frees the seat and tells the passenger, having reminded them one
+cutoff-length earlier. A Paid mark that syncs after that restores the
+seat if the trip still has one, and otherwise alerts the Terminal
+Manager (`paid_after_release`) — there is real cash to settle either way.
+Migration 033 retired the gateway-era seat hold with its TTL, its sweeper
+and `seat_inventory.hold_expires_at`.
 
 **Policy values are snapshotted onto each trip at generation.** Changing a
 policy must not alter terms a passenger already booked under. A trip is
@@ -279,11 +280,10 @@ check-in windows silently.
 **Seed emails must end `.dev`, not `.test`** — `.test` is an RFC 2606
 reserved TLD and Pydantic's `EmailStr` rejects it.
 
-**Superseded by rev 721 — still true of the code until step S2 (`docs/GAP_REPORT.md` §10.4) removes it. Do not build on it.**
-
-**Cash is not missing money.** A cash walk-in writes a `pending` payment
-row so the revenue view can separate `cash_in_hand` from `unreconciled`.
-Before this, every honest conductor appeared to be stealing.
+**Cash is not missing money.** A walk-up the Dispatcher lists is paid as
+it is listed (`paid_at` set at creation), so it counts as income in hand
+and never as something unreconciled. Before this rule, every honest
+conductor appeared to be stealing.
 
 ---
 

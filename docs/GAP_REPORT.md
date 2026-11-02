@@ -656,12 +656,25 @@ Only the prose changes.
    `dcott_ticket_fee`, `parking_fee`, `unpaid_cutoff_min`. Whether the
    ₱75 applies to a special trip is [ASSUMED] in the brief — it ships as
    a setting and goes on the list for A2Z.
+5. **The reminder to pay is derived from the cutoff, not set separately**
+   (S3). Brief §2.1 asks for a reminder "before the cutoff" and gives no
+   interval, so it is sent one cutoff-length before the cutoff — 30
+   minutes earlier at the default. A2Z sets one number, not two. If they
+   want the reminder earlier the second setting is a one-line change, and
+   the question is on the list for them.
+6. **`cancel_cutoff_hours` is retired** (S3). Rev 721 closes cancellation
+   at the passenger list lock, not a number of hours, and the key's
+   reader went with the gateway in S2 — it was showing in Rules &
+   Settings as a deadline nothing enforced. `refund_enabled`, the other
+   setting brief §14 asks A2Z about, went in S2. Both questions stay on
+   the list: what A2Z thought those two settings meant is worth knowing
+   even though the code no longer has them.
 
 | Step | Brief | What |
 |---|---|---|
 | S1 | 0.2 | This section; CLAUDE.md re-pointed at the rev 721 brief |
 | S2 | 2.1, 7.3 | **Done 2 Nov** (`83bdbfd`). Migration 032: booking code, Paid/cancel columns; dropped the gateway, QR, `payments`, `boarding_scans`, the revenue view and reschedule; Mark as Paid, Cancel and search endpoints. Pulled in with it, because the schema change forced them: **S6 matching** (no window), home-pickup **activation by the paid mark** and the **landmark photo** in place of payment proof, and the rental fee's income group by request origin |
-| S3 | 2.1, 4.2 r15 | Release of unpaid reservations at the cutoff, and the offline Paid mark (restore or alert) |
+| S3 | 2.1, 4.2 r15 | **Done 2 Nov.** Migration 033: `unpaid_cutoff_min` (30), notification type `paid_after_release`; retired `seat_hold_ttl_seconds`, `hold_sweep_interval_seconds`, `cancel_cutoff_hours` and `seat_inventory.hold_expires_at`. `application/booking/unpaid_release.py` replaces the hold sweeper on the same `PeriodicJob`: it reminds, then releases, and a check-in does not stop it. A Paid mark that syncs after a release restores the seat, or alerts the Terminal Manager when a walk-up has taken it. `test_unpaid_release.sh` (T53–T56, T61–T63) |
 | S4 | 2.1 | Income groups Booked and Walk-up |
 | S5 | 2.1 item 13 | Terminal fees, operator's share, parking-only charge, the Start block on the full fees |
 | ~~S6~~ | 5.2, 6.1 | ~~Matching with no time window~~ — done inside S2: it reads the table S2 dropped, so the two could not be separated without an intermediate rule no revision describes. Its tests (T57, T59) are in `test_door_check.sh` |

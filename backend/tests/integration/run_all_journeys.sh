@@ -182,6 +182,22 @@ else
   ./tests/integration/test_special_trips.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# Rev 721 S3: release of unpaid reservations, and the Paid mark that
+# arrives after it (T53-T56, T61-T63). It fills the van to prove T63, so
+# it takes the reset before it rather than after.
+{
+  echo
+  echo "==================================================================="
+  echo "  UNPAID RELEASE (rev 721)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh --soon >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_unpaid_release.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_unpaid_release.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 # Rev 603 R5a: door events against the passenger list.
 {
   echo

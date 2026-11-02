@@ -78,6 +78,7 @@ from app.core.exceptions import (
 from app.domain.enums import (
     BookingStatus,
     BookingType,
+    CancelReason,
     PaymentStatus,
     Role,
     TripStatus,
@@ -405,8 +406,16 @@ class HomePickups:
                 pickup.updated_at = now
         return {p.booking_id for p in pickups if p.status == "activated"}
 
-    async def on_cancelled(self, booking: BookingRow) -> None:
-        """A seat of a pickup was cancelled, before the list locked."""
+    async def on_cancelled(
+        self, booking: BookingRow, *, reason: CancelReason | None = None
+    ) -> None:
+        """A seat of a pickup was cancelled, or released at the cutoff.
+
+        The beneficiary's seat carries the same reason as the relative's,
+        because it was not cancelled on its own terms: a statement that
+        showed one as released and the other as nothing would invite the
+        office to look for a decision nobody made.
+        """
         pickup = await pickup_of(self.session, booking.booking_id)
         if pickup is None or pickup.status not in OPEN:
             return
@@ -419,6 +428,7 @@ class HomePickups:
         if seat.status in STANDING:
             seat.status = BookingStatus.CANCELLED.value
             seat.cancelled_at = now
+            seat.cancel_reason = reason.value if reason else None
             seat.updated_at = now
             await SeatRepository(self.session).release(booking_id=seat.booking_id)
 

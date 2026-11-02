@@ -36,12 +36,26 @@ THREE LAYERS OF DEFENCE
 2. Here    -- SELECT ... FOR UPDATE serialises the read-then-write
 3. Database-- UNIQUE (trip_id, seat_number, leg_sequence) makes a
               double-seating physically impossible even if 1 and 2 fail
+
+CLAIM, BIND, CONFIRM -- AND NO TIMER
+------------------------------------
+A seat-leg is claimed ('held') before the booking row exists, because
+the booking cannot be written until a seat number is known; `bind_to_
+booking()` then writes the id and `confirm()` flips the rows to 'booked'.
+All three run inside the caller's single transaction, so no row survives
+it as 'held'.
+
+Under brief rev 721 nothing waits on a gateway, so no claim lapses: an
+unpaid reservation keeps its seat until the cutoff job releases it
+(`application/booking/unpaid_release.py`). That is a decision about the
+booking -- who is notified, what reason is recorded -- and not an
+expiring lock on an inventory row, which is why migration 033 dropped
+`hold_expires_at` and the sweeper that read it.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import OperationalError
@@ -73,7 +87,6 @@ class SeatRepository:
         *,
         trip_id: str,
         segment: Segment,
-        hold_ttl_seconds: int = 600,
     ) -> int:
         """Lock the candidate window and claim the lowest free seat.
 
@@ -118,15 +131,9 @@ class SeatRepository:
             raise NotFoundError(f"No seat inventory exists for trip {trip_id}.")
 
         # ---- (2) CHOOSE --------------------------------------------------
-        now = datetime.now(timezone.utc)
         free_legs_by_seat: dict[int, int] = {}
         for row in rows:
-            usable = row.status == SeatStatus.AVAILABLE.value or (
-                row.status == SeatStatus.HELD.value
-                and row.hold_expires_at is not None
-                and row.hold_expires_at.replace(tzinfo=timezone.utc) < now
-            )
-            if usable:
+            if row.status == SeatStatus.AVAILABLE.value:
                 free_legs_by_seat[row.seat_number] = (
                     free_legs_by_seat.get(row.seat_number, 0) + 1
                 )
@@ -151,10 +158,7 @@ class SeatRepository:
                 SeatInventory.leg_sequence >= lo_leg,
                 SeatInventory.leg_sequence <= hi_leg,
             )
-            .values(
-                status=SeatStatus.HELD.value,
-                hold_expires_at=now + timedelta(seconds=hold_ttl_seconds),
-            )
+            .values(status=SeatStatus.HELD.value)
         )
         return seat_number
 
@@ -175,11 +179,11 @@ class SeatRepository:
         )
 
     async def confirm(self, *, booking_id: str) -> None:
-        """Payment cleared: held -> booked, hold no longer expires."""
+        """The booking row exists and holds the seat: held -> booked."""
         await self.session.execute(
             update(SeatInventory)
             .where(SeatInventory.booking_id == booking_id)
-            .values(status=SeatStatus.BOOKED.value, hold_expires_at=None)
+            .values(status=SeatStatus.BOOKED.value)
         )
 
     async def release(self, *, booking_id: str) -> None:
@@ -187,28 +191,8 @@ class SeatRepository:
         await self.session.execute(
             update(SeatInventory)
             .where(SeatInventory.booking_id == booking_id)
-            .values(
-                status=SeatStatus.AVAILABLE.value,
-                booking_id=None,
-                hold_expires_at=None,
-            )
+            .values(status=SeatStatus.AVAILABLE.value, booking_id=None)
         )
-
-    async def sweep_expired_holds(self) -> int:
-        """Release seats whose checkout was abandoned. Run periodically."""
-        result = await self.session.execute(
-            update(SeatInventory)
-            .where(
-                SeatInventory.status == SeatStatus.HELD.value,
-                SeatInventory.hold_expires_at < datetime.now(timezone.utc),
-            )
-            .values(
-                status=SeatStatus.AVAILABLE.value,
-                booking_id=None,
-                hold_expires_at=None,
-            )
-        )
-        return result.rowcount or 0
 
     # ------------------------------------------------------------------
     async def count_available(self, *, trip_id: str, segment: Segment) -> int:

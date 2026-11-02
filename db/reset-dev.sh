@@ -31,11 +31,12 @@ UPDATE trips
        departed_at = NULL,
        completed_at = NULL
  WHERE trip_id IN ('TRIP-DEMO-00000001', 'TRIP-DEMO-00000002');
--- The seeded trip departs 20 min out with --soon, so a 2-hour
--- cancellation deadline would refuse everything. The fixture starts
--- permissive; test_group_f.sh sets its own value to exercise the rule.
-UPDATE cooperative_policies SET policy_value = '0'
- WHERE policy_key = 'cancel_cutoff_hours';
+-- The shipped 30-minute unpaid cutoff is past a trip departing in 20,
+-- so the release job would take every reservation a test had just
+-- made. The fixture leaves 5 minutes; test_unpaid_release.sh sets its
+-- own value to exercise the rule.
+UPDATE cooperative_policies SET policy_value = '5'
+ WHERE policy_key = 'unpaid_cutoff_min';
 UPDATE trip_legs l JOIN trips t ON t.trip_id = l.trip_id
    SET l.departs_at = t.departure_datetime
        + INTERVAL (l.leg_sequence - 1) * 90 MINUTE

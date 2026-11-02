@@ -522,7 +522,6 @@ class SeatInventory(Base):
     leg_sequence: Mapped[int] = mapped_column(SmallInteger)
     status: Mapped[str] = mapped_column(String(16), default="available")
     booking_id: Mapped[str | None] = mapped_column(String(36))
-    hold_expires_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     updated_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
     __table_args__ = (

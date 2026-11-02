@@ -34,9 +34,9 @@ from app.api.v1 import (
     users,
 )
 from app.config import settings
+from app.application.booking.unpaid_release import release_unpaid_reservations
 from app.application.edge.evidence import alert_silent_phones
 from app.application.edge.retention import purge_expired_evidence
-from app.application.operations.guards import sweep_abandoned_holds
 from app.core.db import SessionFactory, engine
 from app.core.exceptions import DomainError
 from app.core.periodic import PeriodicJob
@@ -55,11 +55,14 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("SELECT 1"))
     log.info("Database connection verified.")
 
-    # Abandoned payment holds were only released when another booking
-    # happened to try that exact space. Until then search showed it as
-    # unavailable.
     jobs = [
-        PeriodicJob("Hold sweep", 60, lambda: sweep_abandoned_holds(SessionFactory)),
+        # An unpaid reservation holds one of the 14 seats but is not on
+        # the passenger list, so it is released a set number of minutes
+        # before departure and the seat offered to a walk-up (brief 2.1).
+        PeriodicJob(
+            "Unpaid release", 60,
+            lambda: release_unpaid_reservations(SessionFactory),
+        ),
         # The phone of a trip under way went silent: alert at once; the
         # Unaudited mark waits for its stored reports (brief 4.4).
         PeriodicJob("Phone silence", 60, lambda: alert_silent_phones(SessionFactory)),
