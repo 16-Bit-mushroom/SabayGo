@@ -124,11 +124,11 @@ hdr "TERMINAL MANAGER — 4. Configuration"
 S=$(code GET /config/policies "" "$OT")
 [ "$S" = "200" ] && ok "read all policies" || bad "policies gave $S"
 
-S=$(code PUT /config/policies/match_window_seconds '{"policy_value":"90"}' "$OT")
-[ "$S" = "200" ] && ok "match window set to 90 s" || bad "policy update gave $S"
-code PUT /config/policies/match_window_seconds '{"policy_value":"120"}' "$OT" >/dev/null
-S=$(code GET /config/policies/match_window_seconds/history "" "$CT")
-python3 -c "import json;h=json.load(open('/tmp/resp.json'));assert [p['policy_value'] for p in h[:2]]==['120','90'] and h[0]['updated_by_name']=='Maria Santos'" \
+S=$(code PUT /config/policies/home_pickup_wait_minutes '{"policy_value":"15"}' "$OT")
+[ "$S" = "200" ] && ok "home-pickup wait set to 15 min" || bad "policy update gave $S"
+code PUT /config/policies/home_pickup_wait_minutes '{"policy_value":"10"}' "$OT" >/dev/null
+S=$(code GET /config/policies/home_pickup_wait_minutes/history "" "$CT")
+python3 -c "import json;h=json.load(open('/tmp/resp.json'));assert [p['policy_value'] for p in h[:2]]==['10','15'] and h[0]['updated_by_name']=='Maria Santos'" \
   && ok "the history keeps each value, newest first, with who set it (the Cashier may read it)" \
   || bad "policy history gave $S: $(head -c 300 /tmp/resp.json)"
 

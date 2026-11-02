@@ -60,7 +60,9 @@ assert p["remittance_rate_pct"]["policy_value"] in ("15.00", "15")
 assert p["retention_days"]["policy_value"] == "30"
 assert p["depart_zone_radius_m"]["policy_value"] == "" and p["depart_readings"]["policy_value"] == ""
 assert p["home_pickup_max_route_m"]["policy_value"] == ""
-assert p["chat_image_max_kb"]["policy_value"] == "10240" and p["match_window_seconds"]["policy_value"] == "120"
+assert p["chat_image_max_kb"]["policy_value"] == "10240"
+# Retired in rev 721: the list is matched with no time window (036).
+assert "match_window_seconds" not in p
 assert all("effective_from" in r for r in p.values())
 EOF
 is "$(code PUT /config/policies/start_opens_minutes '{"policy_value":"15"}' "$CT")" 403 \

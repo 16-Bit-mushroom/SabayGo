@@ -24,7 +24,6 @@ _BOUNDS: dict[str, tuple[Decimal, Decimal | None]] = {
     # 0 would count every phone as silent the moment it reported.
     "heartbeat_gap_seconds": (Decimal(1), None),
     "retention_days": (Decimal(1), None),
-    "match_window_seconds": (Decimal(1), None),
     "depart_zone_radius_m": (Decimal(1), None),
     "depart_readings": (Decimal(1), None),
     "home_pickup_max_route_m": (Decimal(1), None),
