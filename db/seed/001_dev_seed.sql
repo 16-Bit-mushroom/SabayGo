@@ -142,10 +142,10 @@ CROSS JOIN seats s
 WHERE l.trip_id = 'TRIP-DEMO-00000001';
 
 -- ------------------------------------------------- a second trip
--- Needed so reschedule has a target: a booking can only move to another
--- trip on the same route, and with one seeded trip there is nowhere to
--- move it to. Uses the 07:30 template and the second van, which also
--- keeps the van overlap check from firing.
+-- A second trip on the same route, so a passenger whose reservation was
+-- cancelled has another to book and the journey scripts have two to
+-- compare. Uses the 07:30 template and the second van, which also keeps
+-- the van overlap check from firing.
 INSERT INTO trips
   (trip_id, template_id, route_id, service_date, departure_datetime,
    van_id, dispatcher_id, assigned_by, assigned_at, trip_label,

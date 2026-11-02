@@ -119,7 +119,6 @@ class OperatorFields(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=255)
     contact_number: str | None = None
     email: EmailStr | None = None
-    payout_ref: str | None = Field(default=None, max_length=64)
     license_number: str | None = None
     license_expiry: dt.date | None = None
 
@@ -162,7 +161,6 @@ class OperatorOut(BaseModel):
     full_name: str
     contact_number: str
     email: str | None
-    payout_ref: str | None
     license_number: str
     license_expiry: dt.date
     license_expired: bool

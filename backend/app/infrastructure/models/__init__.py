@@ -232,7 +232,6 @@ class Operator(Base):
     full_name: Mapped[str] = mapped_column(String(255))
     contact_number: Mapped[str] = mapped_column(String(20), unique=True)
     email: Mapped[str | None] = mapped_column(String(255))
-    payout_ref: Mapped[str | None] = mapped_column(String(64))
     license_number: Mapped[str] = mapped_column(String(64), unique=True)
     license_expiry: Mapped[dt.date] = mapped_column(Date)
     membership_status: Mapped[str] = mapped_column(String(16), default="active")

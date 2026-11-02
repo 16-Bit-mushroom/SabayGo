@@ -78,7 +78,7 @@ class Booking:
     ) -> Booking:
         # Consultation: walk-in passenger details are OPTIONAL -- provided
         # only if the passenger wants a receipt. App bookings still need an
-        # account, since that is who the e-ticket belongs to.
+        # account, since that is who holds the booking code.
         if booking_type is BookingType.APP and not passenger_user_id:
             raise ConflictError("An app booking requires an authenticated passenger.")
         if fare_amount < 0:

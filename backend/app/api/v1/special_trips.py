@@ -1,11 +1,11 @@
 """Special trips: a whole van rented from a chosen pickup (rev 603, change
 brief 2.5). The rules are `application/operations/special_trips.py`.
 
-The passenger asks, may withdraw before approval, and pays the fee
-through the gateway once approved; the office (the
+The passenger asks and may withdraw before approval; the office (the
 Terminal Manager or the Cashier) enters counter requests, approves with
-the agreed fee, or rejects; the trip's Dispatcher logs a cash fee. The
-van and the Dispatcher are assigned through `PUT /trips/{id}/assignment`.
+the agreed fee, or rejects; the trip's Dispatcher takes the fee in cash
+at the terminal and marks it paid. The van and the Dispatcher are
+assigned through `PUT /trips/{id}/assignment`.
 """
 
 from __future__ import annotations

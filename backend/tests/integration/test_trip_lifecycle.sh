@@ -259,15 +259,20 @@ is "$(code POST /trips/$TRIP1/change-van '{"van_id":"VAN-0006","reason":"Engine 
    "T21 the cashier cannot change a started trip's van"
 is "$(code POST /trips/$TAG6/change-van '{"van_id":"VAN-0006","reason":"x y z"}' "$OT")" 409 \
    "a trip not yet started is changed through its assignment"
+# What LCT-9042 owes today before the change: its balance, or the P50 its
+# statement opens with. Whether a seed trip paid its parking depends on the
+# hour the fixture was reset at (the seed's trips run 06:00-14:00).
+code GET /statements "" "$CT" >/dev/null
+OWED=$(python3 -c "import json;s={s['plate_number']:s for s in json.load(open('/tmp/resp.json'))}.get('LCT-9042');print(s['amount_due'] if s else '50.00')")
 is "$(code POST /trips/$TRIP1/change-van '{"van_id":"VAN-0006","reason":"Engine trouble"}' "$OT")" 200 \
    "manager changes the van of the started trip"
 is "$(field plate_number)" LCT-9042 "the new plate is on the trip"
 field change_note | grep -q "earlier van ABC-1234, operator Juan Dela Cruz" \
   && ok "the earlier van and operator are in the note" || bad "note: $(field change_note)"
 is "$(board $TRIP1 operator_name)" "Nestor Abellana" "the new operator is copied"
-# DUE paid ABC-1234's 15 %, its DCOTT ticket and its day's P50; LCT-9042
-# paid its own parking in the seed, so the P50 does not move.
-is "$(stmt LCT-9042 amount_due)" "$(python3 -c "print(f'{float("$DUE")+float("$TOPUP")-50:.2f}')")" \
+# DUE paid ABC-1234's 15 %, its DCOTT ticket and its day's P50. The 15 %
+# and the ticket move to LCT-9042; the P50 and the payment stay.
+is "$(stmt LCT-9042 amount_due)" "$(python3 -c "print(f'{float("$OWED")+float("$DUE")+float("$TOPUP")-50:.2f}')")" \
    "its fare lines and DCOTT ticket move to the new van's statement; the payment stays where it was recorded"
 
 # ╔═══════════════════════════════════════════════════════════════╗
@@ -308,7 +313,7 @@ is "$(code POST /trips/$TRIP1/void '{"reason":"too late"}' "$OT")" 409 "a comple
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "9. GPS departure, Not a passenger trip, Left Unpaid (rules 8-11; T13-T18)"
-LIVE=TRIP-A2Z-LIVE-SOON    # VAN-0004, dispatcher5@, two QR seats, nothing recorded
+LIVE=TRIP-A2Z-LIVE-SOON    # VAN-0004, dispatcher5@, two paid seats, nothing recorded
 # The seed dates this trip two hours from the reset, so a suite run after
 # 22:00 finds it on tomorrow's board and statement, not today's.
 LIVE_DAY=$(date +%F)

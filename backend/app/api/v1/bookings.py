@@ -366,8 +366,8 @@ async def my_booking(
 ) -> MyBookingOut:
     """One of the passenger's own bookings (G.7).
 
-    Same shape as one element of `/mine`, so the ticket screen can poll a
-    single row while a checkout is pending instead of fetching the list.
+    Same shape as one element of `/mine`, so the reservation screen can
+    refresh a single row (to see the Paid mark) instead of the list.
     Another passenger's booking is a 404, not a 403 -- the ID's existence is
     not the caller's business.
     """

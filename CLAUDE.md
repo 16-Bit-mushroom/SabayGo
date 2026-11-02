@@ -325,6 +325,9 @@ code, terminal fees. Its eleven steps are `docs/GAP_REPORT.md` §10.4,
 backend first and the two Flutter apps last, one step at a time with its
 journey script green before the next. Everything below waits on it,
 except items the owner runs.
+**Handoff (3 Nov): `docs/HANDOFF_REV721.md`.** S1–S6 and S8 are done;
+S7 (special trips), S9 (console), S10 (apps) and S11 (docs) are left,
+each with its files, endpoints and proof listed there.
 
 In the order agreed on 16 Oct, one step at a time. The runner probes and
 the rev 468 retirement are done (`docs/PROGRESS_LOG.md`). Left:

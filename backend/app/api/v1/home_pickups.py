@@ -1,12 +1,11 @@
 """Home pickup of a disabled or elderly passenger (rev 603, change brief
 2.6). The rules are `application/booking/home_pickup.py`.
 
-The relative books both seats with the pin, then pays each booking
-through `POST /payments/checkout`, or, when the gateway is down, sends a
-payment screenshot into the trip chat, which the trip's Dispatcher
-confirms to the Terminal Manager. The trip's Dispatcher (or the Terminal
-Manager stepping in) lists the trip's pickups, activates one by hand,
-marks the van at the pin, and closes the stop.
+The relative books both seats with the pin and pays both fares in cash
+at the terminal; the Dispatcher marking the seats Paid activates the
+pickup. The trip's Dispatcher (or the Terminal Manager stepping in)
+lists the trip's pickups, activates one by hand, marks the van at the
+pin, and closes the stop.
 """
 
 from __future__ import annotations

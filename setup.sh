@@ -116,11 +116,6 @@ done
 # one fails at import. This is the single most common setup failure.
 set_env_if_blank backend/.env JWT_SECRET "$(gen_hex 32)"
 
-# The development payment sandbox signs its webhooks with this, exactly as
-# PayMongo would. Real PayMongo issues its own secret; paste that over this
-# one when real keys are configured.
-set_env_if_blank backend/.env PAYMONGO_WEBHOOK_SECRET "$(gen_hex 32)"
-
 # ─────────────────────────────────────────────── 3. python venvs
 # A venv is tied to its absolute path: console scripts carry it in their
 # shebang. One that travelled in a zip from another machine is unusable,

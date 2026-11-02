@@ -3,8 +3,8 @@
 # the defence will show it, narrating each step, and STOPS at the first
 # thing that would embarrass you on stage.
 #
-#   register -> login -> search -> book -> pay -> e-ticket -> check-in
-#   -> scan -> board -> manifest -> camera check -> statements
+#   login -> search -> reserve -> booking code -> check-in -> Mark as Paid
+#   -> walk-up -> terminal fees -> start -> camera check -> statements
 #
 # Run it the morning of the demo, after:
 #   ./db/reset-dev.sh --soon          # fixture trip departs in 20 min
@@ -15,9 +15,8 @@
 # dataset (routes, yesterday's statements, driving flags) is the backdrop
 # the console screens show while you talk.
 #
-# Needs the venv and .env exported (the webhook simulator signs with
-# PAYMONGO_WEBHOOK_SECRET):
-#   source venv/bin/activate; set -a; source .env; set +a
+# Needs only curl and python3. A2Z handles cash only (brief rev 721), so
+# there is no gateway to sign for and no secret to export.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -45,8 +44,6 @@ login() { code POST /auth/login "{\"email\":\"$1\",\"password\":\"$PW\"}" >/dev/
 step "0. Pre-flight"
 curl -s -o /dev/null -w '%{http_code}' "$API/../../docs" | grep -q 200 && ok "backend answering at $API" \
   || die "backend not reachable at $API -- uvicorn app.main:app --host 0.0.0.0 --port 8000"
-[ -n "${PAYMONGO_WEBHOOK_SECRET:-}" ] && ok "PAYMONGO_WEBHOOK_SECRET exported (webhook simulator will sign)" \
-  || die "PAYMONGO_WEBHOOK_SECRET not in the environment -- set -a; source .env; set +a"
 
 PT=$(login passenger@sabaygo.dev); [ -n "$PT" ] && ok "passenger@ logs in" || die "passenger@ login failed -- did reset-dev.sh run?"
 CT=$(login dispatcher@sabaygo.dev); [ -n "$CT" ] && ok "dispatcher@ logs in" || die "dispatcher@ login failed"
@@ -71,7 +68,7 @@ T=$(python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))))" 2>/de
   || warn "statement backdrop thin (${T:-0} for yesterday) -- 002_demo_dataset.sql may not have loaded"
 
 # ─────────────────────────────────────────────────────── 1. passenger books
-step "1. Passenger: search Ecoland → Cotabato, reserve, pay, e-ticket"
+step "1. Passenger: search Ecoland → Cotabato, reserve, read the booking code"
 S=$(code GET /trips/terminals "" "$PT")
 ok "terminal picker: $(python3 -c "import json;print(', '.join(t['terminal_name'].replace(' Terminal','') for t in json.load(open('/tmp/resp.json'))))")"
 
@@ -92,12 +89,12 @@ if [ "$S" = "200" ]; then ok "checked in -- manifest will show AT TERMINAL"
 else warn "check-in refused ($S): $(j "['detail']" < /tmp/resp.json) -- fine to show as the 'too early' rejection, then continue"; fi
 
 # ─────────────────────────────────────────────────────── 3. dispatcher
-step "3. Dispatcher builds the list in cash; Cashier records the share; office starts the trip"
+step "3. Dispatcher builds the list in cash; Cashier records the terminal fees; office starts the trip"
 S=$(code GET /trips/assigned "" "$CT")
 grep -q "$TRIP" /tmp/resp.json && ok "trip is on dispatcher@'s assigned list" || die "fixture trip not in /trips/assigned for dispatcher@"
 
 # The list comes first (brief 4.2 rule 3): the Dispatcher takes each
-# fare in cash and marks the seat Paid, then hands the share over.
+# fare in cash and marks the seat Paid, then hands the terminal fees over.
 S=$(code GET "/bookings/trip/$TRIP/seats?q=$CODE" "" "$CT")
 [ "$S" = "200" ] && ok "dispatcher@ finds the seat by booking code $CODE" || die "seat search gave $S"
 S=$(code POST "/bookings/$BID/mark-paid" '{}' "$CT")
@@ -109,12 +106,14 @@ S=$(code POST /bookings/walk-in "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"al
 [ "$S" = "201" ] && ok "cash walk-in logged -- ₱$(j "['fare_amount']" < /tmp/resp.json) in the Dispatcher's hand" \
   || die "walk-in gave $S: $(j "['detail']" < /tmp/resp.json)"
 
-# Start waits for A2Z's share (brief 2.1): the Dispatcher hands it over
-# and the Cashier records it. Either office role starts.
+# Start waits for the terminal fees (brief 2.1): the 15 %, the ₱75 DCOTT
+# ticket and the day's ₱50 parking. The Dispatcher hands them over with
+# the operator's share, the Cashier records both, either office role starts.
 code GET "/trips/$TRIP/share" "" "$KT" >/dev/null
 DUE=$(j "['amount_due']" < /tmp/resp.json)
-S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$DUE\",\"reference\":\"OR-DEMO\"}" "$KT")
-[ "$S" = "200" ] && ok "cashier@ records the share, ₱$DUE -- the passenger list locks" || die "payment gave $S: $(j "['detail']" < /tmp/resp.json)"
+SHARE=$(j "['operator_share_owed']" < /tmp/resp.json)
+S=$(code POST "/trips/$TRIP/payment" "{\"amount\":\"$DUE\",\"reference\":\"OR-DEMO\",\"operator_share\":\"$SHARE\"}" "$KT")
+[ "$S" = "200" ] && ok "cashier@ records ₱$DUE of terminal fees and ₱$SHARE to the operator -- the passenger list locks" || die "payment gave $S: $(j "['detail']" < /tmp/resp.json)"
 S=$(code POST "/trips/$TRIP/start" "" "$OT")
 [ "$S" = "200" ] && ok "manager@ starts the trip" || die "start gave $S: $(j "['detail']" < /tmp/resp.json)"
 

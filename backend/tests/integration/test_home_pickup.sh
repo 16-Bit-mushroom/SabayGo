@@ -6,7 +6,7 @@
 #
 # Books on TRIP-DEMO-00000001 (Ecoland -> Digos -> ..., dispatcher@,
 # departs in 20 min). The pins sit 150 m and 2 km off the straight
-# Ecoland-Digos stretch. Seats are paid with the signed webhook simulator.
+# Ecoland-Digos stretch. The Dispatcher marks the seats Paid (cash).
 set -uo pipefail
 
 API="http://127.0.0.1:8000/api/v1"

@@ -131,6 +131,16 @@ is "$(code PUT /trips/$RT1/assignment '{"van_id":"VAN-0004","dispatcher_id":"USE
    "T52 its operator declines: the Cashier assigns NBC-7788"
 is "$(board $RT1 van_id)" VAN-0004 "the first assignment is cleared"
 is "$(sql "SELECT is_special_trip FROM trips WHERE trip_id = '$RT1'")" 1 "still a special trip"
+# LCT-9042 was at its turn, so it keeps the day's parking (GAP_REPORT
+# 10.4, decision 8): P50, unless a seed trip of its paid it already, which
+# depends on the hour the fixture was reset at (the seed's run 06:00-14:00).
+OWED=$(stmt LCT-9042 amount_due)
+python3 -c "import sys;sys.exit(0 if float('$OWED') in (0, 50) else 1)" \
+  && ok "the van taken off keeps only the day's parking: ₱$OWED" || bad "LCT-9042 owes ₱$OWED"
+if [ "$OWED" != "0.00" ]; then
+  is "$(code POST "/statements/$(stmt LCT-9042 remittance_id)/payments" "{\"amount\":\"$OWED\",\"reference\":\"OR-PARK\"}" "$CT")" 200 \
+     "the Cashier records it, so the van can take its next trip"
+fi
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "5. Payment first (T51)"
@@ -157,14 +167,11 @@ hdr "   (the override is withdrawn to show the 15 % block too)"
 sql "UPDATE trips SET payment_override_by = NULL, payment_override_at = NULL, payment_override_note = NULL, payment_status = 'unpaid' WHERE trip_id = '$TW'"
 is "$(code POST /trips/$TW/start "" "$CT")" 409 "T51 Start is blocked until the Cashier records the terminal fees"
 field detail | grep -q "terminal fees" && ok "and says the terminal fees are due" || bad "detail: $(field detail)"
-# The ₱300 and the trip's ₱75 DCOTT ticket [ASSUMED for a special trip],
-# and LCT-9042's ₱50 parking if no trip has paid it yet today -- which
-# depends on the hour the fixture was reset at.
+# The ₱300 and the trip's ₱75 DCOTT ticket [ASSUMED for a special trip];
+# LCT-9042's parking was recorded in section 4.
 code GET /trips/$TW/share "" "$CT" >/dev/null
 DUE=$(field amount_due)
-python3 -c "import sys;sys.exit(0 if float('$DUE') - 300 in (75, 125, 200) else 1)" \
-  && ok "₱300 plus the ₱75 DCOTT ticket (and the day's parking if unpaid): ₱$DUE" \
-  || bad "due before Start: ₱$DUE"
+is "$DUE" 375.00 "₱300 plus the ₱75 DCOTT ticket"
 is "$(code POST /trips/$TW/payment '{"amount":"300.00","reference":"OR-RENT"}' "$CT")" 200 "the Cashier records ₱300"
 is "$(code POST /trips/$TW/start "" "$CT")" 409 "the 15 % alone does not open Start (T66)"
 REST=$(python3 -c "print(f'{float(\"$DUE\") - 300:.2f}')")
