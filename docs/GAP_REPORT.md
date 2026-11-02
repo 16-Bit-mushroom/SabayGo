@@ -660,12 +660,12 @@ Only the prose changes.
 | Step | Brief | What |
 |---|---|---|
 | S1 | 0.2 | This section; CLAUDE.md re-pointed at the rev 721 brief |
-| S2 | 2.1, 7.3 | Migration 032: booking code, Paid/cancel columns, drop the gateway, QR, `payments` and reschedule; rebuild `v_trip_revenue`; Mark as Paid, Cancel, search endpoints |
+| S2 | 2.1, 7.3 | **Done 2 Nov** (`83bdbfd`). Migration 032: booking code, Paid/cancel columns; dropped the gateway, QR, `payments`, `boarding_scans`, the revenue view and reschedule; Mark as Paid, Cancel and search endpoints. Pulled in with it, because the schema change forced them: **S6 matching** (no window), home-pickup **activation by the paid mark** and the **landmark photo** in place of payment proof, and the rental fee's income group by request origin |
 | S3 | 2.1, 4.2 r15 | Release of unpaid reservations at the cutoff, and the offline Paid mark (restore or alert) |
 | S4 | 2.1 | Income groups Booked and Walk-up |
 | S5 | 2.1 item 13 | Terminal fees, operator's share, parking-only charge, the Start block on the full fees |
-| S6 | 5.2, 6.1 | Matching with no time window |
-| S7 | 2.5, 2.6 | Special trips and home pickups paid in cash to the Dispatcher |
+| ~~S6~~ | 5.2, 6.1 | ~~Matching with no time window~~ — done inside S2: it reads the table S2 dropped, so the two could not be separated without an intermediate rule no revision describes. Its tests (T57, T59) are in `test_door_check.sh` |
+| S7 | 2.5, 2.6 | Special trips: the walk-in fee basis and the counter flow. The **cash mark** (`/special-trips/{id}/cash`, `paid_at`, `paid_by`) and the whole **home-pickup** half landed in S2 |
 | S8 | 12.2 T60 | Sweep for gateway, QR, window and estimate remnants; full journey suite |
 | S9 | 9 | Operator console: remittance, settings, Start block wording |
 | S10 | 9 | Flutter: booking code and pay-at-terminal notice, Mark as Paid, Cancel |
