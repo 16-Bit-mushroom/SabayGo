@@ -490,10 +490,11 @@ SELECT UUID(), r.remittance_id, t.trip_id, o.terminal_id, d.terminal_id, g.incom
        g.fare_amount, g.seats, g.fare_amount * g.seats,
        ROUND(g.fare_amount * g.seats * 0.15, 2), FALSE, t.started_at - INTERVAL 2 MINUTE
   FROM (SELECT b.trip_id, b.alighting_stop_sequence, b.fare_amount,
-               IF(b.booking_type = 'app', 'verified', 'declared') AS income_group,
+               IF(b.booking_type = 'app', 'booked', 'walk_up') AS income_group,
                COUNT(*) AS seats
           FROM bookings b
          WHERE b.status IN ('confirmed','checked_in','boarded','completed','no_show')
+           AND b.payment_status = 'paid'
          GROUP BY b.trip_id, b.alighting_stop_sequence, b.fare_amount, income_group) g
   JOIN trips t ON t.trip_id = g.trip_id AND t.status IN ('boarding','departed','completed')
   JOIN remittances r ON r.van_id = t.van_id AND r.service_date = t.service_date
@@ -502,13 +503,13 @@ SELECT UUID(), r.remittance_id, t.trip_id, o.terminal_id, d.terminal_id, g.incom
 
 UPDATE remittances r
   JOIN (SELECT l.remittance_id,
-               SUM(IF(l.income_group = 'verified', l.gross_fare, 0)) AS v,
-               SUM(IF(l.income_group = 'declared', l.gross_fare, 0)) AS d,
+               SUM(IF(l.income_group = 'booked', l.gross_fare, 0)) AS b,
+               SUM(IF(l.income_group = 'walk_up', l.gross_fare, 0)) AS w,
                SUM(l.share_amount) AS owed,
                MAX(l.created_at) AS paid_at
           FROM remittance_lines l GROUP BY l.remittance_id) x
     ON x.remittance_id = r.remittance_id
-   SET r.verified_income = x.v, r.declared_income = x.d, r.remittance_owed = x.owed,
+   SET r.booked_income = x.b, r.walk_up_income = x.w, r.remittance_owed = x.owed,
        r.settled_amount = x.owed, r.settled_at = x.paid_at,
        r.recorded_by = 'USER-CASHIER-0001', r.status = 'settled';
 DELETE r FROM remittances r

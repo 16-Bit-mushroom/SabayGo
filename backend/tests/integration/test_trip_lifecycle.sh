@@ -73,8 +73,8 @@ ping() {
 # The trip's share: share TRIP_ID FIELD
 share() { code GET "/trips/$1/share" "" "$CT" >/dev/null; field "$2"; }
 # Today's statement of a van: stmt PLATE FIELD
-stmt() {
-  code GET /statements "" "$CT" >/dev/null
+stmt() {  # PLATE FIELD [DATE]
+  code GET "/statements${3:+?date=$3}" "" "$CT" >/dev/null
   python3 -c "import json;print({s['plate_number']:s for s in json.load(open('/tmp/resp.json'))}['$1']['$2'])"
 }
 pay() { code POST "/trips/$1/payment" "{\"amount\":\"$2\",\"reference\":\"OR-$RANDOM\"}" "${3:-$CT}"; }
@@ -145,8 +145,8 @@ is "$(code GET /trips/$TRIP1/manifest "" "$DT")" 200 "and reads its passenger li
 is "$(field status)" scheduled "the trip is still scheduled"
 is "$(code GET /trips/$TRIP1/share "" "$D2T")" 403 "another Dispatcher cannot read its share"
 code GET /trips/$TRIP1/share "" "$DT" >/dev/null
-python3 -c "import json;s=json.load(open('/tmp/resp.json'));g={l['income_group'] for l in s['lines']};assert g=={'verified','declared'} and s['amount_due']!='0.00'" \
-  && ok "the share has a verified (app) and a declared (cash) line" || bad "share: $(cat /tmp/resp.json)"
+python3 -c "import json;s=json.load(open('/tmp/resp.json'));g={l['income_group'] for l in s['lines']};assert g=={'booked','walk_up'} and s['amount_due']!='0.00'" \
+  && ok "the share has a booked (app) and a walk-up (cash) line" || bad "share: $(cat /tmp/resp.json)"
 DUE_ALL=$(share $TRIP1 amount_due)
 # A paid seat is the Dispatcher's to cancel: the cash goes back by hand.
 is "$(code POST /bookings/$DROP/dispatcher-cancel '{"reason":"passenger_asked_dispatcher"}' "$DT")" 200 \
@@ -306,12 +306,17 @@ is "$(code POST /trips/$TRIP1/void '{"reason":"too late"}' "$OT")" 409 "a comple
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "9. GPS departure, Not a passenger trip, Left Unpaid (rules 8-11; T13-T18)"
 LIVE=TRIP-A2Z-LIVE-SOON    # VAN-0004, dispatcher5@, two QR seats, nothing recorded
+# The seed dates this trip two hours from the reset, so a suite run after
+# 22:00 finds it on tomorrow's board and statement, not today's.
+LIVE_DAY=$(date +%F)
+code GET "/config/trips?date=$LIVE_DAY" "" "$OT" >/dev/null
+grep -q "\"$LIVE\"" /tmp/resp.json || LIVE_DAY=$(date -d tomorrow +%F)
 code GET /trips/$LIVE/stops "" "$OT" >/dev/null
 read -r LAT LON < <(python3 -c "import json;s=json.load(open('/tmp/resp.json'))[0];print(s['latitude'],s['longitude'])")
 FARLAT=$(python3 -c "print($LAT + 0.05)")
 out3() { ping $LIVE "$FARLAT" "$LON" >/dev/null; ping $LIVE "$FARLAT" "$LON" >/dev/null; ping $LIVE "$FARLAT" "$LON" >/dev/null; }
 ping $LIVE "$LAT" "$LON" >/dev/null; out3
-is "$(board $LIVE status)" scheduled "zone radius and N unset: no GPS departure"
+is "$(board $LIVE status $LIVE_DAY)" scheduled "zone radius and N unset: no GPS departure"
 code PUT /config/policies/depart_zone_radius_m '{"policy_value":"300"}' "$OT" >/dev/null
 code PUT /config/policies/depart_readings '{"policy_value":"3"}' "$OT" >/dev/null
 ping $LIVE "$LAT" "$LON" >/dev/null
@@ -328,7 +333,7 @@ is "$(code GET /non-passenger-moves/open "" "$D5T")/$(field move_id)/$(field rea
    "the app reads the open move back, to show End"
 is "$(code POST /non-passenger-moves '{"reason":"errand"}' "$D5T")" 409 "one open move per van"
 out3
-is "$(board $LIVE status)" scheduled "T17 the van leaves on the errand: nothing starts"
+is "$(board $LIVE status $LIVE_DAY)" scheduled "T17 the van leaves on the errand: nothing starts"
 ping $LIVE "$LAT" "$LON" >/dev/null
 is "$(code POST /non-passenger-moves/$MOVE/end "" "$D5T")" 409 "back inside the terminal zone, the move has ended"
 is "$(code GET /non-passenger-moves/open "" "$D5T" >/dev/null; cat /tmp/resp.json)" null "and none is open"
@@ -341,18 +346,18 @@ assert t['payment_status'] in ('unpaid', 'paid', 'overridden', 'left_unpaid') an
   || bad "assigned trip: $(head -c 400 /tmp/resp.json)"
 
 ping $LIVE "$FARLAT" "$LON" >/dev/null
-is "$(board $LIVE status)" scheduled "T13 a single stray reading departs nothing"
+is "$(board $LIVE status $LIVE_DAY)" scheduled "T13 a single stray reading departs nothing"
 ping $LIVE "$FARLAT" "$LON" >/dev/null; ping $LIVE "$FARLAT" "$LON" >/dev/null
-is "$(board $LIVE status)/$(board $LIVE departure_source)" departed/gps "N readings outside the zone: departed, GPS"
-is "$(board $LIVE start_mode)/$(board $LIVE start_review_status)" auto_assigned/pending \
+is "$(board $LIVE status $LIVE_DAY)/$(board $LIVE departure_source $LIVE_DAY)" departed/gps "N readings outside the zone: departed, GPS"
+is "$(board $LIVE start_mode $LIVE_DAY)/$(board $LIVE start_review_status $LIVE_DAY)" auto_assigned/pending \
    "T15 nobody started it: Auto_Assigned, held for review"
-is "$(board $LIVE payment_status)" left_unpaid "nothing was recorded: Left_Unpaid"
+is "$(board $LIVE payment_status $LIVE_DAY)" left_unpaid "nothing was recorded: Left_Unpaid"
 is "$(notes "$OT" left_unpaid $LIVE)/$(notes "$CT" left_unpaid $LIVE)" 1/1 "'Left Unpaid' to the manager and the cashier"
-is "$(stmt NBC-7788 held_share)/$(stmt NBC-7788 remittance_owed)" 33.00/0.00 \
+is "$(stmt NBC-7788 held_share $LIVE_DAY)/$(stmt NBC-7788 remittance_owed $LIVE_DAY)" 33.00/0.00 \
    "the share is held, off the statement: 15 % of P100 + P60 + P60"
 is "$(code PUT /trips/$TAG6/assignment '{"van_id":"VAN-0004"}' "$OT")" 409 "the held share still refuses the van's next assignment"
 is "$(code POST /trips/$LIVE/start-review "" "$OT")" 200 "T16 the manager reviews it"
-is "$(stmt NBC-7788 held_share)/$(stmt NBC-7788 remittance_owed)" 0.00/33.00 "its lines join the statement: held moves into owed"
+is "$(stmt NBC-7788 held_share $LIVE_DAY)/$(stmt NBC-7788 remittance_owed $LIVE_DAY)" 0.00/33.00 "its lines join the statement: held moves into owed"
 
 BOARD=TRIP-A2Z-LIVE-BOARD  # started and paid in the seed, VAN-0003
 code GET /trips/$BOARD/stops "" "$OT" >/dev/null

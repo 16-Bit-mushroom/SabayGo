@@ -142,14 +142,14 @@ is "$(decide "$CT" "$DA" upheld "ok")" 403 "a Cashier who tries to decide is ref
 is "$(decide "$DT" "$DA" upheld "ok")" 403 "so is a Dispatcher"
 is "$(decide "$OT" "$DA" upheld "  ")" 422 "a decision needs its reason"
 is "$(decide "$OT" "$DA" upheld "ok" 1.00)" 422 "only an adjusted decision sets an amount"
-OWED=$(stmt ABC-1234 remittance_owed); DECL=$(stmt ABC-1234 declared_income)
+OWED=$(stmt ABC-1234 remittance_owed); DECL=$(stmt ABC-1234 walk_up_income)
 GA=$(sql "SELECT gross_fare FROM remittance_lines WHERE line_id = '$A'")
 is "$(decide "$OT" "$DA" upheld "The nephew rides free, as A2Z agreed.")" 200 "T9 a the Terminal Manager upholds it"
 is "$(field "['status']")/$(field "['outcome']")/$(field "['decided_by']")/$(field "['decision_note']")" \
    "resolved/upheld/USER-MANAGER-0001/The nephew rides free, as A2Z agreed." "DecidedBy and DecisionNote stored"
 [ "$(field "['decided_at']")" != "None" ] && ok "and DecidedAt" || bad "no decided_at"
-is "$(stmt ABC-1234 remittance_owed)/$(stmt ABC-1234 declared_income)" \
-   "$(sub "$OWED" "$SA")/$(sub "$DECL" "$GA")" "the line leaves the amount owed, and its fare the declared income"
+is "$(stmt ABC-1234 remittance_owed)/$(stmt ABC-1234 walk_up_income)" \
+   "$(sub "$OWED" "$SA")/$(sub "$DECL" "$GA")" "the line leaves the amount owed, and its fare the walk-up income"
 is "$(decide "$OT" "$DA" rejected "Changed my mind")" 409 "a decision is final"
 is "$(decide "$OT" "$DT1" rejected "Your own Dispatcher listed him.")" 200 "T9 b the top-up dispute is rejected"
 is "$(share $TRIP1 amount_due)/$(field "['payment_status']")" "$ST/unpaid" \
@@ -186,10 +186,10 @@ HALF=$(python3 -c "from decimal import Decimal as D;print((D('$SC')/2).quantize(
 is "$(decide "$OT" "$DC" adjusted "Half fare to the market." "$(add "$SC" 0.01)")" 422 \
    "an adjusted share above the disputed one is refused"
 is "$(decide "$OT" "$DC" adjusted "Half fare to the market.")" 422 "an adjusted decision names the share due"
-OWED=$(stmt XYZ-9876 remittance_owed); DECL=$(stmt XYZ-9876 declared_income)
+OWED=$(stmt XYZ-9876 remittance_owed); DECL=$(stmt XYZ-9876 walk_up_income)
 is "$(decide "$OT" "$DC" adjusted "Half fare to the market." "$HALF")" 200 "T9 c adjusted"
 is "$(field "['outcome']")/$(field "['adjusted_amount']")" "adjusted/$HALF" "AdjustedAmount stored"
-is "$(stmt XYZ-9876 remittance_owed)/$(stmt XYZ-9876 declared_income)" "$(sub "$OWED" "$(sub "$SC" "$HALF")")/$DECL" \
+is "$(stmt XYZ-9876 remittance_owed)/$(stmt XYZ-9876 walk_up_income)" "$(sub "$OWED" "$(sub "$SC" "$HALF")")/$DECL" \
    "the share due is the adjusted amount; the fares stay"
 is "$(decide "$OT" "$DB" rejected "A child pays full fare on this route.")" 200 "the child's fare is rejected"
 DUE=$(share $TRIP2 amount_due)

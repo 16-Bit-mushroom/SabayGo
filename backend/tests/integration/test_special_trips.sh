@@ -148,10 +148,10 @@ is "$(code POST /special-trips/$RW/cash "" "$D3T")" 200 "dispatcher3 logs the �
 is "$(field payment_status)" paid "the fee is paid"
 is "$(code POST /special-trips/$RW/cash "" "$D3T")" 409 "logged once only"
 code GET /trips/$TW/share "" "$CT" >/dev/null
-python3 -c "import json;s=json.load(open('/tmp/st.json'));l=s['lines'];assert len(l)==1 and l[0]['income_group']=='declared' and l[0]['gross_fare']=='2000.00' and l[0]['share_amount']=='300.00' and l[0]['dest_terminal_id'] is None" \
-  && ok "T51 one fare line: declared, ₱2,000, share ₱300" || bad "lines: $(cat /tmp/st.json)"
+python3 -c "import json;s=json.load(open('/tmp/st.json'));l=s['lines'];assert len(l)==1 and l[0]['income_group']=='walk_up' and l[0]['gross_fare']=='2000.00' and l[0]['share_amount']=='300.00' and l[0]['dest_terminal_id'] is None" \
+  && ok "T51 one fare line: walk-up, ₱2,000, share ₱300" || bad "lines: $(cat /tmp/st.json)"
 is "$(sql "SELECT request_id FROM remittance_lines WHERE trip_id = '$TW'")" "$RW" "the line names its request"
-is "$(stmt LCT-9042 declared_income)/$(stmt LCT-9042 remittance_owed)" 2000.00/300.00 "D = ₱2,000, RemittanceOwed = ₱300"
+is "$(stmt LCT-9042 walk_up_income)/$(stmt LCT-9042 remittance_owed)" 2000.00/300.00 "W = ₱2,000, RemittanceOwed = ₱300"
 
 hdr "   (the override is withdrawn to show the 15 % block too)"
 sql "UPDATE trips SET payment_override_by = NULL, payment_override_at = NULL, payment_override_note = NULL, payment_status = 'unpaid' WHERE trip_id = '$TW'"
@@ -175,7 +175,7 @@ is "$(field payment_status)" paid "the fee is paid"
 is "$(sql "SELECT CONCAT(COALESCE(paid_by, '-'), '/', paid_at IS NOT NULL) FROM special_trip_requests WHERE request_id = '$R1'")" \
    USER-DISPATCHER-0002/1 "with the Dispatcher who took it and when; no gateway reference exists"
 code GET /trips/$RT1/share "" "$CT" >/dev/null
-python3 -c "import json;l=json.load(open('/tmp/st.json'))['lines'];assert len(l)==1 and l[0]['income_group']=='verified' and l[0]['share_amount']=='525.00'" \
+python3 -c "import json;l=json.load(open('/tmp/st.json'))['lines'];assert len(l)==1 and l[0]['income_group']=='booked' and l[0]['share_amount']=='525.00'" \
   && ok "one fare line: booked, share ₱525" || bad "lines: $(cat /tmp/st.json)"
 is "$(code POST /special-trips/$R1/cash "" "$D2T")" 409 "logged once only"
 code GET /trips/$RT1/share "" "$CT" >/dev/null

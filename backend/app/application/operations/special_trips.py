@@ -17,10 +17,11 @@ Dispatcher are assigned through the trip's own assignment, at the van's
 turn, and changed the same way when an operator declines a far trip
 (T52). Rejecting needs a reason, which the passenger is told.
 
-Payment comes first. The fee is paid before the van leaves -- in cash at
-the terminal, which the trip's Dispatcher logs here (declared, D), or
-through the gateway (verified, V) -- and then the trip's Start waits for
-it (`TripLifecycle.start`). A paid fee is one fare line on the van's
+Payment comes first. The fee is paid in cash at the terminal before the
+van leaves, which the trip's Dispatcher logs here, and then the trip's
+Start waits for it (`TripLifecycle.start`). The fee is booked income (B)
+when the request came from the app, walk-up (W) when it was entered at
+the counter (rev 721 item 3). A paid fee is one fare line on the van's
 statement (`finance.statement`), so its 15 % is handed to the Cashier
 before Start under the same block as any trip. GPS auto-start is never
 blocked.

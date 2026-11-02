@@ -44,7 +44,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.finance.statement import CASH, PAID_SEAT
+from app.application.finance.statement import PAID_SEAT, WALK_UP_TYPES
 from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
@@ -162,7 +162,7 @@ class ListCheck:
         )).all()
         records = [
             (_naive(paid_at or created_at),
-             "matched_log" if kind in CASH else "matched_booking",
+             "matched_log" if kind in WALK_UP_TYPES else "matched_booking",
              booking_id)
             for paid_at, created_at, kind, booking_id in rows
         ]

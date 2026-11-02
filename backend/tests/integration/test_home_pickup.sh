@@ -74,9 +74,9 @@ notes() {
   code GET "/notifications?limit=100" "" "$1" >/dev/null
   python3 -c "import json;print(sum(1 for n in json.load(open('/tmp/hp.json'))['items'] if n['type']=='$2' and n['related_entity_id']=='$TRIP'))"
 }
-verified() {  # verified seats to Digos on the trip's statement
+booked() {  # booked seats to Digos on the trip's statement
   code GET /trips/$TRIP/share "" "$CT" >/dev/null
-  python3 -c "import json;print(sum(l['passenger_count'] for l in json.load(open('/tmp/hp.json'))['lines'] if l['income_group']=='verified' and (l['dest_terminal_name'] or '').startswith('Digos')))"
+  python3 -c "import json;print(sum(l['passenger_count'] for l in json.load(open('/tmp/hp.json'))['lines'] if l['income_group']=='booked' and (l['dest_terminal_name'] or '').startswith('Digos')))"
 }
 img() { python3 -c "import sys;sys.stdout.buffer.write(b'\\x89PNG\\r\\n\\x1a\\n'+bytes([$2])*$1)" > "$3"; }
 
@@ -197,9 +197,9 @@ is "$(fetch "$H" "$OT")/$(fetch "$H" "$RT")" 200/200 "so do the Terminal Manager
 is "$(fetch "$H" "$PT")/$(fetch "$H" "$D2T")" 404/403 "not another passenger or another Dispatcher"
 ! find "$BACKEND/media" -name "$M2*" 2>/dev/null | grep -q . && [ -f "$BACKEND/storage/chat/$M2.png" ] \
   && ok "stored in storage/chat, not the public media folder" || bad "image location"
-V0=$(verified)
+B0=$(booked)
 pay "$HRB"; pay "$HSB"
-is "$(verified)" "$((V0 + 2))" "the cash at the terminal is what puts both seats in B"
+is "$(booked)" "$((B0 + 2))" "the cash at the terminal is what puts both seats in B"
 is "$(pk "$H")" "activated/USER-DISPATCHER-0001" "and activates the pickup"
 is "$(upload "$H" /tmp/hp_photo1.png "$RT")" 201 "a photo is still allowed afterwards: nothing depends on it"
 

@@ -44,7 +44,7 @@ class LineOut(BaseModel):
     trip_id: str
     dest_terminal_id: str | None
     dest_terminal_name: str | None
-    income_group: str
+    income_group: str           # 'booked' | 'walk_up'
     fare_per_passenger: Decimal
     passenger_count: int
     gross_fare: Decimal
@@ -74,8 +74,8 @@ class StatementOut(BaseModel):
     operator_id: str
     service_date: dt.date
     rate_pct: Decimal
-    verified_income: Decimal
-    declared_income: Decimal
+    booked_income: Decimal
+    walk_up_income: Decimal
     remittance_owed: Decimal
     held_share: Decimal
     settled_amount: Decimal
@@ -135,7 +135,7 @@ async def _statement(session, statement: Remittance) -> StatementOut:
         remittance_id=statement.remittance_id, van_id=statement.van_id,
         plate_number=van.plate_number, operator_id=statement.operator_id,
         service_date=statement.service_date, rate_pct=statement.rate_pct,
-        verified_income=statement.verified_income, declared_income=statement.declared_income,
+        booked_income=statement.booked_income, walk_up_income=statement.walk_up_income,
         remittance_owed=statement.remittance_owed, held_share=statement.held_share,
         settled_amount=statement.settled_amount, amount_due=await money.due(statement),
         disputed=await money.disputed(statement), status=statement.status,

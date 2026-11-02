@@ -5,16 +5,17 @@ Rev 603, change brief 2.1-2.2. The operator remits 15 % of the fares on
 the passenger list of each trip that boards at the terminal, handed by
 the Dispatcher to the Cashier before Start. Equation (2):
 
-    remittance owed = rate x (V + D)
+    remittance owed = rate x (B + W)
 
-V is the seats reserved in the app that the Dispatcher marked as paid,
-D the cash walk-ups the Dispatcher listed. (Rev 721 renames these Booked
-and Walk-up; the columns still carry the old names until step S4.) Every
-fare is cash, handed to the Dispatcher at the terminal. A seat counts
-whether or not its passenger comes; the camera adds nothing. A special
-trip's rental fee, once paid, is one line of its own (`request_id`, no
-drop-off terminal): V when the trip was requested in the app, D when it
-was entered at the counter (2.2, 2.5). The system records the payment;
+B (booked) is the seats reserved in the app that the Dispatcher marked
+as paid, a home-pickup seat among them; W (walk-up) the cash walk-ups
+the Dispatcher listed (rev 721 item 3). Every fare is cash, handed to
+the Dispatcher at the terminal: the group says where the seat came
+from, not how it was paid. A seat counts whether or not its passenger
+comes; the camera adds nothing. A special trip's rental fee, once paid,
+is one line of its own (`request_id`, no drop-off terminal): B when the
+trip was requested in the app, W when it was entered at the counter
+(2.2, 2.5). The system records the payment;
 it never holds the money.
 
 Fare lines follow the passenger list (`sync`). A line groups a trip's
@@ -27,7 +28,7 @@ line (`is_top_up`), which sets the trip back to 'unpaid' until it is paid.
 
 The statement, one per van per service date, is recomputed from its
 lines whenever they change, so its totals cannot drift from them:
-  - V, D and remittance_owed count the lines of trips that ran or will
+  - B, W and remittance_owed count the lines of trips that ran or will
     run (not voided) and are not waiting for a review;
   - held_share is the lines of trips the system started and the
     Terminal Manager has not reviewed: off the statement, still owed;
@@ -100,7 +101,10 @@ PAID_SEAT = (
     Booking.payment_status == PaymentStatus.PAID.value,
     Booking.status != BookingStatus.CANCELLED.value,
 )
-CASH = (BookingType.WALK_IN.value, BookingType.DRIVER_ISSUED.value)
+# The Dispatcher's own entries: a walk-up, in group W. Every other paid
+# seat was reserved in the app, in group B.
+WALK_UP_TYPES = (BookingType.WALK_IN.value, BookingType.DRIVER_ISSUED.value)
+BOOKED, WALK_UP = "booked", "walk_up"
 BEFORE_DEPARTURE = (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value)
 
 
@@ -116,7 +120,7 @@ def share_of(gross: Decimal, rate_pct: Decimal) -> Decimal:
 class LineKey:
     dest_terminal_id: str | None    # None on a rental
     fare: Decimal
-    group: str          # 'verified' | 'declared'
+    group: str          # BOOKED | WALK_UP
     request_id: str | None = None   # a rental fee's request
 
 
@@ -140,10 +144,9 @@ class Statements:
             # Brief 2.5: the fee is the whole income of the trip, and
             # which group it falls in is where the rental came from --
             # booked when the passenger requested it in the app,
-            # walk-up when it was entered at the counter. Until rev 721
-            # it was whether a gateway reference existed; there is no
-            # gateway now, and the Dispatcher takes the cash either way.
-            group = "verified" if rental.passenger_user_id else "declared"
+            # walk-up when it was entered at the counter. The Dispatcher
+            # takes the cash either way.
+            group = BOOKED if rental.passenger_user_id else WALK_UP
             return {LineKey(None, Decimal(rental.rental_fee), group, rental.request_id): 1}
         terminal_at = await self._terminals(trip)
         rows = (await self.session.execute(
@@ -153,7 +156,7 @@ class Statements:
         out: dict[LineKey, int] = {}
         for alight, fare, kind in rows:
             key = LineKey(terminal_at[alight], Decimal(fare),
-                          "declared" if kind in CASH else "verified")
+                          WALK_UP if kind in WALK_UP_TYPES else BOOKED)
             out[key] = out.get(key, 0) + 1
         return out
 
@@ -354,7 +357,7 @@ class Statements:
             .where(RemittanceLine.remittance_id == statement.remittance_id,
                    Trip.status != TripStatus.CANCELLED.value)
         )).all()
-        verified = declared = owed = held = ZERO
+        booked = walk_up = owed = held = ZERO
         for group, gross, share, review, outcome, adjusted in rows:
             if outcome == "upheld":
                 continue
@@ -364,12 +367,12 @@ class Statements:
                 held += share
                 continue
             owed += share
-            if group == "verified":
-                verified += gross
+            if group == BOOKED:
+                booked += gross
             else:
-                declared += gross
-        statement.verified_income = verified
-        statement.declared_income = declared
+                walk_up += gross
+        statement.booked_income = booked
+        statement.walk_up_income = walk_up
         statement.remittance_owed = owed
         statement.held_share = held
         settled = owed + held - statement.settled_amount <= 0

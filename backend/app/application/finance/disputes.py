@@ -277,7 +277,8 @@ class Disputes:
         to = await self.session.scalar(
             select(Terminal.terminal_name).where(Terminal.terminal_id == line.dest_terminal_id))
         seats = f"{line.passenger_count} seat{'s' if line.passenger_count > 1 else ''}"
-        return f"the {line.income_group} line to {to} ({seats}, share ₱{line.share_amount:,.2f})"
+        group = line.income_group.replace("_", "-")
+        return f"the {group} line to {to} ({seats}, share ₱{line.share_amount:,.2f})"
 
     async def _tell_manager(self, trip: Trip, by: User, item: str, dispute: Dispute) -> None:
         await self.session.flush()
