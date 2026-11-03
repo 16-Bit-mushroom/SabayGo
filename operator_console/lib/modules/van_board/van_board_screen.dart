@@ -111,7 +111,7 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
                   SizedBox(width: 170, child: StatTile(
                       label: state(s).$1, value: '${count(s)}', icon: state(s).$3)),
                 SizedBox(width: 200, child: StatTile(
-                    label: 'Owe A2Z\'s share', value: '$owing',
+                    label: 'Owe terminal fees', value: '$owing',
                     icon: Icons.money_off, color: owing > 0 ? AppColors.warning : null,
                     caption: 'From their last trip')),
               ]),
@@ -178,7 +178,7 @@ class _VanRow extends StatelessWidget {
           Text('Status', style: head),
           Text('Operator', style: head),
           Text('Where and with whom', style: head),
-          Text('A2Z\'s share', style: head),
+          Text('Terminal fees', style: head),
         ]),
       );
     }

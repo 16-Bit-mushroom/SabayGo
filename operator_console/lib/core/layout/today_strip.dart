@@ -125,7 +125,7 @@ class _TodayStripState extends State<TodayStrip> {
           ),
           _Chip(
             icon: _manager ? Icons.how_to_reg_outlined : Icons.money_off,
-            label: _manager ? 'Boardings to review' : 'Vans owing the share',
+            label: _manager ? 'Boardings to review' : 'Vans owing terminal fees',
             compact: compact,
             value: review == null ? '—' : '$review',
             tone: (review ?? 0) > 0 ? Tone.warning : Tone.neutral,

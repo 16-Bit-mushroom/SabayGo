@@ -186,23 +186,33 @@ class UnlistedBoarding {
 
 /// A2Z's share of the trip, line by line (brief 2.1-2.2): what the
 /// Dispatcher hands to the Cashier.
+/// What the Dispatcher hands over before Start (brief rev 721, 2.1): the
+/// terminal fees to the Cashier -- the 15 % of each line, the DCOTT ticket,
+/// the day's parking when unpaid -- and the operator's share to the
+/// operator, which the Cashier records beside them.
 class TripShare {
   const TripShare({
     required this.paymentStatus,
     required this.amountDue,
     required this.disputed,
+    required this.operatorShareOwed,
+    required this.operatorShareGiven,
     required this.lines,
   });
 
   final String paymentStatus;
   final double amountDue;
   final double disputed;
+  final double operatorShareOwed;
+  final double operatorShareGiven;
   final List<ShareLine> lines;
 
   factory TripShare.fromJson(Map<String, dynamic> j) => TripShare(
         paymentStatus: j['payment_status'] as String,
         amountDue: double.parse(j['amount_due'].toString()),
         disputed: double.parse(j['disputed'].toString()),
+        operatorShareOwed: double.parse((j['operator_share_owed'] ?? 0).toString()),
+        operatorShareGiven: double.parse((j['operator_share_given'] ?? 0).toString()),
         lines: [for (final l in j['lines'] as List) ShareLine.fromJson(l as Map<String, dynamic>)],
       );
 }

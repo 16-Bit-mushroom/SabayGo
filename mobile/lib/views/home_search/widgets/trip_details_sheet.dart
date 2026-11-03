@@ -133,7 +133,7 @@ class TripDetailsSheet extends StatelessWidget {
             const CameraNotice(),
             const SizedBox(height: AppSpacing.xxl),
             FilledButton(
-              // Reserve first, pay on the ticket screen: the space has to be
+              // Reserve first, pay the Dispatcher in cash at the terminal: the space has to be
               // held before there is anything to charge for.
               onPressed: trip.isFull ? null : onBook,
               child: Text(

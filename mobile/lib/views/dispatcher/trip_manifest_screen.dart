@@ -379,7 +379,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                           onCash: () => _do(() => _ops.rentalCash(rental.requestId), 'Rental fee recorded.'),
                         ),
                       ],
-                      if (_share case final share? when share.lines.isNotEmpty) ...[
+                      if (_share case final share? when share.lines.isNotEmpty || share.amountDue > 0) ...[
                         const SizedBox(height: 8),
                         SharePanel(
                           share: share,
