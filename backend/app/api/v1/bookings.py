@@ -249,6 +249,11 @@ class MyBookingOut(BaseModel):
     # showing a seat that silently stopped existing.
     cancelled_at: datetime | None = None
     cancel_reason: str | None = None
+    # When the cutoff job releases this seat if it is still unpaid
+    # (`unpaid_cutoff_min` before departure, the value the job reads), so
+    # the app can say "pay the Dispatcher before ...". None once it is
+    # paid or no longer standing.
+    pay_by: datetime | None = None
     # D.1: when the van is due at the passenger's OWN stop, and when
     # check-in there opens. The app shows these; the server enforces them.
     boarding_due_at: datetime
@@ -286,9 +291,9 @@ async def _render_bookings(
             stop_names[(rid, seq)] = name
             stop_offsets[(rid, seq)] = offset
 
-    checkin_window = timedelta(
-        minutes=await PolicyRepository(session).get_int("checkin_window_minutes")
-    )
+    policies = PolicyRepository(session)
+    checkin_window = timedelta(minutes=await policies.get_int("checkin_window_minutes"))
+    unpaid_cutoff = timedelta(minutes=await policies.get_int("unpaid_cutoff_min"))
     now = app_tz.now()
     active = {"pending", "confirmed", "checked_in"}
     out: list[MyBookingOut] = []
@@ -339,6 +344,11 @@ async def _render_bookings(
                 ),
                 cancelled_at=booking.cancelled_at,
                 cancel_reason=booking.cancel_reason,
+                pay_by=(
+                    departure - unpaid_cutoff
+                    if booking.status in active and booking.payment_status == "unpaid"
+                    else None
+                ),
                 boarding_due_at=boarding_due_at,
                 checkin_opens_at=boarding_due_at - checkin_window,
                 home_pickup=pickups.get(booking.booking_id),
