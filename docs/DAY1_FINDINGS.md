@@ -1,0 +1,14 @@
+# Day 1 test: findings
+
+*Started 3 Nov 2026. The system was set up from an empty database, as A2Z
+would on its first day: one Terminal Manager made with
+`backend/scripts/create_first_manager.py`, everything else entered in the
+console. One line per finding; newest at the bottom.*
+
+| # | Where | What happened | Status |
+|---|---|---|---|
+| 1 | Console, sidebar | A new message did not show a number on **Messages** in the sidebar (tester). The count existed per conversation inside the page but was never added up for the menu. | **Fixed** 3 Nov: the sidebar poller counts unread messages every 30 s and opening a thread clears it. Retest |
+| 2 | Console, Timetable | Trips exist only after someone presses **Create upcoming trips**. Nothing creates them nightly: `backend/scripts/generate_trips.py` is a cron job that is not installed, and the backend runs no such job. The brief has trips created "days ahead" automatically. | Open: install the cron on the server, or make it a backend job |
+| 3 | Console, Terminals | Closing a terminal needs **Save changes** after switching Open off; the first attempt left all three open. The Staffed switch came out wrong twice. | UX note: easy to miss, works when saved |
+| 4 | Console, Staff | The new Dispatcher was left Pending: **Validate** sits at the foot of the panel. | UX note |
+| 5 | Data | From A2Z's trip-schedule poster: their route is Davao (Ecoland) → Cotabato City, every 2 h from 5:30 AM, shared with Kutoco Coop. Not on the poster: the stops, minutes and fares (test values used), how departures split with Kutoco, whether the last trip is 5:30 or 6:00 PM, and whether the Lebak/Kalamansig and Zamboanga night trips are A2Z's. | Questions for A2Z |

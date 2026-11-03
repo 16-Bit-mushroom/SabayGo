@@ -15,6 +15,7 @@ import '../../modules/trip_monitor/screens/trip_monitor_screen.dart';
 import '../../viewmodels/auth_provider.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/dispatch_repository.dart';
+import '../../data/repositories/messaging_repository.dart';
 import '../../data/repositories/money_repository.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/oversight_repository.dart';
@@ -62,6 +63,7 @@ class _OperatorShellState extends State<OperatorShell> {
       dispatch: context.read<DispatchRepository>(),
       oversight: context.read<OversightRepository>(),
       money: context.read<MoneyRepository>(),
+      messaging: MessagingRepository(context.read<ApiClient>()),
       manager: _manager,
     );
   }
@@ -92,7 +94,8 @@ class _OperatorShellState extends State<OperatorShell> {
       _Page('Disputes', const DisputesScreen(), count: () => _reviews.disputes),
     ], count: () => _reviews.total),
     _Hub('Money', Icons.receipt_long_outlined, Icons.receipt_long, [_Page('Remittance', const RemittanceScreen())]),
-    _Hub('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, [_Page('Messages', const MessagesScreen())]),
+    _Hub('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, [_Page('Messages', const MessagesScreen())],
+        count: () => _reviews.messages),
     _Hub('Setup', Icons.tune_outlined, Icons.tune,
         [_Page('Setup', SetupScreen(onOpenTrips: () => _show((w) => w is TripMonitorScreen)))]),
     _Hub('Emergencies (SOS)', Icons.emergency_outlined, Icons.emergency,
