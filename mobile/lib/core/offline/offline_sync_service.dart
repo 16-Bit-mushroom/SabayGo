@@ -242,8 +242,10 @@ class OfflineSyncService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Not 1 << 32: on the web shifts are 32-bit, that is 0, and nextInt(0)
+  // throws -- the walk-up was never sent.
   String _newRequestId() =>
-      '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
+      '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}';
 
   @override
   void dispose() {

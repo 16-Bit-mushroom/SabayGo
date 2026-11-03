@@ -311,9 +311,11 @@ class Statements:
         for key, count in want.items():
             extra = count - written.get(key, 0)
             if extra > 0:
-                self._add(trip, statement, origin, key, extra, top_up=bool(lines))
+                # A top-up even when the list was empty at the payment:
+                # the fees recorded then held no 15 % for this seat.
+                self._add(trip, statement, origin, key, extra, top_up=True)
                 added = True
-        if added and lines and trip.payment_status == "paid":
+        if added and trip.payment_status == "paid":
             trip.payment_status = "unpaid"
 
     def _add(self, trip: Trip, statement: Remittance, origin: str | None,

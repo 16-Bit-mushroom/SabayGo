@@ -164,12 +164,15 @@ class _WalkInScreenState extends State<WalkInScreen> {
       } else {
         Navigator.pop(context);
       }
-    } on ApiException catch (e) {
+    } catch (e) {
+      // Anything else, too: a Log button that silently does nothing
+      // leaves the Dispatcher holding cash that is on no list.
       if (mounted) {
         HapticFeedback.heavyImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e is ApiException ? e.message : 'Not logged: $e'),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
