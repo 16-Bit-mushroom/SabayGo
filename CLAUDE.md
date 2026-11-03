@@ -44,6 +44,7 @@ contribution.
 | File | Why |
 |---|---|
 | `docs/REMAINING_WORK.md` | What is left, grouped |
+| `docs/ALPHA_TEST_GUIDE.md` | Setting up at school, accounts, one trip end to end, each role's tasks, what is blocked |
 | `docs/MANUSCRIPT_CORRECTIONS.md` | Where the paper and the code disagree, with replacement wording |
 | `docs/FLUTTER_PHASE1_ISSUES.md` | 20 documented setup failures and fixes |
 | `backend/app/infrastructure/repositories/seat_repository.py` | The thesis. Read its docstring before touching it |
