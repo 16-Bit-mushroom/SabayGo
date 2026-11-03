@@ -97,7 +97,8 @@ def stop_coordinates(client: httpx.Client, stops: list[dict]) -> list[dict]:
     pw = os.getenv("MYSQL_ROOT_PASSWORD", "sabaygo_root_dev")
     out = subprocess.run(
         ["docker", "compose", "exec", "-T", "-e", f"MYSQL_PWD={pw}",
-         "mysql", "mysql", "-u", "root", "--silent", "sabaygo", "-e", sql],
+         "mysql", "mysql", "-u", "root", "--silent", "--default-character-set=utf8mb4",
+         "sabaygo", "-e", sql],
         capture_output=True, text=True, cwd=str(pathlib.Path(__file__).resolve().parents[2]),
     )
     if out.returncode != 0:

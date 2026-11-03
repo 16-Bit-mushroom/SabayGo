@@ -111,7 +111,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           PageHeader(
-            title: 'Remittance',
+            title: 'Money',
             description: 'Each van\'s statement for the day: the terminal fees owed on its passenger lists '
                 '(A2Z\'s 15 %, the DCOTT ticket per trip, the day\'s parking) and the operator\'s share. '
                 'The Dispatcher hands them over and the Cashier records them here.',

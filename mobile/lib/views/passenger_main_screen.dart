@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/design/components/brand_logo.dart';
 import '../core/design/tokens.dart';
+import '../core/network/api_client.dart';
+import '../data/repositories/messaging_repository.dart';
+import '../data/repositories/notification_repository.dart';
+import '../viewmodels/conversations_viewmodel.dart';
+import '../viewmodels/notifications_viewmodel.dart';
 import 'home_search/home_screen.dart';
 import 'messages/conversations_screen.dart';
 import 'notifications/notifications_screen.dart';
@@ -43,6 +49,31 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
 
   static const _destinations = PassengerNavBar.destinations;
 
+  // Owned here, not by the two screens, so the bar can show their unread
+  // counts while another tab is open (as the Dispatcher's shell does).
+  late final ConversationsViewModel _conversations;
+  late final NotificationsViewModel _notifications;
+
+  @override
+  void initState() {
+    super.initState();
+    _conversations = ConversationsViewModel(
+      MessagingRepository(context.read<ApiClient>()),
+      pollEvery: const Duration(seconds: 15),
+    );
+    _notifications = NotificationsViewModel(
+      NotificationRepository(context.read<ApiClient>()),
+      pollEvery: const Duration(seconds: 30),
+    );
+  }
+
+  @override
+  void dispose() {
+    _conversations.dispose();
+    _notifications.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,17 +97,21 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
       ),
       body: IndexedStack(
         index: _index,
-        children: const [
-          HomeScreen(),
-          ReservationsScreen(),
-          ConversationsScreen(),
-          NotificationsScreen(),
-          ProfileScreen(),
+        children: [
+          const HomeScreen(),
+          const ReservationsScreen(),
+          ConversationsScreen(viewModel: _conversations),
+          NotificationsScreen(viewModel: _notifications),
+          const ProfileScreen(),
         ],
       ),
-      bottomNavigationBar: PassengerNavBar(
-        selectedIndex: _index,
-        onSelected: (i) => setState(() => _index = i),
+      bottomNavigationBar: ListenableBuilder(
+        listenable: Listenable.merge([_conversations, _notifications]),
+        builder: (context, _) => PassengerNavBar(
+          selectedIndex: _index,
+          onSelected: (i) => setState(() => _index = i),
+          unread: {2: _conversations.unreadCount, 3: _notifications.unreadCount},
+        ),
       ),
     );
   }
@@ -94,11 +129,15 @@ class PassengerNavBar extends StatelessWidget {
   const PassengerNavBar({
     required this.selectedIndex,
     required this.onSelected,
+    this.unread = const {},
     super.key,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+
+  /// Unread count by destination index, drawn as a badge on its icon.
+  final Map<int, int> unread;
 
   static const destinations = <PassengerDestination>[
     PassengerDestination(
@@ -165,12 +204,12 @@ class PassengerNavBar extends StatelessWidget {
           selectedIndex: selectedIndex,
           onDestinationSelected: onSelected,
           destinations: [
-            for (final d in destinations)
+            for (final (i, d) in destinations.indexed)
               NavigationDestination(
-                icon: Icon(d.icon),
-                selectedIcon: Icon(d.selectedIcon),
+                icon: _badged(Icon(d.icon), unread[i] ?? 0),
+                selectedIcon: _badged(Icon(d.selectedIcon), unread[i] ?? 0),
                 label: d.label,
-                tooltip: d.title,
+                tooltip: (unread[i] ?? 0) > 0 ? '${d.title}, ${unread[i]} unread' : d.title,
               ),
           ],
         ),
@@ -178,6 +217,9 @@ class PassengerNavBar extends StatelessWidget {
     );
   }
 }
+
+Widget _badged(Widget icon, int count) =>
+    Badge(isLabelVisible: count > 0, label: Text('$count'), child: icon);
 
 class PassengerDestination {
   const PassengerDestination({

@@ -93,7 +93,7 @@ class _OperatorShellState extends State<OperatorShell> {
       _Page('Driving Flags', const DrivingFlagsScreen(), count: () => _reviews.flags),
       _Page('Disputes', const DisputesScreen(), count: () => _reviews.disputes),
     ], count: () => _reviews.total),
-    _Hub('Money', Icons.receipt_long_outlined, Icons.receipt_long, [_Page('Remittance', const RemittanceScreen())]),
+    _Hub('Money', Icons.receipt_long_outlined, Icons.receipt_long, [_Page('Money', const RemittanceScreen())]),
     _Hub('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, [_Page('Messages', const MessagesScreen())],
         count: () => _reviews.messages),
     _Hub('Setup', Icons.tune_outlined, Icons.tune,
