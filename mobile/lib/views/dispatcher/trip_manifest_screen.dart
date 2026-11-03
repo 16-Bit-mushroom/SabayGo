@@ -519,6 +519,9 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         children: [
           if (!paid)
             FilledButton(
+              // The theme's buttons are full width; in a row this one
+              // would squeeze the name to a letter per line.
+              style: FilledButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
               onPressed: _acting ? null : () => _markPaid(s),
               child: const Text('Mark as Paid'),
             ),

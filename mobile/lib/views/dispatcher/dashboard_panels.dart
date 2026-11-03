@@ -83,7 +83,11 @@ class DoorCheckPanel extends StatelessWidget {
             Expanded(child: Text('Boarded ${_time.format(u.at)}, not on the list',
                 style: const TextStyle(fontWeight: FontWeight.w600))),
             TextButton(onPressed: busy ? null : () => onExplain(u), child: const Text('Reason')),
-            FilledButton(onPressed: busy ? null : () => onList(u), child: const Text('Add to list')),
+            FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
+              onPressed: busy ? null : () => onList(u),
+              child: const Text('Add to list'),
+            ),
           ]),
         ),
       for (final u in c.unlisted.where((u) => !u.isPending))
