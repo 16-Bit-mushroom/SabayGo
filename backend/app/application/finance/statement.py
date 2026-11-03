@@ -543,6 +543,11 @@ class Statements:
                                    Trip.status.in_(BEFORE_DEPARTURE))
             )).scalars():
                 trip.payment_status = "paid"
+                # Paid from the statement locks the list as paying the
+                # trip does, or a seat added later would be mirrored,
+                # not a top-up, and the trip would stay paid while the
+                # statement owes its 15 %.
+                trip.list_locked_at = trip.list_locked_at or now
         return statement
 
     async def record_operator_share(
