@@ -210,6 +210,12 @@ fi
 # ───────────────────────────────────────────── 2. backend
 say "backend"
 [ -x backend/venv/bin/python ] || die "backend/venv is missing -- run ./setup.sh first"
+# A backend left running from an earlier session keeps the port: the new
+# one fails to bind, the health check below answers from the old process,
+# and the whole session runs yesterday's code without a word.
+if command -v ss >/dev/null 2>&1 && ss -ltn "sport = :$PORT_BACKEND" | grep -q LISTEN; then
+  die "port $PORT_BACKEND is already in use (an old backend?). Stop it first: pkill -f 'uvicorn app.main:app'"
+fi
 start backend "$ROOT/backend" "$LOGS/backend.log" \
   "$ROOT/backend/venv/bin/python" -m uvicorn app.main:app \
   --host 0.0.0.0 --port "$PORT_BACKEND"
