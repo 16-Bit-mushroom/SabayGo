@@ -15,17 +15,20 @@
 ///   the two, and "Today" is read in less time than any date can be.
 ///
 /// All times are Asia/Manila local, which is how MySQL stores them — see
-/// `app.core.timezone` on the server. Nothing here converts a zone, and
-/// nothing should: a departure at 05:30 is 05:30 at the terminal.
+/// `app.core.timezone` on the server. A naive time from the server parses
+/// as local and is shown as written: a departure at 05:30 is 05:30 at the
+/// terminal. A few fields (check-in opens, pay by) carry a `+08:00` offset,
+/// which Dart parses to UTC; `toLocal()` brings those back to the phone's
+/// Manila clock and leaves a local time untouched.
 library;
 
 import 'package:intl/intl.dart';
 
 /// `5:30 AM`
-String clockTime(DateTime dt) => DateFormat('h:mm a').format(dt);
+String clockTime(DateTime dt) => DateFormat('h:mm a').format(dt.toLocal());
 
 /// `Sat, 4 Oct`
-String dayShort(DateTime dt) => DateFormat('EEE, d MMM').format(dt);
+String dayShort(DateTime dt) => DateFormat('EEE, d MMM').format(dt.toLocal());
 
 /// `Today, 4 Oct` · `Tomorrow, 5 Oct` · `Saturday, 8 Oct`
 ///

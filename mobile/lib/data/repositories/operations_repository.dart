@@ -5,8 +5,8 @@ import 'trip_repository.dart';
 
 /// A trip this crew member is rostered to.
 ///
-/// Carries the route's stops so the scanner and the walk-in form know
-/// the sequence numbers without a second request at the van door.
+/// Carries the route's stops so the passenger list and the walk-in form
+/// know the sequence numbers without a second request at the van door.
 class CrewTrip {
   const CrewTrip({
     required this.tripId,
@@ -53,7 +53,7 @@ class CrewTrip {
   String get title => tripLabel ?? routeName;
 
   /// Where every passenger boards: the starting terminal (rev 603, brief
-  /// 2.4). A ticket scan and a cash walk-in are judged against it.
+  /// 2.4). A reservation and a cash walk-in are judged against it.
   int get boardingStop => stops.isEmpty ? 1 : stops.first.stopSequence;
 
   String stopName(int sequence) {
@@ -166,7 +166,7 @@ class DoorCheck {
       );
 }
 
-/// A boarding the phone counted that matched no ticket scan or cash entry.
+/// A boarding the phone counted that matched nobody on the passenger list.
 class UnlistedBoarding {
   const UnlistedBoarding({required this.eventId, required this.at, required this.resolution, this.note});
   final String eventId;
@@ -246,8 +246,7 @@ class HomePickup {
     required this.note,
     required this.status,
     required this.arrivedAt,
-    required this.hasProof,
-    required this.proofConfirmed,
+    required this.hasPhoto,
   });
 
   final String pickupId;
@@ -258,8 +257,9 @@ class HomePickup {
   final String? note;
   final String status; // pending | activated | arrived | boarded | no_show | cancelled
   final DateTime? arrivedAt;
-  final bool hasProof;
-  final bool proofConfirmed;
+  /// The relative sent a photo of a landmark at the pin. Not payment
+  /// proof: nothing depends on it (brief 2.6).
+  final bool hasPhoto;
 
   factory HomePickup.fromJson(Map<String, dynamic> j) => HomePickup(
         pickupId: j['pickup_id'] as String,
@@ -270,8 +270,7 @@ class HomePickup {
         note: j['pickup_note'] as String?,
         status: j['status'] as String,
         arrivedAt: j['arrived_at'] == null ? null : DateTime.parse(j['arrived_at'] as String),
-        hasProof: j['proof_message_id'] != null,
-        proofConfirmed: j['proof_confirmed_at'] != null,
+        hasPhoto: j['photo_message_id'] != null,
       );
 }
 
@@ -330,34 +329,36 @@ class NonPassengerMove {
 class ManifestPassenger {
   const ManifestPassenger({
     required this.bookingId,
-    required this.ticketNumber,
+    required this.bookingCode,
     required this.boardingStop,
     required this.alightingStop,
     required this.bookingType,
     required this.status,
+    required this.paymentStatus,
     required this.fare,
     this.name,
   });
 
   final String bookingId;
-  final String ticketNumber;
+  final String bookingCode;
   final int boardingStop;
   final int alightingStop;
   final String bookingType;
   final String status;
+  final String paymentStatus;
   final double fare;
   final String? name;
 
   bool get isWalkIn => bookingType == 'walk_in';
   bool get isBoarded => status == 'boarded';
   bool get isCheckedIn => status == 'checked_in';
-  bool get isUnpaid => status == 'pending';
+  bool get isUnpaid => paymentStatus == 'unpaid';
   bool get isNoShow => status == 'no_show';
   bool get isCancelled => status == 'cancelled';
 
   /// True only for a synthetic row built from the offline queue: a
   /// walk-in the Dispatcher logged in a dead zone that has not reached
-  /// the server yet, so it has no real booking id or ticket number.
+  /// the server yet, so it has no real booking id or booking code.
   bool get isPendingSync => bookingId.isEmpty;
 
   /// A placeholder row for a walk-in still sitting in the offline queue.
@@ -370,22 +371,24 @@ class ManifestPassenger {
   }) =>
       ManifestPassenger(
         bookingId: '',
-        ticketNumber: 'PENDING SYNC',
+        bookingCode: 'PENDING SYNC',
         boardingStop: boardingStop,
         alightingStop: alightingStop,
         bookingType: 'walk_in',
         status: 'pending_sync',
+        paymentStatus: 'paid',
         fare: 0,
         name: name,
       );
 
   factory ManifestPassenger.fromJson(Map<String, dynamic> j) => ManifestPassenger(
         bookingId: j['booking_id'] as String,
-        ticketNumber: j['ticket_number'] as String,
+        bookingCode: j['booking_code'] as String,
         boardingStop: j['boarding_stop'] as int,
         alightingStop: j['alighting_stop'] as int,
         bookingType: j['booking_type'] as String? ?? 'app',
         status: j['status'] as String,
+        paymentStatus: j['payment_status'] as String? ?? 'unpaid',
         fare: double.parse(j['fare_amount'].toString()),
         name: j['name'] as String?,
       );
@@ -435,55 +438,105 @@ class Manifest {
       );
 }
 
-/// The verdict on a scanned QR. Always returned, never thrown: a
-/// refused ticket is a normal outcome at a van door, not an error.
-class ScanVerdict {
-  const ScanVerdict({
-    required this.result,
-    required this.accepted,
-    required this.message,
-    this.ticketNumber,
-    this.boardingStop,
-    this.alightingStop,
+/// A reservation or walk-up on the trip, as the Dispatcher finds it by
+/// name or booking code (brief rev 721, 2.1). Unpaid ones come first: those
+/// are the ones with cash still to collect.
+class SeatOnList {
+  const SeatOnList({
+    required this.bookingId,
+    required this.bookingCode,
+    required this.passengerName,
+    required this.contactNumber,
+    required this.alightingStop,
+    required this.fare,
+    required this.bookingType,
+    required this.status,
+    required this.paymentStatus,
+    required this.isHomePickupSeat,
+    required this.paidAt,
   });
 
-  final String result;
-  final bool accepted;
-  final String message;
-  final String? ticketNumber;
-  final int? boardingStop;
-  final int? alightingStop;
+  final String bookingId;
+  final String bookingCode;
+  final String? passengerName;
+  final String? contactNumber;
+  final int alightingStop;
+  final double fare;
+  final String bookingType;
+  final String status;
+  final String paymentStatus;
+  final bool isHomePickupSeat;
+  final DateTime? paidAt;
 
-  factory ScanVerdict.fromJson(Map<String, dynamic> j) => ScanVerdict(
-        result: j['result'] as String,
-        accepted: j['accepted'] as bool,
-        message: j['message'] as String,
-        ticketNumber: j['ticket_number'] as String?,
-        boardingStop: j['boarding_stop'] as int?,
-        alightingStop: j['alighting_stop'] as int?,
+  bool get isPaid => paymentStatus == 'paid';
+  bool get isWalkIn => bookingType == 'walk_in';
+
+  factory SeatOnList.fromJson(Map<String, dynamic> j) => SeatOnList(
+        bookingId: j['booking_id'] as String,
+        bookingCode: j['booking_code'] as String,
+        passengerName: j['passenger_name'] as String?,
+        contactNumber: j['contact_number'] as String?,
+        alightingStop: j['alighting_stop'] as int,
+        fare: double.parse(j['fare_amount'].toString()),
+        bookingType: j['booking_type'] as String? ?? 'app',
+        status: j['status'] as String,
+        paymentStatus: j['payment_status'] as String,
+        isHomePickupSeat: j['is_home_pickup_seat'] as bool? ?? false,
+        paidAt: j['paid_at'] == null ? null : DateTime.parse(j['paid_at'] as String),
       );
+}
+
+/// What a Mark as Paid came back with. `restored` and `seatGone` are only
+/// set on a mark that synced after the cutoff job released the seat: the
+/// seat was given back, or there was none left and the Terminal Manager
+/// has been alerted to settle the cash.
+class MarkPaidResult {
+  const MarkPaidResult({required this.seat, required this.restored, required this.seatGone, this.pickupNote});
+
+  final SeatOnList seat;
+  final bool restored;
+  final bool seatGone;
+  final String? pickupNote;
+
+  factory MarkPaidResult.fromJson(Map<String, dynamic> j) => MarkPaidResult(
+        seat: SeatOnList.fromJson(j),
+        restored: j['restored'] as bool? ?? false,
+        seatGone: j['seat_gone'] as bool? ?? false,
+        pickupNote: j['pickup_note'] as String?,
+      );
+
+  /// What to tell the Dispatcher, or null when it is a plain Paid mark.
+  String? get notice {
+    final who = seat.passengerName ?? seat.bookingCode;
+    if (seatGone) {
+      return '$who paid after the seat was released and the trip is full. The Terminal Manager has been '
+          'told; settle the fare with them.';
+    }
+    if (restored) return '$who paid after the cutoff; the seat has been given back.';
+    return pickupNote;
+  }
 }
 
 class WalkInResult {
   const WalkInResult({
     required this.bookingId,
-    required this.ticketNumber,
+    required this.bookingCode,
     required this.fare,
   });
 
   final String bookingId;
-  final String ticketNumber;
+  final String bookingCode;
   final double fare;
 
   factory WalkInResult.fromJson(Map<String, dynamic> j) => WalkInResult(
         bookingId: j['booking_id'] as String,
-        ticketNumber: j['ticket_number'] as String,
+        bookingCode: j['booking_code'] as String,
         fare: double.parse(j['fare_amount'].toString()),
       );
 }
 
-/// Everything crew do at the van: scan, log cash passengers, count
-/// heads, open and close boarding, hand over cash.
+/// Everything crew do at the van: take reservations' cash, log walk-ups,
+/// count heads, depart and arrive.
 class OperationsRepository {
   OperationsRepository(this._api);
   final ApiClient _api;
@@ -513,17 +566,29 @@ class OperationsRepository {
 
   /// Validate a ticket at the door. The server answers 200 for every
   /// outcome; read `accepted`.
-  Future<ScanVerdict> scan({
-    required String qrPayload,
-    required String tripId,
-    required int stopSequence,
-  }) async {
-    final json = await _api.post('/scans', body: {
-      'qr_payload': qrPayload,
-      'trip_id': tripId,
-      'stop_sequence': stopSequence,
-    });
-    return ScanVerdict.fromJson(json as Map<String, dynamic>);
+  /// The trip's reservations and walk-ups, narrowed by name or booking
+  /// code when [query] is given. Cancelled seats are not on it.
+  Future<List<SeatOnList>> seats(String tripId, {String? query}) async {
+    final json = await _api.get('/bookings/trip/$tripId/seats',
+        query: {if (query != null && query.trim().isNotEmpty) 'q': query.trim()}) as List<dynamic>;
+    return [for (final s in json) SeatOnList.fromJson(s as Map<String, dynamic>)];
+  }
+
+  /// The passenger handed over the fare in cash. [paidAt] is when the
+  /// device recorded it, so a mark queued offline keeps its time. Safe to
+  /// repeat: an already-paid seat is accepted and unchanged.
+  Future<MarkPaidResult> markPaid(String bookingId, {required DateTime paidAt}) async {
+    final json = await _api.post('/bookings/$bookingId/mark-paid',
+        body: {'paid_at': paidAt.toIso8601String()});
+    return MarkPaidResult.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Cancel a seat: the passenger asked (hand back any cash taken), or an
+  /// unpaid reservation nobody came for. Returns the server's message.
+  Future<String> dispatcherCancel(String bookingId, {required String reason}) async {
+    final json = await _api.post('/bookings/$bookingId/dispatcher-cancel', body: {'reason': reason})
+        as Map<String, dynamic>;
+    return json['message'] as String? ?? 'Reservation cancelled.';
   }
 
   /// Record a cash passenger boarding at a terminal stop. The server
@@ -560,8 +625,8 @@ class OperationsRepository {
   }
 
   /// The van has arrived and everyone is off: the trip is completed.
-  /// Starting and departing are the office's (rev 468, brief 4.2); the
-  /// Dispatcher scans and logs fares from the moment they are assigned.
+  /// Starting is the office's (rev 468, brief 4.2); the Dispatcher marks
+  /// reservations Paid and lists walk-ups from the moment they are assigned.
   Future<void> arrive(String tripId) => _api.post('/trips/$tripId/arrive');
 
   // ---------------------------------------------- the dashboard (rev 603)
@@ -591,8 +656,8 @@ class OperationsRepository {
   Future<void> arrivedAtPickup(String id) => _api.post('/home-pickups/$id/arrived');
   Future<void> closePickup(String id, {required bool boarded}) =>
       _api.post('/home-pickups/$id/close', body: {'outcome': boarded ? 'boarded' : 'no_show'});
-  Future<Uint8List> pickupProof(String id) => _api.getBytes('/home-pickups/$id/proof');
-  Future<void> confirmPickupProof(String id) => _api.post('/home-pickups/$id/proof/confirm');
+  /// The landmark photo the relative sent, to help find the pin.
+  Future<Uint8List> pickupPhoto(String id) => _api.getBytes('/home-pickups/$id/photo');
 
   /// The rental fee collected in cash (brief 2.5).
   Future<void> rentalCash(String requestId) => _api.post('/special-trips/$requestId/cash');

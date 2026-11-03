@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/design/components/empty_state.dart';
 import '../../core/design/components/money.dart';
@@ -13,8 +12,8 @@ import '../../data/repositories/special_trip_repository.dart';
 
 /// Rent the whole van (brief 2.5): request it -- when, pickup, destination,
 /// how many, at most 14 -- and follow the request. A2Z agrees the fee by
-/// pickup and destination and assigns a van; the fee is paid before the
-/// van leaves, through the gateway here or in cash to the Dispatcher.
+/// pickup and destination and assigns a van; the fee is paid in cash to
+/// the Dispatcher at the terminal before the van leaves.
 class SpecialTripsScreen extends StatefulWidget {
   const SpecialTripsScreen({super.key});
 
@@ -76,13 +75,6 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
     }
   }
 
-  Future<void> _pay(SpecialTripRequest r) => _run(() async {
-        final url = await _repo.checkout(r.requestId);
-        if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
-          throw const ServerException('Could not open the payment page.');
-        }
-      }, '');
-
   @override
   Widget build(BuildContext context) {
     final list = _list;
@@ -121,7 +113,7 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
     final text = Theme.of(context).textTheme;
     final (label, tone) = switch (r.status) {
       'requested' => ('WAITING FOR A2Z', StatusTone.warning),
-      'approved' => r.paymentStatus == 'paid' ? ('PAID', StatusTone.success) : ('APPROVED: PAY THE FEE', StatusTone.info),
+      'approved' => r.paymentStatus == 'paid' ? ('PAID', StatusTone.success) : ('APPROVED: PAY IN CASH', StatusTone.info),
       'rejected' => ('NOT POSSIBLE', StatusTone.danger),
       'completed' => ('DONE', StatusTone.muted),
       _ => ('WITHDRAWN', StatusTone.muted),
@@ -146,22 +138,19 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
           ],
           if (r.status == 'rejected')
             Text('A2Z could not take this one; their reason is in your updates.', style: text.bodySmall),
-          if (r.canPay || r.canWithdraw) ...[
+          if (r.owesFee) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text('Pay ${Money.format(r.fee!)} in cash to the Dispatcher at the terminal before the van leaves. '
+                'Someone may pay for you.', style: text.bodySmall),
+          ],
+          if (r.canWithdraw) ...[
             const SizedBox(height: AppSpacing.md),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              if (r.canWithdraw)
-                TextButton(
-                  onPressed: _busy ? null : () => _run(() => _repo.withdraw(r.requestId), 'Request withdrawn.'),
-                  child: const Text('Withdraw'),
-                ),
-              if (r.canPay)
-                FilledButton(
-                  onPressed: _busy ? null : () => _pay(r),
-                  child: Text('Pay ${Money.format(r.fee!)}'),
-                ),
+              TextButton(
+                onPressed: _busy ? null : () => _run(() => _repo.withdraw(r.requestId), 'Request withdrawn.'),
+                child: const Text('Withdraw'),
+              ),
             ]),
-            if (r.canPay)
-              Text('Pay before the van leaves, here or in cash to the Dispatcher.', style: text.bodySmall),
           ],
         ]),
       ),

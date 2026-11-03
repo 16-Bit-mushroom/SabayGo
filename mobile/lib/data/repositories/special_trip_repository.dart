@@ -26,7 +26,9 @@ class SpecialTripRequest {
   final String status; // requested | approved | rejected | completed | cancelled
 
   bool get canWithdraw => status == 'requested';
-  bool get canPay => status == 'approved' && paymentStatus != 'paid' && fee != null;
+  /// Approved with a fee and not yet paid: the fee is cash to the
+  /// Dispatcher at the terminal before the van leaves.
+  bool get owesFee => status == 'approved' && paymentStatus != 'paid' && fee != null;
 
   factory SpecialTripRequest.fromJson(Map<String, dynamic> j) => SpecialTripRequest(
         requestId: j['request_id'] as String,
@@ -41,8 +43,8 @@ class SpecialTripRequest {
       );
 }
 
-/// Renting the whole van: request, follow, withdraw before approval, pay
-/// the agreed fee through the gateway before the van leaves.
+/// Renting the whole van: request, follow, withdraw before approval. The
+/// agreed fee is paid in cash to the Dispatcher before the van leaves.
 class SpecialTripRepository {
   SpecialTripRepository(this._api);
   final ApiClient _api;
@@ -67,8 +69,4 @@ class SpecialTripRepository {
 
   Future<void> withdraw(String requestId) => _api.post('/special-trips/$requestId/withdraw');
 
-  /// The gateway page for the agreed fee. Only the verified webhook marks
-  /// it paid.
-  Future<String> checkout(String requestId) async =>
-      (await _api.post('/special-trips/$requestId/checkout') as Map<String, dynamic>)['checkout_url'] as String;
 }

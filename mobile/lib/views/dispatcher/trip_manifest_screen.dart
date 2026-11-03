@@ -9,26 +9,30 @@ import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/offline/pending_walk_in.dart';
-import '../../core/offline/walk_in_sync_service.dart';
+import '../../core/offline/seat_mark_queue.dart';
+import '../../core/offline/offline_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../../viewmodels/shift_viewmodel.dart';
 import '../safety/sos_button.dart';
 import 'dashboard_panels.dart';
-import 'qr_scanner_screen.dart';
 import 'walk_in_screen.dart';
 
-/// The Dispatcher's dashboard for one trip (rev 603, brief 9).
+/// The Dispatcher's dashboard for one trip (rev 603, brief 9; rev 721).
 ///
-/// The passenger list with each destination and fare; the camera's count
+/// The reservations, found by name or booking code, each marked Paid when
+/// the passenger hands over the cash or cancelled -- both work offline and
+/// sync on reconnect; the passenger list with each destination and fare;
+/// the camera's count
 /// aboard against the list, with a fix or a reason for each boarding not
 /// on it; the crew toggle; Depart; 'Not a passenger trip'; home pickups;
-/// A2Z's share to hand to the Cashier; and the operator, shown as a name
+/// the terminal fees to hand to the Cashier; and the operator, shown as a name
 /// and licence beside the van's plate. It works before Start, from
 /// assignment on. No van picking, no void or change-van: those are the
 /// office's.
 ///
 /// Everything shown comes from the server; an action changes the server
-/// and the screen reloads to show the result.
+/// and the screen reloads to show the result. The reservations list is
+/// kept from the last load, so a dead zone does not take it away.
 class TripManifestScreen extends StatefulWidget {
   const TripManifestScreen({super.key, required this.trip});
 
@@ -47,6 +51,11 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
   List<HomePickup> _pickups = const [];
   List<TripFlag> _flags = const [];
   NonPassengerMove? _move;
+  /// The trip's reservations and walk-ups, as last loaded. Searched on
+  /// the device, so a name or code can be found without a connection.
+  List<SeatOnList>? _seats;
+  final _search = TextEditingController();
+  late final OfflineSyncService _sync;
   bool _loading = true;
   bool _acting = false;
   String? _error;
@@ -55,6 +64,25 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
   void initState() {
     super.initState();
     _ops = OperationsRepository(context.read<ApiClient>());
+    _sync = context.read<OfflineSyncService>()..addListener(_showSyncNotices);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _sync.removeListener(_showSyncNotices);
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// A mark that synced later may come back restored, with no seat left,
+  /// or refused: the Dispatcher has to hear about each.
+  void _showSyncNotices() {
+    final notices = _sync.takeNotices();
+    if (notices.isEmpty || !mounted) return;
+    for (final n in notices) {
+      _snack(n);
+    }
     _load();
   }
 
@@ -77,6 +105,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         optional(_ops.homePickups(id)),
         before ? Future.value(null) : optional(_ops.flags(id)),
         optional(_ops.openMove()),
+        before ? optional(_ops.seats(id)) : Future.value(null),
       ]);
       if (!mounted) return;
       setState(() {
@@ -87,6 +116,8 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         _pickups = results[3] as List<HomePickup>? ?? const [];
         _flags = [for (final f in results[4] as List<TripFlag>? ?? const <TripFlag>[]) if (f.flagged) f];
         _move = results[5] as NonPassengerMove?;
+        // Keep the last list when this load could not fetch it (offline).
+        if (results[6] case final List<SeatOnList> seats) _seats = seats;
       });
       context.read<ShiftViewModel>().markStatus(m.status);
     } on ApiException catch (e) {
@@ -164,16 +195,65 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     }
   }
 
+  /// The passenger handed over the fare in cash.
+  Future<void> _markPaid(SeatOnList s) async {
+    final who = s.passengerName ?? s.bookingCode;
+    if (!await _confirm('Mark as Paid?',
+        '$who · ${s.bookingCode}\n₱${s.fare.toStringAsFixed(2)} in cash, in your hand now.', 'Mark as Paid')) {
+      return;
+    }
+    await _act(() async {
+      final r = await _sync.markPaidOrQueue(tripId: widget.trip.tripId, bookingId: s.bookingId, label: who);
+      if (r.queued) {
+        _snack('No connection: $who is marked Paid on this phone and syncs when you are back online.');
+      } else {
+        _snack(r.notice ?? '$who is Paid and on the passenger list.');
+        await _load();
+      }
+    });
+  }
+
+  /// The passenger asked to cancel (any cash is handed back), or nobody
+  /// came for an unpaid reservation.
+  Future<void> _cancelSeat(SeatOnList s) async {
+    final who = s.passengerName ?? s.bookingCode;
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('Cancel $who\'s reservation?'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'passenger_asked_dispatcher'),
+            child: Text(s.isPaid
+                ? 'The passenger asked. I hand back the ₱${s.fare.toStringAsFixed(2)} I took.'
+                : 'The passenger asked me to cancel it.'),
+          ),
+          if (!s.isPaid)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, 'forgot_to_cancel'),
+              child: const Text('Nobody came for it.'),
+            ),
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx), child: const Text('Keep it')),
+        ],
+      ),
+    );
+    if (reason == null) return;
+    await _act(() async {
+      final r = await _sync.cancelOrQueue(
+          tripId: widget.trip.tripId, bookingId: s.bookingId, label: who, reason: reason);
+      if (r.queued) {
+        _snack('No connection: the cancel is saved on this phone and syncs when you are back online.');
+      } else {
+        _snack('$who\'s reservation is cancelled and the space is free.');
+        await _load();
+      }
+    });
+  }
+
   Future<void> _pickup(HomePickup p, String action) async {
     switch (action) {
-      case 'proof':
-        await showDialog<void>(context: context, builder: (_) => _ProofDialog(load: () => _ops.pickupProof(p.pickupId)));
-      case 'confirm':
-        if (await _confirm('Confirm the payment?',
-            'You checked the screenshot: the unpaid seats of this pickup are confirmed as paid through the app, '
-                'with your name, and the Terminal Manager is told.', 'Confirm')) {
-          await _do(() => _ops.confirmPickupProof(p.pickupId), 'Payment confirmed.');
-        }
+      case 'photo':
+        await showDialog<void>(context: context, builder: (_) => _PhotoDialog(load: () => _ops.pickupPhoto(p.pickupId)));
       case 'activate':
         await _do(() => _ops.activatePickup(p.pickupId), '${p.beneficiaryName}\'s pickup is activated.');
       case 'arrived':
@@ -237,8 +317,9 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     final trip = shift.active?.tripId == widget.trip.tripId ? shift.active! : widget.trip;
     final m = _manifest;
     final departed = trip.isDeparted;
-    final sync = context.watch<WalkInSyncService>();
+    final sync = context.watch<OfflineSyncService>();
     final pending = sync.pendingFor(trip.tripId);
+    final marks = sync.marksFor(trip.tripId);
 
     return Scaffold(
       appBar: AppBar(
@@ -265,9 +346,9 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                     padding: const EdgeInsets.only(bottom: 24),
                     children: [
                       _statusPanel(trip, m!),
-                      if (pending.isNotEmpty) ...[
+                      if (pending.isNotEmpty || marks.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        _pendingSyncBanner(pending.length, sync),
+                        _pendingSyncBanner(pending.length, marks.length, sync),
                       ],
                       if (_move case final move?) ...[
                         const SizedBox(height: 8),
@@ -311,24 +392,147 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
                         const SizedBox(height: 8),
                         FlagsPanel(flags: _flags, busy: _acting, onDispute: (f) => _dispute(flag: f)),
                       ],
-                      if (trip.rental == null) ...[
+                      if (trip.rental == null && !departed) ...[
+                        const SizedBox(height: 8),
+                        _reservations(trip, marks),
+                      ],
+                      if (trip.rental == null && departed) ...[
                         const SizedBox(height: 8),
                         _passengerList(trip, m, pending),
                       ],
                     ],
                   ),
                 ),
-      floatingActionButton: departed || m == null || trip.rental != null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _acting
-                  ? null
-                  : () => _push(QRScannerScreen(trip: trip, stopSequence: trip.boardingStop)),
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Scan', style: TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+
+  /// Every reservation and walk-up, unpaid first, found by name or code.
+  /// A mark still on the phone shows as such until it syncs.
+  Widget _reservations(CrewTrip trip, Map<String, PendingSeatMark> marks) {
+    final all = _seats;
+    final q = _search.text.trim().toLowerCase();
+    final shown = [
+      for (final s in all ?? const <SeatOnList>[])
+        if (marks[s.bookingId]?.kind != 'cancel' &&
+            (q.isEmpty ||
+                s.bookingCode.toLowerCase().contains(q) ||
+                (s.passengerName ?? '').toLowerCase().contains(q)))
+          s,
+    ];
+    final unpaid = (all ?? const <SeatOnList>[])
+        .where((s) => !s.isPaid && marks[s.bookingId] == null)
+        .length;
+
+    return Container(
+      color: AppColors.surfaceRaised,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('RESERVATIONS AND WALK-UPS',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted, letterSpacing: 1.2)),
+                if (all != null)
+                  Text('$unpaid unpaid · ${all.length - unpaid} paid',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Name or booking code',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(_search.clear),
+                      ),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (all == null)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('The list has not loaded. Pull down to try again.',
+                  textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
+            )
+          else if (shown.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(q.isEmpty ? 'Nobody has reserved yet.' : 'No reservation matches "${_search.text.trim()}".',
+                  textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
+            ),
+          for (var i = 0; i < shown.length; i++) ...[
+            if (i > 0) const Divider(height: 1),
+            _seatTile(trip, shown[i], marks[shown[i].bookingId]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _seatTile(CrewTrip trip, SeatOnList s, PendingSeatMark? mark) {
+    final paidHere = mark?.isPaid ?? false;
+    final paid = s.isPaid || paidHere;
+    final (label, tone) = switch (s.status) {
+      _ when paidHere => ('PAID · NOT SYNCED', StatusTone.info),
+      'boarded' => ('ABOARD', StatusTone.success),
+      _ when paid => ('PAID', StatusTone.success),
+      _ => ('UNPAID', StatusTone.warning),
+    };
+    final who = s.passengerName ?? (s.isWalkIn ? 'Walk-up passenger' : 'App passenger');
+
+    return ListTile(
+      contentPadding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+      title: Text(who, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 2),
+          Text(s.bookingCode,
+              style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1, color: AppColors.primary)),
+          Text(
+            'To ${trip.stopName(s.alightingStop)} · ₱${s.fare.toStringAsFixed(0)}'
+            '${s.isWalkIn ? ' · walk-up' : ''}${s.isHomePickupSeat ? ' · home pickup' : ''}',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          StatusChip(label, tone: tone),
+        ],
+      ),
+      isThreeLine: true,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!paid)
+            FilledButton(
+              onPressed: _acting ? null : () => _markPaid(s),
+              child: const Text('Mark as Paid'),
+            ),
+          if (mark == null && !s.isWalkIn)
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              enabled: !_acting,
+              onSelected: (_) => _cancelSeat(s),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'cancel', child: Text('Cancel reservation')),
+              ],
+            ),
+        ],
+      ),
     );
   }
 
@@ -390,10 +594,10 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                _stat('Boarded', m.boarded, AppColors.success),
+                _stat('Paid', m.totalBookings - m.unpaid, AppColors.success),
+                _stat('Unpaid', m.unpaid, AppColors.warning),
                 _stat('Checked in', m.checkedIn, AppColors.info),
-                _stat('Awaiting', m.awaiting, AppColors.warning),
-                _stat('Unpaid', m.unpaid, AppColors.textMuted),
+                _stat('Spaces left', (m.seatCapacity - m.totalBookings).clamp(0, m.seatCapacity), AppColors.textMuted),
               ],
             ),
             const SizedBox(height: 8),
@@ -427,11 +631,11 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         ),
       );
 
-  /// Cash the Dispatcher has already collected but the server doesn't
-  /// know about yet -- logged in a dead zone, waiting on the queue.
-  /// Never hidden: a variance the office can't see coming is worse than
-  /// one flagged in advance.
-  Widget _pendingSyncBanner(int count, WalkInSyncService sync) => Container(
+  /// Cash the Dispatcher has already collected, or a cancel, that the
+  /// server doesn't know about yet -- done in a dead zone, waiting on the
+  /// queue. Never hidden: a variance the office can't see coming is worse
+  /// than one flagged in advance.
+  Widget _pendingSyncBanner(int walkIns, int marks, OfflineSyncService sync) => Container(
         color: AppColors.warningContainer,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
@@ -440,7 +644,10 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '$count passenger${count == 1 ? '' : 's'} logged offline, not yet synced.',
+                '${[
+                  if (walkIns > 0) '$walkIns walk-up${walkIns == 1 ? '' : 's'}',
+                  if (marks > 0) '$marks mark${marks == 1 ? '' : 's'}',
+                ].join(' and ')} made offline, not yet synced.',
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
@@ -553,18 +760,20 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
   }
 
   Widget _passengerTile(CrewTrip trip, ManifestPassenger p) {
+    // After departure the server closes every seat still on the trip; a
+    // paid one is not called a no-show, because nobody can tell from here
+    // whether that passenger rode.
     final (label, tone) = switch (p.status) {
       'boarded' => ('BOARDED', StatusTone.success),
-      'checked_in' => ('AT TERMINAL', StatusTone.info),
-      'confirmed' => ('NOT YET', StatusTone.warning),
-      'pending' => ('UNPAID', StatusTone.muted),
-      'no_show' => ('NO-SHOW', StatusTone.danger),
       'pending_sync' => ('PENDING SYNC', StatusTone.info),
-      _ => (p.status.toUpperCase(), StatusTone.muted),
+      _ when p.isUnpaid => (p.isNoShow ? 'NO-SHOW' : 'UNPAID', StatusTone.danger),
+      'checked_in' => ('AT TERMINAL', StatusTone.info),
+      _ => ('PAID', StatusTone.success),
     };
+    final struck = p.isNoShow && p.isUnpaid;
 
     // How the passenger got on the manifest — booked ahead through the
-    // app or paid cash at a terminal. A Dispatcher scans a queue of
+    // app or paid cash at a terminal. A Dispatcher looks over a queue of
     // strangers; this has to be legible at a glance, not a suffix at the
     // end of a grey line.
     final (methodLabel, methodColour, methodIcon) = switch (p) {
@@ -581,8 +790,8 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         p.name ?? (p.isWalkIn ? 'Cash passenger' : 'App passenger'),
         style: TextStyle(
           fontWeight: FontWeight.bold,
-          color: p.isNoShow ? AppColors.textMuted : AppColors.textPrimary,
-          decoration: p.isNoShow ? TextDecoration.lineThrough : null,
+          color: struck ? AppColors.textMuted : AppColors.textPrimary,
+          decoration: struck ? TextDecoration.lineThrough : null,
         ),
       ),
       subtitle: Column(
@@ -602,7 +811,7 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           ),
           const SizedBox(height: 3),
           Text(
-            '${p.ticketNumber} · ${trip.stopName(p.boardingStop)} → ${trip.stopName(p.alightingStop)}',
+            '${p.bookingCode} · ${trip.stopName(p.boardingStop)} → ${trip.stopName(p.alightingStop)}',
             style: TextStyle(color: AppColors.textMuted, fontSize: 13),
           ),
         ],
@@ -728,19 +937,19 @@ class _MoveDialogState extends State<_MoveDialog> {
 }
 
 /// The relative's payment screenshot, for the Dispatcher to check.
-class _ProofDialog extends StatelessWidget {
-  const _ProofDialog({required this.load});
+class _PhotoDialog extends StatelessWidget {
+  const _PhotoDialog({required this.load});
   final Future<Uint8List> Function() load;
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Payment screenshot'),
+        title: const Text('Landmark photo'),
         content: FutureBuilder<Uint8List>(
           future: load(),
           builder: (_, snap) {
             if (snap.hasError) {
               final e = snap.error;
-              return Text(e is ApiException ? e.message : 'The screenshot could not be loaded.');
+              return Text(e is ApiException ? e.message : 'The photo could not be loaded.');
             }
             if (!snap.hasData) {
               return const SizedBox(height: 160, child: Center(child: CircularProgressIndicator()));

@@ -13,7 +13,7 @@ class ReservationsViewModel extends ChangeNotifier {
   bool hasLoaded = false;
   String? error;
 
-  /// Booking ids with a cancel or reschedule in flight, so the row can
+  /// Booking ids with a cancel in flight, so the row can
   /// disable its own buttons without freezing the whole list.
   final Set<String> _busy = {};
   bool isBusy(String bookingId) => _busy.contains(bookingId);
@@ -57,22 +57,6 @@ class ReservationsViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       await _repo.cancel(bookingId);
-      await load();
-      return null;
-    } on ApiException catch (e) {
-      return e.message;
-    } finally {
-      _busy.remove(bookingId);
-      notifyListeners();
-    }
-  }
-
-  /// Returns the server's message on failure, null on success.
-  Future<String?> reschedule(String bookingId, String newTripId) async {
-    _busy.add(bookingId);
-    notifyListeners();
-    try {
-      await _repo.reschedule(bookingId: bookingId, newTripId: newTripId);
       await load();
       return null;
     } on ApiException catch (e) {
