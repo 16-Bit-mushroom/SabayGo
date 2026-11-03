@@ -64,17 +64,28 @@ pay() {  # TRIP AMOUNT [OPERATOR_SHARE]
   code POST "/trips/$1/payment" \
     "{\"amount\":\"$2\",\"reference\":\"OR-$RANDOM\"${3:+,\"operator_share\":\"$3\"}}" "$CT"
 }
-reserve_paid() {  # TRIP ALIGHTING_STOP COUNT: reserved in the app, marked Paid
+reserve_paid() {  # TRIP ALIGHTING_STOP COUNT [DISPATCHER_TOKEN]: reserved in the app, marked Paid
   local i bid
   for i in $(seq 1 "$3"); do
     code POST /bookings/reserve \
       "{\"trip_id\":\"$1\",\"boarding_stop\":1,\"alighting_stop\":$2}" "$PT" >/dev/null
     bid=$(field booking_id)
-    [ "$(code POST "/bookings/$bid/mark-paid" '{}' "$DT")" = "200" ] || return 1
+    [ "$(code POST "/bookings/$bid/mark-paid" '{}' "${4:-$DT}")" = "200" ] || return 1
   done
 }
 walk_up() { code POST /bookings/walk-in \
               "{\"trip_id\":\"$1\",\"boarding_stop\":1,\"alighting_stop\":$2}" "$DT"; }
+crew() {  # TRIP VAN -> $CREW_T: the trip gets the first Dispatcher free then
+  local n
+  CREW_T=""
+  for n in 2 3 4 5; do
+    if [ "$(code PUT "/trips/$1/assignment" \
+          "{\"van_id\":\"$2\",\"dispatcher_id\":\"USER-DISPATCHER-000$n\"}" "$OT")" = "200" ]; then
+      CREW_T=$(login "dispatcher$n@sabaygo.dev"); return 0
+    fi
+  done
+  return 1
+}
 new_trip() {  # MINUTES_FROM_NOW -> $TRIP_ID
   code POST /config/trips/special "{\"route_id\":\"$ROUTE\",
     \"departure_datetime\":\"$(date -d "+$1 minutes" '+%Y-%m-%dT%H:%M:00')\",
@@ -230,6 +241,27 @@ is "$(code POST /statements/$PSID/payments '{"amount":"50.00","reference":"OR-PA
    "the Cashier records the P50"
 is "$(field status)/$(field amount_due)" settled/0.00 "settled once the P50 is recorded"
 is "$(code PUT "/trips/$TRIP3/assignment" "{\"van_id\":\"$IDLE\"}" "$OT")" 200 "and the van can be assigned"
+
+# ═══════════════════════════════════════════════ fees before any seat
+# Day 1 test, 3 Nov: the fees of an empty trip were recorded, then a seat
+# was paid. Either way it is a top-up and the trip owes again, or Start
+# would not wait for its 15 %.
+hdr "Fees recorded on an empty list, then a seat"
+is "$(code POST /statements/$PSID/payments '{"amount":"75.00","reference":"OR-EMPTY"}' "$CT")" 200 \
+   "from the statement: the Cashier records the empty trip's P75 ticket"
+is "$(board "$TRIP3" payment_status)" paid "the trip is paid"
+crew "$TRIP3" "$IDLE" && ok "a Dispatcher is assigned" || bad "no Dispatcher: $(cat /tmp/resp.json)"
+reserve_paid "$TRIP3" 3 1 "$CREW_T" && ok "then a seat to Digos is marked Paid (P110.00)" || bad "reserve: $(cat /tmp/resp.json)"
+is "$(share "$TRIP3" amount_due)/$(field payment_status)" 16.50/unpaid "a P16.50 top-up, and the trip owes again"
+python3 -c "import json;l=json.load(open('/tmp/resp.json'))['lines'];assert any(x['is_top_up'] and x['share_amount']=='16.50' for x in l)" \
+  && ok "the seat is a top-up line" || bad "lines: $(cat /tmp/resp.json)"
+
+new_trip 300; TRIP4=$TRIP_ID
+crew "$TRIP4" "$VAN" && ok "$PLATE and a Dispatcher get an empty trip later today" \
+  || bad "assignment: $(cat /tmp/resp.json)"
+is "$(pay "$TRIP4" 75.00)" 200 "from the trip: the Cashier records its P75 ticket, nobody listed"
+reserve_paid "$TRIP4" 3 1 "$CREW_T" && ok "then a seat to Digos is marked Paid" || bad "reserve: $(cat /tmp/resp.json)"
+is "$(share "$TRIP4" amount_due)/$(field payment_status)" 16.50/unpaid "a P16.50 top-up, and the trip owes again"
 
 # ═══════════════════════════════════════════════ settings
 hdr "Settings"
