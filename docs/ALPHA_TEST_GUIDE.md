@@ -176,6 +176,8 @@ right; the console and the app must show the same numbers.
 
 ## 6. Tasks by role
 
+Step by step, with what each screen should show: `docs/ALPHA_TEST_SCRIPT.md`.
+
 Each line is something a tester should try and report on.
 
 ### Passenger (app)
