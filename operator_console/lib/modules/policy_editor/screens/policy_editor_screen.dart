@@ -316,18 +316,9 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
         'How many days ahead the app lets a passenger book a space.'),
     'advance_booking_seat_cap': _Words('Spaces that can be booked ahead', 'Booking and changes',
         'How many of a van\'s spaces the app may sell in advance. Set it to the van\'s spaces to open them all.'),
-    'seat_hold_ttl_seconds': _Words('How long an unpaid space is held', 'Booking and changes',
-        'A space a passenger picked but has not paid for goes back on sale after this long.'),
-    'hold_sweep_interval_seconds': _Words('How often unpaid holds are released', _advancedGroup,
-        'How often the system returns unpaid holds that ran out to sale.'),
-    'cancel_cutoff_hours': _Words('Cancellation deadline', 'Booking and changes',
-        'A passenger cannot cancel this close to departure. 0 means no deadline.'),
-    'reschedule_cutoff_hours': _Words('Trip-change deadline', 'Booking and changes',
-        'A passenger cannot move to another trip this close to departure.'),
-    'max_reschedules_per_booking': _Words('Times a passenger may change trips', 'Booking and changes',
-        'How many times one booking may be moved to another trip.'),
-    'refund_enabled': _Words('Refunds allowed', 'Booking and changes',
-        'A2Z\'s policy is no cash refunds: a passenger changes trips instead.'),
+    'unpaid_cutoff_min': _Words('Release unpaid reservations before departure', 'Booking and changes',
+        'A reservation the Dispatcher has not marked Paid this long before departure is cancelled and its '
+            'space freed. The passenger is reminded one cutoff-length earlier.'),
     'checkin_window_minutes': _Words('When check-in opens', 'At the terminal',
         'How long before departure a passenger at the terminal can check in from the app.'),
     'default_geofence_radius_m': _Words('Size of a terminal area', 'At the terminal',
@@ -350,6 +341,12 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
         'How long before departure the Start button appears on a trip.'),
     'remittance_rate_pct': _Words('A2Z\'s share of the fares', 'Trips and payment',
         'The part of the fares on each trip\'s passenger list that is handed to the Cashier before Start.'),
+    'dcott_ticket_fee': _Words('DCOTT ticket per trip', 'Trips and payment',
+        'Owed for every trip once it has a van, even with nobody on the list. Part of the terminal fees '
+            'Start waits for.'),
+    'parking_fee': _Words('Parking per van per day', 'Trips and payment',
+        'Charged once a day on each van\'s statement, including a van with no trip. Part of the terminal '
+            'fees Start waits for.'),
     'depart_zone_radius_m': _Words('Terminal zone for a GPS departure', 'Departure and home pickup',
         'The area around the terminal that holds the queue and loading bay. A van that leaves it has departed.',
         unset: 'a departure is tapped by the Dispatcher or the office, never read from GPS.'),
@@ -363,9 +360,6 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
         unset: 'home pickup is not offered.'),
     'heartbeat_gap_seconds': _Words('A phone is silent after', 'Phones and camera',
         'A phone in a van that sends no report for this long is silent, and its trip may go Unaudited.'),
-    'match_window_seconds': _Words('A boarding matches a scan within', 'Phones and camera',
-        'A person counted at the door is on the list if a ticket was scanned, or a cash passenger entered, '
-            'this close before or after.'),
     'overspeed_seconds': _Words('Above the limit this long is overspeed', 'Driving flags',
         'How long a van must stay above a stretch\'s speed limit before it is flagged.'),
     'stop_seconds': _Words('An unscheduled stop is longer than', 'Driving flags',
@@ -384,9 +378,9 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
         'After this many days the blurred stills and GPS readings are deleted, except those still under '
             'review or in a dispute.',
         unset: 'everything is kept.'),
-    'chat_image_max_kb': _Words('Largest payment screenshot accepted', _advancedGroup,
+    'chat_image_max_kb': _Words('Largest chat picture accepted', _advancedGroup,
         'The largest picture a passenger may send in a chat message.'),
-    'chat_image_retention_days': _Words('Days payment screenshots are kept', 'Evidence and privacy',
+    'chat_image_retention_days': _Words('Days chat pictures are kept', 'Evidence and privacy',
         'Pictures sent in chat are deleted after this many days.'),
   };
 
@@ -401,6 +395,8 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
       ('_days', 'days'),
       ('_hours', 'hours'),
       ('_minutes', 'minutes'),
+      ('_min', 'minutes'),
+      ('_fee', 'pesos'),
       ('_seconds', 'seconds'),
       ('_m', 'metres'),
     ]) {

@@ -9,14 +9,15 @@ import '../../data/repositories/dispatch_repository.dart';
 import '../../data/repositories/fleet_repository.dart';
 import '../../viewmodels/auth_provider.dart';
 
-/// Assignment, A2Z's share, start, departure and the Terminal Manager's
+/// Assignment, the terminal fees, start, departure and the Terminal Manager's
 /// changes for one trip (change brief 2.1, 4.2).
 ///
 /// The rules are the server's: this panel offers what the signed-in role
 /// may do at this point in the trip and says why a button is off, so a
 /// refusal is rare and, when it comes, is the server's own sentence. The
 /// office assigns, starts and departs; Start waits for the Cashier to
-/// record the 15 % the Dispatcher hands over. Only the Terminal Manager
+/// record the terminal fees the Dispatcher hands over (15 %, the ₱75 DCOTT
+/// ticket, the day's ₱50 parking when unpaid). Only the Terminal Manager
 /// lifts that block, reviews an automatic start, changes a started trip's
 /// van or voids a trip, and records no payment.
 class TripLifecyclePanel extends StatelessWidget {
@@ -64,7 +65,7 @@ class TripLifecyclePanel extends StatelessWidget {
         (Icons.task_alt, 'Automatic start reviewed', null),
       if (t.auditStatus == 'unaudited')
         (Icons.videocam_off_outlined, 'Unaudited: ${_unaudited(t.unauditedReason)}. The camera cannot '
-            'check this trip; only QR tickets and logged fares count.', AppColors.danger),
+            'check this trip; only the passenger list counts.', AppColors.danger),
       if (t.departureSource == 'gps')
         (Icons.gps_fixed, 'Departure detected: the van\'s GPS left the terminal', null)
       else if (t.departureSource == 'staff')
@@ -72,16 +73,16 @@ class TripLifecyclePanel extends StatelessWidget {
       else if (t.departureSource == 'dispatcher')
         (Icons.logout, 'Departed: tapped by the Dispatcher', null),
       if (t.paymentStatus == 'left_unpaid')
-        (Icons.money_off, 'Left before A2Z\'s 15 % was recorded. It is owed on the van\'s statement, '
+        (Icons.money_off, 'Left before the terminal fees were recorded. It is owed on the van\'s statement, '
             'and the van\'s next assignment waits, until the Cashier records it.', AppColors.danger)
       else if (t.paymentStatus == 'overridden')
         (Icons.lock_open, 'Payment block lifted by the Terminal Manager', AppColors.warning)
       else if (t.paymentStatus == 'paid')
-        (Icons.paid_outlined, 'A2Z\'s 15 % recorded. The passenger list is locked: a cash passenger '
+        (Icons.paid_outlined, 'Terminal fees recorded. The passenger list is locked: a cash passenger '
             'added now is a top-up.', null)
       else if (beforeDeparture && t.vanId != null)
-        (Icons.payments_outlined, 'A2Z\'s 15 % not recorded yet. Start waits for it once passengers '
-            'are listed.', AppColors.warning),
+        (Icons.payments_outlined, 'Terminal fees not recorded yet (15 %, DCOTT ticket, the day\'s '
+            'parking). Start waits for them.', AppColors.warning),
       if (t.phoneSilent == true && t.status != 'completed')
         (Icons.wifi_off, t.phoneLastReportAt == null
             ? 'The phone out with the van has not reported yet.'
@@ -97,7 +98,7 @@ class TripLifecyclePanel extends StatelessWidget {
         FilledButton.tonalIcon(
           onPressed: () => _recordShare(context),
           icon: const Icon(Icons.payments_outlined, size: 18),
-          label: const Text('Record A2Z\'s share'),
+          label: const Text('Record terminal fees'),
         ),
       if (manager && beforeDeparture && t.paymentStatus == 'unpaid')
         OutlinedButton.icon(
@@ -172,8 +173,8 @@ class TripLifecyclePanel extends StatelessWidget {
           if (scheduled && t.isAssigned && !windowOpen)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: Text('Start opens at ${_time.format(t.startOpensAt)}. The Dispatcher can scan '
-                  'tickets and log fares before then.', style: text.bodySmall),
+              child: Text('Start opens at ${_time.format(t.startOpensAt)}. The Dispatcher can mark '
+                  'reservations Paid and list walk-ups before then.', style: text.bodySmall),
             ),
           for (final (icon, line, colour) in facts)
             Padding(
@@ -269,14 +270,18 @@ class TripLifecyclePanel extends StatelessWidget {
 
   Future<void> _recordShare(BuildContext context) async {
     final dispatch = context.read<DispatchRepository>();
-    final picked = await showDialog<(TripShare, String, String)>(
+    final picked = await showDialog<(TripShare, String, String, String?)>(
       context: context,
       builder: (_) => _ShareDialog(trip: trip),
     );
     if (picked == null || !context.mounted) return;
-    final (share, amount, reference) = picked;
-    await _run(context, () => dispatch.recordPayment(share, amount: amount, reference: reference),
-        share.beforeDeparture ? 'Share recorded. Start is open.' : 'Payment recorded on the van\'s statement.');
+    final (share, amount, reference, operatorShare) = picked;
+    await _run(
+        context,
+        () => dispatch.recordPayment(share, amount: amount, reference: reference, operatorShare: operatorShare),
+        share.beforeDeparture
+            ? 'Terminal fees recorded. Start is open.'
+            : 'Payment recorded on the van\'s statement.');
   }
 
   Future<void> _override(BuildContext context) async {
@@ -285,8 +290,8 @@ class TripLifecyclePanel extends StatelessWidget {
       context: context,
       builder: (_) => const _ReasonDialog(
         title: 'Lift the payment block?',
-        intro: 'This trip may then be assigned and started before A2Z\'s share is recorded. The '
-            'share stays owed on the van\'s statement. Your reason is kept with the trip and the '
+        intro: 'This trip may then be assigned and started before its terminal fees are recorded. '
+            'They stay owed on the van\'s statement. Your reason is kept with the trip and the '
             'Cashier is told.',
         confirmLabel: 'Lift block',
         reasonRequired: true,
@@ -303,8 +308,8 @@ class TripLifecyclePanel extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Depart now?'),
-        content: const Text('Boarding closes. Paid passengers who were not scanned aboard become '
-            'no-shows and their space is released. No refund is issued.'),
+        content: const Text('Boarding closes and the passenger list locks. Nobody boards after this, and '
+            'paid seats still count in the terminal fees. No refund is issued.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Depart')),
@@ -361,8 +366,8 @@ class TripLifecyclePanel extends StatelessWidget {
       context: context,
       builder: (_) => const _ReasonDialog(
         title: 'Void this trip?',
-        intro: 'The trip is cancelled and kept on record with your reason. Passengers holding '
-            'tickets are told to see the terminal office. This cannot be undone.',
+        intro: 'The trip is cancelled and kept on record with your reason. Passengers with '
+            'reservations are told to see the terminal office. This cannot be undone.',
         confirmLabel: 'Void trip',
         reasonRequired: true,
         danger: true,
@@ -373,9 +378,10 @@ class TripLifecyclePanel extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------------ A2Z's share
-/// What the Cashier should receive now, line by line, and the amount and
-/// receipt number to record. Pops (share, amount, reference).
+// ---------------------------------------------------------- terminal fees
+/// What the Cashier should receive now, line by line, and the amount,
+/// receipt number and operator's share to record. Pops (share, amount,
+/// reference, operator's share or null).
 class _ShareDialog extends StatefulWidget {
   const _ShareDialog({required this.trip});
   final TripBoardEntry trip;
@@ -391,15 +397,19 @@ class _ShareDialogState extends State<_ShareDialog> {
       .share(widget.trip.tripId, tripStatus: widget.trip.status)
       .then((s) {
     _amount.text = s.amountDue.toStringAsFixed(2);
+    final left = s.operatorShareOwed - s.operatorShareGiven;
+    if (left > 0) _share.text = left.toStringAsFixed(2);
     return s;
   });
   final _amount = TextEditingController();
   final _reference = TextEditingController();
+  final _share = TextEditingController();
 
   @override
   void dispose() {
     _amount.dispose();
     _reference.dispose();
+    _share.dispose();
     super.dispose();
   }
 
@@ -411,9 +421,12 @@ class _ShareDialogState extends State<_ShareDialog> {
       builder: (context, snap) {
         final share = snap.data;
         final amount = double.tryParse(_amount.text.trim());
-        final valid = share != null && amount != null && amount > 0 && amount <= share.amountDue + 0.001;
+        final shareText = _share.text.trim();
+        final operatorShare = shareText.isEmpty ? null : double.tryParse(shareText);
+        final valid = share != null && amount != null && amount > 0 && amount <= share.amountDue + 0.001 &&
+            (shareText.isEmpty || (operatorShare != null && operatorShare >= 0));
         return AlertDialog(
-          title: const Text('Record A2Z\'s 15 %'),
+          title: const Text('Record terminal fees'),
           content: SizedBox(
             width: 460,
             child: snap.hasError
@@ -427,10 +440,10 @@ class _ShareDialogState extends State<_ShareDialog> {
                         children: [
                           Text(
                             share.beforeDeparture
-                                ? 'The share ${widget.trip.dispatcherName ?? 'the Dispatcher'} hands over '
-                                    'for ${widget.trip.plateNumber}. Recording it locks the passenger list '
-                                    'and opens Start.'
-                                : 'This trip left without its share recorded. The payment goes on '
+                                ? 'The terminal fees ${widget.trip.dispatcherName ?? 'the Dispatcher'} hands '
+                                    'over for ${widget.trip.plateNumber}. Recording them locks the passenger '
+                                    'list and opens Start.'
+                                : 'This trip left without its terminal fees recorded. The payment goes on '
                                     '${widget.trip.plateNumber}\'s statement for the day.',
                             style: text.bodySmall,
                           ),
@@ -456,7 +469,8 @@ class _ShareDialogState extends State<_ShareDialog> {
                             Expanded(child: Text('Due now', style: text.titleSmall)),
                             Text(_peso.format(share.amountDue), style: text.titleSmall),
                           ]),
-                          Text('Includes anything else the van still owes today.',
+                          Text('A2Z\'s 15 % of the lines above, the DCOTT ticket, the day\'s parking '
+                              'if unpaid, and anything else the van still owes today.',
                               style: text.bodySmall?.copyWith(color: AppColors.textMuted)),
                           if (share.disputed > 0)
                             Text('${_peso.format(share.disputed)} is under dispute and not due.',
@@ -482,6 +496,19 @@ class _ShareDialogState extends State<_ShareDialog> {
                               maxLength: 64,
                               decoration: const InputDecoration(labelText: 'Receipt number (optional)'),
                             ),
+                            TextField(
+                              controller: _share,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: 'Operator\'s share handed to the operator',
+                                prefixText: '₱ ',
+                                helperText: 'Owed today ${_peso.format(share.operatorShareOwed)}, recorded '
+                                    '${_peso.format(share.operatorShareGiven)}. Leave empty if not yet given; '
+                                    'it does not block Start.',
+                                helperMaxLines: 2,
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -490,7 +517,12 @@ class _ShareDialogState extends State<_ShareDialog> {
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             FilledButton(
               onPressed: valid
-                  ? () => Navigator.pop<(TripShare, String, String)>(context, (share, amount.toStringAsFixed(2), _reference.text.trim()))
+                  ? () => Navigator.pop<(TripShare, String, String, String?)>(context, (
+                        share,
+                        amount.toStringAsFixed(2),
+                        _reference.text.trim(),
+                        operatorShare?.toStringAsFixed(2),
+                      ))
                   : null,
               child: const Text('Record payment'),
             ),
@@ -547,8 +579,8 @@ class _AssignDialogState extends State<_AssignDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Validated vans and Dispatchers only. The Dispatcher can scan and log fares '
-                    'from now on.', style: Theme.of(context).textTheme.bodySmall),
+                Text('Validated vans and Dispatchers only. The Dispatcher can mark reservations Paid '
+                    'and list walk-ups from now on.', style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: AppSpacing.md),
                 DropdownButtonFormField<String>(
                   decoration: const InputDecoration(labelText: 'Van'),

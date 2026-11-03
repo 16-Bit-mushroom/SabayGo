@@ -1,7 +1,8 @@
 import '../../core/network/api_client.dart';
 
-/// A configurable cooperative policy row -- reschedule cutoff, advance
-/// booking cap, geofence radius, hold TTL, variance threshold, and so on.
+/// A configurable cooperative policy row -- the unpaid-reservation cutoff,
+/// A2Z's rate, the DCOTT ticket and parking fees, advance booking cap,
+/// geofence radius, and so on. The server's list is the source of truth.
 ///
 /// Existing trips are unaffected by an edit here: policy values are
 /// snapshotted onto each trip at generation time, so a change here only

@@ -261,7 +261,7 @@ class _StaffFormState extends State<StaffForm> {
         const SizedBox(height: AppSpacing.xs),
         Text(
           _role == 'dispatcher'
-              ? 'Rides the van, scans tickets and records cash passengers. Validated before a trip.'
+              ? 'Rides the van, marks reservations Paid and lists walk-ups. Validated before a trip.'
               : 'Works at the desk. Not validated: office accounts are never assigned to a van.',
           style: text.bodySmall,
         ),

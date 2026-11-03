@@ -389,7 +389,7 @@ class _TripDetail extends StatelessWidget {
                     Expanded(
                       child: StatTile(
                           label: 'Aboard', value: '${t.boarded}', color: AppColors.success,
-                          caption: 'scanned or listed'),
+                          caption: 'on the passenger list'),
                     ),
                     if (t.doorAboard != null) ...[
                       const SizedBox(width: AppSpacing.sm),
@@ -413,7 +413,7 @@ class _TripDetail extends StatelessWidget {
                     Expanded(
                       child: StatTile(
                           label: 'Aboard', value: '${m.boarded}', color: AppColors.success,
-                          caption: 'scanned or listed'),
+                          caption: 'on the passenger list'),
                     ),
                     if (t.doorAboard != null) ...[
                       const SizedBox(width: AppSpacing.sm),
