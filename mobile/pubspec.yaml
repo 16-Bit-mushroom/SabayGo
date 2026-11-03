@@ -34,13 +34,10 @@ dependencies:
   path: ^1.9.0
 
   # --- device ---
-  mobile_scanner: ^7.2.1        # conductor QR scanning
-  qr_flutter: ^4.1.0            # passenger e-ticket rendering
   geolocator: ^13.0.2           # geofenced check-in
   permission_handler: ^11.3.1
   connectivity_plus: ^6.1.0     # offline detection for the manifest
-  url_launcher: ^6.3.1          # PayMongo checkout redirect
-  image_picker: ^1.2.3          # home-pickup payment screenshot
+  image_picker: ^1.2.3          # home-pickup landmark photo, chat images
 
   # --- maps ---
   # NAHGM's client half. OpenStreetMap tiles via flutter_map rather than the

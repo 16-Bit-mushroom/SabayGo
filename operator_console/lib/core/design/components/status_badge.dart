@@ -29,13 +29,18 @@ class StatusBadge extends StatelessWidget {
   }
 
   /// A passenger's status on a trip's passenger list.
-  factory StatusBadge.passenger(String status, {Key? key}) {
+  /// A seat's state on the passenger list. Cash only (brief rev 721): a
+  /// reservation is Unpaid until the Dispatcher marks it Paid. After
+  /// departure the server closes every seat still on the trip, so a paid
+  /// one is not called a no-show -- nobody can tell whether it rode.
+  factory StatusBadge.passenger(String status, {required bool paid, Key? key}) {
     final (label, tone) = switch (status) {
       'boarded' => ('Boarded', Tone.success),
-      'checked_in' => ('At terminal', Tone.info),
-      'confirmed' => ('Not yet boarded', Tone.warning),
-      'pending' => ('Unpaid', Tone.neutral),
-      'no_show' => ('No-show', Tone.danger),
+      _ when !paid && status == 'no_show' => ('No-show', Tone.danger),
+      _ when !paid => ('Unpaid', Tone.warning),
+      'checked_in' => ('Paid, at terminal', Tone.info),
+      'confirmed' => ('Paid', Tone.success),
+      'no_show' => ('Paid, departed', Tone.neutral),
       'completed' => ('Completed', Tone.neutral),
       _ => (status, Tone.neutral),
     };

@@ -1181,3 +1181,34 @@ against T38). The Dispatcher app still offers a "Van is at" stop for
 walk-ins (R2: only stop 1 is accepted). Open in the brief: where the
 Dispatcher records a dispute (app or web), Emergencies kept or dropped.
 
+### Rev 721 S9, S10 and the Day 1 test (3 Nov)
+
+Branch `rev721-frontends`. **S9** (console) and **S10** (app) brought
+both front ends onto the cash-only backend; what each covers is in
+`docs/GAP_REPORT.md` §10.4. Then the **Day 1 test**: the database
+rebuilt empty, the first Terminal Manager made by
+`backend/scripts/create_first_manager.py` (staff do not self-register),
+A2Z's setup entered through the console from their trip-schedule poster,
+and one cash trip run from reservation to statement, all four roles in
+one browser (`docs/DAY1_TEST_GUIDE.md`). Twenty-three findings
+(`docs/DAY1_FINDINGS.md`); the fixes that touch rules:
+
+- **Any seat paid after the list locks is a top-up** and puts the trip
+  back to unpaid, even when the list was empty at the payment
+  (`finance/statement._top_up`), and a payment recorded from the
+  statement locks the lists of the trips it pays, as paying the trip
+  does (`record_payment`). Before, a seat paid after the fees of an
+  empty trip left the trip Paid while its statement owed the 15 %, so
+  Start did not wait for it. `test_terminal_fees.sh` gained ten checks
+  ("Fees recorded on an empty list, then a seat"): 79/0;
+  `test_trip_lifecycle.sh` 135/0.
+- **The manifest names app passengers** from their profile
+  (`operations/boarding.ManifestUseCase`); before, only a walk-up's
+  typed name was sent.
+
+The rest were front-end fixes (unread badges in both apps, row buttons,
+a web-only crash in the walk-up request id, the Money title) and
+`tracking_simulator.py` reading names as utf8mb4. The data the test
+ended with ships as `db/day1/day1_a2z.sql`, loaded by
+`./db/load-day1.sh` in place of the demo seed. Handoff:
+`docs/HANDOFF_DAY1.md`.

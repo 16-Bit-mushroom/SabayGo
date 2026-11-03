@@ -83,7 +83,11 @@ class DoorCheckPanel extends StatelessWidget {
             Expanded(child: Text('Boarded ${_time.format(u.at)}, not on the list',
                 style: const TextStyle(fontWeight: FontWeight.w600))),
             TextButton(onPressed: busy ? null : () => onExplain(u), child: const Text('Reason')),
-            FilledButton(onPressed: busy ? null : () => onList(u), child: const Text('Add to list')),
+            FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
+              onPressed: busy ? null : () => onList(u),
+              child: const Text('Add to list'),
+            ),
           ]),
         ),
       for (final u in c.unlisted.where((u) => !u.isPending))
@@ -139,7 +143,7 @@ class HomePickupsPanel extends StatelessWidget {
   final bool departed;
   final bool busy;
 
-  /// (pickup, action): activate | arrived | boarded | no_show | proof | confirm
+  /// (pickup, action): activate | arrived | boarded | no_show | photo
   final void Function(HomePickup, String) onAction;
 
   @override
@@ -155,19 +159,10 @@ class HomePickupsPanel extends StatelessWidget {
         Text('${p.beneficiaryContact} · pin ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
         if (p.note != null) Text('"${p.note}"', style: const TextStyle(fontSize: 13)),
-        if (p.hasProof)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.xs),
-            child: Text(p.proofConfirmed ? 'Payment screenshot confirmed' : 'Payment screenshot sent, not yet confirmed',
-                style: TextStyle(
-                    fontSize: 13, color: p.proofConfirmed ? AppColors.success : AppColors.warning,
-                    fontWeight: FontWeight.w600)),
-          ),
         const SizedBox(height: AppSpacing.sm),
         Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
-          if (p.hasProof) OutlinedButton(onPressed: busy ? null : () => onAction(p, 'proof'), child: const Text('View screenshot')),
-          if (p.hasProof && !p.proofConfirmed && !departed)
-            FilledButton.tonal(onPressed: busy ? null : () => onAction(p, 'confirm'), child: const Text('Confirm payment')),
+          if (p.hasPhoto)
+            OutlinedButton(onPressed: busy ? null : () => onAction(p, 'photo'), child: const Text('Landmark photo')),
           if (p.status == 'requested' && !departed)
             FilledButton(onPressed: busy ? null : () => onAction(p, 'activate'), child: const Text('Activate')),
           if (p.status == 'activated' && departed)
@@ -180,7 +175,7 @@ class HomePickupsPanel extends StatelessWidget {
         if (p.status == 'requested' && !departed)
           const Padding(
             padding: EdgeInsets.only(top: AppSpacing.xs),
-            child: Text('Scanning the relative\'s ticket activates it too. Not activated by departure, it is a no-show.',
+            child: Text('Marking the seats Paid activates it too. Not activated by departure, it is a no-show.',
                 style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
           ),
       ],
@@ -238,10 +233,12 @@ class RentalPanel extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------------ A2Z's share
-/// What the Dispatcher hands to the Cashier before Start: A2Z's share of
-/// each line of the list (brief 2.1). The operator's dispute of a line is
-/// recorded here, until the payment.
+// ---------------------------------------------------------- terminal fees
+/// What the Dispatcher hands over before Start (brief rev 721, 2.1): the
+/// terminal fees to the Cashier (the 15 % of each line below, the DCOTT
+/// ticket, the day's parking when unpaid) and the operator's share to the
+/// operator. The operator's dispute of a line is recorded here, until the
+/// payment.
 class SharePanel extends StatelessWidget {
   const SharePanel({
     super.key,
@@ -265,11 +262,19 @@ class SharePanel extends StatelessWidget {
       'left_unpaid' => ('LEFT UNPAID', StatusTone.danger),
       _ => ('NOT PAID', StatusTone.warning),
     };
-    return DashPanel(title: 'A2Z\'s share', trailing: StatusChip(label, tone: tone), children: [
-      if (s.amountDue > 0)
-        Text('Hand ${_peso.format(s.amountDue)} to the Cashier', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))
-      else
-        const Text('Nothing to hand over now.', style: TextStyle(fontWeight: FontWeight.w600)),
+    final toOperator = s.operatorShareOwed - s.operatorShareGiven;
+    return DashPanel(title: 'Terminal fees', trailing: StatusChip(label, tone: tone), children: [
+      if (s.amountDue > 0) ...[
+        Text('Hand ${_peso.format(s.amountDue)} to the Cashier', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const Text('A2Z\'s 15 % of the lines below, the DCOTT ticket, and the day\'s parking if not yet paid. '
+            'Start waits for it.', style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+      ] else
+        const Text('Nothing to hand to the Cashier now.', style: TextStyle(fontWeight: FontWeight.w600)),
+      if (toOperator > 0) ...[
+        const SizedBox(height: AppSpacing.xs),
+        Text('Give the operator ${_peso.format(toOperator)}, in front of the Cashier',
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+      ],
       if (s.disputed > 0)
         Text('${_peso.format(s.disputed)} disputed: waits for the Terminal Manager.',
             style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600)),

@@ -15,7 +15,6 @@ import '../../viewmodels/shift_viewmodel.dart';
 import '../messages/conversations_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'dispatcher_trips_screen.dart';
-import 'qr_scanner_screen.dart';
 
 /// Shell for the Dispatcher working a van.
 ///
@@ -60,32 +59,6 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
     super.dispose();
   }
 
-  Future<void> _openScanner() async {
-    final trip = _shift.active;
-    if (trip == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Open a trip first so the scan is checked against it.'),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-    if (trip.isDeparted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('That trip has departed: boarding closed at its starting terminal.'),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider.value(
-          value: _shift,
-          child: QRScannerScreen(trip: trip, stopSequence: trip.boardingStop),
-        ),
-      ),
-    );
-  }
-
   void _openMessages() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -126,7 +99,7 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('End shift?'),
         content: const Text(
-          'You will need to sign in again to scan tickets or log passengers.',
+          'You will need to sign in again to mark seats Paid or log passengers.',
         ),
         actions: [
           TextButton(
@@ -227,15 +200,6 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
           ],
         ),
         body: const DispatcherTripsScreen(),
-        // Scanning is the single most repeated action of a shift, so it
-        // stays reachable from the list, not only from inside a manifest.
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _openScanner,
-          backgroundColor: AppColors.success,
-          foregroundColor: Colors.white,
-          icon: const Icon(Icons.qr_code_scanner),
-          label: const Text('Scan', style: TextStyle(fontWeight: FontWeight.w700)),
-        ),
       ),
     );
   }

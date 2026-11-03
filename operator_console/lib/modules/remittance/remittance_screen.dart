@@ -10,13 +10,17 @@ import '../../data/repositories/money_repository.dart';
 import '../../viewmodels/auth_provider.dart';
 
 /// Remittance (brief 9, replaces Fares & Cash): each van's statement for
-/// the day -- income paid through the app (verified) and in cash to the
-/// Dispatcher (declared), A2Z's share of it, any share held from a trip
-/// that left unpaid, what has been paid, and what is disputed.
+/// the day -- income reserved in the app (Booked) and listed as walk-ups
+/// (Walk-up), all of it cash; the terminal fees it owes (A2Z's 15 %, the
+/// DCOTT ticket per trip, the day's parking); any share held from a trip
+/// that left unpaid; what has been paid; what is disputed; and the
+/// operator's share, owed and handed over.
 ///
-/// The Cashier records the payment the Dispatcher hands over, and may
-/// record an operator's dispute on a line until that payment. Nothing here
-/// is estimated: the lines are the passenger list.
+/// The Cashier records the terminal fees the Dispatcher hands over with
+/// the operator's share, a later difference in that share, and a
+/// parking-only charge for a van with no trip. An operator's dispute on a
+/// line may be recorded until its payment. Nothing here is estimated: the
+/// lines are the passenger list.
 class RemittanceScreen extends StatefulWidget {
   const RemittanceScreen({super.key});
 
@@ -58,6 +62,40 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     }
   }
 
+  /// The day's ₱50 for a van parked at the terminal with no trip.
+  Future<void> _parking() async {
+    List<Van> vans;
+    try {
+      vans = await context.read<FleetRepository>().listVans();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
+    if (!mounted) return;
+    final charged = {for (final s in _statements ?? const <Statement>[]) s.vanId};
+    final van = await showDialog<Van>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Parking-only charge'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text('For a van parked at the terminal today with no trip. It opens a statement of '
+                'its own with the day\'s parking, paid like any other.'),
+          ),
+          for (final v in vans)
+            if (!charged.contains(v.vanId))
+              SimpleDialogOption(onPressed: () => Navigator.pop(ctx, v), child: Text(v.plateNumber)),
+        ],
+      ),
+    );
+    if (van == null || !mounted) return;
+    if (await runAction(context, () => _money.chargeParking(van.vanId),
+        'Parking charged to ${van.plateNumber}.')) {
+      _load();
+    }
+  }
+
   void _shift(int days) {
     setState(() => _day = _day.add(Duration(days: days)));
     _load();
@@ -73,10 +111,17 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           PageHeader(
-            title: 'Remittance',
-            description: 'Each van\'s statement for the day: A2Z\'s share of the fares on its passenger '
-                'lists. The Dispatcher hands the share over and the Cashier records it here.',
+            title: 'Money',
+            description: 'Each van\'s statement for the day: the terminal fees owed on its passenger lists '
+                '(A2Z\'s 15 %, the DCOTT ticket per trip, the day\'s parking) and the operator\'s share. '
+                'The Dispatcher hands them over and the Cashier records them here.',
             actions: [
+              if (context.read<AuthProvider>().profile?.role.isCashier ?? false)
+                OutlinedButton.icon(
+                  onPressed: _parking,
+                  icon: const Icon(Icons.local_parking_outlined, size: 18),
+                  label: const Text('Parking-only charge'),
+                ),
               DayPicker(day: _day, onShift: _shift),
               RefreshButton(onPressed: _load, busy: _loading),
             ],
@@ -86,14 +131,18 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               padding: const EdgeInsets.only(bottom: AppSpacing.lg),
               child: Wrap(spacing: AppSpacing.md, runSpacing: AppSpacing.md, children: [
                 SizedBox(width: 200, child: StatTile(
-                    label: 'A2Z\'s share', value: peso.format(sum((s) => s.remittanceOwed + s.heldShare)),
-                    icon: Icons.account_balance_outlined)),
+                    label: 'Terminal fees', value: peso.format(sum((s) => s.terminalFeesOwed + s.heldShare)),
+                    icon: Icons.account_balance_outlined, caption: '15 % + DCOTT tickets + parking')),
                 SizedBox(width: 200, child: StatTile(
                     label: 'Paid', value: peso.format(sum((s) => s.settledAmount)),
                     icon: Icons.paid_outlined, color: AppColors.success)),
                 SizedBox(width: 200, child: StatTile(
                     label: 'Due now', value: peso.format(sum((s) => s.amountDue)),
                     icon: Icons.payments_outlined, color: AppColors.warning)),
+                SizedBox(width: 200, child: StatTile(
+                    label: 'Operator\'s share', value: peso.format(sum((s) => s.operatorShareOwed)),
+                    icon: Icons.person_outline,
+                    caption: 'Given ${peso.format(sum((s) => s.operatorShareGiven))}')),
                 SizedBox(width: 200, child: StatTile(
                     label: 'Disputed', value: peso.format(sum((s) => s.disputed)),
                     icon: Icons.gavel_outlined, caption: 'Waits for the Terminal Manager')),
@@ -162,13 +211,35 @@ class _StatementPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(spacing: AppSpacing.xl, runSpacing: AppSpacing.sm, children: [
-            _figure(context, 'Paid through the app (verified)', s.verifiedIncome),
-            _figure(context, 'Paid in cash (declared)', s.declaredIncome),
-            _figure(context, 'A2Z\'s share (${s.ratePct.toStringAsFixed(0)} %)', s.remittanceOwed),
+            _figure(context, 'Booked (B)', s.bookedIncome),
+            _figure(context, 'Walk-up (W)', s.walkUpIncome),
+            _figure(context, 'A2Z\'s ${s.ratePct.toStringAsFixed(0)} %', s.remittanceOwed),
+            _figure(context, 'DCOTT tickets (${_trips(s)} × ${peso.format(s.dcottTicketFee)})', s.dcottFees),
+            _figure(context, 'Parking', s.parkingFee),
+            _figure(context, 'Terminal fees owed', s.terminalFeesOwed, strong: true),
             if (s.heldShare > 0) _figure(context, 'Held from a trip that left unpaid', s.heldShare),
             _figure(context, 'Paid', s.settledAmount),
+            _figure(context, 'Due now', s.amountDue, strong: true),
             if (s.disputed > 0) _figure(context, 'Disputed', s.disputed),
           ]),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(spacing: AppSpacing.xl, runSpacing: AppSpacing.sm, crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+            _figure(context, 'Operator\'s share owed', s.operatorShareOwed),
+            _figure(context, 'Operator\'s share given', s.operatorShareGiven),
+            // A warning only: the share is handed between the Dispatcher and
+            // the operator, and a difference blocks nothing (T68).
+            if (s.operatorShareDiffers)
+              StatusBadge(
+                  'Operator share differs by ${peso.format((s.operatorShareDifference ?? 0).abs())}',
+                  tone: Tone.warning),
+          ]),
+          if (s.operatorShareGivenAt != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            FactLine(Icons.person_outline,
+                'Operator\'s share recorded by ${s.operatorShareRecordedByName ?? 'the Cashier'} '
+                'at ${_time.format(s.operatorShareGivenAt!)}'),
+          ],
           if (s.settledAt != null) ...[
             const SizedBox(height: AppSpacing.sm),
             FactLine(Icons.how_to_reg_outlined,
@@ -185,32 +256,71 @@ class _StatementPanel extends StatelessWidget {
                   onChanged: onChanged),
             const SizedBox(height: AppSpacing.sm),
           ],
-          if (cashier && s.amountDue > 0)
+          if (cashier)
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: () => _pay(context),
-                icon: const Icon(Icons.payments_outlined, size: 18),
-                label: Text('Record payment of ${peso.format(s.amountDue)}'),
-              ),
+              child: Wrap(spacing: AppSpacing.sm, children: [
+                OutlinedButton.icon(
+                  onPressed: () => _operatorShare(context),
+                  icon: const Icon(Icons.person_outline, size: 18),
+                  label: const Text('Record operator\'s share'),
+                ),
+                if (s.amountDue > 0)
+                  FilledButton.icon(
+                    onPressed: () => _pay(context),
+                    icon: const Icon(Icons.payments_outlined, size: 18),
+                    label: Text('Record payment of ${peso.format(s.amountDue)}'),
+                  ),
+              ]),
             ),
         ],
       ),
     );
   }
 
-  Widget _figure(BuildContext context, String label, double value) {
+  static int _trips(Statement s) => s.dcottTicketFee > 0 ? (s.dcottFees / s.dcottTicketFee).round() : 0;
+
+  Widget _figure(BuildContext context, String label, double value, {bool strong = false}) {
     final text = Theme.of(context).textTheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: text.bodySmall),
       Text(peso.format(value),
-          style: text.titleMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+          style: text.titleMedium?.copyWith(
+              fontWeight: strong ? FontWeight.w700 : null,
+              fontFeatures: const [FontFeature.tabularFigures()])),
     ]);
+  }
+
+  /// A difference in the operator's share, handed over after the payment.
+  Future<void> _operatorShare(BuildContext context) async {
+    final money = context.read<MoneyRepository>();
+    final left = statement.operatorShareOwed - statement.operatorShareGiven;
+    final amount = await askText(
+      context,
+      title: 'Record operator\'s share · ${statement.plateNumber}',
+      intro: 'Owed ${peso.format(statement.operatorShareOwed)}, recorded so far '
+          '${peso.format(statement.operatorShareGiven)}'
+          '${left > 0 ? ', ${peso.format(left)} still to give' : ''}. Enter what the Dispatcher has just '
+          'handed the operator.',
+      label: 'Amount handed to the operator (₱)',
+      confirmLabel: 'Record',
+      maxLength: 12,
+    );
+    if (amount == null || !context.mounted) return;
+    final value = double.tryParse(amount.trim());
+    if (value == null || value <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter an amount above zero.')));
+      return;
+    }
+    if (await runAction(context, () => money.recordOperatorShare(statement.remittanceId, value.toStringAsFixed(2)),
+        'Operator\'s share recorded for ${statement.plateNumber}.')) {
+      onChanged();
+    }
   }
 
   Future<void> _pay(BuildContext context) async {
     final money = context.read<MoneyRepository>();
-    final picked = await showDialog<(String, String, String?)>(
+    final picked = await showDialog<(String, String, String?, String?)>(
       context: context,
       builder: (_) => _PaymentDialog(statement: statement),
     );
@@ -218,7 +328,7 @@ class _StatementPanel extends StatelessWidget {
     final ok = await runAction(
       context,
       () => money.pay(statement.remittanceId,
-          amount: picked.$1, reference: picked.$2, handedOverBy: picked.$3),
+          amount: picked.$1, reference: picked.$2, handedOverBy: picked.$3, operatorShare: picked.$4),
       'Payment recorded for ${statement.plateNumber}.',
     );
     if (ok) onChanged();
@@ -239,8 +349,8 @@ class _LineRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(children: [
-        SizedBox(width: 40, child: StatusBadge(l.incomeGroup,
-            tone: l.incomeGroup == 'V' ? Tone.info : Tone.neutral)),
+        SizedBox(width: 40, child: StatusBadge(l.incomeGroup == 'booked' ? 'B' : 'W',
+            tone: l.incomeGroup == 'booked' ? Tone.info : Tone.neutral)),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text('${l.count} × ${peso.format(l.fare)} to ${l.destination}'
@@ -284,7 +394,8 @@ class _LineRow extends StatelessWidget {
 }
 
 /// The amount handed over (the amount due by default), the receipt
-/// reference, and the Dispatcher who handed it over.
+/// reference, the Dispatcher who handed it over, and the operator's share
+/// handed to the operator in the same step.
 class _PaymentDialog extends StatefulWidget {
   const _PaymentDialog({required this.statement});
   final Statement statement;
@@ -296,6 +407,10 @@ class _PaymentDialog extends StatefulWidget {
 class _PaymentDialogState extends State<_PaymentDialog> {
   late final _amount = TextEditingController(text: widget.statement.amountDue.toStringAsFixed(2));
   final _reference = TextEditingController();
+  late final _share = TextEditingController(text: () {
+    final left = widget.statement.operatorShareOwed - widget.statement.operatorShareGiven;
+    return left > 0 ? left.toStringAsFixed(2) : '';
+  }());
   List<StaffMember>? _dispatchers;
   String? _handedOverBy;
 
@@ -313,10 +428,13 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   void dispose() {
     _amount.dispose();
     _reference.dispose();
+    _share.dispose();
     super.dispose();
   }
 
-  bool get _ok => (double.tryParse(_amount.text) ?? 0) > 0;
+  bool get _ok =>
+      (double.tryParse(_amount.text) ?? 0) > 0 &&
+      (_share.text.trim().isEmpty || (double.tryParse(_share.text.trim()) ?? -1) >= 0);
 
   @override
   Widget build(BuildContext context) {
@@ -330,6 +448,16 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             onChanged: (_) => setState(() {}),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(labelText: 'Amount received', prefixText: '₱ '),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _share,
+            onChanged: (_) => setState(() {}),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+                labelText: 'Operator\'s share handed to the operator',
+                prefixText: '₱ ',
+                helperText: 'Owed ${peso.format(widget.statement.operatorShareOwed)}. Leave empty if not yet given.'),
           ),
           const SizedBox(height: AppSpacing.md),
           TextField(
@@ -354,7 +482,8 @@ class _PaymentDialogState extends State<_PaymentDialog> {
         FilledButton(
           onPressed: _ok
               ? () => Navigator.pop(context,
-                  (double.parse(_amount.text).toStringAsFixed(2), _reference.text.trim(), _handedOverBy))
+                  (double.parse(_amount.text).toStringAsFixed(2), _reference.text.trim(), _handedOverBy,
+                      _share.text.trim().isEmpty ? null : double.parse(_share.text.trim()).toStringAsFixed(2)))
               : null,
           child: const Text('Record payment'),
         ),

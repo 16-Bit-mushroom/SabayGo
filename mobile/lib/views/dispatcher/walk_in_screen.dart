@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
-import '../../core/offline/walk_in_sync_service.dart';
+import '../../core/offline/offline_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
 
 /// Record a cash passenger boarding at the starting terminal.
@@ -41,7 +41,7 @@ class WalkInScreen extends StatefulWidget {
 }
 
 class _WalkInScreenState extends State<WalkInScreen> {
-  late final WalkInSyncService _sync;
+  late final OfflineSyncService _sync;
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
@@ -59,7 +59,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
   @override
   void initState() {
     super.initState();
-    _sync = context.read<WalkInSyncService>();
+    _sync = context.read<OfflineSyncService>();
     _boarding = widget.trip.boardingStop;
     final last = _lastStop;
     // Most walk-ins ride to the end of the line; preselect it so the
@@ -153,7 +153,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
         enableDrag: false,
         builder: (ctx) => _LoggedSheet(
           queued: submission.queued,
-          ticketNumber: submission.queued ? null : submission.result!.ticketNumber,
+          bookingCode: submission.queued ? null : submission.result!.bookingCode,
           collect: collect,
           route: '${widget.trip.stopName(_boarding)} → ${widget.trip.stopName(_alighting!)}',
         ),
@@ -164,12 +164,15 @@ class _WalkInScreenState extends State<WalkInScreen> {
       } else {
         Navigator.pop(context);
       }
-    } on ApiException catch (e) {
+    } catch (e) {
+      // Anything else, too: a Log button that silently does nothing
+      // leaves the Dispatcher holding cash that is on no list.
       if (mounted) {
         HapticFeedback.heavyImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e is ApiException ? e.message : 'Not logged: $e'),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -432,13 +435,13 @@ class _TotalBar extends StatelessWidget {
 class _LoggedSheet extends StatelessWidget {
   const _LoggedSheet({
     required this.queued,
-    required this.ticketNumber,
+    required this.bookingCode,
     required this.collect,
     required this.route,
   });
 
   final bool queued;
-  final String? ticketNumber;
+  final String? bookingCode;
   final double? collect;
   final String route;
 
@@ -461,8 +464,8 @@ class _LoggedSheet extends StatelessWidget {
               ]),
               const SizedBox(height: AppSpacing.md),
               Text(route, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
-              if (ticketNumber != null)
-                Text(ticketNumber!,
+              if (bookingCode != null)
+                Text(bookingCode!,
                     style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1, fontSize: 15)),
               const SizedBox(height: AppSpacing.lg),
               const Text('COLLECT',
@@ -480,7 +483,7 @@ class _LoggedSheet extends StatelessWidget {
                 const SizedBox(height: AppSpacing.md),
                 const Text(
                   'No connection right now. Saved on this phone; it syncs and gets a real '
-                  'ticket number once you are back online.',
+                  'booking code once you are back online.',
                   style: TextStyle(fontSize: 13.5, height: 1.4),
                 ),
               ],

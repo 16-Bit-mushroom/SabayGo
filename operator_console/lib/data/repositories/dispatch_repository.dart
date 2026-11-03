@@ -119,7 +119,8 @@ class TripBoardEntry {
   final String? unauditedReason;
   final String? departureSource; // confirmed | detected
   final String? changeNote;
-  /// A2Z's 15 % (brief 2.1): unpaid | paid | overridden | left_unpaid.
+  /// The terminal fees (brief 2.1: A2Z's 15 %, the DCOTT ticket, the
+  /// day's parking): unpaid | paid | overridden | left_unpaid.
   final String paymentStatus;
 
   bool get isAssigned => vanId != null && dispatcherId != null;
@@ -206,30 +207,36 @@ class TripManifest {
 
 class ManifestPassenger {
   const ManifestPassenger({
-    required this.ticketNumber,
+    required this.bookingCode,
     required this.name,
     required this.boardingStop,
     required this.alightingStop,
     required this.bookingType,
     required this.status,
+    required this.paymentStatus,
     required this.fareAmount,
   });
 
-  final String ticketNumber;
+  final String bookingCode;
   final String? name;
   final int boardingStop;
   final int alightingStop;
   final String bookingType;
   final String status;
+  /// 'unpaid' until the Dispatcher marks the seat Paid (brief rev 721).
+  final String paymentStatus;
   final String fareAmount;
 
+  bool get isPaid => paymentStatus == 'paid';
+
   factory ManifestPassenger.fromJson(Map<String, dynamic> j) => ManifestPassenger(
-        ticketNumber: j['ticket_number'] as String,
+        bookingCode: j['booking_code'] as String,
         name: j['name'] as String?,
         boardingStop: j['boarding_stop'] as int,
         alightingStop: j['alighting_stop'] as int,
         bookingType: j['booking_type'] as String,
         status: j['status'] as String,
+        paymentStatus: j['payment_status'] as String? ?? 'unpaid',
         fareAmount: j['fare_amount'].toString(),
       );
 }
@@ -313,10 +320,12 @@ class DispatchRepository {
   Future<void> voidTrip(String tripId, {required String reason}) =>
       _api.post('/trips/$tripId/void', body: {'reason': reason});
 
-  // ------------------------------------------------------- A2Z's share
-  // The Cashier records the 15 % the Dispatcher hands over; Start waits
-  // for it (brief 2.1). The Terminal Manager may lift the block, with a
-  // reason, but records no payment.
+  // ------------------------------------------------------ terminal fees
+  // The Cashier records the terminal fees the Dispatcher hands over (15 %,
+  // the ₱75 DCOTT ticket, the day's ₱50 parking when unpaid) with the
+  // operator's share; Start waits for the fees, not the share (brief 2.1).
+  // The Terminal Manager may lift the block, with a reason, but records
+  // no payment.
 
   /// The share does not carry the trip's status; the board's is passed in.
   Future<TripShare> share(String tripId, {required String tripStatus}) async => TripShare.fromJson(
@@ -326,8 +335,13 @@ class DispatchRepository {
 
   /// Before departure the payment is the trip's; after, it goes on the
   /// van's statement, where a trip that left unpaid is still owed.
-  Future<void> recordPayment(TripShare share, {required String amount, String? reference}) {
-    final body = {'amount': amount, if (reference != null && reference.isNotEmpty) 'reference': reference};
+  Future<void> recordPayment(TripShare share,
+      {required String amount, String? reference, String? operatorShare}) {
+    final body = {
+      'amount': amount,
+      if (reference != null && reference.isNotEmpty) 'reference': reference,
+      if (operatorShare != null && operatorShare.isNotEmpty) 'operator_share': operatorShare,
+    };
     return share.beforeDeparture
         ? _api.post('/trips/${share.tripId}/payment', body: body)
         : _api.post('/statements/${share.remittanceId}/payments', body: body);
@@ -337,9 +351,11 @@ class DispatchRepository {
       _api.post('/trips/$tripId/payment-override', body: {'note': note});
 }
 
-/// A trip's share (GET /trips/{id}/share). `amountDue` is the van's
-/// undisputed balance for the day: this trip's share plus anything the van
-/// still owes, which is what the Cashier should receive now.
+/// A trip's terminal fees (GET /trips/{id}/share). `amountDue` is the
+/// van's undisputed balance for the day: this trip's 15 % and DCOTT
+/// ticket, the day's parking if unpaid, and anything the van still owes,
+/// which is what the Cashier should receive now. The operator's share is
+/// the van's for the day, owed and recorded so far.
 class TripShare {
   const TripShare({
     required this.tripId,
@@ -347,6 +363,8 @@ class TripShare {
     required this.remittanceId,
     required this.amountDue,
     required this.disputed,
+    required this.operatorShareOwed,
+    required this.operatorShareGiven,
     required this.lines,
     required this.beforeDeparture,
   });
@@ -356,6 +374,8 @@ class TripShare {
   final String? remittanceId;
   final double amountDue;
   final double disputed;
+  final double operatorShareOwed;
+  final double operatorShareGiven;
   final List<ShareLine> lines;
   final bool beforeDeparture;
 
@@ -365,6 +385,8 @@ class TripShare {
         remittanceId: j['remittance_id'] as String?,
         amountDue: double.parse(j['amount_due'].toString()),
         disputed: double.parse(j['disputed'].toString()),
+        operatorShareOwed: double.parse((j['operator_share_owed'] ?? 0).toString()),
+        operatorShareGiven: double.parse((j['operator_share_given'] ?? 0).toString()),
         lines: (j['lines'] as List).map((e) => ShareLine.fromJson(e as Map<String, dynamic>)).toList(),
         beforeDeparture: beforeDeparture,
       );

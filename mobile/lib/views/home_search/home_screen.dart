@@ -11,7 +11,7 @@ import '../../data/repositories/booking_repository.dart';
 import '../../data/repositories/trip_repository.dart';
 import '../../models/uv_trip_model.dart';
 import '../../viewmodels/home_search_viewmodel.dart';
-import '../ticket/ticket_screen.dart';
+import '../reservations/reservation_screen.dart';
 import 'widgets/journey_picker_card.dart';
 import 'widgets/time_block_filter.dart';
 import 'widgets/trip_card.dart';
@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => TicketScreen(bookedTrip: trip, reservation: result),
+          builder: (_) => ReservationScreen(bookedTrip: trip, reservation: result),
         ),
       );
       // Availability changed for everyone, so pull fresh numbers rather

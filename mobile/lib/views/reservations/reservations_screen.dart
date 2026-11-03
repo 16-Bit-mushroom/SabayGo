@@ -13,10 +13,8 @@ import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/util/when.dart';
 import '../../data/repositories/booking_repository.dart';
-import '../../data/repositories/trip_repository.dart';
 import '../../viewmodels/reservations_viewmodel.dart';
-import '../ticket/ticket_screen.dart';
-import 'reschedule_sheet.dart';
+import 'reservation_screen.dart';
 
 /// Everything the passenger has booked: the next one, the later ones, and
 /// what has already happened.
@@ -39,13 +37,11 @@ class ReservationsScreen extends StatefulWidget {
 
 class _ReservationsScreenState extends State<ReservationsScreen> {
   late final ReservationsViewModel _vm;
-  late final TripRepository _trips;
 
   @override
   void initState() {
     super.initState();
     final api = context.read<ApiClient>();
-    _trips = TripRepository(api);
     _vm = ReservationsViewModel(BookingRepository(api))
       ..addListener(_onChanged);
     _vm.load();
@@ -69,11 +65,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
-  Future<void> _openTicket(BookingSummary b) async {
+  Future<void> _openReservation(BookingSummary b) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => TicketScreen.fromBooking(booking: b)),
+      MaterialPageRoute(builder: (_) => ReservationScreen.fromBooking(booking: b)),
     );
-    // Payment, check-in or cancel may have happened on that screen.
+    // The Paid mark, a check-in or a cancel may have happened meanwhile.
     _vm.load();
   }
 
@@ -81,10 +77,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel this booking?'),
+        title: const Text('Cancel this reservation?'),
         content: const Text(
-          'Your space will be released. The cooperative does not issue '
-          'refunds, so any fare already paid is not returned.',
+          'Your space will be released for someone else. You have not paid, '
+          'so there is nothing to hand back.',
         ),
         actions: [
           TextButton(
@@ -94,26 +90,14 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Cancel booking'),
+            child: const Text('Cancel reservation'),
           ),
         ],
       ),
     );
     if (ok != true) return;
     final err = await _vm.cancel(b.bookingId);
-    _snack(err ?? 'Booking cancelled. The space has been released.');
-  }
-
-  Future<void> _reschedule(BookingSummary b) async {
-    final newTripId = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => RescheduleSheet(booking: b, trips: _trips),
-    );
-    if (newTripId == null) return;
-    final err = await _vm.reschedule(b.bookingId, newTripId);
-    _snack(err ?? 'Moved to the new departure.');
+    _snack(err ?? 'Reservation cancelled. The space has been released.');
   }
 
   @override
@@ -185,7 +169,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               _BookingRow(
                 booking: b,
                 tone: _toneFor(b),
-                onTap: () => _openTicket(b),
+                onTap: () => _openReservation(b),
               ),
               const SizedBox(height: AppSpacing.md),
             ],
@@ -232,7 +216,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   /// One of a home pickup's two seats: who it is for, where they board,
-  /// and the payment screenshot when the gateway was down (brief 2.6).
+  /// and the landmark photo for the Dispatcher (brief 2.6). Both seats are
+  /// paid in cash at the terminal.
   Widget _homePickupBand(BookingSummary b, HomePickupRef p) {
     final text = Theme.of(context).textTheme;
     return Padding(
@@ -245,39 +230,39 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             child: Text(
               p.isPassengerSeat
                   ? '${p.beneficiaryName}\'s seat: the van stops for them at the pin.'
-                  : 'Your seat, riding with ${p.beneficiaryName}. Scan this ticket at the terminal.',
+                  : 'Your seat, riding with ${p.beneficiaryName}. Pay both seats in cash to the Dispatcher '
+                      'at the terminal.',
               style: text.bodyMedium,
             ),
           ),
         ]),
-        if (b.isAwaitingPayment) ...[
+        if (p.isPassengerSeat && b.isActive) ...[
           const SizedBox(height: AppSpacing.sm),
           Text(
-            p.proofSent
-                ? (p.proofConfirmed ? 'Screenshot confirmed.' : 'Screenshot sent: the Dispatcher will confirm it.')
-                : 'Payment page not working? Send a screenshot of your payment to the Dispatcher.',
+            p.photoSent
+                ? 'Landmark photo sent to the Dispatcher.'
+                : 'Help the Dispatcher find the place: send a photo of a landmark near the pin.',
             style: text.bodySmall,
           ),
-          if (!p.proofConfirmed)
-            TextButton.icon(
-              onPressed: () => _sendScreenshot(p),
-              icon: const Icon(Icons.image_outlined, size: 18),
-              label: Text(p.proofSent ? 'Send another screenshot' : 'Send a payment screenshot'),
-            ),
+          TextButton.icon(
+            onPressed: () => _sendLandmarkPhoto(p),
+            icon: const Icon(Icons.image_outlined, size: 18),
+            label: Text(p.photoSent ? 'Send another photo' : 'Send a landmark photo'),
+          ),
         ],
       ]),
     );
   }
 
-  Future<void> _sendScreenshot(HomePickupRef p) async {
+  Future<void> _sendLandmarkPhoto(HomePickupRef p) async {
     final messenger = ScaffoldMessenger.of(context);
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (picked == null || !mounted) return;
     try {
       await BookingRepository(context.read<ApiClient>())
-          .sendPaymentScreenshot(p.pickupId, await picked.readAsBytes(), picked.name);
+          .sendLandmarkPhoto(p.pickupId, await picked.readAsBytes(), picked.name);
       messenger.showSnackBar(const SnackBar(
-        content: Text('Sent to the trip\'s Dispatcher. Both seats are held until departure.'),
+        content: Text('Sent to the trip\'s Dispatcher in the chat.'),
         behavior: SnackBarBehavior.floating,
       ));
       _vm.load();
@@ -290,7 +275,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   Widget _nextTripCard(BookingSummary b) {
     final busy = _vm.isBusy(b.bookingId);
     final text = Theme.of(context).textTheme;
-    final canCancel = !b.isCheckedIn && !b.isBoarded;
+    // The server decides: only an unpaid seat, before the list locks.
+    final canCancel = b.canCancel;
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -300,10 +286,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             button: true,
             label: '${b.statusLabel}. ${dayAndTime(b.departure)}. '
                 '${b.boardingTerminal} to ${b.alightingTerminal}. '
-                '${Money.format(b.fare)}. Opens the boarding pass.',
+                '${Money.format(b.fare)}. Booking code ${b.bookingCode}. Opens the reservation.',
             excludeSemantics: true,
             child: InkWell(
-              onTap: busy ? null : () => _openTicket(b),
+              onTap: busy ? null : () => _openReservation(b),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(AppRadius.lg),
               ),
@@ -341,7 +327,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(b.ticketNumber, style: text.bodySmall),
+                          child: Text(
+                            b.isPaid
+                                ? 'Code ${b.bookingCode}'
+                                : 'Code ${b.bookingCode} · pay in cash'
+                                    '${b.payBy != null ? ' by ${clockTime(b.payBy!)}' : ' at the terminal'}',
+                            style: text.bodySmall,
+                          ),
                         ),
                         Money(
                           b.fare,
@@ -359,23 +351,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             const Divider(height: 1),
             _homePickupBand(b, pickup),
           ],
-          if (b.canReschedule || canCancel) ...[
+          if (canCancel) ...[
             const Divider(height: 1),
             Row(
               children: [
-                if (b.canReschedule)
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: busy ? null : () => _reschedule(b),
-                      icon: const Icon(Icons.event_repeat, size: 18),
-                      label: const Text('Reschedule'),
-                    ),
-                  ),
-                if (b.canReschedule && canCancel)
-                  const SizedBox(
-                    height: AppSizing.minTouchTarget,
-                    child: VerticalDivider(width: 1),
-                  ),
                 if (canCancel)
                   Expanded(
                     child: TextButton.icon(
@@ -427,15 +406,15 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       itemBuilder: (context, i) => _BookingRow(
         booking: bookings[i],
         tone: tone,
-        showTicketNumber: true,
+        showCode: true,
       ),
     );
   }
 
   static StatusTone _toneFor(BookingSummary b) {
     if (b.isCancelled) return StatusTone.danger;
-    if (b.isAwaitingPayment) return StatusTone.warning;
-    if (b.isBoarded || b.isCheckedIn) return StatusTone.success;
+    if (b.isActive && !b.isPaid) return StatusTone.warning;
+    if (b.isPaid || b.isBoarded) return StatusTone.success;
     return StatusTone.info;
   }
 }
@@ -450,13 +429,13 @@ class _BookingRow extends StatelessWidget {
     required this.booking,
     required this.tone,
     this.onTap,
-    this.showTicketNumber = false,
+    this.showCode = false,
   });
 
   final BookingSummary booking;
   final StatusTone tone;
   final VoidCallback? onTap;
-  final bool showTicketNumber;
+  final bool showCode;
 
   @override
   Widget build(BuildContext context) {
@@ -468,7 +447,7 @@ class _BookingRow extends StatelessWidget {
       semanticLabel: '${dayAndTime(b.departure)}. ${b.boardingTerminal} to '
           '${b.alightingTerminal}. ${Money.format(b.fare)}. '
           '${b.statusLabel}.'
-          '${onTap == null ? '' : ' Opens the boarding pass.'}',
+          '${onTap == null ? '' : ' Opens the reservation.'}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -517,11 +496,11 @@ class _BookingRow extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              if (showTicketNumber)
+              if (showCode)
                 Expanded(
                   child: Text(
-                    b.ticketNumber,
-                    maxLines: 1,
+                    b.cancelLabel ?? 'Code ${b.bookingCode}',
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: text.bodySmall,
                   ),
@@ -529,8 +508,8 @@ class _BookingRow extends StatelessWidget {
               else
                 const Spacer(),
               const SizedBox(width: AppSpacing.sm),
-              // "AWAITING PAYMENT" is a wide chip; flexible so it ellipsises
-              // rather than pushing the ticket number off the card.
+              // "RELEASED, UNPAID" is a wide chip; flexible so it ellipsises
+              // rather than pushing the code off the card.
               Flexible(
                 child: StatusChip(b.statusLabel.toUpperCase(), tone: tone),
               ),

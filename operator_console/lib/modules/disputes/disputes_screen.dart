@@ -59,7 +59,7 @@ class _DisputesScreenState extends State<DisputesScreen> {
           PageHeader(
             title: 'Disputes',
             description: 'An operator\'s contest of a fare line or a driving flag. Record one from '
-                'Remittance or Driving Flags; the Terminal Manager decides each, with a note.',
+                'Money or Driving Flags; the Terminal Manager decides each, with a note.',
             actions: [
               SegmentedButton<String>(
                 segments: const [

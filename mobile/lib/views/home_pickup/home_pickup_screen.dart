@@ -3,7 +3,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/design/components/money.dart';
 import '../../core/design/tokens.dart';
@@ -19,11 +18,12 @@ import '../../models/uv_trip_model.dart';
 /// relative holds a seat too, pays for both, comes to the terminal first
 /// and rides along; the van stops at a pin on the map for the passenger.
 ///
-/// Two steps: who and where (name, contact, pin and note), then payment --
-/// each seat through the gateway, or, when the gateway is down, a
-/// screenshot of the payment sent to the trip's Dispatcher, who confirms
-/// it. A pin too far from the route is refused by the server in its own
-/// words.
+/// Two steps: who and where (name, contact, pin and note), then the two
+/// booking codes. Both seats are paid in cash to the Dispatcher at the
+/// terminal, and the Dispatcher marking them Paid activates the pickup. A
+/// photo of a landmark near the pin can go to the Dispatcher in the chat;
+/// it is not payment proof and nothing depends on it. A pin too far from
+/// the route is refused by the server in its own words.
 class HomePickupScreen extends StatefulWidget {
   const HomePickupScreen({super.key, required this.trip});
   final UvTripModel trip;
@@ -43,7 +43,7 @@ class _HomePickupScreenState extends State<HomePickupScreen> {
   LatLng? _pin;
   bool _busy = false;
   HomePickupBooking? _booked;
-  bool _proofSent = false;
+  bool _photoSent = false;
 
   @override
   void initState() {
@@ -101,28 +101,15 @@ class _HomePickupScreenState extends State<HomePickupScreen> {
     }
   }
 
-  Future<void> _pay(ReservationResult seat) async {
-    setState(() => _busy = true);
-    try {
-      final url = await _bookings.startCheckout(seat.bookingId);
-      final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      if (!ok) _snack('Could not open the payment page.');
-    } on ApiException catch (e) {
-      _snack(e.message);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _screenshot() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+  Future<void> _landmarkPhoto() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (picked == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      await _bookings.sendPaymentScreenshot(_booked!.pickupId, await picked.readAsBytes(), picked.name);
+      await _bookings.sendLandmarkPhoto(_booked!.pickupId, await picked.readAsBytes(), picked.name);
       if (!mounted) return;
-      setState(() => _proofSent = true);
-      _snack('Sent to the trip\'s Dispatcher. Both seats are held until departure while they check it.');
+      setState(() => _photoSent = true);
+      _snack('Sent to the trip\'s Dispatcher in the chat.');
     } on ApiException catch (e) {
       _snack(e.message);
     } finally {
@@ -149,7 +136,7 @@ class _HomePickupScreenState extends State<HomePickupScreen> {
         children: [
           Text('For a passenger who cannot come to the terminal because of age or disability. You take '
               'a seat too: you board at ${t.origin.name} and ride along, and the van stops for them on '
-              'the way. You pay for both seats.', style: text.bodyMedium),
+              'the way. You pay both seats in cash to the Dispatcher at the terminal.', style: text.bodyMedium),
           const SizedBox(height: AppSpacing.lg),
           TextFormField(
             controller: _name,
@@ -252,34 +239,32 @@ class _HomePickupScreenState extends State<HomePickupScreen> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.gutter),
       children: [
-        Text('Both seats are held. Pay for each one.', style: text.titleMedium),
+        Text('Both seats are reserved.', style: text.titleMedium),
         const SizedBox(height: AppSpacing.sm),
-        Text('Find both tickets on the Trips tab. Scan yours at ${widget.trip.origin.name}: that tells the '
-            'Dispatcher to stop for ${_name.text.trim()}. Their ticket is not scanned at the terminal.',
+        Text('Come to ${widget.trip.origin.name} before the van leaves and pay both fares in cash to the '
+            'Dispatcher. Give them these codes or your name. Once they mark the seats Paid, the van stops '
+            'for ${_name.text.trim()} at the pin. Unpaid seats are released shortly before departure.',
             style: text.bodyMedium),
         const SizedBox(height: AppSpacing.lg),
         for (final (label, seat) in [('Your seat', b.relative), ('${_name.text.trim()}\'s seat', b.passenger)])
           Card(
             child: ListTile(
               title: Text(label),
-              subtitle: Text(seat.ticketNumber),
-              trailing: FilledButton(
-                onPressed: _busy ? null : () => _pay(seat),
-                child: Text('Pay ${Money.format(seat.fare)}'),
-              ),
+              subtitle: Text('Code ${seat.bookingCode}'),
+              trailing: Money(seat.fare, style: text.titleMedium),
             ),
           ),
         const SizedBox(height: AppSpacing.xl),
-        Text('Payment page not working?', style: text.titleSmall),
+        Text('Help the Dispatcher find the place', style: text.titleSmall),
         const SizedBox(height: AppSpacing.xs),
-        Text('Pay A2Z another digital way and send a screenshot of the payment. It goes to the trip\'s '
-            'Dispatcher in your chat with them; they confirm it. A screenshot can show personal details: '
-            'it is kept only for a limited number of days.', style: text.bodySmall),
+        Text('Send a photo of a landmark near the pin, such as a gate or a store. It goes to the trip\'s '
+            'Dispatcher in your chat with them. A photo can show personal details: it is kept only for a '
+            'limited number of days.', style: text.bodySmall),
         const SizedBox(height: AppSpacing.sm),
         OutlinedButton.icon(
-          onPressed: _busy ? null : _screenshot,
-          icon: Icon(_proofSent ? Icons.check_circle_outline : Icons.image_outlined),
-          label: Text(_proofSent ? 'Screenshot sent. Send another' : 'Send a payment screenshot'),
+          onPressed: _busy ? null : _landmarkPhoto,
+          icon: Icon(_photoSent ? Icons.check_circle_outline : Icons.image_outlined),
+          label: Text(_photoSent ? 'Photo sent. Send another' : 'Send a landmark photo'),
         ),
         const SizedBox(height: AppSpacing.xl),
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done')),

@@ -24,7 +24,7 @@ from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
 from app.domain.enums import BookingStatus, DepartureSource, Role, TripStatus
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import Trip
+from app.infrastructure.models import PassengerProfile, Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 log = logging.getLogger(__name__)
@@ -66,14 +66,20 @@ class ManifestUseCase:
             raise NotFoundError("Trip not found.")
 
         result = await self.session.execute(
-            select(BookingRow)
+            select(BookingRow, PassengerProfile)
+            .join(
+                PassengerProfile,
+                PassengerProfile.user_id == BookingRow.passenger_user_id,
+                isouter=True,
+            )
             .where(
                 BookingRow.trip_id == trip_id,
                 BookingRow.status != BookingStatus.CANCELLED.value,
             )
             .order_by(BookingRow.boarding_stop_sequence, BookingRow.booked_at)
         )
-        bookings = list(result.scalars().all())
+        rows = result.all()
+        bookings = [b for b, _ in rows]
 
         return {
             "trip_id": trip_id,
@@ -101,10 +107,11 @@ class ManifestUseCase:
                     "payment_status": b.payment_status,
                     "paid_at": b.paid_at,
                     "fare_amount": b.fare_amount,
-                    # Walk-ins may legitimately be anonymous.
-                    "name": b.walkin_name,
+                    # The passenger's profile name; walk-ins may
+                    # legitimately be anonymous.
+                    "name": f"{pp.first_name} {pp.last_name}" if pp else b.walkin_name,
                 }
-                for b in bookings
+                for b, pp in rows
             ],
         }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/layout/review_counts.dart';
 import '../../../core/network/api_client.dart';
 import '../../../data/repositories/messaging_repository.dart';
 import '../../../viewmodels/messaging_provider.dart';
@@ -138,7 +139,14 @@ class _ConversationList extends StatelessWidget {
                       style: TextStyle(fontSize: 11, color: AppColors.onFill)),
                 )
               : null,
-          onTap: () => p.openConversation(c.conversationId),
+          onTap: () {
+            p.openConversation(c.conversationId);
+            // Opening the thread reads it; clear the sidebar badge now
+            // rather than at the next poll.
+            Future.delayed(const Duration(seconds: 2), () {
+              if (context.mounted) context.read<ReviewCounts>().refresh();
+            });
+          },
         );
       },
     );

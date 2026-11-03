@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../../data/repositories/operations_repository.dart';
 import '../network/api_exception.dart';
 import 'pending_walk_in.dart';
+import 'seat_mark_queue.dart';
 import 'walk_in_queue.dart';
 
 /// The outcome of logging a walk-in: either it reached the server, or it
@@ -21,11 +22,23 @@ class WalkInSubmission {
   final bool queued;
 }
 
-/// Logs walk-ins over the network when possible, and queues them on
-/// device otherwise -- the offline-capable Dispatcher manifest (spec
-/// section 2.3.5, Table 5's Walk-In Audit row). Scoped to walk-in
-/// logging only: the rest of the manifest still needs a live server
-/// round trip to view.
+/// The outcome of a Mark as Paid or a cancel: done (with anything the
+/// server wants the Dispatcher told), or queued on the device.
+class SeatMarkSubmission {
+  const SeatMarkSubmission.done(this.notice) : queued = false;
+  const SeatMarkSubmission.queued()
+      : notice = null,
+        queued = true;
+
+  final String? notice;
+  final bool queued;
+}
+
+/// The Dispatcher's work that must survive a dead zone (brief rev 721,
+/// 2.1): walk-ins, Mark as Paid and cancelling a reservation. Each goes
+/// over the network when possible and is queued on the device otherwise,
+/// then replayed when the connection returns. Viewing the list still
+/// needs the server; the screen keeps the last list it loaded.
 ///
 /// A submission is queued, not failed, on `NetworkException` (never
 /// left the device) or `RequestTimeoutException` (left, but the
@@ -33,9 +46,10 @@ class WalkInSubmission {
 /// because every attempt carries the same `client_request_id`, which
 /// the backend dedupes on -- a retried request that actually landed the
 /// first time returns the original booking instead of a second one.
-class WalkInSyncService extends ChangeNotifier {
-  WalkInSyncService(this._ops, {WalkInQueue? queue})
-      : _queue = queue ?? WalkInQueue() {
+class OfflineSyncService extends ChangeNotifier {
+  OfflineSyncService(this._ops, {WalkInQueue? queue, SeatMarkQueue? marks})
+      : _queue = queue ?? WalkInQueue(),
+        _marks = marks ?? SeatMarkQueue() {
     _sub = Connectivity().onConnectivityChanged.listen((results) {
       if (!results.contains(ConnectivityResult.none)) flush();
     });
@@ -43,10 +57,25 @@ class WalkInSyncService extends ChangeNotifier {
 
   final OperationsRepository _ops;
   final WalkInQueue _queue;
+  final SeatMarkQueue _marks;
   late final StreamSubscription<List<ConnectivityResult>> _sub;
 
   final Map<String, List<PendingWalkIn>> _pendingByTrip = {};
+  final Map<String, PendingSeatMark> _pendingMarks = {};
+  final List<String> _notices = [];
   bool _flushing = false;
+
+  /// Marks still on the device for this trip, by booking id.
+  Map<String, PendingSeatMark> marksFor(String tripId) =>
+      {for (final m in _pendingMarks.values) if (m.tripId == tripId) m.bookingId: m};
+
+  /// What synced marks came back with (a seat restored, a seat gone, a
+  /// refusal), for the screen to show once. Reading empties it.
+  List<String> takeNotices() {
+    final out = List<String>.of(_notices);
+    _notices.clear();
+    return out;
+  }
 
   List<PendingWalkIn> pendingFor(String tripId) =>
       List.unmodifiable(_pendingByTrip[tripId] ?? const []);
@@ -60,6 +89,55 @@ class WalkInSyncService extends ChangeNotifier {
     for (final item in items) {
       (_pendingByTrip[item.tripId] ??= []).add(item);
     }
+    _pendingMarks
+      ..clear()
+      ..addAll({for (final m in await _marks.all()) m.bookingId: m});
+    notifyListeners();
+  }
+
+  /// The passenger handed over the fare: mark the seat Paid, now or when
+  /// the connection returns.
+  Future<SeatMarkSubmission> markPaidOrQueue({
+    required String tripId,
+    required String bookingId,
+    required String label,
+  }) =>
+      _markOrQueue(PendingSeatMark(
+          bookingId: bookingId, tripId: tripId, kind: 'paid', at: DateTime.now(), label: label));
+
+  /// Cancel a seat, now or when the connection returns.
+  Future<SeatMarkSubmission> cancelOrQueue({
+    required String tripId,
+    required String bookingId,
+    required String label,
+    required String reason,
+  }) =>
+      _markOrQueue(PendingSeatMark(
+          bookingId: bookingId, tripId: tripId, kind: 'cancel', at: DateTime.now(), label: label, reason: reason));
+
+  Future<SeatMarkSubmission> _markOrQueue(PendingSeatMark mark) async {
+    try {
+      return SeatMarkSubmission.done(await _submitMark(mark));
+    } on NetworkException {
+      await _enqueueMark(mark);
+      return const SeatMarkSubmission.queued();
+    } on RequestTimeoutException {
+      await _enqueueMark(mark);
+      return const SeatMarkSubmission.queued();
+    }
+  }
+
+  Future<String?> _submitMark(PendingSeatMark mark) async {
+    if (mark.isPaid) {
+      return (await _ops.markPaid(mark.bookingId, paidAt: mark.at)).notice;
+    }
+    await _ops.dispatcherCancel(mark.bookingId, reason: mark.reason!);
+    return null;
+  }
+
+  Future<void> _enqueueMark(PendingSeatMark mark) async {
+    await _marks.enqueue(mark);
+    _pendingMarks[mark.bookingId] = mark;
     notifyListeners();
   }
 
@@ -119,6 +197,25 @@ class WalkInSyncService extends ChangeNotifier {
     if (_flushing) return;
     _flushing = true;
     try {
+      // Marks first: a Paid mark that reaches the server before the cutoff
+      // keeps the seat, and a walk-up may be waiting for a cancelled one.
+      for (final mark in await _marks.all()) {
+        try {
+          final notice = await _submitMark(mark);
+          if (notice != null) _notices.add(notice);
+          await _dropMark(mark);
+        } on NetworkException {
+          return;
+        } on RequestTimeoutException {
+          return;
+        } on ApiException catch (e) {
+          // Refused for good (the list locked, the seat already gone):
+          // a replay would be refused again, so it is dropped and the
+          // Dispatcher is told why.
+          _notices.add('${mark.label}: ${e.message}');
+          await _dropMark(mark);
+        }
+      }
       for (final item in await _queue.all()) {
         try {
           await _submit(item);
@@ -139,8 +236,16 @@ class WalkInSyncService extends ChangeNotifier {
     }
   }
 
+  Future<void> _dropMark(PendingSeatMark mark) async {
+    await _marks.remove(mark.bookingId);
+    _pendingMarks.remove(mark.bookingId);
+    notifyListeners();
+  }
+
+  // Not 1 << 32: on the web shifts are 32-bit, that is 0, and nextInt(0)
+  // throws -- the walk-up was never sent.
   String _newRequestId() =>
-      '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
+      '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}';
 
   @override
   void dispose() {
