@@ -77,7 +77,7 @@ On `TRIP-A2Z-LIVE-SOON`. Do the steps in order.
 | 18 | B | Pull down to refresh → **Depart** → confirm | Status DEPARTED; the list shows who was on it |
 | 19 | B | **Arrived** → confirm | "Trip completed." |
 | 20 | D | **Money** → **Remittance**, van NBC-7788 | Booked (B), Walk-up (W), A2Z's 15 %, DCOTT tickets (n × ₱75), Parking ₱50, **Terminal fees owed**, Paid, **Due now ₱0**, operator's share owed and given |
-| 21 | C | **Reviews** → **Review Starts** and **Boarding Audit** | The trip is **Unaudited (no phone)**: correct, no edge phone went out |
+| 21 | C | The bell; **Trips** → the trip; **Reviews** → **Boarding Audit** | Alert **Unaudited trip · no phone** at Start; the trip panel says Unaudited (correct, no edge phone went out). Boarding Audit: "Nothing to review on this day" (it lists only what a phone reported) |
 | 22 | A | **Trips** tab → **History** | The trip reads "Trip departed" or completed, never "Missed" |
 
 Check the arithmetic: terminal fees = 15 % × (B + W) + ₱75 per trip + ₱50

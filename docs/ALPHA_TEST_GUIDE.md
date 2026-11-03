@@ -166,7 +166,7 @@ and four or more passengers.
 | 10 | Cashier | **Start trip** | Trip is Boarding; operator name, licence and plate copied onto it |
 | 11 | Dispatcher | **Depart** | En Route; passengers can track the van |
 | 12 | Dispatcher | **Arrived** | Completed |
-| 13 | Terminal Manager | Reviews → Boarding Audit | The trip is **Unaudited, no_phone** (no edge phone went out). Not a zero count |
+| 13 | Terminal Manager | The bell, then Trips → the trip | An **Unaudited trip · no phone** alert at Start, and the trip panel says Unaudited (no edge phone went out). Not a zero count. Boarding Audit stays empty: it lists only what a phone reported |
 | 14 | Cashier | Money → Remittance, the van's statement | Booked, Walk-up, 15 %, ₱75 × trips, ₱50, terminal fees owed, operator's share owed and given |
 
 The brief's sample trip is the arithmetic check: Booked ₱1,370 and
