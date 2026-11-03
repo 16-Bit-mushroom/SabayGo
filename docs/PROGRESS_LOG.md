@@ -1210,5 +1210,6 @@ The rest were front-end fixes (unread badges in both apps, row buttons,
 a web-only crash in the walk-up request id, the Money title) and
 `tracking_simulator.py` reading names as utf8mb4. The data the test
 ended with ships as `db/day1/day1_a2z.sql`, loaded by
-`./db/load-day1.sh` in place of the demo seed. Handoff:
+`./db/load-day1.sh` in place of the demo seed. Full suite 1070 passed,
+0 failed, 0 gaps (`journeys_20261103_154759.txt`). Handoff:
 `docs/HANDOFF_DAY1.md`.

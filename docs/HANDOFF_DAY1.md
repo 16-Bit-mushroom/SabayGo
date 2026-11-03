@@ -20,10 +20,8 @@
   notes.
 - **Journey scripts run after the fixes:** `test_terminal_fees.sh` 79/0
   (10 new checks for the top-up bugs) and `test_trip_lifecycle.sh`
-  135/0. **The full suite has not been run on this branch.** Run
-  `backend/tests/integration/run_all_journeys.sh` before merging: the
-  manifest now sends passenger names (`operations/boarding.py`) and
-  `statement.py` changed twice.
+  135/0. **Full suite** at `f0d34d6`: **1070 passed, 0 failed, 0 gaps**
+  (`docs/test-reports/journeys_20261103_154759.txt`).
 - **Not tried on a phone yet.** The whole test ran in a browser; the APK
   builds but the new screens have not been on a handset.
 

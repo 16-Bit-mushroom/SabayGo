@@ -331,8 +331,8 @@ journey script green before the next. Everything below waits on it,
 except items the owner runs.
 **Handoff (3 Nov, evening): `docs/HANDOFF_DAY1.md`.** S9 and S10 are
 done on branch `rev721-frontends` (not merged, not pushed) and the Day 1
-test passed end to end; left are S7, S11, the open Day 1 findings, and a
-full journey run before merging. The earlier handoff,
+test passed end to end (full suite 1070/0/0); left are S7, S11 and the
+open Day 1 findings. The earlier handoff,
 `docs/HANDOFF_REV721.md`, lists S7 and S11's files and proof.
 
 In the order agreed on 16 Oct, one step at a time. The runner probes and
