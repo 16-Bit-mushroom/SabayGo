@@ -23,6 +23,12 @@ pins (one route, two trips, four dev users); `002_demo_dataset.sql` is the
 realistic multi-route backdrop for the demo — placeholder routes shaped
 like the Davao network, to be replaced with A2Z's own.
 
+`./db/load-day1.sh` loads the **Day 1 test data** instead of either
+seed: A2Z's setup as entered through the console on 3 Nov 2026
+(`db/day1/day1_a2z.sql`, a data-only dump applied over the migrations;
+`docs/DAY1_TEST_GUIDE.md`). It is not in `db/seed/`, so `--seed` never
+loads it, and the journey suite does not use it.
+
 ## Migration order
 
 | File | Contents |
