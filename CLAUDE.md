@@ -45,6 +45,8 @@ contribution.
 |---|---|
 | `docs/REMAINING_WORK.md` | What is left, grouped |
 | `docs/ALPHA_TEST_GUIDE.md` | Setting up at school, accounts, one trip end to end, each role's tasks, what is blocked |
+| `docs/DAY1_TEST_GUIDE.md` | Setting the system up from empty as A2Z would, then one cash trip; what happened on 3 Nov |
+| `docs/DAY1_FINDINGS.md` | The 23 Day 1 findings: fixed, open, questions for A2Z |
 | `docs/MANUSCRIPT_CORRECTIONS.md` | Where the paper and the code disagree, with replacement wording |
 | `docs/FLUTTER_PHASE1_ISSUES.md` | 20 documented setup failures and fixes |
 | `backend/app/infrastructure/repositories/seat_repository.py` | The thesis. Read its docstring before touching it |
@@ -132,6 +134,7 @@ four hand-maintained copies of an IP address is what broke the last demo.
 ./run.sh --host 10.0.52.117   # force the address, when detection picks the wrong NIC
 ./run.sh --soon               # rebuild demo data, trip departs in 20 min
 ./run.sh --reset-db           # rebuild demo data; live trips dated from now
+./db/load-day1.sh             # instead of the demo: A2Z's Day 1 setup (@a2z.dev accounts)
 ```
 
 `002_demo_dataset.sql` seeds three **live trips dated from the moment of
@@ -326,9 +329,11 @@ code, terminal fees. Its eleven steps are `docs/GAP_REPORT.md` §10.4,
 backend first and the two Flutter apps last, one step at a time with its
 journey script green before the next. Everything below waits on it,
 except items the owner runs.
-**Handoff (3 Nov): `docs/HANDOFF_REV721.md`.** S1–S6 and S8 are done;
-S7 (special trips), S9 (console), S10 (apps) and S11 (docs) are left,
-each with its files, endpoints and proof listed there.
+**Handoff (3 Nov, evening): `docs/HANDOFF_DAY1.md`.** S9 and S10 are
+done on branch `rev721-frontends` (not merged, not pushed) and the Day 1
+test passed end to end; left are S7, S11, the open Day 1 findings, and a
+full journey run before merging. The earlier handoff,
+`docs/HANDOFF_REV721.md`, lists S7 and S11's files and proof.
 
 In the order agreed on 16 Oct, one step at a time. The runner probes and
 the rev 468 retirement are done (`docs/PROGRESS_LOG.md`). Left:
