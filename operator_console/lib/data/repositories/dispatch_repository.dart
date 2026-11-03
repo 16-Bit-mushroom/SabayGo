@@ -207,30 +207,36 @@ class TripManifest {
 
 class ManifestPassenger {
   const ManifestPassenger({
-    required this.ticketNumber,
+    required this.bookingCode,
     required this.name,
     required this.boardingStop,
     required this.alightingStop,
     required this.bookingType,
     required this.status,
+    required this.paymentStatus,
     required this.fareAmount,
   });
 
-  final String ticketNumber;
+  final String bookingCode;
   final String? name;
   final int boardingStop;
   final int alightingStop;
   final String bookingType;
   final String status;
+  /// 'unpaid' until the Dispatcher marks the seat Paid (brief rev 721).
+  final String paymentStatus;
   final String fareAmount;
 
+  bool get isPaid => paymentStatus == 'paid';
+
   factory ManifestPassenger.fromJson(Map<String, dynamic> j) => ManifestPassenger(
-        ticketNumber: j['ticket_number'] as String,
+        bookingCode: j['booking_code'] as String,
         name: j['name'] as String?,
         boardingStop: j['boarding_stop'] as int,
         alightingStop: j['alighting_stop'] as int,
         bookingType: j['booking_type'] as String,
         status: j['status'] as String,
+        paymentStatus: j['payment_status'] as String? ?? 'unpaid',
         fareAmount: j['fare_amount'].toString(),
       );
 }

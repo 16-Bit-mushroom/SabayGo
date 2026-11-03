@@ -566,9 +566,9 @@ class _PassengerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    // App passengers are identified by ticket, as on the Dispatcher's
-    // screen; walk-ins carry the name the Dispatcher typed.
-    final who = p.name ?? 'Ticket ${p.ticketNumber}';
+    // App passengers are identified by booking code, as on the
+    // Dispatcher's screen; walk-ins carry the name the Dispatcher typed.
+    final who = p.name ?? p.bookingCode;
     final detail = [
       '${stop(p.boardingStop)} → ${stop(p.alightingStop)}',
       p.bookingType == 'walk_in' ? 'walk-in, paid cash' : 'booked in app',
@@ -587,7 +587,7 @@ class _PassengerRow extends StatelessWidget {
               ],
             ),
           ),
-          StatusBadge.passenger(p.status),
+          StatusBadge.passenger(p.status, paid: p.isPaid),
         ],
       ),
     );
