@@ -329,10 +329,11 @@ code, terminal fees. Its eleven steps are `docs/GAP_REPORT.md` §10.4,
 backend first and the two Flutter apps last, one step at a time with its
 journey script green before the next. Everything below waits on it,
 except items the owner runs.
-**Handoff (3 Nov, evening): `docs/HANDOFF_DAY1.md`.** S9 and S10 are
-done on branch `rev721-frontends` (not merged, not pushed) and the Day 1
-test passed end to end (full suite 1070/0/0); left are S7, S11 and the
-open Day 1 findings. The earlier handoff,
+**Handoff (9 Nov): `docs/HANDOFF_ALPHA_PREP.md`**: the simulation
+test before alpha (10 Nov), browser only, and what to fix first. S9 and
+S10 are merged into `main` and the Day 1 test passed end to end (full
+suite 1070/0/0); left are S7, S11 and the open Day 1 findings. The 3 Nov
+handoff, `docs/HANDOFF_DAY1.md`, keeps the Day 1 traps. The earlier handoff,
 `docs/HANDOFF_REV721.md`, lists S7 and S11's files and proof.
 
 In the order agreed on 16 Oct, one step at a time. The runner probes and

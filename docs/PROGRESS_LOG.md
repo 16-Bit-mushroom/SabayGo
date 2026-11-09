@@ -1213,3 +1213,20 @@ ended with ships as `db/day1/day1_a2z.sql`, loaded by
 `./db/load-day1.sh` in place of the demo seed. Full suite 1070 passed,
 0 failed, 0 gaps (`journeys_20261103_154759.txt`). Handoff:
 `docs/HANDOFF_DAY1.md`.
+
+### Alpha preparation (8–9 Nov)
+
+Two fixes found while preparing the alpha test, both about reaching the
+backend from a machine other than the server laptop. `run.sh` built the
+console against `127.0.0.1`, so a second laptop loaded the sign-in page
+and then failed every API call; it now builds against the LAN address
+it gives the backend and the APK (checked: the stamp and the bundle
+carry the LAN address, and CORS answers a tester laptop's origin). The
+app's network security config allowed cleartext to four fixed hosts
+only; a debug-only override
+(`mobile/android/app/src/debug/res/xml/network_security_config.xml`)
+permits it to any host, so a debug APK works on whatever address the
+venue hands out, and release builds keep the strict config (checked in
+the built APK's binary XML: `base-config`, no `domain-config`). Merged
+into `main` with rev 721 S9 and S10. Handoff for the simulation test
+before alpha: `docs/HANDOFF_ALPHA_PREP.md`.
