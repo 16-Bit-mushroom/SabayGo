@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only. This file overrides the strict main config
+  (src/main/res/xml/network_security_config.xml) for the debug variant,
+  because Gradle resolves a variant source set ahead of main.
+
+  The main config permits cleartext for four fixed hosts: 192.168.1.8,
+  10.0.2.2, localhost and 127.0.0.1. That list was written when the
+  development machine was always 192.168.1.8, and it silently breaks
+  every other address. run.sh resolves whatever the venue hands out
+  (10.0.52.117 at school, a hotspot 192.168.43.x), and Android then
+  refuses the request before it ever leaves the phone.
+
+  android:usesCleartextTraffic="true" in the manifest does not rescue
+  it. The platform ignores that attribute whenever a network security
+  config is present, and a config with no base-config falls back to
+  cleartextTrafficPermitted="false" on API 28 and above. The symptom is
+  the worst kind to diagnose: every call fails while logs/backend.log
+  stays empty, which reads exactly like a dead server.
+
+  A debug build talks to a development backend over plain HTTP on a LAN
+  whose address nobody can predict, so it permits cleartext anywhere.
+  Release builds keep the main config and still require HTTPS, which is
+  what a tunnel or a hosted backend serves at the pilot.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -307,7 +307,7 @@ CONSOLE_STAMP="$CONSOLE_WEB/.sabaygo-api-base"
 console_needs_build() {
   [ -f "$CONSOLE_WEB/main.dart.js" ] || return 0
   [ -f "$CONSOLE_STAMP" ] || return 0
-  [ "$(cat "$CONSOLE_STAMP")" = "$API_LOCAL" ] || return 0
+  [ "$(cat "$CONSOLE_STAMP")" = "$API_LAN" ] || return 0
   [ -z "$(find "$ROOT/operator_console/lib" "$ROOT/operator_console/pubspec.yaml" \
             -newer "$CONSOLE_WEB/main.dart.js" -print -quit 2>/dev/null)" ] || return 0
   return 1
@@ -322,13 +322,13 @@ if [ "$WITH_CONSOLE" = 1 ] && [ "$HAVE_FLUTTER" = 1 ]; then
     # backend, which is unfixable from the demo floor.
     if ! ( cd "$ROOT/operator_console" && flutter build web --release \
              --pwa-strategy=none \
-             --dart-define=API_BASE_URL="$API_LOCAL" ) \
+             --dart-define=API_BASE_URL="$API_LAN" ) \
            > "$LOGS/console_build.log" 2>&1; then
       warn "the console failed to build. Last lines:"
       tail -n 20 "$LOGS/console_build.log" >&2 || true
       die "console build failed"
     fi
-    printf '%s' "$API_LOCAL" > "$CONSOLE_STAMP"
+    printf '%s' "$API_LAN" > "$CONSOLE_STAMP"
     ok "built"
   else
     ok "bundle is current -- not rebuilding"
