@@ -197,6 +197,8 @@ class TripShare {
     required this.disputed,
     required this.operatorShareOwed,
     required this.operatorShareGiven,
+    this.operatorShareHeld = 0,
+    this.operatorShareOver = 0,
     required this.lines,
   });
 
@@ -205,6 +207,11 @@ class TripShare {
   final double disputed;
   final double operatorShareOwed;
   final double operatorShareGiven;
+  /// What the operator holds: given less handed back (migration 038).
+  final double operatorShareHeld;
+  /// Held over the share owed, for example after a dispute was upheld:
+  /// it goes back to the Cashier.
+  final double operatorShareOver;
   final List<ShareLine> lines;
 
   factory TripShare.fromJson(Map<String, dynamic> j) => TripShare(
@@ -213,6 +220,8 @@ class TripShare {
         disputed: double.parse(j['disputed'].toString()),
         operatorShareOwed: double.parse((j['operator_share_owed'] ?? 0).toString()),
         operatorShareGiven: double.parse((j['operator_share_given'] ?? 0).toString()),
+        operatorShareHeld: double.parse((j['operator_share_held'] ?? j['operator_share_given'] ?? 0).toString()),
+        operatorShareOver: double.parse((j['operator_share_over'] ?? 0).toString()),
         lines: [for (final l in j['lines'] as List) ShareLine.fromJson(l as Map<String, dynamic>)],
       );
 }
@@ -448,7 +457,7 @@ class Manifest {
       );
 }
 
-/// A reservation or walk-up on the trip, as the Dispatcher finds it by
+/// A reservation or walk-in on the trip, as the Dispatcher finds it by
 /// name or booking code (brief rev 721, 2.1). Unpaid ones come first: those
 /// are the ones with cash still to collect.
 class SeatOnList {
@@ -545,7 +554,7 @@ class WalkInResult {
       );
 }
 
-/// Everything crew do at the van: take reservations' cash, log walk-ups,
+/// Everything crew do at the van: take reservations' cash, log walk-ins,
 /// count heads, depart and arrive.
 class OperationsRepository {
   OperationsRepository(this._api);
@@ -576,7 +585,7 @@ class OperationsRepository {
 
   /// Validate a ticket at the door. The server answers 200 for every
   /// outcome; read `accepted`.
-  /// The trip's reservations and walk-ups, narrowed by name or booking
+  /// The trip's reservations and walk-ins, narrowed by name or booking
   /// code when [query] is given. Cancelled seats are not on it.
   Future<List<SeatOnList>> seats(String tripId, {String? query}) async {
     final json = await _api.get('/bookings/trip/$tripId/seats',
@@ -636,7 +645,7 @@ class OperationsRepository {
 
   /// The van has arrived and everyone is off: the trip is completed.
   /// Starting is the office's (rev 468, brief 4.2); the Dispatcher marks
-  /// reservations Paid and lists walk-ups from the moment they are assigned.
+  /// reservations Paid and lists walk-ins from the moment they are assigned.
   Future<void> arrive(String tripId) => _api.post('/trips/$tripId/arrive');
 
   // ---------------------------------------------- the dashboard (rev 603)

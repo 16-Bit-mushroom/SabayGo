@@ -43,18 +43,11 @@ class JourneyPickerCard extends StatelessWidget {
             padding: EdgeInsets.zero,
             child: vm.isLoadingTerminals ? _loading() : _form(context),
           ),
-          const SizedBox(height: AppSpacing.md),
-          FilledButton(
-            onPressed:
-                vm.canSearch && !vm.isLoadingTrips ? vm.search : null,
-            child: vm.isLoadingTrips
-                ? const _ButtonBusy(label: 'Searching…')
-                : const Text('Search departures'),
-          ),
-          // Says why the button is disabled rather than leaving the person
-          // to guess. The direction case matters: routes are one-way
-          // sequences, so Cotabato→Ecoland is a different route, not this
-          // one reversed.
+          // No Search button (12 Nov): the departures follow the journey as
+          // soon as both ends are chosen. What is still missing is said
+          // here, so an empty list never leaves the person guessing. The
+          // direction case matters: routes are one-way sequences, so
+          // Cotabato→Ecoland is a different route, not this one reversed.
           if (blocked != null) ...[
             const SizedBox(height: AppSpacing.md),
             _Note(blocked),
@@ -89,14 +82,10 @@ class JourneyPickerCard extends StatelessWidget {
             onChanged: vm.setDestination,
           ),
           const Divider(height: 1, indent: _textInset),
-          AppPickerRow(
-            leading: const Icon(Icons.calendar_today_outlined,
-                size: 16, color: AppColors.textMuted),
-            label: 'Travel date',
-            value: dayFriendly(vm.serviceDate),
-            placeholder: 'Pick a date',
-            semanticHint: 'Opens the calendar',
-            onTap: () => _pickDate(context),
+          _DayChips(
+            selected: vm.serviceDate,
+            onSelected: vm.setServiceDate,
+            onPick: () => _pickDate(context),
           ),
         ],
       );
@@ -143,25 +132,53 @@ class _SwapRow extends StatelessWidget {
   }
 }
 
-class _ButtonBusy extends StatelessWidget {
-  const _ButtonBusy({required this.label});
+/// The travel day as three one-tap chips -- Today, Tomorrow, and a
+/// third that opens the calendar and then shows the day picked -- instead
+/// of a row that always opened the calendar: nearly every trip is today or
+/// tomorrow, so the common choice costs one tap, not three (Hick, Fitts).
+class _DayChips extends StatelessWidget {
+  const _DayChips({required this.selected, required this.onSelected, required this.onPick});
 
-  final String label;
+  final DateTime selected;
+  final ValueChanged<DateTime> onSelected;
+  final VoidCallback onPick;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(
-              strokeWidth: 2, color: Colors.white),
-        ),
+    final today = DateUtils.dateOnly(DateTime.now());
+    final tomorrow = today.add(const Duration(days: 1));
+    final day = DateUtils.dateOnly(selected);
+    final other = day != today && day != tomorrow;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
+      child: Row(children: [
+        const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textMuted),
         const SizedBox(width: AppSpacing.md),
-        Text(label),
-      ],
+        Expanded(
+          child: Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
+            ChoiceChip(
+              label: const Text('Today'),
+              selected: day == today,
+              showCheckmark: false,
+              onSelected: (_) => onSelected(today),
+            ),
+            ChoiceChip(
+              label: const Text('Tomorrow'),
+              selected: day == tomorrow,
+              showCheckmark: false,
+              onSelected: (_) => onSelected(tomorrow),
+            ),
+            ChoiceChip(
+              avatar: Icon(Icons.event, size: 16, color: other ? AppColors.onFill : AppColors.primary),
+              label: Text(other ? dayShort(day) : 'Other day'),
+              selected: other,
+              showCheckmark: false,
+              tooltip: 'Opens the calendar',
+              onSelected: (_) => onPick(),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
 }

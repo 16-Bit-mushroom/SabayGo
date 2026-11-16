@@ -11,7 +11,7 @@
 # that drives it in service is section 9.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 BACKEND="$(cd "$(dirname "$0")/../.." && pwd)"
 PY="$BACKEND/venv/bin/python"
 PASS_N=0; FAIL_N=0
@@ -137,6 +137,9 @@ PT=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" \
 code POST /bookings/reserve "{\"trip_id\":\"$TRIP1\",\"boarding_stop\":1,\"alighting_stop\":4}" "$PT" >/dev/null
 KEEP=$(field booking_id)
 code POST "/bookings/$KEEP/mark-paid" '{}' "$DT" >/dev/null
+is "$(notes "$PT" trip_update "$KEEP")" 1 "(12 Nov) the passenger is told the seat is paid, once"
+is "$(code GET /bookings/$KEEP "" "$PT" >/dev/null; field status)" checked_in \
+   "(12 Nov) paying is the check-in: a paid passenger is at the terminal"
 code POST /bookings/reserve "{\"trip_id\":\"$TRIP1\",\"boarding_stop\":1,\"alighting_stop\":3}" "$PT" >/dev/null
 DROP=$(field booking_id)
 code POST "/bookings/$DROP/mark-paid" '{}' "$DT" >/dev/null
@@ -145,8 +148,8 @@ is "$(code GET /trips/$TRIP1/manifest "" "$DT")" 200 "and reads its passenger li
 is "$(field status)" scheduled "the trip is still scheduled"
 is "$(code GET /trips/$TRIP1/share "" "$D2T")" 403 "another Dispatcher cannot read its share"
 code GET /trips/$TRIP1/share "" "$DT" >/dev/null
-python3 -c "import json;s=json.load(open('/tmp/resp.json'));g={l['income_group'] for l in s['lines']};assert g=={'booked','walk_up'} and s['amount_due']!='0.00'" \
-  && ok "the share has a booked (app) and a walk-up (cash) line" || bad "share: $(cat /tmp/resp.json)"
+python3 -c "import json;s=json.load(open('/tmp/resp.json'));g={l['income_group'] for l in s['lines']};assert g=={'booked','walk_in'} and s['amount_due']!='0.00'" \
+  && ok "the share has a booked (app) and a walk-in (cash) line" || bad "share: $(cat /tmp/resp.json)"
 DUE_ALL=$(share $TRIP1 amount_due)
 # A paid seat is the Dispatcher's to cancel: the cash goes back by hand.
 is "$(code POST /bookings/$DROP/dispatcher-cancel '{"reason":"passenger_asked_dispatcher"}' "$DT")" 200 \
@@ -288,8 +291,9 @@ trip_share() { code GET "/trips/$TRIP1/share" "" "$CT" >/dev/null
 SHARE_BEFORE=$(trip_share)
 is "$(code POST /trips/$TRIP1/depart "" "$DT")" 200 "T12 the Dispatcher taps Depart"
 is "$(field departure_source)" dispatcher "DepartureSource dispatcher"
-is "$(code GET /bookings/$KEEP "" "$PT" >/dev/null; field status)" no_show \
-   "T8 the paid app passenger who never boarded is a no-show"
+is "$(code GET /bookings/$KEEP "" "$PT" >/dev/null; field status)" boarded \
+   "T8 (12 Nov, finding 31) a paid app passenger is aboard at departure, not a no-show"
+is "$(field trip_status)" departed "  and the passenger's app sees the trip on the road: still the current trip"
 is "$(trip_share)/$(field payment_status)" "$SHARE_BEFORE/paid" "T8 and the share is unchanged (P$SHARE_BEFORE), still paid"
 is "$(code POST /trips/$TRIP1/depart "" "$OT")" 409 "a trip departs once"
 is "$(code POST /trips/$TRIP2/depart "" "$CT")" 200 "on the other trip the cashier taps it"
@@ -309,6 +313,8 @@ is "$(code PUT /trips/$DIG630/assignment '{"van_id":"VAN-0002"}' "$OT")" 200 "an
 is "$(code POST /trips/$TRIP1/arrive "" "$D2T")" 403 "another Dispatcher cannot tap Arrived"
 is "$(code POST /trips/$TRIP1/arrive "" "$DT")" 200 "the Dispatcher taps Arrived"
 is "$(field status)" completed "Completed"
+is "$(code GET /bookings/$KEEP "" "$PT" >/dev/null; field status)/$(field trip_status)" boarded/completed \
+   "(12 Nov) the seat stays boarded (it rode); the trip reads completed, so the app files it as past"
 is "$(code POST /trips/$TRIP1/void '{"reason":"too late"}' "$OT")" 409 "a completed trip cannot be voided"
 
 # ╔═══════════════════════════════════════════════════════════════╗

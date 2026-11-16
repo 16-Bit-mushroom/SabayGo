@@ -116,9 +116,13 @@ contact is not named. Keep `[name and position to be supplied by A2Z]`.
 
 ## Brand Commitments
 
-- Name: **SabayGo**. Logo: `operator_console/assets/branding/sabaygo_logo.png`
+- Name: **SabayGo**. Logo: `operator_console/assets/branding/sabaygo_van_logo.png`
   and `mobile/assets/branding/sabaygo_logo.png`.
-- The logo is an ink-black owl with a red eye and a red route pin. The
+- The console's logo (10 Nov) is a light-green van carrying passengers in
+  the camera's detection boxes, with the GPS signal at its windscreen, over
+  the "SabayGo" wordmark; the van alone (`sabaygo_van_mark.png`) is the folded
+  sidebar's and the browser's icon. The app still carries the earlier
+  ink-black owl with a red eye and a red route pin. The
   console (UI redesign v3, 25 Oct, the owner's brief) is white, terminal
   green and black/red in a 60-30-10 split: white is the page, green the
   frame and the action colour, black the text, and red only route

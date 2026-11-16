@@ -27,6 +27,10 @@ class VanStatus {
     required this.positionAt,
     required this.positionStale,
     required this.nearestStopName,
+    this.seatCapacity = 14,
+    this.camera,
+    this.cameraSeenAt,
+    this.openFlags,
   });
 
   final String vanId;
@@ -49,6 +53,18 @@ class VanStatus {
   final DateTime? positionAt;
   final bool? positionStale;
   final String? nearestStopName;
+  final int seatCapacity;
+
+  /// The door camera on a trip under way: 'live', 'lens_blocked', 'silent'
+  /// or 'no_phone'; null when no trip is under way.
+  final String? camera;
+  final DateTime? cameraSeenAt;
+
+  /// Driving flags on the trip still open for review; null off a trip.
+  final int? openFlags;
+
+  bool get underWay => tripStatus == 'boarding' || state == 'travelling';
+  bool get overloaded => aboard != null && aboard! > seatCapacity;
 
   factory VanStatus.fromJson(Map<String, dynamic> j) => VanStatus(
         vanId: j['van_id'] as String,
@@ -70,6 +86,10 @@ class VanStatus {
         positionAt: _time(j['position_at']),
         positionStale: j['position_stale'] as bool?,
         nearestStopName: j['nearest_stop_name'] as String?,
+        seatCapacity: j['seat_capacity'] as int? ?? 14,
+        camera: j['camera'] as String?,
+        cameraSeenAt: _time(j['camera_seen_at']),
+        openFlags: j['open_flags'] as int?,
       );
 }
 

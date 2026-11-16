@@ -147,7 +147,7 @@ async def run(n: int, boarding: int, alighting: int, capacity: int) -> None:
     print(f"Trip seat capacity       : {capacity}")
     print(f"Successful bookings      : {len(successes)}")
     print(f"Rejected                 : {n - len(successes)}")
-    print(f"DOUBLE-SOLD SEAT-LEGS    : {len(duplicates)}   <-- must be 0")
+    print(f"SEAT-LEGS SOLD TWICE     : {len(duplicates)}   <-- must be 0")
     print()
     print("Response codes:")
     for code, count in sorted(codes.items()):
@@ -177,8 +177,8 @@ async def run(n: int, boarding: int, alighting: int, capacity: int) -> None:
     elif overbooked:
         print(f"FAIL: {len(successes)} bookings exceeded capacity {capacity}.")
     else:
-        print("PASS: no double-booking, no overbooking.")
-        print("      Pessimistic locking held under concurrent load.")
+        print("PASS: no overbooking -- no seat reserved twice, never more bookings than seats.")
+        print("      The reservation lock held under concurrent load.")
     print("=" * 62)
 
     print("\nVerify independently in MySQL:")

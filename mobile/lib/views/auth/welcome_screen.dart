@@ -16,8 +16,9 @@ import 'signup_screen.dart';
 ///
 /// Light, with the official mark as the hero (3 Oct). The flat
 /// purple field it replaced pushed every element to white-on-colour; on
-/// white the logo's own ink and red do the branding, the actions take the
-/// theme's ink fill at 18:1, and the screen matches every screen after it,
+/// white the logo does the branding, the actions take the theme's emerald
+/// fill with dark text (6.03:1; the console's palette since 10 Nov), and
+/// the screen matches every screen after it,
 /// so the first impression is the app rather than a splash for it (Jakob's
 /// law: one look, end to end). The CTA is at the bottom, in thumb reach.
 ///
@@ -63,7 +64,7 @@ class WelcomeScreen extends StatelessWidget {
                   // rather than ink so it reads as a caption to the logo,
                   // not a second headline competing with it.
                   Text(
-                    'Book a space on your UV Express\nbefore you get to the terminal.',
+                    'Book a seat on your UV Express\nbefore you get to the terminal.',
                     textAlign: TextAlign.center,
                     style: text.bodyLarge!.copyWith(
                       color: AppColors.textMuted,
@@ -73,7 +74,7 @@ class WelcomeScreen extends StatelessWidget {
 
                   const Spacer(flex: 3),
 
-                  // Theme defaults on purpose: ink fill for the one primary
+                  // Theme defaults on purpose: emerald fill for the one primary
                   // action, outline for the alternative. A new passenger
                   // has exactly one obvious next step (Hick's law).
                   FilledButton(

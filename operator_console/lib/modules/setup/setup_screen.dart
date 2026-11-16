@@ -12,7 +12,6 @@ import '../../data/repositories/schedule_repository.dart';
 import '../../viewmodels/auth_provider.dart';
 import '../phones/phones_screen.dart';
 import '../policy_editor/screens/policy_editor_screen.dart';
-import '../schedule_management/screens/schedule_screen.dart';
 import 'fares_step.dart';
 import 'operators_vans_step.dart';
 import 'routes_step.dart';
@@ -30,10 +29,19 @@ import 'terminals_step.dart';
 /// Done, to do and blocked are read from the database, never assumed: a
 /// list that could not be read says so instead of passing as empty.
 class SetupScreen extends StatefulWidget {
-  const SetupScreen({super.key, required this.onOpenTrips});
+  const SetupScreen({super.key, required this.onOpenTimetable});
 
-  /// "Ready for the first trip": opens Trips.
-  final VoidCallback onOpenTrips;
+  /// A step another page asked Setup to open on (12 Nov: the Timetable's
+  /// "Add a new route" lands on Setup › Route, not on whatever step Setup
+  /// last showed). Read once when Setup opens, then cleared.
+  static SetupStep? requested;
+
+  /// With [requested]: open that step's add form too.
+  static bool requestAdd = false;
+
+  /// The timetable lives in the Trips area (11 Nov); the set-up queue's
+  /// Timetable step opens it there.
+  final VoidCallback onOpenTimetable;
 
   @override
   State<SetupScreen> createState() => _SetupScreenState();
@@ -48,9 +56,20 @@ class _SetupScreenState extends State<SetupScreen> {
   SetupFacts? _facts;
   SetupStep? _step;
 
+  /// The requested step opens with its add form, the first time only.
+  bool _addOnOpen = false;
+
   @override
   void initState() {
     super.initState();
+    if (SetupScreen.requested case final s?) {
+      if (_steps.contains(s)) {
+        _step = s;
+        _addOnOpen = SetupScreen.requestAdd;
+      }
+      SetupScreen.requested = null;
+      SetupScreen.requestAdd = false;
+    }
     _count();
   }
 
@@ -114,17 +133,33 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   void _open(SetupStep s) {
-    setState(() => _step = s);
+    setState(() {
+      _step = s;
+      _addOnOpen = false;
+    });
     _count();
   }
 
   Widget _body(SetupStep step) => switch (step) {
         SetupStep.terminals => TerminalsStep(onChanged: _count),
-        SetupStep.route => RoutesStep(onChanged: _count, onOpenStep: _open),
+        SetupStep.route => RoutesStep(onChanged: _count, onOpenStep: _open, startAdding: _addOnOpen),
         SetupStep.fares => FaresStep(onChanged: _count, onOpenStep: _open),
         SetupStep.operatorsVans => OperatorsVansStep(onChanged: _count),
         SetupStep.staff => StaffStep(onChanged: _count),
-        SetupStep.timetable => ScheduleScreen(onChanged: _count, onOpenRoute: () => _open(SetupStep.route)),
+        // One home for the timetable: the Trips area, beside the trips it
+        // makes. The queue only points there while set-up is under way.
+        SetupStep.timetable => Panel(
+            child: EmptyState(
+              icon: Icons.event_repeat,
+              title: 'Trip schedules are kept with the trips',
+              hint: 'Add them on Trips › Trip Schedules. This step is done as soon as one is in use.',
+              action: FilledButton.icon(
+                onPressed: widget.onOpenTimetable,
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('Open Trip Schedules'),
+              ),
+            ),
+          ),
         SetupStep.phones => PhonesScreen(onChanged: _count),
         SetupStep.rules => const PolicyEditorScreen(),
       };
@@ -143,19 +178,15 @@ class _SetupScreenState extends State<SetupScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         PageHeader(
           title: 'Setup',
-          description: _manager
-              ? 'Everything A2Z needs before the first trip, in the order the system needs it. '
-                  'The head of the queue is the next thing to do.'
-              : 'The vans, staff and phones on A2Z\'s roster. The Terminal Manager sets up '
-                  'terminals, routes, fares and the timetable.',
+          description: !_manager
+              ? 'The vans, staff and phones on A2Z\'s roster. The Terminal Manager keeps the terminals, '
+                  'route and fares.'
+              : ready
+                  ? 'The cooperative\'s records. They change rarely: the day\'s work is on Trips and Money.'
+                  : 'Everything A2Z needs before the first trip, in the order the system needs it. '
+                      'The head of the queue is the next thing to do.',
           actions: [
-            if (ready)
-              OutlinedButton.icon(
-                onPressed: widget.onOpenTrips,
-                icon: const Icon(Icons.departure_board, size: 18),
-                label: const Text('Go to Trips'),
-              )
-            else if (step != null && head != null && head != step && _status(step).state == SetupState.done)
+            if (!ready && step != null && head != null && head != step && _status(step).state == SetupState.done)
               OutlinedButton.icon(
                 onPressed: () => _open(head),
                 icon: const Icon(Icons.arrow_forward, size: 18),
@@ -165,7 +196,19 @@ class _SetupScreenState extends State<SetupScreen> {
         ),
         Expanded(
           child: LayoutBuilder(builder: (context, c) {
-            final queue = _Queue(
+            // Set-up done: a plain list of the records with what each holds
+            // (11 Nov). The numbered queue and its progress belong to the
+            // first set-up, when the order matters.
+            final queue = ready
+                ? _RecordsNav(
+                    steps: [for (final s in _steps) if (s != SetupStep.timetable) s],
+                    status: _status,
+                    selected: step,
+                    sosOff: _manager && !(_facts?.sosNumbersSet ?? true),
+                    onOpen: _open,
+                    compact: c.maxWidth < 980,
+                  )
+                : _Queue(
               steps: _steps,
               status: _status,
               selected: step,
@@ -184,6 +227,33 @@ class _SetupScreenState extends State<SetupScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : KeyedSubtree(key: ValueKey(step), child: _body(step)),
             );
+            // Set-up done: the records as tabs across the top (the owner's
+            // reference layout), the open one under them at full width.
+            if (ready) {
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _RecordTabs(
+                  steps: [for (final s in _steps) if (s != SetupStep.timetable) s],
+                  status: _status,
+                  selected: step,
+                  onOpen: _open,
+                ),
+                if (_manager && !(_facts?.sosNumbersSet ?? true))
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.md),
+                    child: Row(children: [
+                      Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.warning),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text('Emergency texts are off: no SOS numbers are set. An SOS is still recorded, '
+                            'but nobody is texted.', style: Theme.of(context).textTheme.bodySmall),
+                      ),
+                      TextButton(onPressed: () => _open(SetupStep.rules), child: const Text('Set the SOS numbers')),
+                    ]),
+                  ),
+                const SizedBox(height: AppSpacing.lg),
+                Expanded(child: body),
+              ]);
+            }
             if (c.maxWidth < 980) {
               return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 SizedBox(height: 64, child: FocusTraversalGroup(child: queue)),
@@ -199,6 +269,239 @@ class _SetupScreenState extends State<SetupScreen> {
           }),
         ),
       ]),
+    );
+  }
+}
+
+/// Set-up done: the records as tabs across the top, each with what it
+/// holds in its tooltip; the selected one underlined in green, as the
+/// Trips area's tabs are.
+class _RecordTabs extends StatelessWidget {
+  const _RecordTabs({required this.steps, required this.status, required this.selected, required this.onOpen});
+  final List<SetupStep> steps;
+  final StepStatus Function(SetupStep) status;
+  final SetupStep? selected;
+  final ValueChanged<SetupStep> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.divider))),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (final s in steps)
+            Builder(builder: (context) {
+              final on = s == selected;
+              final st = status(s);
+              final warn = st.warning || st.state == SetupState.todo || st.state == SetupState.blocked;
+              return _RecordTab(label: s.label, note: st.note, on: on, warn: warn, onTap: () => onOpen(s));
+            }),
+        ]),
+      ),
+    );
+  }
+}
+
+/// One record tab. Under the pointer the label sits on the see-through
+/// wash and a faint underline previews where the selected bar will be;
+/// selected, the bar is solid green and the label bold. 48 px high, the
+/// whole pill the target. A record with something left to do carries the
+/// ochre dot and says what in its tooltip.
+class _RecordTab extends StatefulWidget {
+  const _RecordTab({required this.label, required this.note, required this.on, required this.warn, required this.onTap});
+  final String label;
+  final String note;
+  final bool on;
+  final bool warn;
+  final VoidCallback onTap;
+
+  @override
+  State<_RecordTab> createState() => _RecordTabState();
+}
+
+class _RecordTabState extends State<_RecordTab> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final speed = still ? Duration.zero : AppDuration.quick;
+    final on = widget.on;
+    return Tooltip(
+      message: widget.note,
+      waitDuration: const Duration(milliseconds: 500),
+      child: Semantics(
+        button: true,
+        selected: on,
+        label: '${widget.label}${widget.warn ? ', needs attention: ${widget.note}' : ''}',
+        excludeSemantics: true,
+        child: Padding(
+          padding: const EdgeInsets.only(right: AppSpacing.xs),
+          child: InkWell(
+            onTap: widget.onTap,
+            onHover: (h) => setState(() => _hover = h),
+            hoverColor: Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: AnimatedContainer(
+              duration: speed,
+              constraints: const BoxConstraints(minHeight: AppSizing.minTouchTarget),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: _hover && !on ? AppColors.hoverWash : Colors.transparent,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.sm)),
+                border: Border(
+                  bottom: BorderSide(
+                    color: on ? AppColors.primary : (_hover ? AppColors.primary.withValues(alpha: 0.35) : Colors.transparent),
+                    width: 2.5,
+                  ),
+                ),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                AnimatedDefaultTextStyle(
+                  duration: speed,
+                  style: text.bodyMedium!.copyWith(
+                      fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                      color: on || _hover ? AppColors.primary : AppColors.textPrimary),
+                  child: Text(widget.label),
+                ),
+                if (widget.warn) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(color: AppColors.warning, shape: BoxShape.circle)),
+                ],
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Set-up done (11 Nov): the records as a plain list, each with what it
+/// holds ("7 terminals", "2 vans ready"). No numbers, ticks or progress: those
+/// tell a first set-up what comes next, and once it is over they are noise.
+/// Something left off is still said (an unset SOS number).
+class _RecordsNav extends StatelessWidget {
+  const _RecordsNav({
+    required this.steps,
+    required this.status,
+    required this.selected,
+    required this.sosOff,
+    required this.onOpen,
+    required this.compact,
+  });
+
+  final List<SetupStep> steps;
+  final StepStatus Function(SetupStep) status;
+  final SetupStep? selected;
+  final bool sosOff;
+  final ValueChanged<SetupStep> onOpen;
+  final bool compact;
+
+  static IconData _icon(SetupStep s) => switch (s) {
+        SetupStep.terminals => Icons.location_on_outlined,
+        SetupStep.route => Icons.route,
+        SetupStep.fares => Icons.payments_outlined,
+        SetupStep.operatorsVans => Icons.airport_shuttle_outlined,
+        SetupStep.staff => Icons.badge_outlined,
+        SetupStep.timetable => Icons.event_repeat,
+        SetupStep.phones => Icons.phone_android,
+        SetupStep.rules => Icons.tune,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    if (compact) {
+      return ListView(scrollDirection: Axis.horizontal, children: [
+        for (final s in steps)
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: Center(
+              child: ChoiceChip(
+                avatar: Icon(_icon(s), size: 16),
+                label: Text(s.label),
+                selected: s == selected,
+                onSelected: (_) => onOpen(s),
+              ),
+            ),
+          ),
+      ]);
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        border: Border.all(color: AppColors.divider),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: ScrollWithThumb(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+            child: Text('Records', style: text.titleSmall),
+          ),
+          for (final s in steps)
+            Builder(builder: (context) {
+              final st = status(s);
+              final on = s == selected;
+              final warn = st.warning || st.state == SetupState.todo || st.state == SetupState.blocked;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Material(
+                  color: on ? AppColors.primaryContainer : Colors.transparent,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    onTap: () => onOpen(s),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
+                      child: Row(children: [
+                        Icon(_icon(s), size: 18, color: on ? AppColors.primary : AppColors.textMuted),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(s.label,
+                                style: text.bodyMedium?.copyWith(
+                                    fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                                    color: on ? AppColors.primary : AppColors.textPrimary)),
+                            Text(st.note,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.bodySmall?.copyWith(color: warn ? AppColors.warning : null)),
+                          ]),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          if (sosOff) ...[
+            const Divider(height: AppSpacing.xl),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.warning),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text('Emergency texts are off: no SOS numbers are set. An SOS is still recorded '
+                      'here, but nobody is texted.', style: text.bodySmall),
+                ),
+              ]),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(onPressed: () => onOpen(SetupStep.rules), child: const Text('Set the SOS numbers')),
+            ),
+          ],
+        ]),
+      ),
     );
   }
 }

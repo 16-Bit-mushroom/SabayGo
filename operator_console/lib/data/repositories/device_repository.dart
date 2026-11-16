@@ -65,9 +65,74 @@ class PhoneCheckout {
 
 /// The phone pool (brief 5.5): the Terminal Manager adds and retires; the
 /// office checks a phone out to a Dispatcher and van and takes it back.
+/// One phone as the door-camera page shows it (`GET /devices/live`, 12 Nov):
+/// its latest report, the last two hours of reports, today's door counts,
+/// and the trip its van is on. A reading the phone did not send is null --
+/// shown as "not reported", never as zero.
+class DoorCamera {
+  DoorCamera.fromJson(Map<String, dynamic> j)
+      : phone = Phone.fromJson(j),
+        charging = j['charging'] as bool?,
+        lensBlocked = j['lens_blocked'] as bool?,
+        detectionRate = (j['detection_rate_hz'] as num?)?.toDouble(),
+        reportsInWindow = j['report_count_window'] as int? ?? 0,
+        history = [for (final p in j['history'] as List? ?? const []) ReportPoint.fromJson(p as Map<String, dynamic>)],
+        boardedToday = j['boarded_today'] as int? ?? 0,
+        alightedToday = j['alighted_today'] as int? ?? 0,
+        trip = j['trip'] == null ? null : CameraTrip.fromJson(j['trip'] as Map<String, dynamic>);
+
+  final Phone phone;
+  final bool? charging;
+  final bool? lensBlocked;
+  final double? detectionRate;
+  final int reportsInWindow;
+  final List<ReportPoint> history;
+  final int boardedToday;
+  final int alightedToday;
+  final CameraTrip? trip;
+}
+
+class ReportPoint {
+  ReportPoint.fromJson(Map<String, dynamic> j)
+      : at = DateTime.parse(j['at'] as String),
+        detectionRate = (j['detection_rate_hz'] as num?)?.toDouble(),
+        tempC = (j['battery_temp_c'] as num?)?.toDouble(),
+        batteryPct = j['battery_pct'] as int?;
+  final DateTime at;
+  final double? detectionRate;
+  final double? tempC;
+  final int? batteryPct;
+}
+
+class CameraTrip {
+  CameraTrip.fromJson(Map<String, dynamic> j)
+      : tripId = j['trip_id'] as String,
+        departure = DateTime.parse(j['departure_datetime'] as String),
+        label = j['trip_label'] as String?,
+        status = j['status'] as String,
+        listed = j['listed'] as int? ?? 0,
+        boarded = j['boarded'] as int? ?? 0,
+        alighted = j['alighted'] as int? ?? 0,
+        aboard = j['aboard'] as int? ?? 0;
+  final String tripId;
+  final DateTime departure;
+  final String? label;
+  final String status;
+  final int listed;
+  final int boarded;
+  final int alighted;
+  final int aboard;
+}
+
 class DeviceRepository {
   DeviceRepository(this._api);
   final ApiClient _api;
+
+  /// The door-camera page's readings, the last [minutes] of reports.
+  Future<List<DoorCamera>> live({int minutes = 120}) async => [
+        for (final d in await _api.get('/devices/live', query: {'minutes': '$minutes'}) as List)
+          DoorCamera.fromJson(d as Map<String, dynamic>)
+      ];
 
   Future<List<Phone>> list() async => [
         for (final d in await _api.get('/devices') as List) Phone.fromJson(d as Map<String, dynamic>)

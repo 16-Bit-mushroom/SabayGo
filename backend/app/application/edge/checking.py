@@ -3,7 +3,7 @@ brief 2.4, 5.2, 6.1; phase 3 of 6.2).
 
 Before departure. A boarding the phone saw is *listed* while an unmatched
 **seat the Dispatcher marked as paid** ('matched_booking') or an
-unmatched **walk-up entry the Dispatcher listed** ('matched_log') remains
+unmatched **walk-in entry the Dispatcher listed** ('matched_log') remains
 on the trip's list. Each seat or entry is used up by one boarding only.
 Otherwise the boarding is 'unlisted', and its resolution is 'pending'
 until the Dispatcher either fixes the list (lists the person with a
@@ -16,7 +16,7 @@ aboard. What remains is a count -- so many paid seats, so many boardings
 -- not an identity. `matched_booking_id` names the seat that was used up,
 not the person who walked through the door.
 
-Seats are consumed oldest first (a paid seat by `paid_at`, a walk-up
+Seats are consumed oldest first (a paid seat by `paid_at`, a walk-in
 entry by when it was logged) so that the result is the same however the
 phone's offline uploads arrive. Which kind is taken first does not
 matter: the paper does not say, and the amount owed does not depend on
@@ -44,7 +44,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.finance.statement import PAID_SEAT, WALK_UP_TYPES
+from app.application.finance.statement import PAID_SEAT, WALK_IN_TYPES
 from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
@@ -145,7 +145,7 @@ class ListCheck:
         """(when, kind, booking) of every seat on the trip's list.
 
         A reservation the Dispatcher marked Paid is 'matched_booking';
-        a walk-up the Dispatcher listed is 'matched_log'. Oldest first,
+        a walk-in the Dispatcher listed is 'matched_log'. Oldest first,
         so a recheck gives the same answer every time. An unpaid
         reservation is not here at all: it is not on the list, so a
         passenger who boards on one is an unlisted boarding until the
@@ -162,7 +162,7 @@ class ListCheck:
         )).all()
         records = [
             (_naive(paid_at or created_at),
-             "matched_log" if kind in WALK_UP_TYPES else "matched_booking",
+             "matched_log" if kind in WALK_IN_TYPES else "matched_booking",
              booking_id)
             for paid_at, created_at, kind, booking_id in rows
         ]

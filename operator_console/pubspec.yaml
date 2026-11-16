@@ -71,17 +71,32 @@ flutter:
   # The SABAY GO mark, and Roboto bundled so the console renders in one
   # typeface on every browser. Same files as mobile/assets.
   assets:
-    - assets/branding/sabaygo_logo.png
+    - assets/branding/sabaygo_van_logo.png
+    - assets/branding/sabaygo_van_mark.png
 
+  # Bundled, never fetched (DESIGN.md, Typography). Inter for the interface,
+  # tables and money (tabular figures); Plus Jakarta Sans for page titles
+  # and the big figures. Static weights cut from the OFL variable fonts in
+  # google/fonts; licences beside them in assets/fonts.
   fonts:
-    - family: Roboto
+    - family: Inter
       fonts:
-        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Inter-Regular.ttf
           weight: 400
-        - asset: assets/fonts/Roboto-Medium.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Roboto-Bold.ttf
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
           weight: 700
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
 
   # To add assets to your application, add an assets section, like this:
   # assets:

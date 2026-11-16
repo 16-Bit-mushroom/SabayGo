@@ -100,6 +100,28 @@ class ScheduleRepository {
     });
   }
 
+  /// Changes a trip schedule in place. Trips already posted keep their
+  /// own route and time; only trips posted from now on follow the edit.
+  Future<void> updateTemplate(
+    String templateId, {
+    String? routeId,
+    required String departureTime,
+    required String daysOfWeek,
+    required String? tripLabel,
+  }) async {
+    await _api.patch('/config/schedule-templates/$templateId', body: {
+      'route_id': ?routeId,
+      'departure_time': departureTime,
+      'days_of_week': daysOfWeek,
+      'trip_label': tripLabel ?? '',
+    });
+  }
+
+  /// Removes it; trips already posted from it still run.
+  Future<void> deleteTemplate(String templateId) async {
+    await _api.delete('/config/schedule-templates/$templateId');
+  }
+
   Future<void> setTemplateActive(String templateId, bool isActive) async {
     await _api.patch('/config/schedule-templates/$templateId/active',
         query: {'is_active': isActive});

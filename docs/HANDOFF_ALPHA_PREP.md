@@ -75,7 +75,7 @@ database on your machine does not matter.
 | What | migrations only; you enter A2Z's setup in the console | the state Day 1 ended in | the demo seed the journey scripts use |
 | Accounts | the first manager you create | `manager@a2z.dev`, `joy@a2z.dev` (Cashier), `ramon@` / `liza@a2z.dev` (Dispatchers), `chris@a2z.dev` | `manager@`, `cashier@`, `dispatcher@`…`dispatcher5@`, `passenger@sabaygo.dev` |
 | Route | what you enter | Ecoland → Cotabato (A2Z's real route, test fares) | Ecoland → Digos / Tagum (test values) |
-| Trips from today | after **Create upcoming trips** | after **Create upcoming trips** | three live trips dated from the reset |
+| Trips from today | after **Trips → Post the timetable for 7 days** (was "Create upcoming trips" on the Timetable) | after **Trips → Post the timetable for 7 days** | three live trips dated from the reset |
 | Unpaid cutoff | what you set | 30 min | 5 min |
 | Home pickup | off until you set it | on (3000 m) | off until you set it |
 
@@ -97,7 +97,7 @@ Follow them; this list is the order and what is new.
 |---|---|---|---|
 | 1 | Terminal Manager | Setup: terminals, route, fares, operators and vans, staff (validate each Dispatcher), timetable, **Phones** (add one phone and copy its token: you need it in step 7), Rules & Settings | |
 | 2 | Terminal Manager | Rules & Settings for testing: when Start opens and when check-in opens to 240 min, home pickup 3000 m, and **Speed Limits** for the route's stretches (without them the speed monitor flags only stops) | Speed limits: yes |
-| 3 | Terminal Manager | Add a departure about an hour from now (check it saved as AM/PM correctly, finding 7), then **Create upcoming trips**, then assign a van and a Dispatcher | |
+| 3 | Terminal Manager | Add a departure about an hour from now (check it saved as AM/PM correctly, finding 7), then **Trips → Post the timetable for 7 days** (was "Create upcoming trips" on the Timetable), then assign a van and a Dispatcher | |
 | 4 | Passenger | Sign up; search; reserve; read the booking code; cancel one and reserve again; chat with the Dispatcher; check in ("I'm at the terminal": fake the location, §4.1); **book for someone else with home pickup**; **rent the whole van** (special trip) | Home pickup, special trip: yes |
 | 5 | Dispatcher | The assigned trip; reservations; **Mark as Paid**; log walk-ups; reply in chat; collect the special trip's fee | |
 | 6 | Cashier | **Record terminal fees** just before Start (not earlier, finding 9), then **Start**; the Money page; Special Trips (agree a fee, a walk-in request, refuse one) | Special trips: yes |
@@ -194,7 +194,7 @@ ahead of this list.
 | | What | Why it matters tomorrow |
 |---|---|---|
 | D1 | **Which data tomorrow.** `ALPHA_TEST_GUIDE.md` §3 lists the `@sabaygo.dev` accounts (demo seed); the owner's database currently holds the Day 1 data (`@a2z.dev`) | Testers following the guide cannot sign in. Once decided, make §3 match |
-| D2 | **Create upcoming trips** must be pressed: the owner's database has **zero** trips from today (finding 2) | Nobody can book until it is |
+| D2 | **Trips → Post the timetable for 7 days** (was "Create upcoming trips" on the Timetable) must be pressed: the owner's database has **zero** trips from today (finding 2) | Nobody can book until it is |
 | D3 | Finding 22: the passenger's SOS lives on the out-of-scope Track-the-van map | Decides whether passenger SOS is tested tomorrow |
 | D4 | Finding 6: **Phones** is a required setup step, so without the edge phone the checklist never reads "ready" | Testers may think setup is broken |
 

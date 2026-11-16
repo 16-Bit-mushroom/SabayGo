@@ -13,12 +13,13 @@ backend on :8000 and a reset dev database.
 
 from __future__ import annotations
 
+import os
 import asyncio
 import sys
 
 import httpx
 
-API = "http://127.0.0.1:8000/api/v1"
+API = os.environ.get("SABAYGO_API", "http://127.0.0.1:8000/api/v1")
 TRIP = "TRIP-DEMO-00000001"
 PASSWORD = "sabaygo123"
 ACCOUNTS = {

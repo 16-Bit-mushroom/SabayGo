@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/section_header.dart';
+import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/profile_repository.dart';
 import '../../models/passenger_moderl.dart';
@@ -40,13 +42,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to sign out of your SabayGo account?'),
+        title: const Text('Sign out?'),
+        content: const Text('You can sign in again at any time with your email and password.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
@@ -55,11 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // the welcome screen on its own -- no manual navigation here.
               context.read<AuthProvider>().signOut();
             },
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFD9534F),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Sign out'),
           ),
         ],
       ),
@@ -75,8 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Delete Account', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text('Delete your account?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +88,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 obscureText: true,
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   errorText: dialogError,
                 ),
               ),
@@ -101,7 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: busy ? null : () => Navigator.pop(dialogContext),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: busy
@@ -126,16 +121,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       context.read<AuthProvider>().signOut();
                     },
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFD9534F),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
+                  backgroundColor: AppColors.danger, foregroundColor: AppColors.onFill),
               child: busy
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.surfaceRaised),
                     )
-                  : const Text('Delete Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                  : const Text('Delete account'),
             ),
           ],
         ),
@@ -163,57 +156,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    final text = Theme.of(context).textTheme;
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _viewModel.load,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.gutter),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Profile',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2D2059)),
-              ),
-              const SizedBox(height: 16),
-
+              // The app bar already says Profile; the screen opens on the person.
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 5))],
+                  color: AppColors.surfaceRaised,
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                  border: Border.all(color: AppColors.edge),
                 ),
                 child: Column(
                   children: [
                     Row(
                       children: [
                         _buildAvatar(user, radius: 32),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(user.fullName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              if (user.trustRating != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(8)),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.star, color: Colors.orange, size: 14),
-                                      const SizedBox(width: 4),
-                                      Text('${user.trustRating} Trust Rating', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
+                        const SizedBox(width: AppSpacing.lg),
+                        Expanded(child: Text(user.fullName, style: text.titleLarge)),
                         IconButton(
+                          tooltip: 'Edit profile',
                           onPressed: () async {
                             final updated = await Navigator.push<bool>(
                               context,
@@ -224,81 +193,81 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             );
                             if (updated == true) setState(() {});
                           },
-                          icon: const Icon(Icons.edit_square, color: Color(0xFF00A859), size: 24),
+                          icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
                         )
                       ],
                     ),
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(height: 1)),
+                    const Padding(padding: EdgeInsets.symmetric(vertical: AppSpacing.lg), child: Divider(height: 1)),
                     _buildQuickInfo(Icons.phone_outlined, user.phoneNumber ?? 'No phone number'),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: AppSpacing.sm),
                     _buildQuickInfo(Icons.email_outlined, user.email),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 24),
-              const Text('ACCOUNT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.xxl),
+              const AppSectionHeader('Account'),
+              const SizedBox(height: AppSpacing.md),
 
               _buildSettingsGroup([
-                _buildSettingsTile(Icons.home_work_outlined, 'Home Address', subtitle: user.address ?? 'Not set'),
-                _buildSettingsTile(Icons.person_outline, 'Gender', subtitle: user.gender ?? 'Not set'),
+                _buildSettingsTile(Icons.home_work_outlined, 'Home address', subtitle: user.address ?? 'Not set'),
+                _buildSettingsTile(Icons.person_outline, 'Gender', subtitle: _sentence(user.gender) ?? 'Not set'),
                 _buildSettingsTile(
                   Icons.health_and_safety_outlined,
-                  'Emergency Contact',
+                  'Emergency contact',
                   subtitle: user.emergencyContactName == null
                       ? 'Not set'
                       : '${user.emergencyContactName}${user.emergencyContactRelation != null ? ' (${user.emergencyContactRelation})' : ''}\n${user.emergencyContactPhone ?? ''}',
-                  iconColor: Colors.red.shade400,
                 ),
               ]),
 
-              const SizedBox(height: 24),
-              const Text('PREFERENCES', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.xxl),
+              const AppSectionHeader('Preferences'),
+              const SizedBox(height: AppSpacing.md),
 
               _buildSettingsGroup([
-                _buildSettingsTile(Icons.bookmark_outline, 'Saved Destinations', onTap: () {
+                _buildSettingsTile(Icons.bookmark_outline, 'Saved destinations', onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => ChangeNotifierProvider.value(
                     value: _viewModel,
                     child: const ManageDestinationsScreen(),
                   )));
                 }),
-                _buildSettingsTile(Icons.notifications_none, 'Notification Settings', onTap: () => _showNotificationSettingsSheet(context)),
+                _buildSettingsTile(Icons.notifications_none, 'Notification settings', onTap: () => _showNotificationSettingsSheet(context)),
               ]),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xxxl),
 
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: AppSizing.primaryActionHeight,
                 child: OutlinedButton.icon(
                   onPressed: () => _showSignOutConfirmation(context),
-                  icon: const Icon(Icons.logout, size: 20, color: Colors.black87),
-                  label: const Text('Sign Out', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                  icon: const Icon(Icons.logout, size: 20),
+                  label: const Text('Sign out'),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: AppSizing.primaryActionHeight,
                 child: TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: AppColors.danger),
                   onPressed: () => _showDeleteAccountDialog(context),
-                  icon: const Icon(Icons.person_remove_outlined, size: 20, color: Colors.red),
-                  label: const Text('Delete Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
+                  icon: const Icon(Icons.person_remove_outlined, size: 20),
+                  label: const Text('Delete account'),
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xxxl),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// Stored values are lower case ('female'); the screen says them as words.
+  static String? _sentence(String? v) =>
+      v == null || v.isEmpty ? null : v[0].toUpperCase() + v.substring(1);
 
   Widget _buildAvatar(PassengerModel user, {required double radius}) {
     final url = user.avatarUrl;
@@ -307,10 +276,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     return CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFF2D2059),
+      backgroundColor: AppColors.primaryContainer,
       child: Text(
         user.initials,
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: radius * 0.6),
+        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: radius * 0.6),
       ),
     );
   }
@@ -318,9 +287,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildQuickInfo(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.grey.shade500),
-        const SizedBox(width: 12),
-        Text(text, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500, fontSize: 13)),
+        Icon(icon, size: 18, color: AppColors.textMuted),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Text(text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
+        ),
       ],
     );
   }
@@ -328,44 +299,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSettingsGroup(List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.edge),
       ),
       child: Column(
-        children: children.asMap().entries.map((entry) {
-          int idx = entry.key;
-          Widget child = entry.value;
-          return Column(
-            children: [
-              child,
-              if (idx != children.length - 1) const Divider(height: 1, indent: 52),
-            ],
-          );
-        }).toList(),
+        children: [
+          for (final (i, child) in children.indexed) ...[
+            child,
+            if (i != children.length - 1) const Divider(height: 1, indent: 64),
+          ],
+        ],
       ),
     );
   }
 
-  Widget _buildSettingsTile(IconData icon, String title, {String? subtitle, Color? iconColor, VoidCallback? onTap}) {
+  Widget _buildSettingsTile(IconData icon, String title, {String? subtitle, VoidCallback? onTap}) {
+    final text = Theme.of(context).textTheme;
     return ListTile(
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 2),
       leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: (iconColor ?? const Color(0xFF2D2059)).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-        child: Icon(icon, size: 20, color: iconColor ?? const Color(0xFF2D2059)),
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(color: AppColors.primaryContainer, borderRadius: BorderRadius.circular(AppRadius.sm)),
+        child: Icon(icon, size: 20, color: AppColors.primary),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-      subtitle: subtitle != null ? Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)) : null,
-      trailing: onTap != null ? const Icon(Icons.chevron_right, size: 20, color: Colors.grey) : null,
+      title: Text(title, style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+      subtitle: subtitle != null ? Text(subtitle, style: text.bodySmall) : null,
+      trailing: onTap != null ? const Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted) : null,
     );
   }
 
   void _showNotificationSettingsSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surfaceRaised,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
@@ -379,13 +347,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
-                      child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+                      child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2))),
                     ),
-                    const Text('Notification Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Notification settings', style: Theme.of(sheetContext).textTheme.titleLarge),
                     const SizedBox(height: 16),
                     SwitchListTile(
-                      title: const Text('Allow All Notifications', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      activeColor: const Color(0xFF00A859),
+                      title: const Text('Allow notifications'),
                       contentPadding: EdgeInsets.zero,
                       value: _viewModel.pushEnabled,
                       onChanged: (val) async {
@@ -395,9 +362,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const Divider(height: 16),
                     SwitchListTile(
-                      title: const Text('Tailored Trip Schedules', style: TextStyle(fontSize: 14)),
-                      subtitle: const Text('Get notified when a van matches your saved destinations.', style: TextStyle(fontSize: 12)),
-                      activeColor: const Color(0xFF00A859),
+                      title: const Text('Departures to my saved destinations'),
+                      subtitle: const Text('A message when a van runs to a destination you saved.'),
                       contentPadding: EdgeInsets.zero,
                       value: _viewModel.tailoredSchedules,
                       onChanged: (val) async {
@@ -406,8 +372,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       },
                     ),
                     SwitchListTile(
-                      title: const Text('Trip Updates & Cancellations', style: TextStyle(fontSize: 14)),
-                      activeColor: const Color(0xFF00A859),
+                      title: const Text('Changes to my trips'),
                       contentPadding: EdgeInsets.zero,
                       value: _viewModel.tripUpdates,
                       onChanged: (val) async {

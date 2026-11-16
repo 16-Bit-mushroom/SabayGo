@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/design/components/empty_state.dart';
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/notification_repository.dart';
@@ -19,6 +21,7 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  String _query = '';
   late final NotificationsViewModel _viewModel;
   late final bool _ownsViewModel;
 
@@ -48,22 +51,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       child: Column(
         children: [
           // --- Search Bar ---
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-            color: Colors.grey.shade100,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.sm),
             child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search notifications',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
+              decoration: const InputDecoration(
+                hintText: 'Search updates',
+                prefixIcon: Icon(Icons.search, color: AppColors.textMuted),
               ),
-              onChanged: _viewModel.setSearchQuery,
+              onChanged: (q) {
+                setState(() => _query = q);
+                _viewModel.setSearchQuery(q);
+              },
             ),
           ),
           
@@ -84,22 +82,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_viewModel.error != null && notifications.isEmpty) {
-      // Inside a scrollable so pull-to-refresh still works from the error.
-      return ListView(
-        children: [
-          const SizedBox(height: 120),
-          Icon(Icons.cloud_off_outlined, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          Text(
-            'Could not load notifications.\nPull down to try again.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-          ),
-        ],
+      return const AppEmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'Could not load updates',
+        body: 'Check your connection, then pull down to try again.',
       );
     }
     if (notifications.isEmpty) {
-      return ListView(children: [SizedBox(height: 320, child: _buildEmptyState())]);
+      return _query.isEmpty
+          ? const AppEmptyState(
+              icon: Icons.notifications_none,
+              title: 'No updates yet',
+              body: 'Reminders and changes to your trips will appear here.',
+            )
+          : const AppEmptyState(
+              icon: Icons.search_off,
+              title: 'Nothing matches',
+              body: 'Try another word, or clear the search.',
+            );
     }
     return ListView.separated(
       itemCount: notifications.length,
@@ -108,84 +108,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.notifications_off_outlined, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          Text(
-            'No notifications found',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildNotificationItem(NotificationModel notification) {
     final isUnread = !notification.isRead;
     
-    // Determine icon and color based on type
-    IconData icon;
-    Color iconColor;
-    
-    switch (notification.type) {
-      case NotificationType.tailoredTrip:
-        icon = Icons.directions_car;
-        iconColor = const Color(0xFF00A859);
-        break;
-      case NotificationType.tripCanceled:
-        icon = Icons.cancel_outlined;
-        iconColor = Colors.red;
-        break;
-      case NotificationType.vanDeparted:
-        icon = Icons.time_to_leave;
-        iconColor = Colors.orange;
-        break;
-      case NotificationType.tripUpdate:
-        icon = Icons.info_outline;
-        iconColor = Colors.blue;
-        break;
-      case NotificationType.policyUpdate:
-      case NotificationType.terminalPolicy:
-        icon = Icons.article_outlined;
-        iconColor = Colors.grey.shade700;
-        break;
-      case NotificationType.varianceAlert:
-        icon = Icons.people_alt_outlined;
-        iconColor = Colors.deepOrange;
-        break;
-      case NotificationType.sosAlert:
-        icon = Icons.emergency_share;
-        iconColor = AppColors.danger;
-        break;
-      case NotificationType.unremittedFare:
-        icon = Icons.payments_outlined;
-        iconColor = Colors.red;
-        break;
-      case NotificationType.departureReminder:
-        icon = Icons.schedule;
-        iconColor = Colors.orange;
-        break;
-      case NotificationType.scheduleChange:
-        icon = Icons.event_repeat;
-        iconColor = Colors.blue;
-        break;
-      case NotificationType.systemAlert:
-        icon = Icons.notifications_active_outlined;
-        iconColor = Colors.grey.shade700;
-        break;
-    }
+    final (IconData icon, StatusTone tone) = switch (notification.type) {
+      NotificationType.tailoredTrip => (Icons.directions_bus_outlined, StatusTone.info),
+      NotificationType.tripCanceled => (Icons.cancel_outlined, StatusTone.danger),
+      NotificationType.vanDeparted => (Icons.time_to_leave, StatusTone.warning),
+      NotificationType.tripUpdate => (Icons.info_outline, StatusTone.info),
+      NotificationType.policyUpdate || NotificationType.terminalPolicy => (Icons.article_outlined, StatusTone.muted),
+      NotificationType.varianceAlert => (Icons.people_alt_outlined, StatusTone.warning),
+      NotificationType.sosAlert => (Icons.emergency_share, StatusTone.danger),
+      // Money still owed is routine until it is paid: ochre, never red.
+      NotificationType.unremittedFare => (Icons.payments_outlined, StatusTone.warning),
+      NotificationType.departureReminder => (Icons.schedule, StatusTone.warning),
+      NotificationType.scheduleChange => (Icons.event_repeat, StatusTone.info),
+      NotificationType.systemAlert => (Icons.notifications_active_outlined, StatusTone.muted),
+    };
+    final text = Theme.of(context).textTheme;
 
     return InkWell(
       onTap: () {
         _viewModel.markAsRead(notification.id);
       },
       child: Container(
-        color: isUnread ? Colors.blue.shade50.withValues(alpha: 0.3) : Colors.white,
-        padding: const EdgeInsets.all(20),
+        color: isUnread ? AppColors.primaryContainer : AppColors.surfaceRaised,
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -193,10 +141,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.1),
+                color: tone.bg,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: iconColor, size: 24),
+              child: Icon(icon, color: tone.fg, size: 24),
             ),
             const SizedBox(width: 16),
             
@@ -211,26 +159,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       Expanded(
                         child: Text(
                           notification.title,
-                          style: TextStyle(
-                            fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
+                          style: text.bodyLarge?.copyWith(fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500),
                         ),
                       ),
                       Text(
                         _formatTimestamp(notification.timestamp),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        style: text.bodySmall,
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Text(
                     notification.message,
-                    style: TextStyle(
-                      color: isUnread ? Colors.black87 : Colors.grey.shade600,
-                      height: 1.4,
-                    ),
+                    style: text.bodyMedium?.copyWith(color: isUnread ? AppColors.textPrimary : AppColors.textMuted),
                   ),
                   
                   // Conditional CTA Buttons
@@ -248,7 +189,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 margin: const EdgeInsets.only(left: 8, top: 8),
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
               ),
           ],
         ),
@@ -264,18 +205,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   // UPDATED: Added BuildContext to access the TabController
   Widget _buildCTAButton(BuildContext context, NotificationModel notification) {
-    String buttonText = '';
-    Color buttonColor = const Color(0xFF00A859);
-    
-    if (notification.type == NotificationType.tailoredTrip) {
-      buttonText = 'Book Now';
-    } else if (notification.type == NotificationType.tripCanceled) {
-      buttonText = 'Find Another Ride';
-      buttonColor = Colors.red;
-    } else if (notification.type == NotificationType.vanDeparted) {
-      buttonText = 'View Next Schedule';
-      buttonColor = Colors.orange;
-    }
+    final buttonText = switch (notification.type) {
+      NotificationType.tailoredTrip => 'Book a seat',
+      NotificationType.tripCanceled => 'Find another trip',
+      _ => 'See the next departures',
+    };
 
     return OutlinedButton(
       onPressed: () {
@@ -285,15 +219,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         // 2. Seamlessly transition the user back to the Home Tab (Index 0)
         DefaultTabController.of(context).animateTo(0);
       },
-      style: OutlinedButton.styleFrom(
-        foregroundColor: buttonColor,
-        side: BorderSide(color: buttonColor),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: Text(buttonText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+      // Ink, the colour of the thing you act on; 48dp tall like every target.
+      style: OutlinedButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
+      child: Text(buttonText),
     );
   }
 

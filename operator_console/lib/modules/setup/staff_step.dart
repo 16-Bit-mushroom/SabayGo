@@ -75,6 +75,13 @@ class _StaffStepState extends State<StaffStep> {
     }
   }
 
+  static const _columns = [
+    RecordColumn('Name', flex: 4),
+    RecordColumn('Role', flex: 3),
+    RecordColumn('Work status', flex: 3),
+    RecordColumn('Validation', flex: 2),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final crew = _crew ?? const <StaffMember>[];
@@ -90,8 +97,8 @@ class _StaffStepState extends State<StaffStep> {
               ? LoadError(message: _error!, onRetry: _load)
               : RecordList(
                   title: 'Staff',
-                  addLabel: _canEdit ? 'Add staff member' : null,
-                  onAdd: _canEdit && selected != null ? () => setState(() => _selected = null) : null,
+                  columns: _columns,
+                  leadingWidth: 44,
                   empty: const EmptyState(
                     icon: Icons.badge_outlined,
                     title: 'No staff yet',
@@ -106,9 +113,13 @@ class _StaffStepState extends State<StaffStep> {
                           child: Text(s.firstName.characters.first.toUpperCase(),
                               style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
                         ),
+                        leadingWidth: 44,
                         title: s.fullName,
-                        subtitle: '${Roster.roleLabel(s.role)} · ${Roster.crewStatus(s.employmentStatus)}',
-                        badges: [
+                        columns: _columns,
+                        cells: [
+                          CellText(s.fullName, strong: true),
+                          CellText(Roster.roleLabel(s.role)),
+                          CellText(Roster.crewStatus(s.employmentStatus), muted: s.employmentStatus != 'active'),
                           s.role == 'dispatcher'
                               ? Roster.validationBadge(s.validationStatus)
                               : Tooltip(
@@ -122,18 +133,20 @@ class _StaffStepState extends State<StaffStep> {
                       ),
                   ],
                 ),
-      side: selected != null
-          ? _panel(selected)
-          : !_canEdit
-              ? null
-              : SidePanel(
-                  title: 'Add staff member',
-                  child: StaffForm(
-                    key: ValueKey('staff-$_blank'),
-                    fleet: _fleet,
-                    onSaved: (created, another) => _changed(select: created.userId, another: another),
-                  ),
-                ),
+      detail: selected == null ? null : _panel(selected),
+      addLabel: 'Add staff member',
+      onAdd: () => setState(() => _selected = null),
+      openWhenEmpty: _crew != null && crew.isEmpty,
+      addForm: !_canEdit
+          ? null
+          : SidePanel(
+              title: 'Add staff member',
+              child: StaffForm(
+                key: ValueKey('staff-$_blank'),
+                fleet: _fleet,
+                onSaved: (created, another) => _changed(select: created.userId, another: another),
+              ),
+            ),
     );
   }
 
@@ -143,7 +156,7 @@ class _StaffStepState extends State<StaffStep> {
     return SidePanel(
       title: s.fullName,
       onClose: () => setState(() => _selected = null),
-      closeLabel: _canEdit ? 'Back to adding' : 'Close',
+
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         FactRow('Role', Roster.roleLabel(s.role)),
         FactRow('Signs in with', s.email),
@@ -261,7 +274,7 @@ class _StaffFormState extends State<StaffForm> {
         const SizedBox(height: AppSpacing.xs),
         Text(
           _role == 'dispatcher'
-              ? 'Rides the van, marks reservations Paid and lists walk-ups. Validated before a trip.'
+              ? 'Rides the van, marks reservations Paid and lists walk-ins. Validated before a trip.'
               : 'Works at the desk. Not validated: office accounts are never assigned to a van.',
           style: text.bodySmall,
         ),

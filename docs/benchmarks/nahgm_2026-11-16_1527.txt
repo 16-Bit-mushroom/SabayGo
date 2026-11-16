@@ -1,0 +1,125 @@
+========================================================================
+NAHGM BENCHMARK: map matching, ETA and ingest speed
+========================================================================
+
+Date        : 2026-11-16 15:26
+Host        : x86_64, 16 threads, Python 3.14.9
+Route       : ECO-COT, Ecoland - Digos - Kidapawan - Cotabato (Day 1 terminals)
+Road        : OSRM over OpenStreetMap, (c) OpenStreetMap contributors, ODbL
+Drive       : 14949 s (4.15 h), speed = OSRM free-flow x 0.85, max 80 km/h,
+              6 traffic stops, 5 min dwell at Digos and Kidapawan
+Fixes       : 1 Hz; scored every 15 s; a fix older than 120 s is 'stale' (shown as old, not scored)
+Scenarios   : GPS error [0, 5, 15, 30] m x lost fixes [0, 10, 30] % x speed reported / absent
+              (lost fixes > 0 also has one 3-minute dead zone on the Kidapawan-Cotabato leg)
+
+TABLE 1  Straight-line (what NAHGM measures) against road distance
+========================================================================
+leg                     straight km   road km   road / straight
+Ecoland - Digos               42.5      52.3          1.23
+Digos - Kidapawan             42.8      55.2          1.29
+Kidapawan - Cotabato          96.0     120.6          1.26
+whole route                  181.3     228.1          1.26
+
+NAHGM sums straight hops between stops, so with an accurate speed its
+ETA is early by about (road / straight - 1) of the remaining time.
+True arrivals: Digos 68 min, Kidapawan 129 min, Cotabato 249 min
+
+TABLE 2  ETA error by how far ahead the stop is (5 m GPS error, no lost fixes, speed reported)
+========================================================================
+error = ETA - true arrival, minutes; negative = says the van comes sooner than it does
+
+ahead          pairs  ETA shown    MAE   median   p90 |e|   within 5 min   within 10%
+0-15 min         180       0.0%   (no ETA shown)
+15-30 min        180       3.3%     4.6     -4.6       4.7         83.3%         0.0%
+30-60 min        360      66.4%     7.7     -4.5      13.8         31.8%        15.1%
+60-120 min       513      96.7%    30.7    -25.8      40.3          6.2%        13.9%
+120+ min         554     100.0%    48.8    -28.0      62.6          4.0%        11.2%
+all             1787      72.5%    34.1    -18.3      56.1         10.3%        12.9%
+
+TABLE 3  Robustness: every scenario, all stops ahead together
+========================================================================
+GPS m  lost  speed      ETA shown    MAE   median   p90 |e|  within 10%   stale
+    0    0%  reported      72.5%    34.3    -17.7      56.0       13.0%    0.0%
+    0    0%  absent        72.5%    29.0     23.4      54.4        5.3%    0.0%
+    0   10%  reported      72.4%    34.9    -17.9      56.4       12.3%    0.4%
+    0   10%  absent        72.4%    29.1     23.6      54.5        5.3%    0.4%
+    0   30%  reported      72.4%    34.1    -17.7      56.6       12.1%    0.4%
+    0   30%  absent        72.5%    29.1     23.6      54.5        5.3%    0.4%
+    5    0%  reported      72.5%    34.1    -18.3      56.1       12.9%    0.0%
+    5    0%  absent        72.5%    29.0     23.4      54.4        5.3%    0.0%
+    5   10%  reported      72.4%    33.1    -17.8      55.6       13.1%    0.4%
+    5   10%  absent        72.4%    29.1     23.6      54.5        5.3%    0.4%
+    5   30%  reported      72.4%    33.2    -18.1      55.9       13.5%    0.4%
+    5   30%  absent        72.5%    29.1     23.6      54.5        5.3%    0.4%
+   15    0%  reported      72.5%    34.0    -17.8      56.1       12.6%    0.0%
+   15    0%  absent        72.5%    29.0     23.4      54.4        5.3%    0.0%
+   15   10%  reported      72.4%    34.2    -18.0      56.0       12.4%    0.4%
+   15   10%  absent        72.4%    29.1     23.6      54.5        5.3%    0.4%
+   15   30%  reported      72.5%    33.8    -17.7      55.7       13.0%    0.4%
+   15   30%  absent        72.4%    29.1     23.6      54.4        5.3%    0.4%
+   30    0%  reported      72.5%    34.1    -17.3      56.2       13.3%    0.0%
+   30    0%  absent        72.5%    29.0     23.4      54.5        5.3%    0.0%
+   30   10%  reported      72.5%    35.1    -18.0      55.8       12.8%    0.4%
+   30   10%  absent        72.4%    29.1     23.7      54.5        5.3%    0.4%
+   30   30%  reported      72.4%    33.1    -17.9      55.8       12.6%    0.4%
+   30   30%  absent        72.4%    29.1     23.6      54.4        5.4%    0.4%
+
+'ETA shown' falls when the van is stopped (NAHGM gives no arrival time
+below 5 km/h rather than an absurd one) and when the next stop has
+already dropped out of the list (Table 4). Without a reported speed the
+schedule's pace is used, which is only as good as the offsets typed in.
+
+TABLE 4  Map matching: the nearest stop against where the van really is
+========================================================================
+GPS m  lost  nearest = next stop   = last stop   other   next stop missing from ETAs
+    0    0%              49.3%          50.7%     0.0%              49.3%
+    0   10%              49.5%          50.5%     0.0%              49.5%
+    0   30%              49.5%          50.5%     0.0%              49.5%
+    5    0%              49.3%          50.7%     0.0%              49.3%
+    5   10%              49.5%          50.5%     0.0%              49.5%
+    5   30%              49.5%          50.5%     0.0%              49.5%
+   15    0%              49.2%          50.8%     0.0%              49.2%
+   15   10%              49.5%          50.5%     0.0%              49.5%
+   15   30%              49.4%          50.6%     0.0%              49.4%
+   30    0%              49.3%          50.7%     0.0%              49.3%
+   30   10%              49.4%          50.6%     0.0%              49.4%
+   30   30%              49.5%          50.5%     0.0%              49.5%
+
+The next stop leaves the ETA list as soon as it becomes the nearest stop,
+which happens once the van is past half the straight-line distance, not
+when it arrives. Minutes before the true arrival that it disappeared
+(5 m, no lost fixes): Digos 28 min, Kidapawan 30 min, Cotabato 64 min
+In that time the passenger sees the stop after it, or nothing on the
+last leg. A progress rule (the stop after the one last passed, e.g.
+geometry.snap_to_route, already in the code) would keep it listed.
+
+TABLE 5  Speed of the arithmetic (in process)
+========================================================================
+map matching (nearest of 4 stops)  :    2.00 us per fix
+ETAs to the stops ahead            :    8.34 us per call
+Pure Python, one core. Both grow with the number of stops (a route
+has a handful), so the arithmetic is never the bottleneck: the
+database write and the request are (below).
+
+TABLE 6  Ingest under load (HTTP, scratch database)
+========================================================================
+vans  sent     ok  errors  ok/s    p50 ms   p95 ms   p99 ms   max ms
+  10    200    200       0   10.5     78.6    239.4    316.3    320.9
+  25    500    500       0   26.0    207.0    266.4    275.8    287.0
+  50   1000   1000       0   51.2    369.5    483.5    519.5    563.9
+ 100   2000   2000       0   93.9    668.0   1926.5   2870.2   4859.9
+
+Most vans kept at one fix per second with p95 under 1 s and no
+errors: 50 (20 s per step, one uvicorn worker as ./run.sh starts it,
+MySQL in Docker, client and server on the same machine).
+
+WHAT THIS DOES NOT MEASURE
+========================================================================
+- A real drive. No van has reported a real trail yet; every stored point
+  came from the simulator. Run this again on the first real trail.
+- Davao traffic. OSRM's free-flow times stand in for it; congestion that
+  changes speed between fixes would widen the far-ahead errors.
+- The phone's own GPS. Its error is modelled as Gaussian; real error is
+  biased near buildings and under trees.
+- The phone's upload path. /edge/fixes batches fixes; Table 6 posts one
+  request per fix, the worst case.

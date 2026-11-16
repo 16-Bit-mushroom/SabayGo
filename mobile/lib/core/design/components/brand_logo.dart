@@ -11,12 +11,18 @@ import 'package:flutter/material.dart';
 /// app is light-first, and there is no dark variant of the mark to fall back
 /// to.
 class BrandLogo extends StatelessWidget {
-  const BrandLogo({this.height = BrandLogoSize.hero, super.key});
+  const BrandLogo({this.height = BrandLogoSize.hero, this.mark = false, super.key});
 
   /// Height in logical pixels. The width follows the mark's ~2:1 aspect.
   final double height;
 
-  static const _asset = 'assets/branding/sabaygo_logo.png';
+  /// The van alone, without the wordmark: for the app bars, where the
+  /// wordmark would be too small to read.
+  final bool mark;
+
+  // The console's van logo (10 Nov), replacing the owl.
+  static const _logo = 'assets/branding/sabaygo_van_logo.png';
+  static const _mark = 'assets/branding/sabaygo_van_mark.png';
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -24,10 +30,10 @@ class BrandLogo extends StatelessWidget {
         image: true,
         child: ExcludeSemantics(
           child: Image.asset(
-            _asset,
+            mark ? _mark : _logo,
             height: height,
             fit: BoxFit.contain,
-            // Upscaling a raster mark blurs it; filterQuality keeps the owl's
+            // Upscaling a raster mark blurs it; filterQuality keeps the van's
             // edges clean at the app-bar size, where it is downscaled most.
             filterQuality: FilterQuality.medium,
           ),

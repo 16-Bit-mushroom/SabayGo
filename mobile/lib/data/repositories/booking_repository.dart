@@ -27,6 +27,7 @@ class BookingSummary {
     required this.status,
     required this.paymentStatus,
     required this.canCancel,
+    this.tripStatus = 'scheduled',
     this.paidAt,
     this.cancelReason,
     this.payBy,
@@ -48,6 +49,11 @@ class BookingSummary {
   final String alightingTerminal;
   final double fare;
   final String status;
+
+  /// The trip's own state: a paid seat is 'boarded' from Depart on and
+  /// stays the current trip until this reads 'completed' (12 Nov).
+  final String tripStatus;
+
   /// 'unpaid' until the Dispatcher takes the cash, then 'paid'.
   final String paymentStatus;
   final DateTime? paidAt;
@@ -78,12 +84,17 @@ class BookingSummary {
   bool get isCheckedIn => status == 'checked_in';
   bool get isBoarded => status == 'boarded';
   bool get isCancelled => status == 'cancelled';
-  bool get isActive => isConfirmed || isCheckedIn || isBoarded;
+  /// On a trip that has finished: arrived, or called off.
+  bool get tripOver => tripStatus == 'completed' || tripStatus == 'cancelled';
+
+  /// Standing or riding: the trip is the passenger's current one, with
+  /// Track the van and the SOS, until the van arrives.
+  bool get isActive => isConfirmed || isCheckedIn || (isBoarded && !tripOver);
   bool get wasReleased => cancelReason == 'auto_release';
 
   String get statusLabel => switch (status) {
         'confirmed' || 'checked_in' => isPaid ? 'Paid' : 'Unpaid',
-        'boarded' => 'On board',
+        'boarded' => tripOver ? 'Completed' : 'On board',
         'completed' => 'Completed',
         'cancelled' => wasReleased ? 'Released, unpaid' : 'Cancelled',
         // The server cannot tell who boarded once the van has left: every
@@ -95,7 +106,7 @@ class BookingSummary {
 
   /// Why a cancelled reservation ended, in the passenger's words.
   String? get cancelLabel => switch (cancelReason) {
-        'auto_release' => 'Not paid at the terminal before the cutoff, so the space was released.',
+        'auto_release' => 'Not paid at the terminal before the cutoff, so the seat was released.',
         'passenger_asked_dispatcher' => 'Cancelled by the Dispatcher at your request.',
         'forgot_to_cancel' => 'Cancelled by the Dispatcher: nobody came for it.',
         null => null,
@@ -115,6 +126,7 @@ class BookingSummary {
         alightingTerminal: j['alighting_terminal'] as String? ?? '',
         fare: double.parse(j['fare_amount'].toString()),
         status: j['status'] as String,
+        tripStatus: j['trip_status'] as String? ?? 'scheduled',
         paymentStatus: j['payment_status'] as String? ?? 'unpaid',
         paidAt: j['paid_at'] == null ? null : DateTime.parse(j['paid_at'] as String),
         canCancel: j['can_cancel'] as bool? ?? false,

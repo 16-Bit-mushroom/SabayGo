@@ -262,7 +262,7 @@ class SharePanel extends StatelessWidget {
       'left_unpaid' => ('LEFT UNPAID', StatusTone.danger),
       _ => ('NOT PAID', StatusTone.warning),
     };
-    final toOperator = s.operatorShareOwed - s.operatorShareGiven;
+    final toOperator = s.operatorShareOwed - s.operatorShareHeld;
     return DashPanel(title: 'Terminal fees', trailing: StatusChip(label, tone: tone), children: [
       if (s.amountDue > 0) ...[
         Text('Hand ${_peso.format(s.amountDue)} to the Cashier', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
@@ -274,6 +274,12 @@ class SharePanel extends StatelessWidget {
         const SizedBox(height: AppSpacing.xs),
         Text('Give the operator ${_peso.format(toOperator)}, in front of the Cashier',
             style: const TextStyle(fontWeight: FontWeight.w700)),
+      ],
+      if (s.operatorShareOver > 0) ...[
+        const SizedBox(height: AppSpacing.xs),
+        Text('The operator holds ${_peso.format(s.operatorShareOver)} more than the share: '
+            'it goes back to the Cashier.',
+            style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600)),
       ],
       if (s.disputed > 0)
         Text('${_peso.format(s.disputed)} disputed: waits for the Terminal Manager.',

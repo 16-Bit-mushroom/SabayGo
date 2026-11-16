@@ -134,7 +134,7 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
           titleSpacing: AppSpacing.gutter,
           title: Row(
             children: [
-              const BrandLogo(height: 30),
+              const BrandLogo(height: 30, mark: true),
               const SizedBox(width: AppSpacing.md),
               Flexible(
                 child: Column(

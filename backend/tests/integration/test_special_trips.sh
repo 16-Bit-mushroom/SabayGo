@@ -2,7 +2,7 @@
 # Rev 603 R3b: special trips, a whole van rented (change brief 2.5;
 # T49-T52 in 12.2). The fee is cash to the Dispatcher either way; a
 # rental requested in the app counts as booked, one entered at the
-# counter as walk-up.
+# counter as walk-in.
 #
 #   ./db/reset-dev.sh --soon && ./tests/integration/test_special_trips.sh
 #
@@ -10,7 +10,7 @@
 # (NBC-7788, free until its 2-hour trip), dispatcher2 and dispatcher3.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 P=0; F=0
 j() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1)" 2>/dev/null; }
 hdr() { printf '\n\033[1m── %s ─────────────────────\033[0m\n' "$1"; }
@@ -158,10 +158,10 @@ is "$(code POST /special-trips/$RW/cash "" "$D3T")" 200 "dispatcher3 logs the �
 is "$(field payment_status)" paid "the fee is paid"
 is "$(code POST /special-trips/$RW/cash "" "$D3T")" 409 "logged once only"
 code GET /trips/$TW/share "" "$CT" >/dev/null
-python3 -c "import json;s=json.load(open('/tmp/st.json'));l=s['lines'];assert len(l)==1 and l[0]['income_group']=='walk_up' and l[0]['gross_fare']=='2000.00' and l[0]['share_amount']=='300.00' and l[0]['dest_terminal_id'] is None" \
-  && ok "T51 one fare line: walk-up, ₱2,000, share ₱300" || bad "lines: $(cat /tmp/st.json)"
+python3 -c "import json;s=json.load(open('/tmp/st.json'));l=s['lines'];assert len(l)==1 and l[0]['income_group']=='walk_in' and l[0]['gross_fare']=='2000.00' and l[0]['share_amount']=='300.00' and l[0]['dest_terminal_id'] is None" \
+  && ok "T51 one fare line: walk-in, ₱2,000, share ₱300" || bad "lines: $(cat /tmp/st.json)"
 is "$(sql "SELECT request_id FROM remittance_lines WHERE trip_id = '$TW'")" "$RW" "the line names its request"
-is "$(stmt LCT-9042 walk_up_income)/$(stmt LCT-9042 remittance_owed)" 2000.00/300.00 "W = ₱2,000, RemittanceOwed = ₱300"
+is "$(stmt LCT-9042 walk_in_income)/$(stmt LCT-9042 remittance_owed)" 2000.00/300.00 "W = ₱2,000, RemittanceOwed = ₱300"
 
 hdr "   (the override is withdrawn to show the 15 % block too)"
 sql "UPDATE trips SET payment_override_by = NULL, payment_override_at = NULL, payment_override_note = NULL, payment_status = 'unpaid' WHERE trip_id = '$TW'"
@@ -185,7 +185,7 @@ hdr "5b. A rental requested in the app: also cash, also to the Dispatcher"
 # cash to the Dispatcher at the terminal before the van leaves. There is
 # no gateway. What the two routes still differ in is the income group:
 # a rental requested in the app counts as booked, one entered at the
-# counter as walk-up.
+# counter as walk-in.
 is "$(code POST /special-trips/$R2/cash "" "$D2T")" 409 "a rejected request is not paid"
 is "$(code POST /special-trips/$R1/cash "" "$D3T")" 404 "a Dispatcher on another trip cannot log its fee"
 is "$(code POST /special-trips/$R1/cash "" "$D2T")" 200 \

@@ -84,12 +84,22 @@ class _DisputesScreenState extends State<DisputesScreen> {
                     : list.isEmpty
                         ? EmptyState(
                             icon: Icons.gavel_outlined,
-                            title: _status == 'open' ? 'No open disputes' : 'Nothing here yet')
-                        : ListView.separated(
-                            itemCount: list.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-                            itemBuilder: (_, i) => _DisputeCard(dispute: list[i], onChanged: _load),
-                          ),
+                            title: _status == 'open' ? 'No open disputes' : 'Nothing here yet',
+                            hint: _status == 'open'
+                                ? 'A dispute is recorded from a fare line on Money or from a flag on Driving Flags.'
+                                : null)
+                        // Cards two to a row on a wide screen (the owner's
+                        // reference), one on a narrow one.
+                        : LayoutBuilder(builder: (context, c) {
+                            final two = c.maxWidth >= 1000;
+                            final w = two ? (c.maxWidth - AppSpacing.lg) / 2 : c.maxWidth;
+                            return SingleChildScrollView(
+                              child: Wrap(spacing: AppSpacing.lg, runSpacing: AppSpacing.lg, children: [
+                                for (final d in list)
+                                  SizedBox(width: w, child: _DisputeCard(dispute: d, onChanged: _load)),
+                              ]),
+                            );
+                          }),
           ),
         ],
       ),
@@ -118,42 +128,86 @@ class _DisputeCard extends StatelessWidget {
       (_, 'adjusted') => const StatusBadge('Adjusted', tone: Tone.info),
       (_, _) => const StatusBadge('Rejected', tone: Tone.danger),
     };
-    return Panel(
-      title: '${isLine ? 'Fare line' : 'Driving flag'}: ${d.item}',
-      icon: isLine ? Icons.receipt_long_outlined : Icons.speed,
-      trailing: badge,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FactLine(Icons.directions_bus_outlined, d.tripLabel),
-          FactLine(Icons.format_quote, '"${d.operatorStatement}"'),
-          FactLine(Icons.person_outline, 'Recorded by ${d.raisedByName}, ${_when.format(d.raisedAt)}'),
-          if (isLine) FactLine(Icons.account_balance_outlined, 'Share withheld: ${peso.format(d.amountDisputed)}'),
-          if (d.decidedAt != null)
-            FactLine(Icons.gavel_outlined,
-                '${d.status == 'withdrawn' ? 'Withdrawn' : 'Decided'} by ${d.decidedByName ?? '—'}, '
-                '${_when.format(d.decidedAt!)}'
-                '${d.adjustedAmount != null ? ' · share due ${peso.format(d.adjustedAmount!)}' : ''}'
-                '${d.decisionNote != null ? ': ${d.decisionNote}' : ''}'),
-          if (d.status == 'open') ...[
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(spacing: AppSpacing.sm, children: [
-              if (manager)
-                FilledButton.icon(
-                  onPressed: () => _decide(context),
-                  icon: const Icon(Icons.gavel, size: 18),
-                  label: const Text('Decide'),
-                ),
-              OutlinedButton(onPressed: () => _withdraw(context), child: const Text('Withdraw')),
-            ]),
-            if (!manager)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xs),
-                child: Text('Only the Terminal Manager decides a dispute.', style: text.bodySmall),
-              ),
-          ],
-        ],
+    final open = d.status == 'open';
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.divider),
       ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: AppColors.textPrimary, borderRadius: BorderRadius.circular(6)),
+            child: Text(d.plateNumber ?? 'No van',
+                style: const TextStyle(color: AppColors.onFill, fontWeight: FontWeight.w700, fontSize: 12.5, letterSpacing: 0.4)),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(d.tripLabel, style: text.bodySmall, overflow: TextOverflow.ellipsis)),
+          badge,
+        ]),
+        const SizedBox(height: AppSpacing.md),
+        Text(isLine ? 'Fare line dispute' : 'Driving flag dispute', style: text.titleMedium),
+        Text('Contested: ${d.item}', style: text.bodySmall?.copyWith(color: AppColors.textPrimary)),
+        const SizedBox(height: AppSpacing.md),
+        // The operator's own words, as recorded at the counter.
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.warningContainer,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('“${d.operatorStatement}”',
+                style: text.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: AppColors.textPrimary)),
+            const SizedBox(height: AppSpacing.xs),
+            Text('Recorded by ${d.raisedByName}, ${_when.format(d.raisedAt)}', style: text.bodySmall),
+          ]),
+        ),
+        if (d.decidedAt != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          FactLine(Icons.gavel_outlined,
+              '${d.status == 'withdrawn' ? 'Withdrawn' : 'Decided'} by ${d.decidedByName ?? '—'}, '
+              '${_when.format(d.decidedAt!)}'
+              '${d.adjustedAmount != null ? ', share due ${peso.format(d.adjustedAmount!)}' : ''}'
+              '${d.decisionNote != null ? ': ${d.decisionNote}' : ''}'),
+        ],
+        const SizedBox(height: AppSpacing.md),
+        const Divider(),
+        const SizedBox(height: AppSpacing.md),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            Text(isLine ? 'Share withheld: ${peso.format(d.amountDisputed)}' : 'A flag withholds nothing',
+                style: text.bodySmall?.copyWith(fontWeight: FontWeight.w700, color: AppColors.primary)),
+            if (open)
+              Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
+                if (manager) ...[
+                  FilledButton(onPressed: () => _decide(context, 'upheld'), child: const Text('Uphold')),
+                  if (isLine)
+                    FilledButton.tonal(onPressed: () => _decide(context, 'adjusted'), child: const Text('Adjust')),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.danger, side: const BorderSide(color: AppColors.danger)),
+                    onPressed: () => _decide(context, 'rejected'),
+                    child: const Text('Reject'),
+                  ),
+                ],
+                TextButton(onPressed: () => _withdraw(context), child: const Text('Withdraw')),
+              ]),
+          ],
+        ),
+        if (open && !manager)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text('Only the Terminal Manager decides a dispute.', style: text.bodySmall),
+          ),
+      ]),
     );
   }
 
@@ -171,11 +225,11 @@ class _DisputeCard extends StatelessWidget {
     }
   }
 
-  Future<void> _decide(BuildContext context) async {
+  Future<void> _decide(BuildContext context, String outcome) async {
     final money = context.read<MoneyRepository>();
     final picked = await showDialog<(String, String, String?)>(
       context: context,
-      builder: (_) => _DecideDialog(dispute: dispute),
+      builder: (_) => _DecideDialog(dispute: dispute, initial: outcome),
     );
     if (picked == null || !context.mounted) return;
     if (await runAction(
@@ -188,17 +242,67 @@ class _DisputeCard extends StatelessWidget {
 }
 
 class _DecideDialog extends StatefulWidget {
-  const _DecideDialog({required this.dispute});
+  const _DecideDialog({required this.dispute, this.initial = 'rejected'});
   final Dispute dispute;
+
+  /// The outcome chosen on the card (Uphold, Adjust or Reject).
+  final String initial;
 
   @override
   State<_DecideDialog> createState() => _DecideDialogState();
 }
 
 class _DecideDialogState extends State<_DecideDialog> {
-  String _outcome = 'rejected';
+  late String _outcome = widget.initial;
   final _note = TextEditingController();
   final _amount = TextEditingController();
+
+  // What the chosen decision would do to the van's statement, worked out
+  // by the server from the real decision and rolled back (finding 35), so
+  // a share already handed to the operator is never a surprise.
+  DecisionPreview? _preview;
+  String? _previewError;
+  int _asked = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (!_isLine) return;
+    String? amount;
+    if (_outcome == 'adjusted') {
+      final v = double.tryParse(_amount.text);
+      if (v == null || v < 0 || v > widget.dispute.amountDisputed) {
+        setState(() {
+          _preview = null;
+          _previewError = null;
+        });
+        return;
+      }
+      amount = v.toStringAsFixed(2);
+    }
+    final money = context.read<MoneyRepository>();
+    final asked = ++_asked;
+    try {
+      final p = await money.preview(widget.dispute.disputeId, outcome: _outcome, adjustedAmount: amount);
+      if (mounted && asked == _asked) {
+        setState(() {
+          _preview = p;
+          _previewError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted && asked == _asked) {
+        setState(() {
+          _preview = null;
+          _previewError = e is ApiException ? e.message : 'What this changes could not be worked out.';
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -231,10 +335,13 @@ class _DecideDialogState extends State<_DecideDialog> {
             const SizedBox(height: AppSpacing.md),
             RadioGroup<String>(
               groupValue: _outcome,
-              onChanged: (v) => setState(() => _outcome = v!),
+              onChanged: (v) {
+                setState(() => _outcome = v!);
+                _refresh();
+              },
               child: Column(children: [
                 RadioListTile(value: 'upheld', title: const Text('Upheld'), subtitle: Text(line
-                    ? 'The operator is right: the line is taken out of what is owed.'
+                    ? 'The operator is right: the line is taken off the balance.'
                     : 'The flag is dismissed.')),
                 RadioListTile(value: 'rejected', title: const Text('Rejected'), subtitle: Text(line
                     ? 'The share is due again.'
@@ -247,7 +354,10 @@ class _DecideDialogState extends State<_DecideDialog> {
             if (_outcome == 'adjusted')
               TextField(
                 controller: _amount,
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) {
+                  setState(() {});
+                  _refresh();
+                },
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'Share due',
@@ -255,6 +365,14 @@ class _DecideDialogState extends State<_DecideDialog> {
                   helperText: 'Between ₱0.00 and ${peso.format(widget.dispute.amountDisputed)}',
                 ),
               ),
+            if (line && _preview != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              _Effect(_preview!, plate: widget.dispute.plateNumber),
+            ] else if (line && _previewError != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(_previewError!, style: TextStyle(color: AppColors.danger)),
+            ],
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _note,
               onChanged: (_) => setState(() {}),
@@ -278,6 +396,70 @@ class _DecideDialogState extends State<_DecideDialog> {
           child: const Text('Decide'),
         ),
       ],
+    );
+  }
+}
+
+/// What a decision changes on the van's statement: the fees, what is due
+/// now, the operator's share -- and, when the operator already holds more
+/// of the share than would then be owed, that excess said in words with
+/// what happens next.
+class _Effect extends StatelessWidget {
+  const _Effect(this.preview, {required this.plate});
+
+  final DecisionPreview preview;
+  final String? plate;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final b = preview.before, a = preview.after;
+    Widget row(String label, double from, double to) {
+      final changed = (from - to).abs() > 0.004;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(children: [
+          Expanded(child: Text(label, style: text.bodySmall)),
+          Text(
+            changed ? '${peso.format(from)}  →  ${peso.format(to)}' : '${peso.format(to)}  unchanged',
+            style: text.bodySmall?.copyWith(
+              color: changed ? AppColors.textPrimary : AppColors.textMuted,
+              fontWeight: changed ? FontWeight.w600 : FontWeight.w400,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ]),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text('What this changes on ${plate ?? 'the van'}\'s statement', style: text.titleSmall),
+        const SizedBox(height: AppSpacing.xs),
+        row('Terminal fees', b.terminalFeesOwed, a.terminalFeesOwed),
+        row('Balance', b.amountDue, a.amountDue),
+        row('Operator\'s share', b.operatorShareOwed, a.operatorShareOwed),
+        if (a.operatorShareOver > 0.004) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.info_outline, size: 18, color: AppColors.warning),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                'The operator has already been paid ${peso.format(a.operatorShareHeld)}: '
+                '${peso.format(a.operatorShareOver)} more than the share would be. The Cashier is told, '
+                'and records it on Money when the operator hands it back.',
+                style: text.bodySmall?.copyWith(color: AppColors.textPrimary),
+              ),
+            ),
+          ]),
+        ],
+      ]),
     );
   }
 }

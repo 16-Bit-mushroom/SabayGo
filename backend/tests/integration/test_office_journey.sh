@@ -9,7 +9,7 @@
 # and checks pages (statements, Boarding Audit, disputes, driving flags).
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 TRIP="TRIP-DEMO-00000001"
 STAMP=$(date +%s)
 PASS_N=0; FAIL_N=0; GAP_N=0

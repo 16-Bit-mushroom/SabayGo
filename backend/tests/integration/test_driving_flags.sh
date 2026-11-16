@@ -11,7 +11,7 @@
 # 90 km/h against 60, a 180 s stop and a 30 s stop away from every stop.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 BACKEND="$(cd "$(dirname "$0")/../.." && pwd)"
 TRIP=TRIP-DEMO-00000001; ROUTE=ROUTE-ECO-COT-0001
 STATE=$(mktemp); trap 'rm -f "$STATE"' EXIT

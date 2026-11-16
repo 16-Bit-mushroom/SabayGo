@@ -39,3 +39,16 @@ logs/
 # Impeccable session state: live-mode sessions and question logs
 .impeccable/live/
 .impeccable/questions/
+
+# Kept on the machine that made them, never pushed (16 Nov). The repo is
+# public: database backups hold real accounts and records, and a phone's
+# data backup holds its device token and door-camera frames of people.
+db/backups/
+edge_app/results/realme_backup_*/
+# The evaluation's downloaded COCO images and the manifest built from them.
+ai_service/eval/data
+# The evaluation environment, kept on another drive and linked here.
+ai_service/venv
+ai_service/eval/manifest.csv
+# Personal editor settings.
+.claude/settings.local.json

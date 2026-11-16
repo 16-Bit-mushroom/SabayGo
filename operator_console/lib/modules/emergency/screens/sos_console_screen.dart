@@ -68,6 +68,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
   Future<void> _acknowledge(SosAlert a) async {
     try {
       await _sos.acknowledge(a.sosId);
+      announceChange();
       await _load(quiet: true);
       _toast('Acknowledged. ${a.raisedBy} has been told someone is responding.');
     } on ApiException catch (e) {
@@ -83,6 +84,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
     if (notes == null) return;
     try {
       await _sos.resolve(a.sosId, notes);
+      announceChange();
       await _load(quiet: true);
       _toast('Emergency closed.');
     } on ApiException catch (e) {
@@ -104,7 +106,7 @@ class _SosConsoleScreenState extends State<SosConsoleScreen> {
     final openCount = rows.where((a) => !a.isResolved).length;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
@@ -336,7 +338,7 @@ class _AlertCard extends StatelessWidget {
           SizedBox(width: 6),
           Expanded(
             child: Text(
-              'No SMS was attempted — set sos_contact_numbers in Policies.',
+              'No SMS was attempted: no SOS numbers are set (Setup › Rules & Settings).',
               style: TextStyle(fontSize: 12, color: AppColors.danger),
             ),
           ),

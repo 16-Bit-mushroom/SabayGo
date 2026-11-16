@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
     jobs = [
         # An unpaid reservation holds one of the 14 seats but is not on
         # the passenger list, so it is released a set number of minutes
-        # before departure and the seat offered to a walk-up (brief 2.1).
+        # before departure and the seat offered to a walk-in (brief 2.1).
         PeriodicJob(
             "Unpaid release", 60,
             lambda: release_unpaid_reservations(SessionFactory),

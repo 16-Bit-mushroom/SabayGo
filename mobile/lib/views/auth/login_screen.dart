@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: AppSpacing.xs + 2),
                 Text(
-                  'Sign in to book a space or start your shift.',
+                  'Sign in to book a seat or start your shift.',
                   style: Theme.of(context).textTheme.bodyMedium!
                       .copyWith(color: AppColors.textMuted),
                 ),
@@ -143,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.4,
-                              color: Colors.white,
+                              color: AppColors.onAction,
                             ),
                           ),
                         )

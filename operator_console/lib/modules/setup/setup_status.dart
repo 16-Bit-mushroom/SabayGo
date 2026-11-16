@@ -14,7 +14,7 @@ enum SetupStep {
   fares('Fares', managerOnly: true),
   operatorsVans('Operators & vans'),
   staff('Staff'),
-  timetable('Timetable', managerOnly: true),
+  timetable('Trip Schedules', managerOnly: true),
   phones('Phones'),
   rules('Rules & Settings', managerOnly: true, optional: true);
 
@@ -134,10 +134,10 @@ class SetupFacts {
       case SetupStep.timetable:
         if (templates == null) return unknown;
         final n = templates!.where((t) => t.isActive).length;
-        if (n > 0) return StepStatus(SetupState.done, '$n regular departure${n == 1 ? '' : 's'}');
+        if (n > 0) return StepStatus(SetupState.done, '$n trip schedule${n == 1 ? '' : 's'}');
         return liveRoutes.isEmpty
             ? const StepStatus(SetupState.blocked, 'Waits for a route')
-            : const StepStatus(SetupState.todo, 'No departure yet');
+            : const StepStatus(SetupState.todo, 'No trip schedule yet');
       case SetupStep.phones:
         if (phones == null) return unknown;
         final n = phones!.where((p) => p.status != 'retired').length;

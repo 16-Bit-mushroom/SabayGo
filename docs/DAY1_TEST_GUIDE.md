@@ -9,7 +9,7 @@ what happened on the day; the problems found are in
 `docs/DAY1_FINDINGS.md`.*
 
 **Result:** setup and the first trip work end to end: reservation with a
-booking code, Mark as Paid, a walk-up, the terminal fees and the
+booking code, Mark as Paid, a walk-in, the terminal fees and the
 operator's share, Start, Depart, Arrived, and a statement that matches
 the brief's arithmetic. Ten defects were found and fixed the same day;
 seven items are open, two are questions for A2Z and four are UX notes
@@ -73,7 +73,7 @@ the first one has to be made by the development team, once.
 **Or the state the test ended in:** `./db/load-day1.sh`. It rebuilds the
 database from the migrations and loads `db/day1/day1_a2z.sql`. Its trips
 are dated 3–5 Nov 2026; sign in as the manager and press **Create
-upcoming trips** (Setup → Timetable) to get trips from today. The
+upcoming trips** (now **Post 7 days of trips** on Trips; the schedules are Trips › Trip Schedules) to get trips from today. The
 passenger in it is `chris@a2z.dev`.
 
 Do **not** use `./run.sh --reset-db` or `./db/reset-dev.sh` for this
@@ -141,7 +141,7 @@ validated. Press **Validate** on each operator and each van.
 Dispatcher is not offered when a trip is assigned; check that Liza is not.
 Sign in once as Joy (`127.0.0.1:3001`) and as Ramon (`127.0.0.1:3000`).
 
-**Step 6. Timetable.** Route ECO-COT, every day, at 5:30, 7:30, 9:30,
+**Step 6. Trip Schedules** (called Timetable on 3 Nov). Route ECO-COT, every day, at 5:30, 7:30, 9:30,
 11:30 AM and 1:30, 3:30, 5:30 PM. The time picker is 12-hour: check AM
 and PM before saving (finding 7). A wrong departure cannot be deleted,
 only switched off (finding 17). Then **Create upcoming trips**, 3 days
@@ -190,11 +190,11 @@ Ramon Villanueva. Ramon's app lists the trip.
 
 **Take the cash** (Dispatcher, `127.0.0.1:3000`):
 
-1. Open the trip → **Reservations and walk-ups** → type part of the code
+1. Open the trip → **Reservations and walk-ins** → type part of the code
    in **Name or booking code** → **Mark as Paid** → confirm. Chip PAID;
    the passenger's screen turns green within 15 s ("Paid: you are on the
    passenger list") and Cancel goes.
-2. **Walk-in** → Digos → **Log** → collect ₱135. Listed as a walk-up,
+2. **Walk-in** → Digos → **Log** → collect ₱135. Listed as a walk-in,
    paid at once.
 
 **Terminal fees and the operator's share** (Cashier, `127.0.0.1:3001`):
@@ -232,7 +232,7 @@ trip owes again until the Cashier records the difference.
 | ABC-1234, 3 Nov | |
 |---|---|
 | Booked (B): 1 to Cotabato | ₱500.00 |
-| Walk-up (W): 1 to Digos | ₱135.00 |
+| Walk-in (W): 1 to Digos | ₱135.00 |
 | A2Z's 15 % of ₱635 | ₱95.25 |
 | DCOTT ticket, 1 trip | ₱75.00 |
 | Parking, the van's day | ₱50.00 |
@@ -290,7 +290,7 @@ within 30 s.
 | 13:53 | 3:30 PM assigned to ABC-1234 and Ramon; its ₱125 recorded from Money with nobody listed | 9 |
 | 14:03 | Passenger signed up and reserved SG-CYVQDJ; the console listed the code without the name, the app the name one letter per line | 10, 11 |
 | 14:20 | Ramon marked it Paid. The statement owed ₱75 but the trip stayed Paid: the payment from Money had not locked the list | 14, 15 |
-| 14:34 | Walk-up to Digos (SG-T6NCZH) after **Log** was fixed for the browser | 13 |
+| 14:34 | Walk-in to Digos (SG-T6NCZH) after **Log** was fixed for the browser | 13 |
 | 14:35 | Joy recorded ₱95.25 and the operator's ₱414.75 | |
 | 15:00 | Start; Unaudited, no phone | |
 | 15:03 | Depart (Ramon) | |
@@ -309,7 +309,7 @@ Tester questions answered on the day, kept here for the next round:
   van's statement (finding 8).
 - **What is the booking code for?** It replaced the QR ticket: the
   passenger says it and the Dispatcher finds that one reservation to
-  mark Paid. Walk-ups get one for the receipt and any dispute.
+  mark Paid. Walk-ins get one for the receipt and any dispute.
 - **Why no override to Start early?** The brief gives Start a window
   setting and an override only for the payment block. The window equals
   the unpaid cutoff, and a van that leaves early is started by GPS and

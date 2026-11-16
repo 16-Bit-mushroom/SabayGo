@@ -1230,3 +1230,1044 @@ venue hands out, and release builds keep the strict config (checked in
 the built APK's binary XML: `base-config`, no `domain-config`). Merged
 into `main` with rev 721 S9 and S10. Handoff for the simulation test
 before alpha: `docs/HANDOFF_ALPHA_PREP.md`.
+
+### Design polish, both apps (10 Nov)
+
+A polish pass inside the two existing design systems (`DESIGN.md`,
+`mobile/DESIGN.md`), from screenshots of every console page and the main
+app screens: no new palette, font or component.
+
+Console: stat tiles take a minimum height so a row lines up with or
+without a caption (`core/design/components/panel.dart`). Money reads as
+a ledger in three groups (fares on the list, terminal fees, operator's
+share) in place of ten equal figures, and its fare lines carry column
+heads and the words Booked / Walk-up (`remittance_screen.dart`). The
+Van Status Board says the trip as route and departure time with the
+detail on a muted second line, dropping the plate and status the row
+already shows and the 24-hour time (`van_board_screen.dart`). A trip row
+on Trips puts its badge beside the route, so the Dispatcher's name is no
+longer cut off. Disputes' empty state says where a dispute comes from.
+
+App: the profile screen leaves the retired purple, the duplicate
+heading, the green and amber accents and its capitalised labels for the
+tokens and `AppSectionHeader`, and no longer shows the trust rating: a
+column default of 5.0 that nothing updates, which shown as a score would
+be an invented number. Notifications map each type to a `StatusTone`
+(money owed is ochre, never red) and use `AppEmptyState`, telling no
+updates from no match; conversations use the tokens and `AppEmptyState`.
+A Dispatcher action label wraps instead of ending in an ellipsis. The
+reserve-sheet layout tests get an offline `ApiClient` for the camera
+notice, so `flutter test` is 29/0 (was 25/4).
+
+Found, not changed: `GET /trips/{id}/door-check` answers `aboard: 0`
+when no phone reports, and the Dispatcher app shows "0 aboard (camera)"
+and "no-shows, nothing to do" -- a count the system does not have.
+
+Second pass the same day. The last four app screens with hand-picked
+colours left them: edit profile (input edges were `grey.shade300`, about
+1.3:1, under the 3:1 a control edge needs; green Save and focus; the
+retired purple avatar; a controller built on every frame and never
+disposed; the password switch now a `SwitchListTile`, so its label names
+it), saved destinations (with an empty state that offers Add), and the
+conversation thread (own messages in ink, not Paid Green; a 10 px grey
+timestamp under AA). No screen in `mobile/lib/views` now writes a raw
+colour except the shadows DESIGN.md specifies. Ten icon buttons across
+both apps had no name for a screen reader and now have a tooltip. The
+app's layout test also runs `flutter_test`'s WCAG guidelines (48 dp
+targets, labelled targets, text contrast) on each screen; the reserve
+sheet is exempt from the contrast check only, a false reading checked
+against a rendered image. `flutter test` 29/0. Recommendations for what
+is left, and for the Flutter stack: `docs/UI_UX_RECOMMENDATIONS.md`.
+
+Third pass, on the owner's review of the running console. The stat
+tiles read as greyed out: they are now white cards with a divider edge,
+the icon on a small plate in the figure's status tint and a 24 px
+figure (`StatTile`, `core/design/components/panel.dart`; the Trips
+tiles gained icons; `DESIGN.md` records the new spec). The profile was a
+dialog; it is now the My account page (`core/layout/account_screen.dart`,
+replacing `profile_dialog.dart`), with details and password in separate
+panels saved separately, and the person's real role where the dialog
+said "Cooperative office staff" for everyone. Each page now has an
+address: `MaterialApp.router` with a small delegate
+(`core/layout/console_router.dart`, no new package) and the shell
+following it, so a refresh keeps the page, Back and Forward work, a
+link survives sign-in, and the browser tab names the page. Checked in a
+headless browser: `#/trips/van-status-board` survives a reload, Back
+steps to Trips then Money, sign-in returns to the page it was on.
+`flutter analyze` unchanged (16 infos); the console's boot test runs
+only in a browser (`flutter test --platform chrome`, web-only imports)
+and passes there.
+
+Fourth pass, the owner's palette and type. The console is a
+monochromatic emerald on clean white: six shades of one green
+(`#9FFFCC` to `#0C6033`), the emerald `#26DA8D` as the main action with
+dark ink text on it (white would be 1.83:1), forest `#0C6033` for every
+green text and icon and the sidebar, near-neutral greys; every pairing
+computed against AA (`tokens.dart`). Fonts: Inter for the interface and
+money (tabular figures), Plus Jakarta Sans for page titles and the card
+figures, static weights cut from the OFL variable fonts and bundled with
+their licences; Roboto is gone from the console. The figure card follows
+the owner's reference (icon tile left, label over figure); a row of
+cards spans the page (`CardRow`), so on Money its edges are the
+statements' edges, and each statement is three equal columns with each
+hand-over's "recorded by" under its own column and the fare lines a
+table with a header row. Danger buttons now set white text explicitly
+(the theme's dark action text would be 2.9:1 on red). `DESIGN.md`
+rewritten for the palette and type. The app (`mobile/`) is unchanged.
+
+The sidebar followed: the forest rail read as too green beside the
+white pages, so it is white with a divider edge, ink labels and muted
+icons; the selected entry is the mint tint with a forest label and its
+icon on an emerald tile; counts are forest pills; Emergencies keeps its
+red tile and turns red when open, with a white label (`tokens.dart`
+sidebar tokens, `operator_shell.dart`). Focus rings on it are forest. Then, at the owner's
+word, the selected entry swapped to the palette's light green `#9FFFCC`
+as the highlight, with an ink label and a forest icon tile. Finally the owner settled it: the
+sidebar itself is the mint `#9FFFCC`, the main colour, with ink labels
+(15.15:1) and the selected entry white with a forest icon tile. Mint proved too pale: the base colour is the light green
+`#26DA8D`, now the sidebar (ink labels 9.86:1, deep-green icons
+`#173A28` 6.87:1, since the grey would be 4.25:1), the main buttons and
+the figure cards' icon tiles (dark icons).
+
+Fifth pass, the owner's VerdantPulse reference, mapped onto SabayGo's
+real operations. Palette: meadow mist `#F0FDF4`, white and `#DCFCE7`
+cards, `#86EFAC` edges, kelly `#22C55E` and emerald `#10B981`, `#059669`
+for secondary hover, `#1E3A2F` type; where the reference fails AA (white
+on emerald, 2.54:1) the text is dark, and green text is `#047857`. The
+sidebar is white with grouped entries ("Daily work", "System") and the
+selected entry an emerald pill. Four widgets, each on recorded data and
+none of the reference's invented scores or growth rates: (1) figure
+cards with a progress bar for a real ratio (`StatTile.progress`; Money
+paid of owed and given of owed, Trips aboard of booked and booked of
+capacity, Van Status Board each state of all vans); (2) a Today panel on
+Overview (`modules/live_map/today_panel.dart`: trips by status as a
+donut, "Needs you today" from `ReviewCounts` with each row opening its
+page, fees paid of owed); (3) search on Money and Trips; (4) the fees
+chart (`modules/remittance/fees_chart.dart`, 7D/30D/1Y) on a new
+endpoint `GET /statements/history` (`api/v1/statements.py`: sums of the
+stored statements by day or month, today synced first, a day with no
+statement a true zero; the day-sync is now `_sync_day`, shared with
+`GET /statements`). Journey: `test_fee_history.sh` 18/0, added to
+`run_all_journeys.sh`; `test_terminal_fees.sh` 79/0 after the refactor.
+
+Sixth pass, the owner's three asks. (1) The day picker's date opens a
+calendar (`DayPicker`, `core/design/components/actions.dart`); the pick
+reaches the page as a shift, so Trips, Reviews and Money all have it.
+(2) Cards that open a page look it and do it (`ClickableCard`,
+`StatTile.onTap`): Overview's Today's trips opens Trips, Terminal fees
+today opens Money. (3) A live van monitor beside the Overview map
+(`modules/live_map/live_vans_panel.dart`): for each van boarding or on
+the road, the YOLOv8 door count against its spaces with a load bar, the
+camera's state, the GPS state and open driving flags; a van over its
+spaces leads in red. The data is the Van Status Board's
+(`operations/van_board.py`), which now carries, for a trip under way,
+`camera` ('live' / 'lens_blocked' / 'silent' / 'no_phone', the same tests
+as the Unaudited rule), `camera_seen_at`, `seat_capacity` and
+`open_flags` (driving flags still open, en-route stops left out); the
+count is computed for boarding trips too, and is zero only when a live
+camera has seen nobody board. The overload alert itself was already the
+server's (`edge/capacity.py` notifies the Terminal Manager, the Cashier
+and the Dispatcher on each crossing); the panel shows it. Journey:
+`test_van_board.sh` 35/0 with five new checks (no phone, silent, live
+with a real 0, lens covered, capacity), run with `run.sh`'s GPS
+simulator stopped, since that simulator puts readings on the departed
+trip that the script expects to have none. Checked in a browser with a
+test phone counting 16 into LAB-4521: the red overload card, the bell's
+"Capacity alert" and Boarding Audit's 11 unlisted boardings; the test
+data was reset away afterwards.
+
+The console's new logo (the owner's art, 10 Nov): a light-green van with
+its passengers in detection boxes and the GPS signal, over the
+"SabayGo" wordmark. Its mint background was cut to transparency and the
+logo trimmed (`assets/branding/sabaygo_logo.png`, replacing the owl);
+the van alone is `sabaygo_mark.png`, for the folded sidebar, the
+favicon and the web app icons (the maskable ones with the 66 % safe
+zone). The swoosh runs through the wordmark, so the logo is shown whole,
+never split into a side-by-side lockup: 80 px tall in the sidebar, 116
+on sign-in, 120 on the start-up screen (first 112/150/160; the owner found
+it too big). The web manifest's colours
+follow the palette. The app keeps the owl.
+
+The owner's browser still showed the owl after the rebuild: `python3 -m
+http.server` sends no Cache-Control, so the browser kept the weeks-old
+logo by its own heuristic (a tenth of the file's age) without asking.
+Two fixes: the logo files and the favicon have new names
+(`sabaygo_van_logo.png`, `sabaygo_van_mark.png`, `favicon-van.png`), so
+no browser holds them; and `run.sh` serves the console through
+`operator_console/tool/serve_web.py`, which sends `Cache-Control:
+no-cache` on every file, so any later rebuild reaches every office PC on
+its next load (an unchanged file is a 304).
+
+### Alpha run with A2Z's trip ticket (10 Nov)
+
+The owner's paper trip ticket Nº 0012223 (Cotabato ₱363 × 2, senior
+₱290 × 4, ₱149 × 1, Digos ₱150 × 1; ₱2,185; 15 % ₱327.75 + parking ₱50 +
+DCOTT ₱75) replayed on the Day 1 data, typed into the console as A2Z's
+office would: the ticket's fares, an operator and van TST-1023 (photos,
+validation), a new Dispatcher, Start and check-in opened 300 minutes
+early for the test, three departures added to the timetable and **Create
+upcoming trips**. Four new users (a Dispatcher and three passengers who
+signed up). Five trips ran from reservation to arrival, trip 1's
+assignment, payment and Start in the console, the rest through the apps'
+endpoints; every amount matched the hand calculation (₱525.20, ₱438.80,
+₱570.20, ₱369.75 with parking once, ₱478.65 after a dispute adjusted
+₱51.00 to ₱22.50; the day ₱2,382.60). Findings 24–33
+(`docs/DAY1_FINDINGS.md`): fixed, a plate wrapping in the van list, a
+dialog left stuck when the page changed under it, the first sign-in on
+a browser lost at the next load (the session values written at once,
+each making its own encryption key; console and app), Start shown as
+the next step while blocked by the fees, the chart above the Cashier's
+statements, the operator's-share hint on a van's second trip, a
+departed trip undercounting its paid seats, and the timetable form
+forgetting the only route. Open for the owner: paid app bookings are
+marked no-show at departure (31) and there are no discount fares (32).
+The run is written up as a test case (`docs/ALPHA_TEST_CASE_TRIP_TICKET.md`)
+and automated (`tests/integration/test_trip_ticket.py`, on fresh Day 1
+data, added to `run_all_journeys.sh`).
+
+The console's sign-in, on the owner's split design: a deep green panel
+(what the console does, a van shown as it appears inside, marked
+"Example") beside the form (labels above the fields, "Forgot password?"
+and "Need help?" pointing to the Terminal Manager, the 12-hour session
+stated). The mock-up's live-looking "14 / 15 Seated", "Secure SSL",
+"A2Z Auth Guard" and pre-sign-in "Role: Manager" were left out as untrue,
+and its 12-hour checkbox is a sentence because the session is not a
+choice. Narrow windows show the form alone. `PasswordField.labelAbove`
+puts its label in the placeholder under a heading. The full journey
+suite ran after the day's backend changes: 1,149 passed, 0 failed, 0
+gaps, including `test_trip_ticket.py`.
+
+
+### Phone app on the console's palette (10 Nov)
+
+The passenger and Dispatcher app now wears the office console's
+VerdantPulse look, so the three roles see one product. `mobile/lib/core/
+design/tokens.dart` takes the console's values under the names the screens
+already used (`primary` 047857, page F0FDF4, cards white with an 86EFAC
+`edge`, type 1E3A2F, one green-grey `AppRamp`) and adds `action` (emerald
+10B981), `actionHover`, `onAction`, `edge`, `surfaceSunken`, `onFill` and
+`disabled`; `info` moves from blue to the console's slate. `theme.dart`:
+Inter for text and Plus Jakarta Sans for headings (bundled from the
+console; Roboto no longer bundled), emerald filled buttons with dark text
+(kelly pressed, sunken disabled), a green rule under the app bar, green-
+edged cards with no shadow, and the selected bottom-nav item as an emerald
+pill (the console's selected sidebar entry). The owl gives way to the van
+logo, the van-only mark in the app bars. Screens: spinners on filled
+buttons go dark (white on emerald is 2.54:1); the three red buttons (sign
+out, SOS) set white text, the SOS send button stays red while sending; the
+profile and destinations screens' grey shadows become green edges. Every
+pair the app uses was computed (lowest 4.99:1 for text); `flutter analyze`
+has no errors or warnings, and the 29 layout tests (WCAG contrast and
+targets) pass. `mobile/DESIGN.md` rewritten to match. The old owl and
+Roboto files stay in `assets/` unbundled.
+
+Alpha finding 34 (Money): the payment dialog asked again for an
+operator's share already given in full, and because the amounts add up a
+second entry would have counted it twice. The dialog now states the share
+as given; while some is still to give, it and **Record operator's share**
+(shown only then) refuse more than the rest (`remittance_screen.dart`).
+
+### An operator's share held over what is owed (10 Nov, finding 35)
+
+Upholding a fare-line dispute takes the line's fares off the van's
+statement, so a share the operator was already given can end up above the
+share owed. Now it is seen before, said after, and settled:
+
+- **Before:** `POST /disputes/{id}/preview` runs the real decision in a
+  savepoint, reads the statement and rolls back
+  (`Disputes.preview`, `_decide` split from `decide`), so the preview
+  cannot disagree with the decision. The Decide dialog shows terminal
+  fees, Due now and the operator's share owed, before → after, for the
+  outcome and amount chosen, and says in words when the operator would
+  hold more than the share.
+- **After:** migration 038 adds `operator_share_returned` (+ when, who)
+  beside `operator_share_given`; the share held is given − returned
+  (`Statements.share_held`) and any excess is reported at once
+  (`share_over`), lists locked or not. The decision notifies the Cashier
+  and the Terminal Manager (`share_over_given`, opens Money). The
+  statement shows "₱X to come back" with **Record ₱X handed back** for the
+  Cashier (`record_share_returned`: never more than the excess, Cashier
+  only). Given stays as handed over, so the record shows both moves.
+- "Still to give" everywhere is owed − held: the Money and Trips dialogs
+  and the Dispatcher's dashboard, which also says when the operator holds
+  an excess. The Trips dialog gets finding 34's guard (no field once the
+  share is given, no more than the rest).
+
+`test_trip_ticket.py` section 10 (LCT-9042, an extra departure: share
+given, line upheld, ₱308.55 previewed, told and handed back in two parts,
+limits and roles) — 75 passed, 0 failed; `test_terminal_fees.sh` 79/0 and
+`test_disputes.sh` 80/0, all on a scratch database (`sabaygo_t`, a second
+backend on :8001) so the alpha data was not reset. Console and mobile
+`flutter analyze`: no errors or warnings.
+
+### Console toned down: one place per job (10 Nov, C + F + G)
+
+The first part of the console restructure the owner chose (the proposal's
+C, F and G; the menu, the Today list, the trip stepper and the Cashier's
+Counter wait):
+
+- **C, one place and one name per job.** One **Record payment** dialog
+  (`modules/remittance/record_payment_dialog.dart`, `askPayment`) for
+  Money and Trips: the same intro, Due now, fields and operator's-share
+  rules (findings 34 and 35). Trips before departure still posts to
+  `/trips/{id}/payment` (it locks that trip's list and defaults "handed
+  over by" to its Dispatcher); Money posts to the statement. "Record
+  terminal fees" and "Record payment of ₱X" are now "Record payment"; the
+  Terminal Manager reads that Start waits until the Cashier records it.
+- **F, Add trips on Trips.** "Create upcoming trips" left Setup →
+  Timetable for a Terminal-Manager-only **Add trips** on Trips
+  (`trip_monitor/add_trips.dart`), a week by default since nothing makes
+  trips on its own. The Timetable keeps the departures and links **Go to
+  Trips**. Alpha guides updated.
+- **G, toned down.** `StatTile`: white, no tinted icon square (a 16px
+  icon by the label carries the status colour), the figure in the type
+  colour, 24px, a flat bar; `tinted` removed. One bar a page at most
+  (Money: fees paid; Overview: today's fees) and four cards a row at most:
+  Money drops its Paid card, Trips folds "At terminal" into "Not yet
+  boarded" and states ratios in words, the van board shows Out of service
+  only when a van is. Card and panel edges take the lighter divider
+  `#BBF7D0`; the bright `#86EFAC` stays on the sidebar and charts.
+  `DESIGN.md` updated.
+
+`flutter analyze`: no errors or warnings (the console's widget test does
+not compile on the VM: `download.dart` and `pick_file.dart` import web-only
+libraries, before this step too). Console rebuilt and served.
+
+### Trips and Money as sheets, posting trips (11 Nov)
+
+The owner's direction after C + F + G: "an automated Excel" for inputs
+and posting trips "like a post". Previewed first as a Design canvas
+(two clickable screens), then built:
+
+- **Trips** (`trip_monitor/trip_sheet.dart`, `post_trip_box.dart`,
+  `screens/trip_monitor_screen.dart`). For the Terminal Manager, **Post a
+  trip** (route, day, time, van and Dispatcher optional; **Post** calls
+  `POST /config/trips/special`, which had no screen, via
+  `DispatchRepository.postTrip`; **Post the timetable for 7 days** is the
+  old Create upcoming trips) beside **Passengers can book now** (the open
+  trips as the passenger app lists them). Below, the **trip sheet**: one
+  row a trip; Van and Dispatcher are dropdown cells saved on choice
+  (`PUT /trips/{id}/assignment`, which takes either alone; offered from
+  `assignableRoster`, the assign dialog's list); Passengers, Fares and
+  Terminal fees fill themselves (fees from the van statements: the trip's
+  15 % lines, its DCOTT ticket, the day's parking on the van's first trip);
+  Status in words; one next step by state and role (Record payment for the
+  Cashier, Start, Depart). A row opens the trip's detail as a panel from
+  the right (`showTripDetail`), refreshing itself every 15 s. The old list
+  and fixed detail column are gone.
+- **Shared steps:** Record payment, Start and Depart moved from the trip
+  panel into `trip_actions.dart` (`TripActions`), so the row button and
+  the panel ask and say the same.
+- **Money** (`remittance_screen.dart`): the statement cards became the
+  **van statements sheet**: a row a van (operator and trips, fares with B
+  and W, terminal fees with paid, due now with any disputed share, the
+  operator's share held of owed or to come back, one next step), "All
+  vans" / "Money due" chips and search; a row opens its statement under it
+  (`_StatementPanel(embedded: true)`: fees line by line, fare lines with
+  disputes, the operator's-share buttons; Record payment stays on the row).
+- Wording: the timetable dialog is "Post the timetable"; the alpha guides
+  say Trips → Post the timetable for 7 days. `DESIGN.md`: the sheet and the
+  post box.
+
+`flutter analyze`: no errors or warnings. Console rebuilt and served. Not
+yet seen rendered by Claude (no browser in this session).
+
+### Repeats removed from Trips and the top bar (11 Nov)
+
+From the owner's screenshots of the new trip sheet:
+- **Sheet rows:** an unassigned row said it three times ("Pick a van" cells,
+  "No van yet", "Pick a van and a Dispatcher"); the next step is now empty
+  there, and for arrived and cancelled trips ("Done", "Voided" repeated the
+  status). "Passengers can book now" listed the sheet's own trips: removed;
+  the post box is one compact row (Post the timetable at its title, Post at
+  the end of the fields line).
+- **Trip detail:** the header carries the time, route and the sheet's status
+  words (`tripStatusWords`, shared), so the card no longer repeats "Leaves
+  5:30 AM" or says "Scheduled" where the sheet says "No van yet". The
+  Aboard/Not yet boarded/Unpaid tiles and the Spaces panel merged into one
+  Passengers panel (figures the row lacks, then the list); Crew became
+  Operator (the row has the plate and Dispatcher), shown once a van is on.
+  `TripLifecyclePanel(besideSheet: true)` drops what the row does (assign,
+  Record payment, Start, Depart) and facts that only restate the status, and
+  vanishes when nothing is left; Special Trips and Review Starts keep the
+  full panel. **Lift payment block** no longer shows on a trip with no van
+  (nothing is owed yet), on every page.
+- **Top bar** (`today_strip.dart`): only what needs the person, while it
+  does: open emergencies (or "could not be checked", never a false zero),
+  boardings to review / vans owing, vans with no signal; otherwise "Nothing
+  needs you right now". "Vans on the road" and "Trips today" repeated
+  Overview and Trips, so they went (one board request fewer every 30 s).
+
+`flutter analyze`: no errors or warnings; console rebuilt and served.
+
+### Setup redesigned; the timetable moves to Trips (11 Nov)
+
+The owner: "trips and setups have repeated operations". Making trips was
+split across two pages (Setup › Timetable kept the departures, Trips
+posted them, and each linked to the other with "Go to Trips"). Now:
+
+- **Timetable → Trips area.** A Terminal-Manager tab Trips · **Timetable**
+  · Van Status Board · Special Trips (`TimetablePage`), beside the post
+  box. Setup's queue keeps a Timetable step during the first set-up only,
+  as a pointer ("Open the timetable"); its done-check is unchanged.
+  "Go to Trips" is gone from Setup and from the timetable.
+- **Setup shell.** The numbered queue and progress bar show while set-up is
+  under way; once every required step is done the left side is a plain
+  **Records** list with what each holds (and the SOS warning when no
+  number is set), and the page says the day's work is on Trips and Money.
+- **Every step (`step_frame.dart`).** `StepFrame` is stateful: the step's
+  one primary action, **Add …**, sits in its header; the side panel shows
+  only the clicked record (`detail`) or the add form after Add (`addForm`)
+  and closes with its ✕ (the add form through `_StepFrameScope`); a step
+  with no records opens its form (`openWhenEmpty`). `RecordList` takes
+  `RecordColumn` heads and `RecordRow` `cells`: Terminals (Terminal, City,
+  Zone, Staffed, Status), Route (Code, Route, Stops in order, Status), Fares
+  (Route, Fares from the first stop, Status; the fare form gained its ✕),
+  Operators (Operator, Licence with an Expired badge, Van, Validation),
+  Vans (Plate, Operator, Condition, Photos, Validation), Staff (Name, Role,
+  Work status, Validation). Phones keep their cards with the same Add.
+  "Back to adding" became a plain ✕ everywhere. The timetable uses the
+  same frame (its form now in a side panel).
+
+`flutter analyze`: no errors or warnings; console rebuilt and served.
+
+### The owner's reference layout; fresh alpha data (11 Nov)
+
+The owner supplied a reference console (HTML and screenshots) to follow,
+asked that the inputs be correct, for more users, and for a reset because
+earlier test data blocked their testing (a van still owed ₱50 from its
+last trip, so it could not be assigned).
+
+- **Data.** Backed up (`db/backups/before_reset_20261111_0107.sql`), then
+  `./db/load-day1.sh` and the new `backend/scripts/seed_alpha.py`, which
+  works through the API: A2Z's trip-ticket fares from today (Digos ₱150,
+  Kidapawan ₱340, Cotabato ₱363; Day 1 had ₱135 and ₱500), TST-1023 with
+  Arnel Bautista (validated, four photos), Dispatchers Nonoy, Jun and Mae
+  (all five validated), Cashier Rose, passengers Andrea, Rogelio, Grace,
+  Paolo and Lea, and the timetable posted for 7 days (42 trips). No van
+  owes anything. 14 accounts, password sabaygo123.
+- **Trips** (`trip_sheet.dart`, `post_trip_box.dart`,
+  `screens/trip_monitor_screen.dart`): the reference's **compact
+  quick-post bar** (route, day, time with "+ Next slot", van, Dispatcher,
+  7-day timetable, Post, and an "N open" pill), or by choice a **split
+  view** (the full card beside "Passengers can book now"); the **sheet**
+  with filter chips (All, No van yet, Boarding, On the road, Arrived),
+  two-line cells (time over route, van over operator, Dispatcher over the
+  phone out with the van, listed over the camera's count with a bar),
+  fares and fees with "✓ Recorded"/"Unpaid", status pills (on the road
+  solid), the next step (the Manager's "Start blocked (unpaid)" opens
+  Lift payment block, `TripActions.liftBlock`), and a totals footer. The
+  **slide-over** opens with the status and fees badges and the operator,
+  then the door camera (listed vs counted, or why it was not counted),
+  the van and Dispatcher (editable while scheduled), the fees worked out
+  (`TripMoney`, `tripMoneyFor`), the passenger list, the Manager's
+  controls, and the next step at the foot (`TripNextStep`, shared with the
+  row).
+- **Top bar:** the four live pills are back (vans on the road with "no
+  signal", trips today with "under way", boardings to review / vans owing,
+  open emergencies, a dash when a figure could not load), and a role chip
+  ("Manager authority" / "Cashier duties") opens what that role may do.
+- **Setup:** once set-up is done, the records are tabs across the top.
+- **Left out of the reference, as untrue here:** "Auto-Assign Next Queue",
+  the "Simulate" buttons, "Firebase Live", "Twilio connected", hash chains,
+  "Mark Arrived" for the office (only the Dispatcher's app can: `CREW`),
+  FR numbers in labels, and its made-up fares.
+
+`flutter analyze`: no errors or warnings; console rebuilt and served.
+Not yet seen rendered by Claude.
+
+### Reference restyles: sheet spacing, Reviews, Van board, Money, Messages (11 Nov)
+
+- **Trip sheet:** the van cell showed "LCT-9042 (Pedro Lumbay)" above "Op:
+  Pedro Lumbay"; the cell now shows the plate alone (the operator stays in
+  the menu and once under the cell). Wider Time & route column (the route
+  no longer cut off), 88px rows, more air between a cell's two lines and
+  beside the dropdowns.
+- **Disputes** (`disputes_screen.dart`): reference cards, two to a row:
+  the plate on a dark chip with the trip, the status, the type, what is
+  contested, the operator's words in a quote box with who recorded them,
+  the decision, and a footer with what is withheld and **Uphold**,
+  **Adjust** (fare lines), **Reject** and Withdraw. Each decision button
+  opens the Decide dialog with that outcome chosen, so the "What this
+  changes" preview still shows first.
+- **Driving flags:** row cards: the type chip, plate, operator, time and
+  status; the place in green; what happened; review buttons on the right.
+- **Van Status Board:** a card a van, three to a row: the plate on a dark
+  chip and its state, operator and licence, then the trip, Dispatcher,
+  door camera, GPS and terminal fees owed, and a footer saying whether it
+  can be dispatched, with a link to the trip sheet.
+- **Money:** the summary tiles went (the ledger's total row has them); the
+  selected van's **statement card** is on top (a "STATEMENT · plate"
+  chip, the operator and trips, due/paid and disputed badges; the fare
+  lines by trip, drop-off and group on the left, the fees worked out with
+  the hand-over buttons on the right), the **daily van statements** ledger
+  below (a click selects the van shown above; Record payment on the row).
+- **Messages:** a thread header (who, and their role), green bubbles for
+  the office and white ones for the other side with the sender's corner
+  squared, a rounder composer with "Reply to …".
+
+Not restyled: Review Starts and Boarding Audit (their own layouts), the
+Overview. `flutter analyze`: no errors or warnings; console rebuilt.
+
+### The last three restyles, and live data from the database (11 Nov)
+
+The owner asked for Review Starts, Boarding Audit and the Overview in the
+reference style, then real-time data in them from the database.
+
+- **Overview** (`live_map/today_panel.dart`, `fleet_map_screen.dart`): the
+  fees card is a tinted card, `_FeesToday`: the day's total, due and
+  disputed, the 15 %, DCOTT and parking, and a paid bar. The map takes 7
+  parts of the width and the live-vans panel 5.
+- **Review Starts** (`start_review/start_review_screen.dart`): a card a
+  trip (`_ReviewCard`): reason pills (started by the system, left unpaid,
+  more aboard than listed, Unaudited), the trip, what happened in
+  sentences, and Review, which opens the trip in a slide-over with the
+  whole lifecycle panel. Reloads quietly every 30 s.
+- **Boarding Audit** (`boarding_audit/boarding_audit_screen.dart`): a card
+  a trip: the plate chip, reason pills, a dark evidence block (the
+  event chain, its count and whether it verifies), the unlisted
+  boardings in a light box with the Dispatcher's explanation, capacity
+  alerts. Reloads quietly every 30 s.
+
+**Live data: `backend/scripts/seed_live_now.py`**, run after
+`seed_alpha.py`. It goes through the real API as each role would, so
+every screen shows what the server holds. It plays an extra trip on
+TST-1023 with Nonoy (three paid reservations, four walk-ups, a phone
+checked out and reporting, eight boardings at the door against seven
+listed, a disputed Kidapawan line, the fees and share recorded, Start;
+Depart is refused until Nonoy explains the eighth boarding, then
+departs); a second extra trip on a van with nothing else today, let go
+by the Terminal Manager before its fees with a written reason and no
+phone aboard (Unaudited: the Review Starts case); and the next
+departures given Dispatchers, one trip left vanless with two paid
+reservations. It leaves the GPS replay and the phone's 30 s status
+reports running in the background (`logs/`; stop with
+`pkill -f seed_live_now ; pkill -f tracking_simulator`). Proved on a
+scratch database rebuilt from Day 1: every step done.
+
+Traps it found, now in the script's comments:
+- An assignment **replaces the van and the Dispatcher together**: a PUT
+  with only `dispatcher_id` takes the van off the trip.
+- A van on a trip today **owes that trip's DCOTT ticket and the day's
+  parking now** (`Statements.van_balance` counts every open statement
+  dated today or earlier), so its second trip today is refused until the
+  Cashier records them. The refusal says "from its last trip" even when
+  that trip has not run yet, which reads oddly; the rule itself is right.
+  Wording left alone for now.
+- A trip let go with the block lifted reads `overridden`, not
+  `left_unpaid`: Review Starts lists it for being Unaudited, not as
+  left unpaid.
+- An extra trip posted at 2 a.m. is still on the road at 05:30, so it
+  cannot share a van with the 05:30 trip (the clash check).
+
+`flutter analyze`: no errors or warnings; console rebuilt and served.
+
+### Livelier console: one hover, glass, one field box (11 Nov)
+
+The owner asked for a livelier console with hover that works everywhere,
+transparency, the post bar's dropdowns and inputs the same size, a less
+bland hover in Setup, and the laws named: Fitts, Hick, Miller,
+proximity, visibility of system status, poka-yoke.
+
+- **One set of interaction states** (`core/design/tokens.dart`):
+  see-through emerald washes for hover (8 %), press (16 %) and focus
+  (12 %), set in the theme for every InkWell, outlined and text button,
+  tab and field; `AppShadow.lift` under the pointer only (a clickable card
+  rises 2 px, a top-bar pill 1 px, the main button takes elevation 3).
+  Reduced motion keeps the edge and drops the movement.
+- **Transparency** (`operator_shell.dart`): two soft emerald glows on the
+  page (`_Ambient`); the top bar and the hub's tabs are frosted glass
+  (`_Glass`, white 78 % over a 14 px blur). Panels with figures stay solid.
+- **One field box** (`core/design/components/field_box.dart`):
+  `FieldBox`, `FieldSelect`, `FieldLabel`, 48 px (`AppSizing.field`),
+  one edge, icon, chevron, hover, a fixed (lock) state and a problem
+  state. Text fields are 48 too (theme padding 14). The trip sheet's van
+  and Dispatcher cells use the same box.
+- **Post a trip** (`post_trip_box.dart`): every box and button 48 high,
+  labels on one line; grouped (proximity) as the trip (route, day, time),
+  a rule, who runs it (both optional), a rule, the actions with Post the
+  largest at the end (Fitts). A time that has passed turns the box red,
+  says so under the bar, and disables Post (poka-yoke: it was a refusal
+  after the click); "+ Next slot" is the fix one click away. Under the
+  bar, "Passengers will see …" states the trip before it is posted
+  (visibility of status). The "N open" pill breathes (`LiveDot`).
+- **Setup** (`step_frame.dart`, `setup_screen.dart`): a record row under
+  the pointer takes the wash, a 3 px emerald bar slides in at its left,
+  its name turns green and a chevron slides in; the whole row is the
+  target. The record tabs are 48 high with a wash pill and a faint
+  underline preview on hover.
+- **Trip sheet and Money ledger rows:** the same wash and accent bar, a
+  hand cursor (they had a meadow-mist hover, near-invisible on white).
+- **Top bar** (`today_strip.dart`): pills lift on hover; a figure that
+  needs someone keeps its tint at rest; a breathing dot while vans move;
+  at the end, "Live · 10 s ago", a spinner while it reloads, "Not
+  updating" in red when nothing answered; a click reloads.
+- **Money, a bug the screenshot showed:** a van whose trip had nobody
+  listed yet read "parking only" though it owed a DCOTT ticket (trips
+  were counted from fare lines). Trips are now counted from the DCOTT
+  tickets too; the empty fare side says what is owed anyway and why
+  (`_NoFares`).
+
+`DESIGN.md` updated (shadows, glass, interaction states, the field box,
+the chips, the sheet rows). `flutter analyze`: no issues; console rebuilt
+and served.
+
+### The clash message names people and trips, not database ids (11 Nov)
+
+The owner's screenshot: posting a 3:30 AM trip with Jun Bautista was
+refused with "This dispatcher is already on trip 0e8163b7-e349-… departing
+07:30, which runs until about 13:15." The message fell back to the trip's
+id whenever the trip had no label, which is every timetable trip.
+`ScheduleConflictChecker._words` (`application/scheduling/conflicts.py`)
+now says it as the office would: "Jun Bautista is already the Dispatcher
+on the 7:30 AM Davao (Ecoland) – Cotabato City trip, and is free again at
+about 1:15 PM (the route plus 45 minutes to turn round). A trip at 3:30 AM
+would overlap it: choose another Dispatcher, leave it for later, or pick a
+time from 1:15 PM." A van clash names the plate the same way. Times are
+12-hour, as the console shows them. Proved on the scratch database (both
+clashes, 409 with the new words); `test_trip_lifecycle.sh` checks only
+the 409s. `seed_live_now.py heartbeat` now rides out a backend restart
+instead of dying.
+
+### Passenger and Dispatcher app: fewer steps (12 Nov)
+
+The owner asked for the passenger and Dispatcher screens to be easier to
+use. Logic and server calls are unchanged; the screens are reordered
+around the task each person does most.
+
+**Dispatcher**
+- **Trip screen** (`views/dispatcher/trip_manifest_screen.dart`): a
+  **Next** line under the counts says what to do now from the trip's
+  state ("Collect ₱450 in cash from 3 passengers, then mark each one
+  Paid"; "The camera counts more aboard than listed …"; "Everyone has
+  paid. When all are aboard, tap Depart"; "On the road. Tap Arrived at
+  Cotabato …"), with a bar of spaces taken. The reservations list comes
+  straight after (it was below the share and flags panels), with chips
+  **To collect · Paid · All** and their counts (it opens on To collect
+  while anyone owes). Each row reads name, status, the booking code large,
+  drop-off and fare, then the action on its own line with the amount on
+  it: **Mark ₱150 paid** (the confirm with the amount stays). **Add
+  walk-up** and **Depart** / **Arrived** are pinned in a bottom bar under
+  the thumb, 56 high; "Not a passenger trip", used rarely, moved to the
+  app bar's ⋮ menu.
+- **Trip list** (`dispatcher_trips_screen.dart`): **Next** (the first
+  open trip, large, "Leaves in 25 min", a full-width Open button), then
+  **Later** and **Done**. "DEPARTED" reads "ON THE ROAD".
+- The walk-up form was already built for speed and is unchanged.
+
+**Passenger**
+- **Search** (`home_search_viewmodel.dart`, `journey_picker_card.dart`):
+  no Search button; the departures load as soon as both ends are chosen
+  and follow every change (older answers are dropped). The last journey
+  is remembered on the phone's secure store, so a daily commuter opens
+  the app on its departures; with none saved, From is the route's
+  starting terminal when there is one (everyone boards there). The day is
+  three chips, **Today · Tomorrow · Other day** (the calendar), not a row
+  that always opened the calendar.
+- **My trips, the upcoming card** (`reservations_screen.dart`): the
+  booking code as a ticket stub, large, with the fare; under it one band
+  with what to do next: "Pay ₱150 in cash by 4:45 AM (in 1 h 20 min)" and
+  that an unpaid space is then released; "Paid. Show this code to the
+  Dispatcher at the van door"; or "You are aboard".
+
+**A bug found on the way:** the theme drew a selected chip's label in
+the same green as its fill (1:1, invisible); the time filter had worked
+around it locally. The theme now draws it white (`core/design/theme.dart`).
+
+`flutter analyze`: no errors or warnings (21 old infos in untouched
+files). `flutter test`: 32 pass, including a new layout case for the
+search card at 320 dp and 200 % text. Not yet installed on a phone.
+
+### The whole day through the screens, every role (11 Nov)
+
+The owner asked for a full simulation: data entered and screens used as
+each person would. A headless Brave drove the real apps (Flutter's
+accessibility tree finds each control by its label; real clicks and
+typing), each role in its own browser context, the console at 1440 px.
+Fourteen steps: a Dispatcher closing a trip; the Terminal Manager posting
+one; a passenger reserving, another cancelling; the Dispatcher marking
+Paid and listing a walk-up; the Cashier recording the fees and starting;
+check-in; chat both ways; Depart and Arrived; a dispute decided and its
+₱51 collected; a new passenger signing up; a new Dispatcher added and
+validated; an SOS raised and closed. Every money figure was checked by
+hand. Report, findings and 59 screenshots:
+`docs/test-reports/ui-run-2026-11-11/` (with the driver, `ui_driver.py`).
+
+Fixed from what it found:
+- My trips reloads when its tab is shown (a new booking never appeared);
+  the reservation screen asks the server on opening and every 30 s (a paid
+  passenger was still told to pay).
+- At 1440 px: the menu folds to icons under 1500 px, the trip sheet has a
+  laptop column set so Record payment and Start stay on screen, and the
+  post bar gives way to the card under 1400 px.
+- Wording: cash-only copy on the trip sheet; "Walk-up passenger"; a
+  cancelled reservation's card; "Start opens at 11:00 AM" (not "Start is
+  open"); the dispute line in the payment dialog; the SOS card without the
+  setting's key; "Parking only" in the Money ledger; one badge, not two.
+- `announceChange()` (`core/design/components/actions.dart`): any action
+  reloads the top bar and the review counts at once.
+
+Open: the passenger sees no "Paid" notice (a server change); a departed
+trip leaves "Next trip" at once (the owner's call); "Cash passenger" vs
+"Walk-up passenger" after departure; A2Z's privacy contact.
+
+`flutter analyze`: no errors or warnings in either app (the console's 20
+"use null-aware" infos and the mobile app's 21 are older and in untouched
+files; an earlier entry's "no issues" for the console was a filter that
+missed them). `flutter test` (mobile): 32 pass.
+
+### The owner's decisions of 12 Nov: walk-in, who rode, the Paid notice
+
+Options were put to the owner first (rename depth; how the system knows
+who rode with no ticket to scan; what a riding passenger sees; how the
+Paid notice is typed). Chosen and built:
+
+- **Walk-in, everywhere, stored names included.** Migration 039
+  (`db/migrations/039_walk_in.sql`, down script beside it):
+  `remittances.walk_up_income` → `walk_in_income`, `remittance_lines.
+  income_group` `walk_up` → `walk_in`, the amounts check remade. Server,
+  scripts, journey tests, both apps, the demo seed and the Day 1 dump
+  renamed with it; the Dispatcher's passenger is "Walk-in passenger"
+  before and after departure (it was "Cash passenger · TERMINAL CASH"
+  after). The brief and the paper say Walk-up: CLAUDE.md notes the
+  override; `MANUSCRIPT_CORRECTIONS.md` §13 has the wording. Tested up,
+  down, up on a scratch copy (amounts unchanged), then applied to the
+  live database after a backup (`db/backups/before_039_20261111_1138.sql`).
+- **Who rode is who paid** (Day 1 finding 31, decided). At Depart a paid
+  seat becomes `boarded`, as a walk-in already was; only an unpaid one is
+  a no-show (`application/operations/boarding.py`). It had made every
+  paid app passenger a no-show, and so the server refused a riding
+  passenger's SOS ("no booking on this trip"): now accepted (HTTP 201 on
+  scratch). `MyBookingOut` carries `trip_status`; the passenger app keeps
+  a boarded booking as the current trip ("On board", Track the van, SOS)
+  until the trip is completed, then files it under Past trips. No
+  counting query changed: `boarded` still means rode.
+- **The Paid notice.** `CashDesk.mark_paid` tells the passenger in
+  Updates ("Seat SG-… is paid: ₱… in cash to the Dispatcher. Show this
+  code at the van door before it leaves at 12:10 PM."), on the existing
+  `trip_update` type, so no schema change; an offline mark tells them
+  when it syncs; a walk-in has no account to tell.
+
+Testing on a scratch database without touching the live one:
+`SABAYGO_DB=sabaygo_t` for `db/apply.sh`, `db/reset-dev.sh` and
+`db/load-day1.sh`; `SABAYGO_API` for every journey script (and
+`test_notifications.py`); `test_unpaid_release.sh` now reads the
+database it was given (it had read the live one by name, read-only, and
+reported false failures). Results on scratch: trip lifecycle 138/0 (T8
+now asserts boarded; new checks for the Paid notice and trip_status),
+terminal fees 79/0, disputes 80/0, unpaid release 57/0, special trips
+74/0, door check 65/0, home pickup 68/0, Dispatcher 30/0, passenger no
+failures, notifications all pass, trip ticket 75/0 (Day 1 data), fee
+history 18/0, retention 35/0. `flutter test` 32 pass; both apps analyze
+with no errors or warnings. The system was restarted on the new code and
+both web builds rebuilt.
+
+Not changed: bookings already recorded as paid no-shows before today
+keep that status (no backfill); the live passenger screens were checked
+by the journey tests and the API, not clicked through again.
+
+### Review Starts opens the console's one trip panel (12 Nov)
+
+The owner's screenshot: Review Starts' own slide-over held one small
+"Start and departure" card above an empty column. It now opens the same
+panel as Trips (`showTripDetail`): status badges, the door camera's
+count against the list, van and Dispatcher, the fees worked out, the
+passenger list, and "More on this trip" with the review facts and Change
+van; the footer says what is next. The panel fetches its figures as it
+opens when the caller has none (it waited for its first 15 s round, so
+the fees showed dashes). Checked at 1920 × 930
+(`docs/test-reports/ui-run-2026-11-11/r01_review_panel.png`,
+`r02_review_actions.png`). `flutter analyze`: no errors or warnings;
+console rebuilt.
+
+### Money: the statement's two halves are one height (12 Nov)
+
+The owner's screenshot: on a statement with no fares yet, the short "No
+passengers listed yet" box sat beside the tall fees box. Side by side the
+two halves are now one height (`IntrinsicHeight`, stretched): the shorter
+grows to the taller, and the empty state centres its words. With fare
+lines it is the fees box that grows to the lines' length. Checked at
+1920 px (`docs/test-reports/ui-run-2026-11-11/s01_statement_symmetric.png`,
+`s02_statement_lines.png`). `flutter analyze`: no issues in the module;
+console rebuilt.
+
+### Seat, "I'm here to pay", the paper's terms, and the door-camera page (12 Nov)
+
+Options were put to the owner first; chosen and built:
+
+- **One word: seat.** 38 sentences people read, in the server's
+  messages and both apps, said "space" and now say "seat" (only quoted
+  sentences changed, never code names). "Reserve a seat", "Seats left",
+  "Book a seat on your UV Express route", "Paid: your seat is confirmed".
+  No seat numbers are shown. CLAUDE.md's vocabulary note reversed.
+- **Paying is the check-in, and "I'm here to pay".** The passenger's
+  check-in button is now "I'm here to pay", offered while unpaid
+  (location-checked as before); when accepted the trip's Dispatcher is
+  told, once, "Lea is at Ecoland to pay ₱150 for seat SG-…"
+  (`application/operations/check_in.py`). Marking a seat Paid also makes
+  it `checked_in` -- paid at the terminal, so there -- except a home
+  pickup's seats (`application/booking/cash.py`). A paid seat's presence
+  cannot be undone (409); "Undo check-in" left the passenger's screen.
+  The Dispatcher's list shows HERE TO PAY at the top of To collect, the
+  Next line says how many are waiting, "Checked in" reads "At terminal".
+- **The paper's terms.** Overbooking (never "double booking"),
+  reservation lock (never "seat lock"; "space lock" would have clashed
+  with "seat"), bounding box (never "hitbox"). The passenger's lost-race
+  message no longer mentions a "seat map"; the concurrency test's output
+  and the demo script use the new words. `MANUSCRIPT_CORRECTIONS.md` §14
+  rewords objective 1.3.2.1 and the process section.
+- **Door cameras** (Overview › Door cameras, Terminal Manager): one card a
+  phone -- van and Dispatcher, Reporting / Silent since / Never reported,
+  camera, GPS, lens and charging in words, battery, temperature (Hot at
+  45 °C, in words), detections a second, aboard now against the list,
+  two small charts for the last 2 h (detections a second; temperature,
+  with the 45 °C line) -- two charts, never one with two scales -- with a
+  hover reading, and the trip and today's door counts. Refreshes every
+  15 s; a reading not sent says "not reported", never zero.
+  `GET /devices/live` (office only) builds it from what the phone already
+  sends (`device_heartbeats`, `passenger_events`); no phone change, no
+  migration.
+
+Tests on scratch: trip lifecycle 139/0 (new: paying is the check-in),
+edge ingestion 95/0 (new: the live page, office only), passenger
+journey no failures (reordered to the new flow: I'm here to pay, undo,
+again, then Paid, then undo refused), unpaid release 57/0 (a paid seat
+stands as checked_in), Dispatcher 30/0, home pickup 68/0, door check
+65/0. The Dispatcher's "Here to pay" and the passenger's "Paid" notices
+checked in the scratch database. `flutter test` 32 pass; both apps
+analyze with no errors or warnings. Left as found: `test_operations.sh`
+and `test_tier2.sh` are outside the suite and already failed (the
+manifest stopped returning `seat_number` before today).
+
+Door cameras, after looking at it on the live data (12 Nov): a lone phone
+takes the full width (two to a row only with two or more); each chart
+runs from the first report carrying its reading to the latest, points
+placed by time, the line broken across a silence over 2.5 min, the 45 °C
+line drawn only when readings come near it; an empty chart says whether
+no reports came or the phone does not send that reading. The simulated
+phone (`seed_live_now.py heartbeat`) now sends what the real edge app
+sends -- battery, its temperature, charging, detections a second -- so
+the page can be seen working; still test data, as the door counts are.
+Screenshots: `docs/test-reports/ui-run-2026-11-11/c10`–`c13`.
+
+### Special trip in one card; door cameras in everyday words (12 Nov)
+
+- **Special Trips:** the request and its trip's start and departure are
+  one card -- the request's facts, a divider, then "Start and departure"
+  with its buttons (`TripLifecyclePanel(bare: true)`, new, draws the
+  section without its own card). "1 passengers" and "1 pax" now read
+  "1 passenger"; the trip sheet's totals say "15 of 126 seats", not "pax".
+- **Door cameras, for a Terminal Manager who is not an IT person:** each
+  phone opens with one answer in words and what to do -- "Working:
+  counting passengers at the door"; "Not counting: the phone stopped
+  sending at 11:58 AM. What to do: check that the phone is switched on,
+  the SabayGo camera app is open, and it has mobile data or Wi-Fi"; the
+  camera off, the view blocked, too hot, battery low, location off each
+  have their own. Then plain checks (Camera: working · Location: on ·
+  Camera view: clear · Charger: plugged in) and four tiles of one height:
+  Battery (52 %, charging), Phone heat (Normal / Warm / Too hot, the
+  degrees under it), Camera (Counting / Stopped, "looks at the door 8
+  times a second"), Passengers inside now (against the list). The charts
+  are behind "Show the last 2 hours". No speed is called good or slow --
+  no operating rate is quoted before the in-van benchmark (CLAUDE.md);
+  heat words use 40 °C (warm) and 45 °C (too hot), where phones commonly
+  start slowing down to cool.
+Checked at 1920 px (`docs/test-reports/ui-run-2026-11-11/c14`, `c15`,
+`t02`). `flutter analyze`: no errors or warnings; console rebuilt.
+
+### Timetable: "Add a new route…" opens the route form in Setup (12 Nov)
+
+The Route list on "Add a regular departure" ends with **Add a new
+route…** (green, a road icon). Choosing it keeps the current choice and
+opens Setup › Route with the Add route form already showing, so a new
+route is one choice away. The "Go to Route" button shown when no route is
+in service does the same. How: `SetupScreen.requested` / `requestAdd`
+(read once when Setup opens), `RoutesStep(startAdding:)` and
+`StepFrame(addOnOpen:)`, set by the shell's Timetable link. Checked at
+1920 px (`docs/test-reports/ui-run-2026-11-11/r10_route_dropdown.png`,
+`r12_setup_route_form.png`). `flutter analyze`: no errors or warnings;
+console rebuilt.
+
+### Van cards one height; the statement in equal halves (12 Nov)
+
+- **Van Status Board:** the van cards are laid out row by row, every card
+  in a row one height (`IntrinsicHeight`, stretched), a short last row
+  keeping the card width; inside each card the footer ("Can be
+  dispatched" / "Next assignment waits for the fees", Trip sheet) sits at
+  the bottom, level across the row.
+- **Money:** the statement's two halves are equal in width as well as
+  height (they were 7 : 5). The fare-lines table fits its half at 1920 px.
+Checked at 1920 px (`docs/test-reports/ui-run-2026-11-11/v01_van_cards_equal.png`,
+`s03_statement_halves.png`, `s04_statement_lines_halves.png`).
+`flutter analyze`: no issues in either module; console rebuilt.
+
+### SabayGo-System-Information.md (12 Nov)
+
+`docs/SabayGo-System-Information.md`: the system as built, for matching
+against the ACM manuscript in another Claude chat -- what it is, the
+stack, roles, vocabulary, the trip flow step by step, the manuscript's
+objectives 1.3.2.1–1.3.2.5 matched to the system (built / reshaped /
+built differently), each app and console page, the door camera (how it
+counts, the 9 Oct evaluation with its limits, the 18 Oct phone
+benchmark), NAHGM, money and disputes, notifications and SOS, the
+reservation-lock experiment, the 42 tables, the 144 endpoints, every
+known difference from the manuscript (pointing at MANUSCRIPT_CORRECTIONS
+§1–§14), limitations, test evidence and where things are. Figures taken
+from `docs/benchmarks/`, the live database and the code.
+
+`docs/SabayGo-System-Information.md` §21 (12 Nov): answers to the
+comparing Claude's questions D1–D10 (driving flags and their settings;
+trust rating stored but unused, trip history built; yolov8_audit_logs
+and cash_remittances unused, 0 rows; no separate walk-in ledger; every
+status value; the short-share warning; 640 × 480 camera, 320 px model,
+7.5 GiB RAM; the public position endpoint, with a recommendation; map
+refresh rates; the matching window dropped in 036), and a note that the
+manuscript's screen tables show the old UI/UX. A stale edge-app comment
+that still described the two-minute matching window was corrected
+(`edge_app/.../link/Link.kt`).
+
+### Plain words, CRUD in Messages and Trip Schedules, Post a trip window, compact Overview (12 Nov)
+
+The owner's list of 12 Nov, for a Terminal Manager who is not an IT person.
+
+- **Messages: create, edit, delete** (migration 040, `messages.edited_at`
+  and `deleted_at`, with its down script). The console's **New message**
+  lists every active Dispatcher, then each passenger with a seat from
+  yesterday to a week ahead, labelled with the trip
+  (`MessagingService._office_contacts`), and opens the thread (an existing
+  one if there is one). A person edits or deletes **a text message they
+  sent themself**: not a colleague's in the shared office inbox, not the
+  other side's, not a home pickup's payment photo, which is proof
+  (`_own_text_message`). A delete erases the text and keeps the row; the
+  thread and the conversation list say "Message deleted". `MessageOut`
+  carries `edited_at`, `deleted_at` and `can_change`, so each app offers
+  Edit / Delete only where the server would allow them: under the bubble
+  in the console, on a long press in the mobile chat.
+- **Trip Schedules** (was "Timetable"): the tab, page, Setup step and
+  every sentence. Each row has **Edit** (the add form, filled in, in a
+  window) and **Delete** (asks first). `PATCH` and `DELETE
+  /config/schedule-templates/{id}` (Terminal Manager). An edit never moves
+  a trip already posted; a delete leaves those trips running with their
+  link cleared (`fk_trip_template ON DELETE SET NULL`); moving one onto
+  another schedule's time is refused in words (409), not a 500. Times
+  read "5:30 AM", as on the Trips page.
+- **Post a trip** is a button on the Trips header that opens a window,
+  beside **Post 7 days of trips** and "N open for booking" (shows the
+  passengers' list). The compact bar, the split view and their toggle
+  are gone (`post_trip_box.dart`, `showPostTripDialog`).
+- **Money words:** Owed → **Total fees**, Paid → **Total paid**, Due now
+  → **Balance**; operator's share Owed / Given → **Total share** / **Paid
+  to operator**; "Vans owing terminal fees" → **Vans with a balance**;
+  badges "Balance ₱…"; the trip status "Fees due" → **Fees unpaid**. In
+  Money, the record-payment window, the Van Status Board, the top strip,
+  Disputes, the fee chart and the trip panel.
+- **No technical words on screen:** Boarding Audit's evidence reads "Door
+  camera record: someone got on or off 8 times … The record is
+  untouched" (or "changed … do not rely on the count from there"), not
+  door events and a hash chain. A phone's "token" is its **set-up code**
+  in the console and the edge app's own screens; the Live vans note no
+  longer names YOLOv8.
+- **Subtext behind an (i):** `PageHeader` puts its description in an
+  `InfoTip` beside the title (hover, Tab, or tap), so every page and
+  Setup step opens on its work. `Panel` and `SidePanel` take `info:` the
+  same way (the schedule form, Needs you today, Live vans, a route's
+  stops, the open-for-booking list).
+- **Review Starts:** the reason a trip is there is at reading size (16 px,
+  with a mark), no longer small grey subtext.
+- **Overview:** the three cards above the map are one size -- equal
+  widths, one height (172 px) -- and compact: the donut smaller, Needs you
+  today in two columns of short rows, the fees card down to the total,
+  the balance and the paid bar (its three parts behind the (i)). The map
+  takes the rest of the page and eight twelfths of the width (was 7 : 5).
+
+Proof: `tests/integration/test_messages_schedules.sh` (new, in
+`run_all_journeys.sh`) 50/0 on a scratch database; re-run on scratch
+because they touch messages or schedules: home pickup 68/0, office
+journey 62/0, trip lifecycle 139/0, group F 13/0, trip ticket (Day 1
+data) 75/0. `flutter analyze`: no errors or warnings in either app;
+mobile `flutter test` 32 pass. Migration 040 applied to the live database
+after `db/backups/before_040_20261111_1514.sql`; both web builds rebuilt
+and the launcher restarted. Checked in headless Brave at 1440 × 900:
+Overview, Trips, the Post a trip window, Trip Schedules and its Edit
+window, Messages and New message, Money. Edit and Delete under a message
+were not tried on the live data (the journey covers them); the edge app's
+renamed strings are not built here.
+
+### Who may see where a van is: the group's decision C5 (12 Nov)
+
+The van's live position (`GET /tracking/trips/{id}/position`) and its GPS
+trail (`.../history`) were open to anyone, and the open trip search hands
+out every trip id and plate, so anyone could follow any van and read the
+whole trail of a trip that had arrived. The operator always drives, so
+this was a person's location (RA 10173). The rule is now in
+`application/tracking/access.py` (its docstring holds it): signed out,
+nothing (401); a passenger, only a trip they hold a seat on (confirmed,
+checked in or boarded) and only while it is boarding or on the road,
+refused in plain words otherwise (403), with "not shown" before boarding
+and after arrival (404, which the app's map already reads as "no report
+yet", so a trip ending while the map is open stops the van, not an error
+page); the office and crew, every van, live and afterwards. No app
+change: the passenger app already sends its sign-in, and "Track the van"
+is offered only on the passenger's own trip. Trip search is unchanged.
+The family share link (option D) is not built. D8 in
+`docs/SabayGo-System-Information.md` rewritten to match.
+
+Proof: `tests/integration/test_van_location_access.sh` (new, in
+`run_all_journeys.sh`) 33/0 on a scratch database.
+
+### Check before merging to main; YOLOv8 and NAHGM benchmarks (16 Nov)
+
+The owner asked for a check of the console and the APKs and the models
+benchmarked "to the max" before this folder goes to GitHub's `main`
+(last pushed 9 Nov), by a fork and pull request from leyaaamy, which can
+only read the repo.
+
+**Checks.** The full journey suite on a scratch database: 1261 passed,
+0 failed, 0 gaps (`docs/test-reports/journeys_20261116_151550.txt`).
+`flutter analyze`: no errors or warnings in either app (only the
+`use_null_aware_elements` style hint). Mobile `flutter test` 32 pass;
+the console's one widget test passes with `--platform chrome` (the
+console uses `dart:js_interop`, so it cannot load on the plain VM, as on
+main). The passenger/Dispatcher release APK builds (60.7 MB), and its
+binary holds none of the dev accounts or their password, so the sign-in
+chips are not in a release build (KNOWN_ISSUES asked for this check).
+The edge app's debug APK builds and its 15 unit tests pass; its release
+build fails lint, as it does on main (KNOWN_ISSUES). In headless Brave,
+on the live data, every console page as the Terminal Manager (14) and
+as the Cashier (10; Door cameras, Trip Schedules, Review Starts and
+Boarding Audit hidden) loaded with no failed API call and no browser
+error.
+
+**For the pull request**, `.gitignore` now keeps out what must not reach
+a public repo: `db/backups/` (real accounts and records), the phone
+backup under `edge_app/results/realme_backup_*/` (its device token and
+101 door-camera frames), the COCO data, the manifest, the evaluation's
+venv (a link to another drive) and personal editor settings.
+
+**YOLOv8**, the full evaluation on CPU: all 1643 COCO frames, six
+degradations, five thresholds, now also at the phone's input sizes
+(`evaluate.py --imgsz`; `degrade.py --in-memory` applies the
+degradations at read time and saves ~3 GB). At 640 px Table 1 is
+identical to the 9 Oct run. At the deployed threshold 0.45, original
+frames:
+
+| input | MAE | exact | false alarm (Δ>0) | 1 hidden found | PC ms |
+|---|---|---|---|---|---|
+| 640 px | 0.339 | 74.7 % | 2.7 % | 77.5 % | 24 |
+| 416 px | 0.384 | 74.3 % | 2.2 % | 76.5 % | 15 |
+| 320 px (phone default) | 0.452 | 70.2 % | 2.3 % | 72.4 % | 11 |
+
+The paper's figures are the 640 px run; the phone runs 320 px by
+default, which finds one hidden passenger about five points less often.
+Reports `docs/benchmarks/ai_count_2026-11-16_*_imgsz*.txt` (rows as
+`.csv.gz`).
+
+**NAHGM**, a new benchmark (`backend/scripts/nahgm_benchmark.py`): a
+second-by-second drive along the real road of ECO-COT (OSRM over
+OpenStreetMap, kept in `docs/benchmarks/nahgm_route_eco_cot_osrm.json`),
+24 scenarios of GPS error, lost fixes and reported speed, scored through
+NAHGM's own functions; then positions posted by N vans at 1 Hz to a
+scratch backend. GPS error and lost fixes barely move the result; the
+nearest-stop rule and straight-line distance do (KNOWN_ISSUES). One
+uvicorn worker keeps 50 vans at p95 0.48 s; at 100 it falls behind.
+Report `docs/benchmarks/nahgm_2026-11-16_1527.txt`.

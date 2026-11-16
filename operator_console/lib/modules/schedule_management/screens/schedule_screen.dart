@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -43,7 +42,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   List<RouteSummary> _routes = [];
   bool _loading = true;
   String? _error;
-  bool _generating = false;
 
   final _rowsScroll = ScrollController();
 
@@ -101,7 +99,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _toggleTemplate(ScheduleTemplate template, bool active) async {
     try {
       await _schedule.setTemplateActive(template.templateId, active);
-      _showSnack('${template.tripLabel ?? 'Regular departure'} is now ${active ? 'in use' : 'paused'}.');
+      _showSnack('${template.tripLabel ?? 'Trip schedule'} is now ${active ? 'in use' : 'off'}.');
       await _load();
       widget.onChanged?.call();
     } on ApiException catch (e) {
@@ -110,119 +108,90 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _onTemplateCreated() async {
-    _showSnack('Regular departure added.');
+    _showSnack('Trip schedule added.');
     await _load();
     widget.onChanged?.call();
   }
 
-  Future<void> _generateTrips() async {
-    final daysAhead = await showDialog<int>(
+  /// Edit: the add form, filled in, in a window over the list.
+  Future<void> _editTemplate(ScheduleTemplate t) async {
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => const _GenerateTripsDialog(),
-    );
-    if (daysAhead == null) return;
-
-    setState(() => _generating = true);
-    try {
-      final reports = await _schedule.generateTrips(daysAhead: daysAhead);
-      if (!mounted) return;
-      final created = reports.fold<int>(0, (sum, r) => sum + r.tripsCreated);
-      final skipped = reports.fold<int>(0, (sum, r) => sum + r.tripsSkipped);
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Upcoming trips created'),
-          content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$created new trip(s) created. $skipped already existed and were left as they were.'),
-                for (final r in reports)
-                  if (r.warnings.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text('${DateFormat('EEE d MMM yyyy').format(r.serviceDate)}:',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                    for (final w in r.warnings)
-                      Text('• $w', style: TextStyle(color: AppColors.warning, fontSize: 12.5)),
-                  ],
-              ],
-            ),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit trip schedule'),
+        content: SizedBox(
+          width: 440,
+          child: _NewTemplateCard(
+            schedule: _schedule,
+            routes: [for (final r in _routes) if (r.isActive || r.routeId == t.routeId) r],
+            editing: t,
+            onCreated: () async => Navigator.pop(ctx, true),
+            onNewRoute: () {},
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-          ],
         ),
-      );
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+      ),
+    );
+    if (saved != true) return;
+    _showSnack('${t.tripLabel ?? 'Trip schedule'} saved. Trips already posted keep their time.');
+    await _load();
+    widget.onChanged?.call();
+  }
+
+  Future<void> _deleteTemplate(ScheduleTemplate t) async {
+    final name = t.tripLabel ?? 'The ${_clock(t.departureTime)} schedule';
+    final ok = await askConfirm(
+      context,
+      title: 'Delete $name?',
+      body: 'No new trips will be posted from it. Trips already posted from it '
+          'stay on the Trips page with their bookings. To stop it for a while '
+          'instead, switch it off under "In use".',
+      confirmLabel: 'Delete',
+    );
+    if (!ok) return;
+    try {
+      await _schedule.deleteTemplate(t.templateId);
+      _showSnack('$name deleted.');
       await _load();
+      widget.onChanged?.call();
     } on ApiException catch (e) {
       _showSnack(e.message, isError: true);
-    } finally {
-      if (mounted) setState(() => _generating = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          PageHeader(
-            compact: true,
-            title: 'Timetable',
-            description: 'Regular departures that repeat each week. Press "Create upcoming '
-                'trips" to turn them into trips passengers can book.',
-            actions: [
-              // Outlined: the form's "Add regular departure" is the one
-              // filled button on this step.
-              OutlinedButton.icon(
-                onPressed: _generating ? null : _generateTrips,
-                icon: _generating
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.event_available, size: 18),
-                label: const Text('Create upcoming trips'),
+    return StepFrame(
+      title: 'Trip Schedules',
+      description: 'Trips that repeat every week at the same time. "Post 7 days of trips" on the Trips '
+          'page makes them bookable; a schedule switched off is left out.',
+      actions: [RefreshButton(onPressed: _load, busy: _loading)],
+      list: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? LoadError(message: _error!, onRetry: _load)
+              : _buildTable(),
+      addLabel: 'Add trip schedule',
+      openWhenEmpty: _templates != null && _templates!.isEmpty,
+      // Like Route and Fares: a step that waits says why and how to get
+      // there, not an empty form.
+      addForm: SidePanel(
+        title: 'Add a trip schedule',
+        info: 'A trip that repeats on the chosen days. The van and the Dispatcher are assigned to each '
+            'trip at the van\'s turn, on the Trips page.',
+        child: _routes.any((r) => r.isActive)
+            ? _NewTemplateCard(
+                schedule: _schedule,
+                routes: _routes,
+                onCreated: _onTemplateCreated,
+                onNewRoute: widget.onOpenRoute,
+              )
+            : BlockedNotice(
+                message: 'A trip schedule runs on a route in service, and there is none yet.',
+                action: 'Go to Route',
+                onAction: widget.onOpenRoute,
               ),
-              RefreshButton(onPressed: _load, busy: _loading),
-            ],
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? LoadError(message: _error!, onRetry: _load)
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: _buildTable()),
-                          const SizedBox(width: 24),
-                          SizedBox(
-                            width: 380,
-                            // Like Route and Fares: a step that waits says
-                            // why and how to get there, not an empty form.
-                            child: _routes.any((r) => r.isActive)
-                                ? _NewTemplateCard(
-                                    schedule: _schedule,
-                                    routes: _routes,
-                                    onCreated: _onTemplateCreated,
-                                  )
-                                : SidePanel(
-                                    title: 'Add a regular departure',
-                                    child: BlockedNotice(
-                                      message: 'A regular departure runs on a route in service, and there '
-                                          'is none yet.',
-                                      action: 'Go to Route',
-                                      onAction: widget.onOpenRoute,
-                                    ),
-                                  ),
-                          ),
-                        ],
-                      ),
-          ),
-        ],
+      ),
     );
   }
 
@@ -234,7 +203,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     ('Route', 27),
     ('Leaves at', 9),
     ('Days', 12),
-    ('In use', 9),
+    ('In use', 8),
+    ('', 14),
   ];
 
   static const double _minTableWidth = 640;
@@ -259,10 +229,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       child: templates.isEmpty
           ? EmptyState(
               icon: Icons.calendar_month_outlined,
-              title: 'No regular departures yet',
+              title: 'No trip schedules yet',
               hint: _routes.any((r) => r.isActive)
                   ? 'Add the first one with the form on the right.'
-                  : 'A departure needs a route in service first.',
+                  : 'A trip schedule needs a route in service first.',
             )
           : LayoutBuilder(builder: (context, c) {
               final width = c.maxWidth < _minTableWidth ? _minTableWidth : c.maxWidth;
@@ -308,6 +278,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
+  /// "05:30:00" as "5:30 AM", as the Trips page shows times.
+  static String _clock(String hms) {
+    final p = hms.split(':');
+    final h = int.parse(p[0]), m = p[1];
+    return '${h % 12 == 0 ? 12 : h % 12}:$m ${h < 12 ? 'AM' : 'PM'}';
+  }
+
   Widget _templateRow(ScheduleTemplate t) {
     // An inactive slot is still listed -- it can be switched back on -- but
     // reads as dormant, so the live timetable is what the eye picks out.
@@ -321,77 +298,32 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontWeight: FontWeight.w700, color: ink))),
           _cell(1, Text(_routeName(t.routeId), overflow: TextOverflow.ellipsis, style: TextStyle(color: ink))),
-          _cell(2, Text(t.departureTime.substring(0, 5),
+          _cell(2, Text(_clock(t.departureTime),
               style: TextStyle(color: ink, fontFeatures: const [FontFeature.tabularFigures()]))),
           _cell(3, Text(t.daysSummary, overflow: TextOverflow.ellipsis, style: TextStyle(color: ink))),
           _cell(
             4,
             Tooltip(
               message: t.isActive
-                  ? 'In use: included when upcoming trips are created'
-                  : 'Paused: skipped when upcoming trips are created',
+                  ? 'In use: posted with the 7 days of trips'
+                  : 'Off: skipped when the 7 days of trips are posted',
               child: Switch(
                 value: t.isActive,
                 onChanged: (v) => _toggleTemplate(t, v),
               ),
             ),
           ),
+          _cell(
+            5,
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              _RowAction(icon: Icons.edit_outlined, label: 'Edit', onTap: () => _editTemplate(t)),
+              const SizedBox(width: 4),
+              _RowAction(
+                  icon: Icons.delete_outline, label: 'Delete', danger: true, onTap: () => _deleteTemplate(t)),
+            ]),
+          ),
         ]),
       ),
-    );
-  }
-}
-
-class _GenerateTripsDialog extends StatefulWidget {
-  const _GenerateTripsDialog();
-
-  @override
-  State<_GenerateTripsDialog> createState() => _GenerateTripsDialogState();
-}
-
-class _GenerateTripsDialogState extends State<_GenerateTripsDialog> {
-  int _daysAhead = 1;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.surfaceRaised,
-      title: const Text('Create upcoming trips'),
-      content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Creates bookable trips from every regular departure that is in use, '
-                'starting today. Trips that already exist are left alone.',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Text('How many days ahead:', style: TextStyle(color: AppColors.textPrimary)),
-                const Spacer(),
-                IconButton(
-                  onPressed: _daysAhead > 1 ? () => setState(() => _daysAhead--) : null,
-                  icon: Icon(Icons.remove_circle_outline, color: AppColors.textMuted),
-                ),
-                Text('$_daysAhead', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
-                IconButton(
-                  onPressed: _daysAhead < 30 ? () => setState(() => _daysAhead++) : null,
-                  icon: Icon(Icons.add_circle_outline, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(_daysAhead),
-          child: const Text('Create trips'),
-        ),
-      ],
     );
   }
 }
@@ -405,11 +337,23 @@ class _NewTemplateCard extends StatefulWidget {
     required this.schedule,
     required this.routes,
     required this.onCreated,
+    required this.onNewRoute,
+    this.editing,
   });
+
+  /// Set when the form edits this schedule (in the Edit window) rather
+  /// than adding one.
+  final ScheduleTemplate? editing;
 
   final ScheduleRepository schedule;
   final List<RouteSummary> routes;
   final Future<void> Function() onCreated;
+
+  /// "Add a new route", the last choice in the Route list: opens Setup ›
+  /// Route, where a route is made (12 Nov).
+  final VoidCallback onNewRoute;
+
+  static const newRoute = '__new_route__';
 
   @override
   State<_NewTemplateCard> createState() => _NewTemplateCardState();
@@ -431,10 +375,30 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
   static const _dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   @override
+  void initState() {
+    super.initState();
+    final t = widget.editing;
+    if (t != null) {
+      _routeId = t.routeId;
+      final hm = t.departureTime.split(':');
+      _time = TimeOfDay(hour: int.parse(hm[0]), minute: int.parse(hm[1]));
+      _label.text = t.tripLabel ?? '';
+      for (var i = 0; i < 7 && i < t.daysOfWeek.length; i++) {
+        _days[i] = t.daysOfWeek[i] == '1';
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _label.dispose();
     super.dispose();
   }
+
+  /// With one route -- A2Z's case -- it is chosen already, and stays
+  /// chosen after each departure is added.
+  String? get _onlyRoute => widget.routes.length == 1 ? widget.routes.first.routeId : null;
+  String? get _route => _routeId ?? _onlyRoute;
 
   void _reset() {
     _routeId = null;
@@ -446,7 +410,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
   }
 
   Future<void> _submit() async {
-    if (_routeId == null) {
+    if (_route == null) {
       setState(() => _error = 'Pick a route.');
       return;
     }
@@ -461,8 +425,21 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
     try {
       final hh = _time.hour.toString().padLeft(2, '0');
       final mm = _time.minute.toString().padLeft(2, '0');
+      final t = widget.editing;
+      if (t != null) {
+        await widget.schedule.updateTemplate(
+          t.templateId,
+          routeId: _route == t.routeId ? null : _route,
+          departureTime: '$hh:$mm:00',
+          daysOfWeek: _days.map((d) => d ? '1' : '0').join(),
+          tripLabel: _label.text.trim(),
+        );
+        if (!mounted) return;
+        await widget.onCreated();
+        return;
+      }
       await widget.schedule.createTemplate(
-        routeId: _routeId!,
+        routeId: _route!,
         departureTime: '$hh:$mm:00',
         daysOfWeek: _days.map((d) => d ? '1' : '0').join(),
         tripLabel: _label.text,
@@ -479,24 +456,18 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.divider),
-      ),
+    return SizedBox(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Add a regular departure', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text('A trip that repeats on the chosen days. The van and the Dispatcher '
-                'are assigned to each trip at the van\'s turn, on the Trips page.',
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: AppSpacing.xl),
+            if (widget.editing != null) ...[
+              Text('Trips already posted keep their time and bookings; '
+                  'trips posted from now on follow this change.',
+                  style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: AppSpacing.lg),
+            ],
             if (_error != null) ...[
               Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
@@ -512,14 +483,33 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Route'),
               isExpanded: true,
-              initialValue: _routeId,
+              initialValue: _route,
               // Keyed by a reset counter, so clearing the form after a create
               // really clears it: initialValue is read only when built.
               key: ValueKey('route-$_epoch'),
-              items: widget.routes
-                  .map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName)))
-                  .toList(),
-              onChanged: (v) => setState(() => _routeId = v),
+              items: [
+                ...widget.routes.map((r) => DropdownMenuItem(value: r.routeId, child: Text(r.routeName))),
+                // Not in the list? Make one: this opens Setup › Route.
+                if (widget.editing == null)
+                const DropdownMenuItem(
+                  value: _NewTemplateCard.newRoute,
+                  child: Row(children: [
+                    Icon(Icons.add_road, size: 18, color: AppColors.primary),
+                    SizedBox(width: AppSpacing.sm),
+                    Text('Add a new route…',
+                        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ],
+              onChanged: (v) {
+                if (v == _NewTemplateCard.newRoute) {
+                  // Leave the choice as it was; the new route is made in Setup.
+                  setState(() => _epoch++);
+                  widget.onNewRoute();
+                  return;
+                }
+                setState(() => _routeId = v);
+              },
             ),
             const SizedBox(height: AppSpacing.md),
             InkWell(
@@ -572,13 +562,52 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
               icon: _submitting
                   ? SizedBox(
                       width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill))
-                  : const Icon(Icons.add),
-              label: const Text('Add regular departure'),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onAction))
+                  : Icon(widget.editing == null ? Icons.add : Icons.check),
+              label: Text(widget.editing == null ? 'Add trip schedule' : 'Save changes'),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+/// Edit / Delete at the end of a schedule's row: a word beside the icon,
+/// so a Terminal Manager does not have to guess what the icon does.
+class _RowAction extends StatelessWidget {
+  const _RowAction({required this.icon, required this.label, required this.onTap, this.danger = false});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+        onPressed: onTap,
+        style: TextButton.styleFrom(
+          foregroundColor: danger ? AppColors.danger : AppColors.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          minimumSize: const Size(0, 36),
+          visualDensity: VisualDensity.compact,
+        ),
+        icon: Icon(icon, size: 17),
+        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      );
+}
+
+/// Trip Schedules as a page of the Trips area (11 Nov; "Timetable" until
+/// 12 Nov): beside the trips it makes and the button that posts them.
+class TimetablePage extends StatelessWidget {
+  const TimetablePage({super.key, required this.onOpenRoute});
+
+  /// A departure needs a route in service: opens Setup when none is.
+  final VoidCallback onOpenRoute;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: ScheduleScreen(onOpenRoute: onOpenRoute),
+      );
 }

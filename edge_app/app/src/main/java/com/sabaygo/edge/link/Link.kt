@@ -44,8 +44,9 @@ class Config(context: Context) {
 
 /**
  * The server's clock, which every time the phone sends is on. The server
- * matches a boarding to a ticket scan within two minutes (brief 6.1) and
- * refuses a batch dated more than 2 min ahead, so the phone's own clock
+ * checks each boarding against the trip's passenger list (no time window
+ * since migration 036; there is no ticket scan) and refuses a batch
+ * dated more than 2 min ahead, so the phone's own clock
  * is not trusted: GET /edge/session gives the server's time (Manila wall
  * time, as its DATETIME columns hold it), and the offset is kept from the
  * request's midpoint.

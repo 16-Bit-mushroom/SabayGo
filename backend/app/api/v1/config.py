@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep
 from app.application.scheduling.generate_trips import (
@@ -689,6 +689,70 @@ async def toggle_template(
     return {"template_id": template_id, "is_active": is_active}
 
 
+class TemplateEditIn(BaseModel):
+    """A trip schedule changed in place (12 Nov: the schedules' edit). Only
+    the fields sent change. Trips already posted from it keep their own
+    route and time: a passenger's booking is never moved by an edit."""
+    route_id: str | None = None
+    departure_time: dt.time | None = None
+    days_of_week: str | None = Field(default=None, pattern="^[01]{7}$")
+    trip_label: str | None = None
+
+
+@router.patch("/schedule-templates/{template_id}", dependencies=[Depends(MANAGER)])
+async def edit_template(template_id: str, payload: TemplateEditIn, session: SessionDep) -> dict:
+    template = await session.get(ScheduleTemplate, template_id)
+    if template is None:
+        raise NotFoundError("Trip schedule not found.")
+    if payload.route_id is not None and payload.route_id != template.route_id:
+        route = await session.get(Route, payload.route_id)
+        if route is None:
+            raise NotFoundError("Route not found.")
+        if not route.is_active:
+            raise ConflictError(f"{route.route_name} is out of service.")
+        template.route_id = payload.route_id
+    if payload.departure_time is not None:
+        template.departure_time = payload.departure_time
+    if payload.days_of_week is not None:
+        if payload.days_of_week == "0000000":
+            raise ConflictError("Choose at least one day, or pause the schedule instead.")
+        template.days_of_week = payload.days_of_week
+    if "trip_label" in payload.model_fields_set:
+        template.trip_label = (payload.trip_label or "").strip() or None
+    # uq_template_slot: one schedule per route and time. Said in words
+    # rather than left to the database as a 500.
+    with session.no_autoflush:  # ask before the change reaches the table
+        clash = (
+            await session.execute(
+                select(ScheduleTemplate.template_id).where(
+                    ScheduleTemplate.route_id == template.route_id,
+                    ScheduleTemplate.departure_time == template.departure_time,
+                    ScheduleTemplate.valid_from == template.valid_from,
+                    ScheduleTemplate.template_id != template_id,
+                )
+            )
+        ).first()
+    if clash is not None:
+        at = f"{template.departure_time:%H:%M}"  # read before the rollback expires it
+        await session.rollback()
+        raise ConflictError(f"Another trip schedule already leaves at {at} on this route.")
+    await session.commit()
+    return {"template_id": template_id}
+
+
+@router.delete("/schedule-templates/{template_id}", dependencies=[Depends(MANAGER)])
+async def delete_template(template_id: str, session: SessionDep) -> dict:
+    """Removes the trip schedule. Trips already posted from it stay as they
+    are -- bookable, with their bookings -- and only lose the link to it
+    (ON DELETE SET NULL); no new trips are posted from it."""
+    template = await session.get(ScheduleTemplate, template_id)
+    if template is None:
+        raise NotFoundError("Trip schedule not found.")
+    await session.delete(template)
+    await session.commit()
+    return {"template_id": template_id, "deleted": True}
+
+
 # ===================================================================
 # Trip generation
 # ===================================================================
@@ -814,7 +878,13 @@ async def trip_board(session: SessionDep, date: dt.date | None = None) -> list[T
             await session.execute(
                 select(
                     Booking.trip_id,
-                    func.sum(case((Booking.status.in_(("confirmed", "checked_in", "boarded")), 1), else_=0)).label("booked"),
+                    # A paid no-show's seat still counts (brief rev 721): it was
+                    # sold and paid, so it stays among the spaces booked after
+                    # departure. Before 10 Nov a trip that left showed its paid
+                    # app passengers as gone ("6 of 14 booked" for 8 sold).
+                    func.sum(case((Booking.status.in_(("confirmed", "checked_in", "boarded")), 1),
+                                  (and_(Booking.status == "no_show", Booking.payment_status == "paid"), 1),
+                                  else_=0)).label("booked"),
                     func.sum(case((Booking.status == "checked_in", 1), else_=0)).label("checked_in"),
                     func.sum(case((Booking.status == "boarded", 1), else_=0)).label("boarded"),
                     func.sum(case((Booking.status == "no_show", 1), else_=0)).label("no_show"),

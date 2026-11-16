@@ -8,7 +8,7 @@
 #   a note to close one; and the person who pressed the button is told
 #   when a human has seen it.
 set -uo pipefail
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 TRIP="TRIP-DEMO-00000001"
 P=0; F=0
 curl -sf http://127.0.0.1:8000/health >/dev/null || { echo "API not running"; exit 1; }

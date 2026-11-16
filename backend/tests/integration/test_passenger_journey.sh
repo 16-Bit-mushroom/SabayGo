@@ -8,7 +8,7 @@
 # missing, and will start passing as those endpoints are built.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 TRIP="TRIP-DEMO-00000001"
 STAMP=$(date +%s)
 EMAIL="journey${STAMP}@sabaygo.dev"
@@ -201,20 +201,22 @@ S=$(code POST "/bookings/$ABANDON/cancel" "" "$TOKEN")
 # ═══════════════════════════════════════════════ 6. TRAVEL DAY
 hdr "6. Travel day"
 
-# Section 5 cancelled the first seat, so book and pay another one.
+# Section 5 cancelled the first seat, so book another one. The travel day
+# runs in the order of 12 Nov: "I'm here to pay" while unpaid (the
+# Dispatcher is told), then the Dispatcher takes the cash -- paying is the
+# check-in, so a paid seat's presence cannot be undone.
 S=$(code POST /bookings/reserve \
   "{\"trip_id\":\"$TRIP\",\"boarding_stop\":1,\"alighting_stop\":4}" "$TOKEN")
 BID=$(j "['booking_id']" < /tmp/resp.json)
-code POST "/bookings/$BID/mark-paid" '{}' "$DT" >/dev/null
 
 # D.2: nothing to undo yet -> 409, never 404/405
 S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
-[ "$S" = "409" ] && ok "undo before check-in rejected (409)" || bad "undo before check-in gave $S"
+[ "$S" = "409" ] && ok "undo before 'I'm here to pay' rejected (409)" || bad "undo before check-in gave $S"
 
 S=$(code POST "/bookings/$BID/check-in" \
   "{\"latitude\":$LAT,\"longitude\":$LNG,\"gps_accuracy_m\":8.5}" "$TOKEN")
 CHECKED_IN=0
-if [ "$S" = "200" ]; then ok "checked in at the terminal"; CHECKED_IN=1
+if [ "$S" = "200" ]; then ok "'I'm here to pay' accepted at the terminal"; CHECKED_IN=1
 elif [ "$S" = "422" ]; then
   gap "check-in -- $(j "['detail']" < /tmp/resp.json)"
 else bad "check-in gave $S"; fi
@@ -243,6 +245,11 @@ if [ "$CHECKED_IN" = "1" ]; then
 else
   gap "undo check-in -- skipped, check-in itself was not accepted"
 fi
+
+# The Dispatcher takes the cash: paid, and so present for good.
+code POST "/bookings/$BID/mark-paid" '{}' "$DT" >/dev/null
+S=$(code DELETE "/bookings/$BID/check-in" "" "$TOKEN")
+[ "$S" = "409" ] && ok "a paid seat's presence cannot be undone (409)" || bad "undo after paying gave $S"
 
 # ═══════════════════════════════════════════════ 7. SELF-SERVICE
 hdr "7. Managing the account"

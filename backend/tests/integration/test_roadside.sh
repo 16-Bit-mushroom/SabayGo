@@ -4,7 +4,7 @@
 #
 #   ./db/reset-dev.sh --soon && ./tests/integration/test_roadside.sh
 set -uo pipefail
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 TRIP="TRIP-DEMO-00000001"     # VAN-0001, dispatcher@, departs in 20 min
 STAMP=$(date +%s)
 P=0; F=0

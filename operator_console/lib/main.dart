@@ -17,6 +17,7 @@ import 'data/repositories/route_repository.dart';
 import 'data/repositories/tracking_repository.dart';
 import 'data/repositories/sos_repository.dart';
 import 'data/repositories/schedule_repository.dart';
+import 'core/layout/console_router.dart';
 import 'core/layout/operator_shell.dart';
 import 'modules/auth/screens/login_screen.dart';
 import 'viewmodels/auth_provider.dart';
@@ -37,6 +38,9 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
   late final TokenStorage _tokens;
   late final ApiClient _api;
   late final AuthProvider _auth;
+  final _location = ConsoleLocation();
+  final _parser = ConsoleRouteParser();
+  late final _router = ConsoleRouterDelegate(_location, const _RootRouter());
 
   @override
   void initState() {
@@ -53,6 +57,8 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
 
   @override
   void dispose() {
+    _router.dispose();
+    _location.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -74,12 +80,14 @@ class _SabayGoOperatorConsoleState extends State<SabayGoOperatorConsole> {
         Provider<RentalRepository>(create: (_) => RentalRepository(_api)),
         Provider<RouteRepository>(create: (_) => RouteRepository(_api)),
         ChangeNotifierProvider<AuthProvider>.value(value: _auth),
+        ChangeNotifierProvider<ConsoleLocation>.value(value: _location),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         title: 'SabayGo Cooperative Office',
         debugShowCheckedModeBanner: false,
         theme: buildConsoleTheme(),
-        home: const _RootRouter(),
+        routerDelegate: _router,
+        routeInformationParser: _parser,
       ),
     );
   }
@@ -113,7 +121,7 @@ class _SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            BrandPlate(height: 96),
+            BrandLogo(height: 120),
             SizedBox(height: 24),
             SizedBox(
               width: 22,

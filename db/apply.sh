@@ -7,6 +7,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
+# A scratch database for the journey tests, without touching the real one:
+#   SABAYGO_DB=sabaygo_t ./db/reset-dev.sh --soon
+MYSQL_DATABASE="${SABAYGO_DB:-$MYSQL_DATABASE}"
 
 MYSQL="docker compose exec -T -e MYSQL_PWD=${MYSQL_ROOT_PASSWORD} mysql mysql -u root --silent"
 

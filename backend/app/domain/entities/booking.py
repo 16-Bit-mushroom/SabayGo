@@ -98,7 +98,7 @@ class Booking:
             # which is what keeps it off the passenger list and exposes
             # it to the cutoff release.
             #
-            # A walk-up pays the Dispatcher as it is listed and is aboard
+            # A walk-in pays the Dispatcher as it is listed and is aboard
             # already. 'confirmed' would read as "not yet boarded" on the
             # manifest, and departure would make the passenger a no-show
             # and release a space someone is sitting in.

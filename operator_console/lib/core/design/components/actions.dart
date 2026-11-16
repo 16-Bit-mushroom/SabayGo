@@ -4,6 +4,14 @@ import 'package:intl/intl.dart';
 import '../../network/api_exception.dart';
 import '../tokens.dart';
 
+/// Ticks after any action that changed something on the server, so the
+/// figures other parts of the page show -- the top bar, the review counts
+/// -- reload at once instead of on their next 30 s round (12 Nov UI run:
+/// "No open emergencies" under a top bar still saying 1).
+final consoleChanged = ValueNotifier<int>(0);
+
+void announceChange() => consoleChanged.value++;
+
 /// Run one call and report it through the app-wide messenger: [done] on
 /// success, the server's own sentence on a refusal. True when it worked.
 ///
@@ -21,6 +29,7 @@ Future<bool> runAction(BuildContext context, Future<void> Function() call, Strin
   try {
     await call();
     messenger.showSnackBar(SnackBar(content: Text(done), behavior: SnackBarBehavior.floating));
+    announceChange();
     return true;
   } on ApiException catch (e) {
     refused(e.message);
@@ -69,6 +78,7 @@ Future<String?> askText(
   bool required = true,
   bool danger = false,
   int maxLength = 255,
+  String initial = '',
 }) =>
     showDialog<String>(
       context: context,
@@ -80,6 +90,7 @@ Future<String?> askText(
         required: required,
         danger: danger,
         maxLength: maxLength,
+        initial: initial,
       ),
     );
 
@@ -92,6 +103,7 @@ class _TextDialog extends StatefulWidget {
     required this.required,
     required this.danger,
     required this.maxLength,
+    this.initial = '',
   });
 
   final String title;
@@ -101,13 +113,15 @@ class _TextDialog extends StatefulWidget {
   final bool required;
   final bool danger;
   final int maxLength;
+  /// Text the field starts with, such as a suggested amount.
+  final String initial;
 
   @override
   State<_TextDialog> createState() => _TextDialogState();
 }
 
 class _TextDialogState extends State<_TextDialog> {
-  final _text = TextEditingController();
+  late final _text = TextEditingController(text: widget.initial);
 
   @override
   void dispose() {
@@ -147,7 +161,7 @@ class _TextDialogState extends State<_TextDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           onPressed: _ok ? () => Navigator.pop(context, _text.text.trim()) : null,
-          style: widget.danger ? FilledButton.styleFrom(backgroundColor: AppColors.danger) : null,
+          style: widget.danger ? FilledButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: AppColors.onFill) : null,
           child: Text(widget.confirmLabel),
         ),
       ],
@@ -177,9 +191,34 @@ class DayPicker extends StatelessWidget {
             onPressed: () => onShift(-1),
             icon: const Icon(Icons.chevron_left),
           ),
-          Text(
-            today ? 'Today, ${DateFormat.MMMd().format(day)}' : DateFormat.yMMMEd().format(day),
-            style: Theme.of(context).textTheme.titleSmall,
+          // The day itself opens a calendar, so a day weeks away is one
+          // pick rather than many presses of an arrow. The choice reaches
+          // the page as a shift, so every page that uses this gets it.
+          Tooltip(
+            message: 'Choose a day',
+            child: TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: AppColors.textPrimary),
+              onPressed: () async {
+                final from = DateUtils.dateOnly(day);
+                final now = DateTime.now();
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: from,
+                  firstDate: DateTime(now.year - 2),
+                  lastDate: DateTime(now.year + 1, 12, 31),
+                  helpText: 'Choose a day',
+                  confirmText: 'Show this day',
+                );
+                if (picked == null) return;
+                final shift = DateUtils.dateOnly(picked).difference(from).inDays;
+                if (shift != 0) onShift(shift);
+              },
+              icon: const Icon(Icons.calendar_month_outlined, size: 18, color: AppColors.primary),
+              label: Text(
+                today ? 'Today, ${DateFormat.MMMd().format(day)}' : DateFormat.yMMMEd().format(day),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
           ),
           IconButton(
             tooltip: 'Next day',

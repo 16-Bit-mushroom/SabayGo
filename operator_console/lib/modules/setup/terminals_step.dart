@@ -26,8 +26,16 @@ class _TerminalsStepState extends State<TerminalsStep> {
   String? _error;
   bool _loading = true;
 
-  /// The terminal open in the side panel; null shows the add form.
+  /// The terminal open in the side panel.
   String? _selected;
+
+  static const _columns = [
+    RecordColumn('Terminal', flex: 4),
+    RecordColumn('City', flex: 3),
+    RecordColumn('Zone', flex: 2, end: true),
+    RecordColumn('Staffed', flex: 2),
+    RecordColumn('Status', flex: 2),
+  ];
   int _blank = 0;
 
   @override
@@ -86,8 +94,7 @@ class _TerminalsStepState extends State<TerminalsStep> {
               ? LoadError(message: _error!, onRetry: _load)
               : RecordList(
                   title: 'Terminals',
-                  addLabel: 'Add terminal',
-                  onAdd: selected == null ? null : () => setState(() => _selected = null),
+                  columns: _columns,
                   empty: const EmptyState(
                     icon: Icons.location_on_outlined,
                     title: 'No terminals yet',
@@ -96,12 +103,13 @@ class _TerminalsStepState extends State<TerminalsStep> {
                   rows: [
                     for (final t in terminals)
                       RecordRow(
-                        leading: Icon(Icons.location_on_outlined, color: AppColors.textMuted),
                         title: t.name,
-                        subtitle: '${t.city} · '
-                            '${t.geofenceM == null ? 'default zone' : 'zone ${t.geofenceM} m'} · '
-                            '${t.isStaffed ? 'staffed' : 'not staffed'}',
-                        badges: [
+                        columns: _columns,
+                        cells: [
+                          CellText(t.name, strong: true),
+                          CellText(t.city),
+                          CellText(t.geofenceM == null ? 'Default' : '${t.geofenceM} m'),
+                          CellText(t.isStaffed ? 'Yes' : 'No', muted: !t.isStaffed),
                           t.isActive ? const StatusBadge('Open', tone: Tone.success) : const StatusBadge('Closed'),
                         ],
                         selected: t.terminalId == _selected,
@@ -110,15 +118,18 @@ class _TerminalsStepState extends State<TerminalsStep> {
                       ),
                   ],
                 ),
-      side: selected == null
-          ? SidePanel(
-              title: 'Add terminal',
-              child: TerminalForm(key: ValueKey('new-$_blank'), onSave: (d, another) => _save(null, d, another)),
-            )
+      addLabel: 'Add terminal',
+      onAdd: () => setState(() => _selected = null),
+      openWhenEmpty: _terminals != null && terminals.isEmpty,
+      addForm: SidePanel(
+        title: 'Add terminal',
+        child: TerminalForm(key: ValueKey('new-$_blank'), onSave: (d, another) => _save(null, d, another)),
+      ),
+      detail: selected == null
+          ? null
           : SidePanel(
               title: 'Edit ${selected.name}',
               onClose: () => setState(() => _selected = null),
-              closeLabel: 'Back to adding',
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 FactLine(Icons.route,
                     selected.routes.isEmpty ? 'On no route in service' : 'On ${selected.routes.join(', ')}'),

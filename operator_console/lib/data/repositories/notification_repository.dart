@@ -36,6 +36,7 @@ class AppNotification {
         'driving_flag',
         'dispute_raised',
         'left_unpaid',
+        'share_over_given',
         'special_trip_request',
       }.contains(type);
 

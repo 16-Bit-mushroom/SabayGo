@@ -12,7 +12,9 @@ rev 603; its text does not). It replaced rev 603 and makes A2Z **cash
 only**: no online payment, no QR ticket. A passenger reserves a seat and
 gets a **booking code**, and the **Dispatcher marks the seat Paid** when
 the cash is handed over at the terminal. Income groups are **Booked (B)**
-and **Walk-up (W)**, and beside the 15 % A2Z charges a **₱75 DCOTT
+and **Walk-in (W)** (the owner's decision of 12 Nov over the brief's
+"Walk-up": migration 039, every screen; the paper's wording is in
+`docs/MANUSCRIPT_CORRECTIONS.md`), and beside the 15 % A2Z charges a **₱75 DCOTT
 ticket for each trip** and a **₱50 parking fee for each van each service
 day** — the three are the **terminal fees**, and what is left of the cash
 is the **operator's share**. Its delta, decisions and roadmap S1–S11 are
@@ -72,9 +74,27 @@ runs from stop *k* to stop *k+1*. A route with N stops has N−1 legs.
 consumes every leg between them: `boarding ≤ leg < alighting`. A passenger
 riding 1→2 is **not** aboard on leg 2.
 
-**Space (not seat)** — UV Express does **not assign seat numbers**;
+**Seat** — the one word every screen, message and notice uses for a
+passenger's place in the van (the owner's decision of 12 Nov; it was
+"space"). UV Express still does **not assign seat numbers**:
 `seat_number` in the database is an internal slot counter and is never
-shown to a passenger.
+shown to a passenger, so "seat" never comes with a number.
+
+**I'm here to pay / paying is the check-in** — the passenger presses
+"I'm here to pay" at the terminal (location-checked) and the Dispatcher is
+told who is waiting with cash; marking the seat Paid also counts the
+passenger as at the terminal. There is no separate check-in step (12 Nov).
+
+**Money words and page names (12 Nov)** — screens say **Total fees**,
+**Total paid** and **Balance** (never owed, due or given), the operator's
+**Total share** and **Paid to operator**; the timetable is **Trip
+Schedules**; a phone's token is its **set-up code**. No "events" or "hash
+chain" on a screen: the office reads what a check means, not how it works.
+
+**Overbooking, reservation lock, bounding box** — the words for the paper
+and the app: overbooking is the same seat reserved twice (never "double
+booking"); the reservation lock is why it cannot happen (never "seat
+lock"); the model draws bounding boxes (never "hitbox").
 
 **Capacity is 14 per trip.** Passengers board **only at the starting
 terminal**, so every booking on a trip consumes leg 1 and the per-leg
@@ -135,6 +155,8 @@ four hand-maintained copies of an IP address is what broke the last demo.
 ./run.sh --soon               # rebuild demo data, trip departs in 20 min
 ./run.sh --reset-db           # rebuild demo data; live trips dated from now
 ./db/load-day1.sh             # instead of the demo: A2Z's Day 1 setup (@a2z.dev accounts)
+backend/venv/bin/python backend/scripts/seed_alpha.py   # then: ticket fares, TST-1023, more staff and passengers, 7 days of trips
+backend/venv/bin/python backend/scripts/seed_live_now.py  # then: two trips on the road now, an audit case, a review case; GPS + phone left running
 ```
 
 `002_demo_dataset.sql` seeds three **live trips dated from the moment of
@@ -149,8 +171,9 @@ Ctrl-C stops everything it started; MySQL is left up. Each process logs to
 `logs/`, so grep the log, never stream it.
 
 The console is **built** (`flutter build web --release --pwa-strategy=none`)
-and served from `operator_console/build/web` with `python3 -m http.server`
-on port 3001, not started with `flutter run`. On this machine `flutter run
+and served from `operator_console/build/web` by `operator_console/tool/serve_web.py`
+on port 3001 (it sends `Cache-Control: no-cache`, so a rebuild reaches every
+browser on its next load), not started with `flutter run`. On this machine `flutter run
 -d chrome` finds no Chrome (only `/usr/bin/chromium`) and `-d web-server`
 opens the port but never accepts a connection. The build takes ~3.5 min
 and is skipped on later runs unless `lib/`, `pubspec.yaml` or the baked-in
@@ -292,7 +315,14 @@ check-in windows silently.
 **Seed emails must end `.dev`, not `.test`** — `.test` is an RFC 2606
 reserved TLD and Pydantic's `EmailStr` rejects it.
 
-**Cash is not missing money.** A walk-up the Dispatcher lists is paid as
+**Who rode is who paid.** With no ticket to scan, a paid seat becomes
+`boarded` at Depart (as a walk-in is when listed); only an unpaid one is a
+no-show. It stays the passenger's current trip, with tracking and the SOS,
+until the trip is completed (the bookings payload carries `trip_status`).
+The door camera's "fewer aboard than listed" flags a paid passenger who
+did not come (12 Nov, Day 1 finding 31).
+
+**Cash is not missing money.** A walk-in the Dispatcher lists is paid as
 it is listed (`paid_at` set at creation), so it counts as income in hand
 and never as something unreconciled. Before this rule, every honest
 conductor appeared to be stealing.

@@ -24,7 +24,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import TripStatus
-from app.infrastructure.models import RouteStop, Trip
+from app.infrastructure.models import Route, RouteStop, StaffProfile, Trip, Van
 
 log = logging.getLogger(__name__)
 
@@ -119,12 +119,38 @@ class ScheduleConflictChecker:
                             resource_id=wanted,
                             conflicting_trip_id=other.trip_id,
                             conflicting_departure=other_start,
-                            message=(
-                                f"This {resource} is already on trip "
-                                f"{other.trip_label or other.trip_id} departing "
-                                f"{other_start:%H:%M}, which runs until about "
-                                f"{other_end:%H:%M}."
-                            ),
+                            message=await self._words(resource, other, other_end, departure),
                         )
                     )
         return conflicts
+
+    async def _words(self, resource: str, other: Trip, free_at: datetime, departure: datetime) -> str:
+        """The clash as the office says it (11 Nov): who or which van, the
+        trip they are on by its time and route, when they are free again,
+        and what to do. Never the trip's database id -- a timetable trip
+        has no label, and the id is all the old message had to show."""
+        route = await self.session.get(Route, other.route_id) if other.route_id else None
+        trip = f"the {_clock(other.departure_datetime)} {route.route_name if route else 'van rental'} trip"
+        if other.trip_label:
+            trip += f" ({other.trip_label})"
+        if resource == "van":
+            plate = other.van_plate_number
+            if plate is None and other.van_id:
+                van = await self.session.get(Van, other.van_id)
+                plate = van.plate_number if van else None
+            who, role, other_choice = plate or "This van", "is already on", "another van"
+        else:
+            profile = await self.session.get(StaffProfile, other.dispatcher_id) if other.dispatcher_id else None
+            who = f"{profile.first_name} {profile.last_name}" if profile else "This Dispatcher"
+            role, other_choice = "is already the Dispatcher on", "another Dispatcher"
+        return (
+            f"{who} {role} {trip}, and is free again at about {_clock(free_at)} "
+            f"(the route plus {TURNAROUND_MINUTES} minutes to turn round). A trip at "
+            f"{_clock(departure)} would overlap it: choose {other_choice}, leave it for later, "
+            f"or pick a time from {_clock(free_at)}."
+        )
+
+
+def _clock(at: datetime) -> str:
+    """'7:30 AM', as the console shows a time."""
+    return f"{at:%I:%M %p}".lstrip("0")

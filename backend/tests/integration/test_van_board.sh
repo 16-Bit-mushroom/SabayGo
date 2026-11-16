@@ -10,7 +10,7 @@
 # maintenance and LCT-9042 has no trip.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 BACKEND="$(cd "$(dirname "$0")/../.." && pwd)"
 TRIP=TRIP-DEMO-00000001
 P=0; F=0
@@ -76,6 +76,9 @@ is "$(van "$DEP_VAN" state,trip_id,trip_status)" "travelling/TRIP-A2Z-LIVE-DEPAR
   && ok "with the Dispatcher, the operator and the route: $(van "$DEP_VAN" dispatcher_name,operator_name,route_name)" \
   || bad "travelling row: $(van "$DEP_VAN" dispatcher_name,operator_name,route_name)"
 is "$(van "$DEP_VAN" aboard,latitude)" "None/None" "no phone, no readings: nothing aboard or on the map is invented"
+is "$(van "$DEP_VAN" camera,seat_capacity)/$(van LAB-4521 camera)" "no_phone/14/no_phone" \
+   "and the board says why: no phone in the van, of its 14 spaces (boarding LAB-4521 too)"
+is "$(van ABC-1234 camera)" "None" "a trip not yet under way carries no camera state"
 is "$(van LAB-4521 state,trip_id)" "on_site/TRIP-A2Z-LIVE-BOARD" "LAB-4521 is on site: its trip is boarding"
 is "$(van ABC-1234 state,trip_id)" "on_site/$TRIP" "ABC-1234 is on site: assigned to a trip of today"
 is "$(van GAK-2205 state,operational_status,trip_id)" "out_of_service/maintenance/None" "GAK-2205 is out of service"
@@ -91,6 +94,14 @@ DEV=$(field "['device_id']"); TOK=$(field "['device_token']")
 is "$(code POST /devices/$DEV/checkout "{\"van_id\":\"$DEP_VAN_ID\",\"dispatcher_id\":\"$DEP_DISP\"}" "$CT")" 200 \
    "a phone checked out with $DEP_VAN"
 sql "UPDATE device_checkouts SET checked_out_at = NOW() - INTERVAL 1 MINUTE WHERE device_id = '$DEV'"
+is "$(van "$DEP_VAN" camera,aboard)" "silent/None" "checked out but never reported: camera silent, nothing counted"
+HB() { python3 -c "
+import datetime as d, json, sys
+t = (d.datetime.now() + d.timedelta(seconds=int(sys.argv[1]))).isoformat(timespec='seconds')
+print(json.dumps({'reports': [{'recorded_at': t, 'camera_ok': True, 'gps_ok': True, 'lens_blocked': sys.argv[2] == '1'}]}))" "$1" "$2"; }
+is "$(edge /edge/heartbeats "$(HB -40 0)")" 200 "the phone reports: camera working, lens clear"
+is "$(van "$DEP_VAN" camera,aboard,open_flags)" "live/0/0" \
+   "camera live, nobody seen boarding yet: a real 0, and no open driving flags"
 EV=$(python3 -c "
 import datetime as d, json, uuid
 t = d.datetime.now()
@@ -103,6 +114,8 @@ is "$(edge /edge/fixes "{\"fixes\":[{\"recorded_at\":\"$NOW\",\"latitude\":7.1,\
    "and sends a GPS reading"
 is "$(van "$DEP_VAN" aboard,latitude,longitude,position_stale)" "2/7.1/125.6/False" \
    "the board shows 2 aboard and the van's last position"
+is "$(edge /edge/heartbeats "$(HB 0 1)")" 200 "a later report: the lens is covered"
+is "$(van "$DEP_VAN" camera,aboard)" "lens_blocked/2" "the board says so, and keeps the count it had"
 
 # ╔═══════════════════════════════════════════════════════════════╗
 hdr "4. Out of service, but on the road"

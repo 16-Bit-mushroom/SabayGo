@@ -43,15 +43,24 @@ class MessageOut(BaseModel):
     retain_until: dt.date | None
     is_mine: bool
     read_at: dt.datetime | None
+    # 040: shown as "edited"; a deleted message has an empty body.
+    edited_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    # True when this reader sent it themself (not a colleague), it is text
+    # and not deleted: the app offers Edit and Delete only then.
+    can_change: bool = False
     created_at: dt.datetime
 
     @classmethod
-    def of(cls, m, *, is_mine: bool) -> MessageOut:
+    def of(cls, m, *, is_mine: bool, reader_id: str | None = None) -> MessageOut:
         return cls(
             message_id=m.message_id, conversation_id=m.conversation_id,
             sender_id=m.sender_id, sender_role=m.sender_role, body=m.body,
             attachment_type=m.attachment_type, attachment_size_kb=m.attachment_size_kb,
             retain_until=m.retain_until, is_mine=is_mine, read_at=m.read_at,
+            edited_at=m.edited_at, deleted_at=m.deleted_at,
+            can_change=(reader_id is not None and m.sender_id == reader_id
+                        and m.attachment_type is None and m.deleted_at is None),
             created_at=m.created_at,
         )
 
@@ -126,7 +135,7 @@ async def list_messages(
 ) -> list[MessageOut]:
     svc = MessagingService(session)
     rows = await svc.list_messages(user, conversation_id, before=before, limit=limit)
-    return [MessageOut.of(m, is_mine=svc.is_mine(user, m)) for m in rows]
+    return [MessageOut.of(m, is_mine=svc.is_mine(user, m), reader_id=user.user_id) for m in rows]
 
 
 @router.post("/{conversation_id}/messages", response_model=MessageOut)
@@ -135,4 +144,26 @@ async def send_message(
 ) -> MessageOut:
     svc = MessagingService(session)
     m = await svc.send_message(user, conversation_id, body.body)
-    return MessageOut.of(m, is_mine=True)
+    return MessageOut.of(m, is_mine=True, reader_id=user.user_id)
+
+
+class EditMessageIn(BaseModel):
+    body: str = Field(min_length=1, max_length=1000)
+
+
+@router.patch("/{conversation_id}/messages/{message_id}", response_model=MessageOut)
+async def edit_message(
+    conversation_id: str, message_id: str, body: EditMessageIn, session: SessionDep, user: CurrentUser,
+) -> MessageOut:
+    """Edit one's own text message (12 Nov)."""
+    m = await MessagingService(session).edit_message(user, conversation_id, message_id, body.body)
+    return MessageOut.of(m, is_mine=True, reader_id=user.user_id)
+
+
+@router.delete("/{conversation_id}/messages/{message_id}", response_model=MessageOut)
+async def delete_message(
+    conversation_id: str, message_id: str, session: SessionDep, user: CurrentUser,
+) -> MessageOut:
+    """Delete one's own text message: its text is erased (12 Nov)."""
+    m = await MessagingService(session).delete_message(user, conversation_id, message_id)
+    return MessageOut.of(m, is_mine=True, reader_id=user.user_id)

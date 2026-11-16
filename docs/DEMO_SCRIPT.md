@@ -75,9 +75,11 @@ want on stage.
   leg, so one space carries two paying passengers on non-overlapping legs —
   `seat 3` on yesterday's 06:00 Tagum trip did exactly that (Ecoland→Panabo,
   then Panabo→Tagum).
-- *What if two people book the last space at once?* 50 concurrent requests,
-  0 double-bookings; the comparison run with the cap outside the lock let
-  14 through a limit of 10. `python tests/integration/test_concurrency.py`.
+- *What if two people book the last seat at once?* 50 concurrent requests,
+  no overbooking: no seat reserved twice. The reservation lock (while one
+  reservation is being saved, no other can take that seat) is why; the
+  comparison run with the cap outside the lock let 14 through a limit of
+  10. `python tests/integration/test_concurrency.py`.
 - *Why Manila time in the database?* Single-timezone cooperative. Every
   timestamp is written through `app.core.timezone`; treating them as UTC
   shifted check-in windows eight hours in an early build.

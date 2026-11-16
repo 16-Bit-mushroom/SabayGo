@@ -12,7 +12,9 @@ import '../tokens.dart';
 /// sidebar entry does, so staff know they landed where they clicked.
 ///
 /// [description] is written for someone new to the office: what they can
-/// do here, in their words, not the system's.
+/// do here, in their words, not the system's. Since 12 Nov it sits behind
+/// the (i) beside the title, shown on hover or tap, so a page opens on its
+/// work rather than on a paragraph (the owner: "bulky subtext").
 class PageHeader extends StatelessWidget {
   const PageHeader({
     super.key,
@@ -37,22 +39,25 @@ class PageHeader extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(bottom: compact ? AppSpacing.lg : AppSpacing.xl),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
                 // The office's words only: system and table names belong to
                 // the code and the manuscript, not the page (UI redesign v3).
                 // A heading to a screen reader, so a page can be found by
                 // its title.
-                Semantics(
-                  header: true,
-                  child: Text(title, style: compact ? text.titleLarge : text.headlineMedium),
+                Flexible(
+                  child: Semantics(
+                    header: true,
+                    child: Text(title,
+                        overflow: TextOverflow.ellipsis,
+                        style: compact ? text.titleLarge : text.headlineMedium),
+                  ),
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(description, style: text.bodyMedium!.copyWith(color: AppColors.textMuted)),
+                const SizedBox(width: AppSpacing.sm),
+                InfoTip(description, size: compact ? 18 : 20),
               ],
             ),
           ),
@@ -87,4 +92,53 @@ class RefreshButton extends StatelessWidget {
             : const Icon(Icons.refresh, size: 18),
         label: const Text('Refresh'),
       );
+}
+
+/// The (i) that holds a page's or a box's explanation: hover it, focus it
+/// with Tab, or tap it on a touch screen. It darkens and fills on hover so
+/// it reads as something to point at.
+class InfoTip extends StatefulWidget {
+  const InfoTip(this.message, {super.key, this.size = 18});
+
+  final String message;
+  final double size;
+
+  @override
+  State<InfoTip> createState() => _InfoTipState();
+}
+
+class _InfoTipState extends State<InfoTip> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.message.trim().isEmpty) return const SizedBox.shrink();
+    return Tooltip(
+      message: widget.message,
+      triggerMode: TooltipTriggerMode.tap,
+      waitDuration: const Duration(milliseconds: 150),
+      showDuration: const Duration(seconds: 12),
+      preferBelow: true,
+      constraints: const BoxConstraints(maxWidth: 380),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      textStyle: const TextStyle(color: AppColors.onFill, fontSize: 13.5, height: 1.45),
+      child: Focus(
+        child: MouseRegion(
+          cursor: SystemMouseCursors.help,
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _hover ? AppColors.primaryContainer : Colors.transparent,
+            ),
+            child: Icon(Icons.info_outline,
+                size: widget.size, color: _hover ? AppColors.primary : AppColors.textMuted),
+          ),
+        ),
+      ),
+    );
+  }
 }

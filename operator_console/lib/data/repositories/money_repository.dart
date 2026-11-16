@@ -14,7 +14,7 @@ class Statement {
     required this.ratePct,
     required this.vanId,
     required this.bookedIncome,
-    required this.walkUpIncome,
+    required this.walkInIncome,
     required this.remittanceOwed,
     required this.dcottTicketFee,
     required this.dcottFees,
@@ -28,6 +28,11 @@ class Statement {
     required this.operatorShareGiven,
     required this.operatorShareGivenAt,
     required this.operatorShareRecordedByName,
+    required this.operatorShareReturned,
+    required this.operatorShareReturnedAt,
+    required this.operatorShareReturnedByName,
+    required this.operatorShareHeld,
+    required this.operatorShareOver,
     required this.operatorShareDifference,
     required this.operatorShareDiffers,
     required this.status,
@@ -43,9 +48,9 @@ class Statement {
   final String operatorName;
   final String vanId;
   final double ratePct;
-  /// Reserved in the app (B) and listed as walk-ups (W); all of it cash.
+  /// Reserved in the app (B) and listed as walk-ins (W); all of it cash.
   final double bookedIncome;
-  final double walkUpIncome;
+  final double walkInIncome;
   /// A2Z's 15 % of the income.
   final double remittanceOwed;
   /// The ticket price, and the ticket times the van's trips.
@@ -67,6 +72,23 @@ class Statement {
   final double operatorShareGiven;
   final DateTime? operatorShareGivenAt;
   final String? operatorShareRecordedByName;
+  /// What the operator handed back (038), kept beside what was given.
+  final double operatorShareReturned;
+  final DateTime? operatorShareReturnedAt;
+  final String? operatorShareReturnedByName;
+  /// What the operator holds: given less returned. "Still to give" is
+  /// owed - held.
+  final double operatorShareHeld;
+  /// The part of [operatorShareHeld] above the share owed, for example
+  /// after a dispute was upheld: cash to come back from the operator.
+  final double operatorShareOver;
+
+  /// Still to give the operator; 0 when nothing is.
+  double get operatorShareLeft {
+    final left = operatorShareOwed - operatorShareHeld;
+    return left > 0.004 ? left : 0;
+  }
+
   /// Null until every trip's list is locked.
   final double? operatorShareDifference;
   final bool operatorShareDiffers;
@@ -84,7 +106,7 @@ class Statement {
         vanId: j['van_id'] as String,
         ratePct: _money(j['rate_pct']),
         bookedIncome: _money(j['booked_income']),
-        walkUpIncome: _money(j['walk_up_income']),
+        walkInIncome: _money(j['walk_in_income']),
         remittanceOwed: _money(j['remittance_owed']),
         dcottTicketFee: _money(j['dcott_ticket_fee']),
         dcottFees: _money(j['dcott_fees']),
@@ -98,6 +120,12 @@ class Statement {
         operatorShareGiven: _money(j['operator_share_given']),
         operatorShareGivenAt: _time(j['operator_share_given_at']),
         operatorShareRecordedByName: j['operator_share_recorded_by_name'] as String?,
+        operatorShareReturned: _money(j['operator_share_returned']),
+        operatorShareReturnedAt: _time(j['operator_share_returned_at']),
+        operatorShareReturnedByName: j['operator_share_returned_by_name'] as String?,
+        // An older backend sends neither: held is then what was given.
+        operatorShareHeld: _money(j['operator_share_held'] ?? j['operator_share_given']),
+        operatorShareOver: _money(j['operator_share_over']),
         operatorShareDifference:
             j['operator_share_difference'] == null ? null : _money(j['operator_share_difference']),
         operatorShareDiffers: j['operator_share_differs'] as bool? ?? false,
@@ -129,7 +157,7 @@ class StatementLine {
   final String tripId;
   final DateTime tripDeparture;
   final String destination;
-  final String incomeGroup; // booked | walk_up
+  final String incomeGroup; // booked | walk_in
   final double fare;
   final int count;
   final double gross;
@@ -214,11 +242,35 @@ class Dispute {
       );
 }
 
+/// One day, or one month, of what the statements recorded
+/// (`GET /statements/history`): recorded sums, never estimates.
+class FeePeriod {
+  const FeePeriod({required this.period, required this.fares, required this.terminalFees, required this.paid});
+  final DateTime period;
+  final double fares;
+  final double terminalFees;
+  final double paid;
+
+  factory FeePeriod.fromJson(Map<String, dynamic> j) => FeePeriod(
+        period: DateTime.parse(j['period'] as String),
+        fares: double.parse(j['fares'].toString()),
+        terminalFees: double.parse(j['terminal_fees'].toString()),
+        paid: double.parse(j['paid'].toString()),
+      );
+}
+
 /// Statements, payments and disputes: the Cashier records, the Terminal
 /// Manager decides (brief 3, separation of duties).
 class MoneyRepository {
   MoneyRepository(this._api);
   final ApiClient _api;
+
+  /// The last [days] days up to today, by day or by month.
+  Future<List<FeePeriod>> history({required int days, bool byMonth = false}) async => [
+        for (final p in await _api.get('/statements/history',
+            query: {'days': '$days', 'by': byMonth ? 'month' : 'day'}) as List)
+          FeePeriod.fromJson(p as Map<String, dynamic>)
+      ];
 
   Future<List<Statement>> statements(String day) async => [
         for (final s in await _api.get('/statements', query: {'date': day}) as List)
@@ -239,6 +291,11 @@ class MoneyRepository {
   /// A difference in the operator's share, handed over after the payment.
   Future<void> recordOperatorShare(String remittanceId, String amount) =>
       _api.post('/statements/$remittanceId/operator-share', body: {'amount': amount});
+
+  /// The operator handed back a share held over what is owed (038); never
+  /// more than [Statement.operatorShareOver].
+  Future<void> recordShareReturned(String remittanceId, String amount) =>
+      _api.post('/statements/$remittanceId/operator-share-returned', body: {'amount': amount});
 
   /// The day's parking for a van at the terminal with no trip. 409 when
   /// the van already has a statement today.
@@ -264,6 +321,18 @@ class MoneyRepository {
   Future<void> withdraw(String disputeId, String? note) => _api.post(
       '/disputes/$disputeId/withdraw', body: {if (note != null && note.isNotEmpty) 'note': note});
 
+  /// What a decision would change on the van's statement, before it is
+  /// made. Nothing is written.
+  Future<DecisionPreview> preview(String disputeId, {required String outcome, String? adjustedAmount}) async {
+    final j = await _api.post('/disputes/$disputeId/preview', body: {
+      'outcome': outcome,
+      if (adjustedAmount != null) 'adjusted_amount': adjustedAmount,
+    }) as Map<String, dynamic>;
+    return DecisionPreview(
+        StatementFigures.fromJson(j['before'] as Map<String, dynamic>),
+        StatementFigures.fromJson(j['after'] as Map<String, dynamic>));
+  }
+
   Future<void> decide(String disputeId,
           {required String outcome, required String note, String? adjustedAmount}) =>
       _api.post('/disputes/$disputeId/decide', body: {
@@ -271,4 +340,42 @@ class MoneyRepository {
         'note': note,
         if (adjustedAmount != null) 'adjusted_amount': adjustedAmount,
       });
+}
+
+/// A van statement's figures, as a dispute preview reports them.
+class StatementFigures {
+  const StatementFigures({
+    required this.fares,
+    required this.terminalFeesOwed,
+    required this.amountDue,
+    required this.disputed,
+    required this.operatorShareOwed,
+    required this.operatorShareHeld,
+    required this.operatorShareOver,
+  });
+
+  final double fares;
+  final double terminalFeesOwed;
+  final double amountDue;
+  final double disputed;
+  final double operatorShareOwed;
+  final double operatorShareHeld;
+  final double operatorShareOver;
+
+  factory StatementFigures.fromJson(Map<String, dynamic> j) => StatementFigures(
+        fares: _money(j['fares']),
+        terminalFeesOwed: _money(j['terminal_fees_owed']),
+        amountDue: _money(j['amount_due']),
+        disputed: _money(j['disputed']),
+        operatorShareOwed: _money(j['operator_share_owed']),
+        operatorShareHeld: _money(j['operator_share_held']),
+        operatorShareOver: _money(j['operator_share_over']),
+      );
+}
+
+/// The statement now, and after the decision.
+class DecisionPreview {
+  const DecisionPreview(this.before, this.after);
+  final StatementFigures before;
+  final StatementFigures after;
 }

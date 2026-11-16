@@ -11,6 +11,18 @@ Each van is in one state, first match wins:
   on_site         a trip of today, scheduled or boarding, is assigned to it
                   (the earliest is shown);
   not_on_trip     neither.
+A trip under way (boarding or departed) also carries what watches it, so
+the office sees it live (10 Nov, the Overview's live van monitor):
+  camera          the door phone checked out with the van: 'live' (it
+                  reported within `heartbeat_gap_seconds`, camera working,
+                  lens clear), 'lens_blocked', 'silent' (no report within
+                  the gap, or never), or 'no_phone' -- the same tests the
+                  Unaudited rule uses (`edge/evidence.py`);
+  aboard          the door count against `seat_capacity`; none without a
+                  phone, and zero only when a live camera has seen nobody
+                  board -- never an invented count;
+  open_flags      the trip's driving flags still open for review (en-route
+                  stops are recorded, not flagged, so they are left out).
 Every van also carries what it still owes of the terminal fees on its
 open statements (the amount that blocks its next assignment), so the Cashier
 sees which vans are out and which still owe for their last trip.
@@ -22,7 +34,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from datetime import timedelta
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.edge.capacity import aboard_after
@@ -33,9 +47,21 @@ from app.application.tracking.nahgm import TrackingService
 from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError
 from app.domain.enums import TripStatus
-from app.infrastructure.models import Operator, PassengerEvent, Trip, User, Van
+from app.infrastructure.models import (
+    DeviceCheckout,
+    DeviceHeartbeat,
+    DrivingEvent,
+    EdgeDevice,
+    Operator,
+    PassengerEvent,
+    Trip,
+    User,
+    Van,
+)
+from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 ON_SITE = (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value)
+UNDER_WAY = (TripStatus.BOARDING.value, TripStatus.DEPARTED.value)
 
 
 @dataclass
@@ -59,6 +85,10 @@ class VanState:
     position_at: datetime | None = None
     position_stale: bool | None = None
     nearest_stop_name: str | None = None
+    seat_capacity: int = 14
+    camera: str | None = None
+    camera_seen_at: datetime | None = None
+    open_flags: int | None = None
 
 
 class VanBoard:
@@ -90,6 +120,7 @@ class VanBoard:
         board = []
         for van, operator in vans:
             row = VanState(
+                seat_capacity=van.seat_capacity,
                 van_id=van.van_id, plate_number=van.plate_number,
                 operator_name=operator.full_name, operator_licence=operator.license_number,
                 operational_status=van.operational_status, state="not_on_trip",
@@ -108,16 +139,48 @@ class VanBoard:
                 row.route_name = trip.route.route_name if trip.route else "Van rental"
                 row.trip_status, row.departure_datetime = trip.status, trip.departure_datetime
                 row.dispatcher_name = names.get(trip.dispatcher_id)
+                if trip.status in UNDER_WAY:
+                    await self._watch(row, trip)
             board.append(row)
         return board
 
-    async def _travelling(self, row: VanState, trip: Trip) -> None:
+    async def _watch(self, row: VanState, trip: Trip) -> None:
+        """The door camera, the count it keeps and the open driving flags of
+        a trip under way."""
+        checkout = await self.session.scalar(
+            select(DeviceCheckout).where(DeviceCheckout.van_id == row.van_id,
+                                         DeviceCheckout.returned_at.is_(None)))
+        if checkout is None:
+            row.camera = "no_phone"
+        else:
+            device = await self.session.get(EdgeDevice, checkout.device_id)
+            last = await self.session.scalar(
+                select(DeviceHeartbeat).where(DeviceHeartbeat.device_id == checkout.device_id)
+                .order_by(DeviceHeartbeat.recorded_at.desc()).limit(1))
+            row.camera_seen_at = device.last_heartbeat_at if device else None
+            gap = timedelta(seconds=await PolicyRepository(self.session).get_int("heartbeat_gap_seconds"))
+            now = app_tz.now().replace(tzinfo=None)
+            if row.camera_seen_at is None or now - row.camera_seen_at > gap:
+                row.camera = "silent"
+            elif last is not None and (last.lens_blocked or not last.camera_ok):
+                row.camera = "lens_blocked"
+            else:
+                row.camera = "live"
         events = list((await self.session.execute(
             select(PassengerEvent).where(PassengerEvent.trip_id == trip.trip_id)
             .order_by(PassengerEvent.event_at)
         )).scalars().all())
         if events:
             row.aboard = aboard_after(events, crew=1 if trip.crew_aboard else 0)[-1][1]
+        elif row.camera == "live":
+            # A camera watching the door that has seen nobody board: a real 0.
+            row.aboard = 0
+        row.open_flags = await self.session.scalar(
+            select(func.count()).select_from(DrivingEvent)
+            .where(DrivingEvent.trip_id == trip.trip_id, DrivingEvent.review_status == "open",
+                   DrivingEvent.flag_type != "en_route_stop"))
+
+    async def _travelling(self, row: VanState, trip: Trip) -> None:
         try:
             pos = await TrackingService(self.session).current_position(trip_id=trip.trip_id)
         except NotFoundError:

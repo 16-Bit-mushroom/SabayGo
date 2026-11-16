@@ -53,6 +53,10 @@ class ReservationViewModel extends ChangeNotifier {
   String bookingCode = '';
   double fare = 0;
   String status = 'confirmed';
+
+  /// The trip's state, so a seat aboard a van that has arrived reads as
+  /// finished (12 Nov).
+  String tripStatus = 'scheduled';
   String paymentStatus = 'unpaid';
   DateTime? paidAt;
   bool canCancel = false;
@@ -76,9 +80,16 @@ class ReservationViewModel extends ChangeNotifier {
   bool get isCheckedIn => status == 'checked_in';
   bool get isBoarded => status == 'boarded';
   bool get isCancelled => status == 'cancelled';
-  bool get isActive => isConfirmed || isCheckedIn || isBoarded;
+  bool get isActive =>
+      isConfirmed || isCheckedIn || (isBoarded && tripStatus != 'completed' && tripStatus != 'cancelled');
   bool get wasReleased => cancelReason == 'auto_release';
-  bool get canCheckIn => hasLiveBooking && isConfirmed;
+  /// "I'm here to pay" (12 Nov): offered while the seat is unpaid; paying
+  /// at the terminal is itself the check-in, so a paid seat needs nothing.
+  bool get canCheckIn => hasLiveBooking && isConfirmed && !isPaid;
+
+  /// Pressed "I'm here to pay" and waiting for the Dispatcher to take the
+  /// cash.
+  bool get isWaitingToPay => hasLiveBooking && isCheckedIn && !isPaid;
   bool get canUndoCheckIn => hasLiveBooking && isCheckedIn;
 
   void _apply(BookingSummary b) {
@@ -86,6 +97,7 @@ class ReservationViewModel extends ChangeNotifier {
     bookingCode = b.bookingCode;
     fare = b.fare;
     status = b.status;
+    tripStatus = b.tripStatus;
     paymentStatus = b.paymentStatus;
     paidAt = b.paidAt;
     canCancel = b.canCancel;
@@ -158,9 +170,9 @@ class ReservationViewModel extends ChangeNotifier {
     } on ApiException catch (e) {
       error = e.message;
     } on LocationServiceDisabledException {
-      error = 'Turn on location services to check in.';
+      error = 'Turn on location services so the Dispatcher can be told you are here.';
     } on PermissionDeniedException {
-      error = 'SabayGo needs location permission to check you in at the terminal.';
+      error = 'SabayGo needs location permission to tell the Dispatcher you are here.';
     } finally {
       isCheckingIn = false;
       notifyListeners();

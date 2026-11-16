@@ -52,7 +52,16 @@ class ChatMessage {
     required this.isMine,
     required this.readAt,
     required this.createdAt,
+    this.canChange = false,
+    this.edited = false,
+    this.deleted = false,
   });
+
+  /// One's own text message, not deleted: long-press offers Edit / Delete
+  /// (migration 040). A deleted one shows "Message deleted".
+  final bool canChange;
+  final bool edited;
+  final bool deleted;
 
   final String id;
   final String conversationId;
@@ -72,6 +81,9 @@ class ChatMessage {
         isMine: json['is_mine'] as bool,
         readAt: json['read_at'] != null ? DateTime.parse(json['read_at'] as String) : null,
         createdAt: DateTime.parse(json['created_at'] as String),
+        canChange: json['can_change'] as bool? ?? false,
+        edited: json['edited_at'] != null,
+        deleted: json['deleted_at'] != null,
       );
 }
 

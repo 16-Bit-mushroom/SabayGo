@@ -159,7 +159,7 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
                                       _loadTrip();
                                     },
                                     title: Text(_when.format(r.pickupAt)),
-                                    subtitle: Text('${r.customerName ?? 'App passenger'} · ${r.passengerCount} pax\n'
+                                    subtitle: Text('${r.customerName ?? 'App passenger'} · ${r.passengerCount} ${r.passengerCount == 1 ? 'passenger' : 'passengers'}\n'
                                         '${r.pickupAddress} → ${r.destinationAddress}'),
                                     isThreeLine: true,
                                     trailing: _badge(r),
@@ -172,11 +172,9 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
                             child: selected == null
                                 ? const SizedBox.shrink()
                                 : ListView(children: [
-                                    _RequestPanel(request: selected, onChanged: _load),
-                                    if (_trip case final trip?) ...[
-                                      const SizedBox(height: AppSpacing.lg),
-                                      TripLifecyclePanel(trip: trip, onChanged: _load),
-                                    ],
+                                    // One card (12 Nov): the request, then its trip's start
+                                    // and departure under a divider, not two cards.
+                                    _RequestPanel(request: selected, trip: _trip, onChanged: _load),
                                   ]),
                           ),
                         ]),
@@ -197,9 +195,12 @@ class _SpecialTripsScreenState extends State<SpecialTripsScreen> {
 }
 
 class _RequestPanel extends StatelessWidget {
-  const _RequestPanel({required this.request, required this.onChanged});
+  const _RequestPanel({required this.request, required this.onChanged, this.trip});
   final RentalRequest request;
   final VoidCallback onChanged;
+
+  /// The trip the agreed request became, shown inside this card.
+  final TripBoardEntry? trip;
 
   static final _when = DateFormat('EEEE d MMMM yyyy, h:mm a');
 
@@ -215,13 +216,20 @@ class _RequestPanel extends StatelessWidget {
             ? 'Requested in the app'
             : 'Walk-in: ${r.customerName ?? '—'}, ${r.customerContact ?? '—'}'),
         FactLine(Icons.place_outlined, '${r.pickupAddress} → ${r.destinationAddress}'),
-        FactLine(Icons.groups_outlined, '${r.passengerCount} passengers (a van has 14 spaces)'),
+        FactLine(Icons.groups_outlined,
+            '${r.passengerCount} ${r.passengerCount == 1 ? 'passenger' : 'passengers'} (a van has 14 seats)'),
         if (r.fee != null)
           FactLine(Icons.payments_outlined, 'Fee ${peso.format(r.fee)}${r.feeNote != null ? ': ${r.feeNote}' : ''}'
               ' · ${r.paymentStatus == 'paid' ? 'paid' : 'not paid yet: Start waits for it'}'),
         if (r.status == 'approved' && r.tripId != null)
           const FactLine(Icons.info_outline, 'Assign a van and a Dispatcher below. The operator may decline '
               'one that is too far; assign another van then.'),
+        if (trip case final t?) ...[
+          const SizedBox(height: AppSpacing.md),
+          const Divider(),
+          const SizedBox(height: AppSpacing.md),
+          TripLifecyclePanel(trip: t, onChanged: onChanged, bare: true),
+        ],
         if (r.status == 'requested') ...[
           const SizedBox(height: AppSpacing.sm),
           Wrap(spacing: AppSpacing.sm, children: [
@@ -441,9 +449,9 @@ class _WalkInDialogState extends State<_WalkInDialog> {
                 decoration: const InputDecoration(labelText: 'Destination')),
             Row(children: [
               const Expanded(child: Text('Passengers (at most 14)')),
-              IconButton(onPressed: _count > 1 ? () => setState(() => _count--) : null, icon: const Icon(Icons.remove)),
+              IconButton(tooltip: 'One passenger fewer', onPressed: _count > 1 ? () => setState(() => _count--) : null, icon: const Icon(Icons.remove)),
               Text('$_count'),
-              IconButton(onPressed: _count < 14 ? () => setState(() => _count++) : null, icon: const Icon(Icons.add)),
+              IconButton(tooltip: 'One passenger more', onPressed: _count < 14 ? () => setState(() => _count++) : null, icon: const Icon(Icons.add)),
             ]),
             const SizedBox(height: AppSpacing.sm),
             _FeeFields(fee: _fee, note: _note, onChanged: changed),

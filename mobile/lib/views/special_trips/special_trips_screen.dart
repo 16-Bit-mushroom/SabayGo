@@ -255,11 +255,13 @@ class _RequestFormState extends State<_RequestForm> {
             Row(children: [
               const Expanded(child: Text('Passengers (at most 14)')),
               IconButton(
+                tooltip: 'One passenger fewer',
                 onPressed: _count > 1 ? () => setState(() => _count--) : null,
                 icon: const Icon(Icons.remove_circle_outline),
               ),
               Text('$_count', style: text.titleMedium),
               IconButton(
+                tooltip: 'One passenger more',
                 onPressed: _count < 14 ? () => setState(() => _count++) : null,
                 icon: const Icon(Icons.add_circle_outline),
               ),

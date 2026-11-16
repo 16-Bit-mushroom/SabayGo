@@ -60,7 +60,7 @@ class ChecklistActivity : ComponentActivity() {
             "Open", ::appSettings)
         row(null, "Realme: not frozen, not in power-saving or sleep standby optimisation", "Open", ::appSettings)
         row(Config(this).ready && Live.sessionError == null && s != null,
-            "Server reached and this phone's token accepted", null, null)
+            "Server reached and this phone's set-up code accepted", null, null)
         row(s?.vanId != null, "Checked out to a van" + (s?.plate?.let { " ($it)" } ?: ""), null, null)
         row(s?.layout != null, "Door line drawn for this van", null, null)
         row(Live.running && now - Live.lastFrameAt < 5_000, "Camera reporting", null, null)

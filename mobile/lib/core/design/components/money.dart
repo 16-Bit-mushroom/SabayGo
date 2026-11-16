@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// A peso amount.
 ///
 /// Exists for one reason: figures that change must not make the layout
-/// jump. Roboto's default figures are proportional, so "₱1,180" is
+/// jump. Inter's default figures are proportional, so "₱1,180" is
 /// narrower than "₱1,880" and a fare that updates after a reschedule
 /// visibly shifts the column it sits in. Tabular figures are the same
 /// width, and a right-aligned money column stays a column.

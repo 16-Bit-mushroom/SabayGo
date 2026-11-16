@@ -3,20 +3,31 @@ import 'package:flutter/material.dart';
 import '../../core/design/components/components.dart';
 import '../../core/design/tokens.dart';
 
-/// One Setup step: its heading, then the step's records beside the panel
-/// that adds or shows one. Records are entered here, not in a dialog, so a
-/// first-day set-up never leaves the page.
+/// One Setup step (11 Nov redesign): its heading with the one primary
+/// action, **Add**, and the step's records as a table across the page.
 ///
-/// Wide enough, the list and the side panel sit side by side; narrower,
-/// the side panel comes first and the list follows at a fixed height.
-class StepFrame extends StatelessWidget {
+/// The side panel is shown only when it has something to do -- the record
+/// clicked ([detail]) or the add form after Add ([addForm]) -- and closes
+/// with its ✕, giving the table its width back (progressive disclosure:
+/// a form left open beside every list was the page's clutter). A step
+/// with no records yet opens the form at once ([openWhenEmpty]): there is
+/// nothing else to do there.
+///
+/// Wide enough, the table and the panel sit side by side; narrower, the
+/// panel comes first and the table follows at a fixed height.
+class StepFrame extends StatefulWidget {
   const StepFrame({
     super.key,
     required this.title,
     required this.description,
     this.actions = const [],
     required this.list,
-    this.side,
+    this.detail,
+    this.addForm,
+    this.addLabel,
+    this.onAdd,
+    this.openWhenEmpty = false,
+    this.addOnOpen = false,
   });
 
   final String title;
@@ -24,43 +35,111 @@ class StepFrame extends StatelessWidget {
   final List<Widget> actions;
   final Widget list;
 
-  /// The add form, or the selected record. Null: the list alone.
-  final Widget? side;
+  /// The record open in the panel (or a notice about the step); it wins
+  /// over the add form.
+  final Widget? detail;
 
-  static const double sideWidth = 400;
+  /// The add form's panel; null when this person may not add.
+  final Widget? addForm;
+
+  /// The header button that opens [addForm] ("Add terminal").
+  final String? addLabel;
+
+  /// Called when Add is pressed, so the step can drop its selection.
+  final VoidCallback? onAdd;
+
+  /// No records yet: the add form is open and has no ✕.
+  final bool openWhenEmpty;
+
+  /// Open with the add form showing, once (12 Nov): another page sent the
+  /// person here to make one -- the Timetable's "Add a new route".
+  final bool addOnOpen;
+
+  static const double sideWidth = 420;
+
+  @override
+  State<StepFrame> createState() => _StepFrameState();
+}
+
+class _StepFrameState extends State<StepFrame> {
+  late bool _adding = widget.addOnOpen;
+
+  @override
+  void didUpdateWidget(StepFrame old) {
+    super.didUpdateWidget(old);
+    // A record opened while adding: the record wins, and closing it
+    // returns to the table rather than to a form nobody asked for again.
+    if (widget.detail != null) _adding = false;
+  }
+
+  void _openAdd() {
+    widget.onAdd?.call();
+    setState(() => _adding = true);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final w = widget;
+    final showingAdd = w.detail == null && w.addForm != null && (_adding || w.openWhenEmpty);
+    final side = w.detail ?? (showingAdd ? w.addForm : null);
+    final scoped = side == null
+        ? null
+        : _StepFrameScope(
+            // The add form closes with the panel's ✕ unless it is the only
+            // thing the step can show.
+            closeAdd: showingAdd && !w.openWhenEmpty ? () => setState(() => _adding = false) : null,
+            child: side,
+          );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PageHeader(title: title, description: description, actions: actions, compact: true),
+        PageHeader(
+          title: w.title,
+          description: w.description,
+          compact: true,
+          actions: [
+            ...w.actions,
+            if (w.addForm != null && w.addLabel != null && !showingAdd)
+              FilledButton.icon(onPressed: _openAdd, icon: const Icon(Icons.add, size: 18), label: Text(w.addLabel!)),
+          ],
+        ),
         Expanded(
           child: LayoutBuilder(builder: (context, c) {
-            final side = this.side;
-            if (side == null) return list;
-            if (c.maxWidth >= 660) {
+            if (scoped == null) return w.list;
+            if (c.maxWidth >= 900) {
               return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: list),
+                Expanded(child: w.list),
                 const SizedBox(width: AppSpacing.lg),
                 SizedBox(
-                  width: c.maxWidth >= 820 ? sideWidth : 360,
+                  width: c.maxWidth >= 1100 ? StepFrame.sideWidth : 360,
                   // A visible thumb whenever the form runs past the bottom,
                   // so its Save buttons are never just out of sight.
-                  child: ScrollWithThumb(child: side),
+                  child: ScrollWithThumb(child: scoped),
                 ),
               ]);
             }
             return ListView(children: [
-              side,
+              scoped,
               const SizedBox(height: AppSpacing.lg),
-              SizedBox(height: 440, child: list),
+              SizedBox(height: 440, child: w.list),
             ]);
           }),
         ),
       ],
     );
   }
+}
+
+/// Lets the add form's [SidePanel] close itself through its ✕.
+class _StepFrameScope extends InheritedWidget {
+  const _StepFrameScope({required this.closeAdd, required super.child});
+  final VoidCallback? closeAdd;
+
+  static VoidCallback? closeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_StepFrameScope>()?.closeAdd;
+
+  @override
+  bool updateShouldNotify(_StepFrameScope old) => old.closeAdd != closeAdd;
 }
 
 /// A column that scrolls with its thumb always shown once it overflows, so
@@ -94,33 +173,46 @@ class _ScrollWithThumbState extends State<ScrollWithThumb> {
       );
 }
 
-/// The step's records in a panel with a count, the add button and rows
-/// that scroll inside it.
+/// A table column in a [RecordList]: its head, its share of the width,
+/// and whether its figures sit at the right.
+class RecordColumn {
+  const RecordColumn(this.label, {this.flex = 2, this.end = false});
+  final String label;
+  final int flex;
+  final bool end;
+}
+
+/// The step's records as a table (11 Nov): a title with the count, column
+/// heads in the sheets' style when [columns] are given, and rows that
+/// scroll inside it. The step's Add is in its header, not here.
 class RecordList extends StatelessWidget {
   const RecordList({
     super.key,
     required this.title,
     required this.rows,
     required this.empty,
-    this.addLabel,
-    this.onAdd,
     this.header,
+    this.columns,
+    this.leadingWidth = 0,
   });
 
   final String title;
   final List<Widget> rows;
   final Widget empty;
 
-  /// Null hides the button: the Cashier reads records they may not add.
-  final String? addLabel;
-  final VoidCallback? onAdd;
-
   /// A control under the heading, such as Vans / Operators.
   final Widget? header;
+
+  /// The table's columns; the rows' [RecordRow.cells] follow them.
+  final List<RecordColumn>? columns;
+
+  /// The width the rows' leading marks take, so the heads line up.
+  final double leadingWidth;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final head = text.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.2);
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceRaised,
@@ -130,32 +222,49 @@ class RecordList extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.sm, AppSpacing.md),
-          child: Row(children: [
-            Text(title, style: text.titleSmall),
-            const SizedBox(width: AppSpacing.sm),
-            Text('${rows.length}', style: text.bodySmall!.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()])),
-            const Spacer(),
-            if (onAdd != null && addLabel != null)
-              TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add, size: 18), label: Text(addLabel!)),
-          ]),
-        ),
-        if (header != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
-            child: header,
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.lg, AppSpacing.lg),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.sm,
+            children: [
+              Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic, children: [
+                Text(title, style: text.titleMedium),
+                const SizedBox(width: AppSpacing.sm),
+                Text('${rows.length}', style: text.bodySmall!.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+              ]),
+              ?header,
+            ],
           ),
-        const Divider(),
+        ),
+        if (columns != null && rows.isNotEmpty)
+          Container(
+            height: 40,
+            padding: EdgeInsets.only(left: AppSpacing.xl + leadingWidth, right: AppSpacing.md + RecordRow.chevronWidth),
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(top: BorderSide(color: AppColors.divider), bottom: BorderSide(color: AppColors.divider)),
+            ),
+            child: Row(children: [
+              for (final col in columns!)
+                Expanded(
+                  flex: col.flex,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.md),
+                    child: Text(col.label, style: head, textAlign: col.end ? TextAlign.right : TextAlign.left),
+                  ),
+                ),
+            ]),
+          )
+        else
+          const Divider(),
         Expanded(
           child: rows.isEmpty
               ? Center(child: SingleChildScrollView(child: empty))
               : Scrollbar(
-                  child: ListView.separated(
-                    itemCount: rows.length,
-                    separatorBuilder: (_, _) => const Divider(),
-                    itemBuilder: (_, i) => rows[i],
-                  ),
+                  child: ListView.builder(itemCount: rows.length, itemBuilder: (_, i) => rows[i]),
                 ),
         ),
       ]),
@@ -163,16 +272,19 @@ class RecordList extends StatelessWidget {
   }
 }
 
-/// One record in a [RecordList]: a leading mark, the name, a line under it
-/// and its badges. Selected, it takes the green tint and a bold name; the
-/// side panel shows it.
-class RecordRow extends StatelessWidget {
+/// One record in a [RecordList]. With [cells] and [columns] it is a table
+/// row; without, a name with a line under it and its badges. Selected, it
+/// takes the green tint and the panel shows it.
+class RecordRow extends StatefulWidget {
   const RecordRow({
     super.key,
     required this.title,
     this.subtitle,
     this.leading,
+    this.leadingWidth = 0,
     this.badges = const [],
+    this.cells,
+    this.columns,
     this.selected = false,
     required this.onTap,
     required this.semanticLabel,
@@ -181,74 +293,177 @@ class RecordRow extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget? leading;
+
+  /// The leading mark's width, the same for every row of a table.
+  final double leadingWidth;
   final List<Widget> badges;
+  final List<Widget>? cells;
+  final List<RecordColumn>? columns;
   final bool selected;
   final VoidCallback onTap;
   final String semanticLabel;
 
+  /// The chevron's column at the end of every row, kept in the heads too
+  /// so the columns line up.
+  static const double chevronWidth = 28;
+
+  @override
+  State<RecordRow> createState() => _RecordRowState();
+}
+
+/// Under the pointer (11 Nov, "the hover is too bland"): the see-through
+/// emerald wash over the whole row, a 3 px emerald bar sliding in at its
+/// left edge, the chevron showing that the row opens, and the cursor a
+/// hand -- the whole row is the target, not its name (Fitts). Selected,
+/// the bar stays and the tint is the soft emerald.
+class _RecordRowState extends State<RecordRow> {
+  bool _hover = false;
+
   @override
   Widget build(BuildContext context) {
+    final w = widget;
     final text = Theme.of(context).textTheme;
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final speed = still ? Duration.zero : AppDuration.quick;
+    final lit = _hover || w.selected;
+    final cols = w.columns;
+    final Widget body;
+    if (w.cells != null && cols != null) {
+      body = Row(children: [
+        if (w.leading != null) SizedBox(width: w.leadingWidth, child: Align(alignment: Alignment.centerLeft, child: w.leading)),
+        for (var i = 0; i < w.cells!.length && i < cols.length; i++)
+          Expanded(
+            flex: cols[i].flex,
+            child: Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.md),
+              child: Align(alignment: cols[i].end ? Alignment.centerRight : Alignment.centerLeft, child: w.cells![i]),
+            ),
+          ),
+      ]);
+    } else {
+      body = Row(children: [
+        if (w.leading != null) ...[w.leading!, const SizedBox(width: AppSpacing.md)],
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Two lines: what tells two long names apart is often at
+            // their end ("... Loading Bay 11").
+            AnimatedDefaultTextStyle(
+              duration: speed,
+              style: text.bodyMedium!.copyWith(
+                  fontWeight: w.selected ? FontWeight.w700 : FontWeight.w500,
+                  color: _hover ? AppColors.primary : AppColors.textPrimary),
+              child: Text(w.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+            if (w.subtitle != null) Text(w.subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodySmall),
+          ]),
+        ),
+        if (w.badges.isNotEmpty) ...[
+          const SizedBox(width: AppSpacing.sm),
+          Wrap(spacing: AppSpacing.xs, runSpacing: AppSpacing.xs, alignment: WrapAlignment.end, children: w.badges),
+        ],
+      ]);
+    }
     return Semantics(
       button: true,
-      selected: selected,
-      label: semanticLabel,
+      selected: w.selected,
+      label: w.semanticLabel,
       excludeSemantics: true,
-      onTap: onTap,
+      onTap: w.onTap,
       child: Material(
-        color: selected ? AppColors.primaryContainer : Colors.transparent,
+        color: w.selected ? AppColors.primaryContainer : Colors.transparent,
         child: FocusRing(
           radius: 0,
           child: InkWell(
-          onTap: onTap,
-          hoverColor: AppColors.surfaceSunken,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-            child: Row(children: [
-              if (leading != null) ...[leading!, const SizedBox(width: AppSpacing.md)],
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Two lines: what tells two long names apart is often at
-                  // their end ("... Loading Bay 11").
-                  Text(title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: text.bodyMedium!.copyWith(fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
-                  if (subtitle != null)
-                    Text(subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodySmall),
-                ]),
-              ),
-              if (badges.isNotEmpty) ...[
-                const SizedBox(width: AppSpacing.sm),
-                Wrap(spacing: AppSpacing.xs, runSpacing: AppSpacing.xs, alignment: WrapAlignment.end, children: badges),
-              ],
-            ]),
+            onTap: w.onTap,
+            onHover: (h) => setState(() => _hover = h),
+            hoverColor: w.selected ? AppColors.pressWash : AppColors.hoverWash,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 60),
+              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.surfaceSunken))),
+              child: Stack(children: [
+                // The accent bar slides in from the left edge.
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: AnimatedContainer(
+                    duration: speed,
+                    curve: Curves.easeOut,
+                    width: lit ? 3 : 0,
+                    color: AppColors.action,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.md, AppSpacing.md, AppSpacing.md),
+                  child: Row(children: [
+                    Expanded(child: body),
+                    SizedBox(
+                      width: RecordRow.chevronWidth,
+                      child: AnimatedOpacity(
+                        duration: speed,
+                        opacity: lit ? 1 : 0,
+                        child: AnimatedSlide(
+                          duration: speed,
+                          offset: Offset(_hover && !still ? 0.15 : 0, 0),
+                          child: const Icon(Icons.chevron_right, size: 20, color: AppColors.primary),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+              ]),
+            ),
           ),
-        ),
         ),
       ),
     );
   }
 }
 
-/// The side panel: a heading with an optional close, and its body.
+/// A plain table cell: one line, the strong one for a record's name.
+class CellText extends StatelessWidget {
+  const CellText(this.text, {super.key, this.strong = false, this.muted = false});
+  final String text;
+  final bool strong;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme.bodyMedium;
+    return Text(text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: t?.copyWith(
+            fontWeight: strong ? FontWeight.w600 : null,
+            color: muted ? AppColors.textMuted : null,
+            fontFeatures: const [FontFeature.tabularFigures()]));
+  }
+}
+
+/// The side panel: a heading with a ✕, and its body. A record's panel
+/// closes through [onClose]; the add form through its [StepFrame].
 class SidePanel extends StatelessWidget {
-  const SidePanel({super.key, required this.title, required this.child, this.onClose, this.closeLabel});
+  const SidePanel({super.key, required this.title, required this.child, this.onClose, this.closeLabel, this.info});
 
   final String title;
+
+  /// What the form is for, behind an (i) beside its title.
+  final String? info;
   final Widget child;
   final VoidCallback? onClose;
   final String? closeLabel;
 
   @override
   Widget build(BuildContext context) {
+    final close = onClose ?? _StepFrameScope.closeOf(context);
     return Panel(
       title: title,
-      trailing: onClose == null
+      info: info,
+      trailing: close == null
           ? null
           : IconButton(
               tooltip: closeLabel ?? 'Close',
-              onPressed: onClose,
+              onPressed: close,
               icon: Icon(Icons.close, size: 20, color: AppColors.textMuted),
             ),
       child: child,
@@ -271,14 +486,21 @@ class PlateTag extends StatelessWidget {
         border: Border.all(color: AppColors.textPrimary, width: 1.5),
         borderRadius: BorderRadius.circular(5),
       ),
-      child: Text(
-        plate.toUpperCase(),
-        style: TextStyle(
-          color: AppColors.textPrimary,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-          fontFeatures: const [FontFeature.tabularFigures()],
+      // A plate is one line, always: in a narrow column it shrinks a little
+      // rather than breaking "ABC-1234" into "ABC-123" over "4".
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          plate.toUpperCase(),
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
       ),
     );

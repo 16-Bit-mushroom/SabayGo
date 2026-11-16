@@ -3,7 +3,7 @@
 #   ./tests/integration/test_core_loop.sh
 set -euo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 STAMP=$(date +%s)
 EMAIL="test${STAMP}@sabaygo.dev"
 

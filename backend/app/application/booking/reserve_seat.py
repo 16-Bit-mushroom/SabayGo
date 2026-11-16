@@ -94,7 +94,7 @@ class ReserveSeatUseCase:
         # ---- lock released -------------------------------------------
 
         log.info(
-            "Reserved space on trip %s, stops %s..%s (booking %s, P%s)",
+            "Reserved seat on trip %s, stops %s..%s (booking %s, P%s)",
             cmd.trip_id, result.boarding_stop, result.alighting_stop,
             result.booking_id, result.fare_amount,
         )
@@ -175,7 +175,7 @@ class ReserveSeatUseCase:
                 fare_amount=fare,
                 status=booking.status.value,
                 payment_status=booking.payment_status.value,
-                # A walk-up hands over the cash as the Dispatcher lists
+                # A walk-in hands over the cash as the Dispatcher lists
                 # it; a reservation is unpaid until the terminal.
                 paid_at=now if is_cash else None,
                 paid_by=cmd.logged_by if is_cash else None,
@@ -248,5 +248,5 @@ class ReserveSeatUseCase:
         if int(result.scalar_one()) >= trip.advance_booking_seat_cap:
             raise PolicyViolationError(
                 f"Advance booking is limited to {trip.advance_booking_seat_cap} "
-                "spaces on this trip."
+                "seats on this trip."
             )

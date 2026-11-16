@@ -8,7 +8,7 @@
 # Every record it makes is new (stamped), so it can run repeatedly.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 PY="$(cd "$(dirname "$0")/../.." && pwd)/venv/bin/python"
 STAMP=$(date +%s)
 N4=${STAMP: -4}

@@ -178,7 +178,7 @@ That is correct behaviour, not a bug.
 ## Part 4. First-day setup, as the Terminal Manager
 
 Skip this whole part if you loaded the Day 1 data — it is already done.
-Press **Create upcoming trips** (Part 5, step 0) and go.
+Press **Trips → Post the timetable for 7 days** (was "Create upcoming trips" on the Timetable) (Part 5, step 0) and go.
 
 On an empty database:
 

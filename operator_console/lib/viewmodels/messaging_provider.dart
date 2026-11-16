@@ -117,6 +117,50 @@ class MessagingProvider extends ChangeNotifier {
     }
   }
 
+  void _replace(ConsoleMessage m) {
+    _messages = [for (final x in _messages) x.messageId == m.messageId ? m : x];
+  }
+
+  /// Edits one of this staff member's own messages. Null on success, else
+  /// the reason in the server's words.
+  Future<String?> edit(ConsoleMessage m, String body) async {
+    try {
+      _replace(await _repo.editMessage(m.conversationId, m.messageId, body.trim()));
+      notifyListeners();
+      refreshConversations();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> delete(ConsoleMessage m) async {
+    try {
+      _replace(await _repo.deleteMessage(m.conversationId, m.messageId));
+      notifyListeners();
+      refreshConversations();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<List<ConsoleContact>> contacts() => _repo.listContacts();
+
+  /// "New message": opens the thread with this person, making it if new.
+  Future<String?> startWith(String peerUserId) async {
+    try {
+      final id = await _repo.startConversation(peerUserId);
+      // Read the list now (not through the poll, which skips while one is
+      // running) so the new thread's header is there when it opens.
+      _conversations = await _repo.listConversations();
+      openConversation(id);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   @override
   void dispose() {
     _listTimer?.cancel();

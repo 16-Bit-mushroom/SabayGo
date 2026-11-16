@@ -14,9 +14,12 @@ import 'step_frame.dart';
 /// saved, because bookings and fares are numbered by them: a route that
 /// changes is taken out of service and entered again.
 class RoutesStep extends StatefulWidget {
-  const RoutesStep({super.key, required this.onChanged, required this.onOpenStep});
+  const RoutesStep({super.key, required this.onChanged, required this.onOpenStep, this.startAdding = false});
   final VoidCallback onChanged;
   final ValueChanged<SetupStep> onOpenStep;
+
+  /// Opened from the Timetable's "Add a new route": the form shows at once.
+  final bool startAdding;
 
   @override
   State<RoutesStep> createState() => _RoutesStepState();
@@ -93,12 +96,18 @@ class _RoutesStepState extends State<RoutesStep> {
   Widget build(BuildContext context) {
     final routes = _routes ?? const <RouteSummary>[];
     final selected = routes.where((r) => r.routeId == _selected).firstOrNull;
-    final Widget side;
+    const columns = [
+      RecordColumn('Code', flex: 2),
+      RecordColumn('Route', flex: 4),
+      RecordColumn('Stops in order', flex: 6),
+      RecordColumn('Status', flex: 2),
+    ];
+    Widget? detail;
+    final Widget addForm;
     if (selected != null) {
-      side = SidePanel(
+      detail = SidePanel(
         title: '${selected.routeCode} · ${selected.routeName}',
         onClose: () => setState(() => _selected = null),
-        closeLabel: 'Back to adding',
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           StopLine(stops: selected.stops),
           const SizedBox(height: AppSpacing.sm),
@@ -116,8 +125,9 @@ class _RoutesStepState extends State<RoutesStep> {
           RouteEditForm(key: ValueKey(selected.routeId), route: selected, onSave: (r) => _edit(selected, r)),
         ]),
       );
-    } else if (_routes != null && _terminals.length < 2) {
-      side = SidePanel(
+    }
+    if (_routes != null && _terminals.length < 2) {
+      addForm = SidePanel(
         title: 'Add route',
         child: BlockedNotice(
           message: 'A route needs two open terminals; there ${_terminals.length == 1 ? 'is 1' : 'are ${_terminals.length}'}.',
@@ -126,12 +136,13 @@ class _RoutesStepState extends State<RoutesStep> {
         ),
       );
     } else {
-      side = SidePanel(
+      addForm = SidePanel(
         title: 'Add route',
         child: RouteForm(key: ValueKey('new-$_blank'), terminals: _terminals, onSave: _add),
       );
     }
     return StepFrame(
+      addOnOpen: widget.startAdding,
       title: 'Route',
       description: 'Each LTFRB route with its stops in order. Passengers board only at the first stop, '
           'and the stops cannot change once the route is saved.',
@@ -142,8 +153,7 @@ class _RoutesStepState extends State<RoutesStep> {
               ? LoadError(message: _error!, onRetry: _load)
               : RecordList(
                   title: 'Routes',
-                  addLabel: 'Add route',
-                  onAdd: selected == null ? null : () => setState(() => _selected = null),
+                  columns: columns,
                   empty: const EmptyState(
                     icon: Icons.route,
                     title: 'No routes yet',
@@ -152,10 +162,12 @@ class _RoutesStepState extends State<RoutesStep> {
                   rows: [
                     for (final r in routes)
                       RecordRow(
-                        leading: Icon(Icons.route, color: AppColors.textMuted),
-                        title: '${r.routeCode} · ${r.routeName}',
-                        subtitle: r.stops.map((s) => s.name).join(' → '),
-                        badges: [
+                        title: r.routeName,
+                        columns: columns,
+                        cells: [
+                          CellText(r.routeCode, strong: true),
+                          CellText(r.routeName),
+                          CellText(r.stops.map((s) => s.name).join(' → '), muted: true),
                           r.isActive
                               ? const StatusBadge('In service', tone: Tone.success)
                               : const StatusBadge('Out of service'),
@@ -166,7 +178,11 @@ class _RoutesStepState extends State<RoutesStep> {
                       ),
                   ],
                 ),
-      side: side,
+      addLabel: 'Add route',
+      onAdd: () => setState(() => _selected = null),
+      openWhenEmpty: _routes != null && routes.isEmpty,
+      addForm: addForm,
+      detail: detail,
     );
   }
 }
@@ -275,9 +291,12 @@ class _RouteFormState extends State<RouteForm> {
       const SizedBox(height: AppSpacing.md),
       TextField(controller: _ltfrb, decoration: const InputDecoration(labelText: 'LTFRB case number (optional)')),
       const SizedBox(height: AppSpacing.lg),
-      Text('Stops, in order', style: text.titleSmall),
-      Text('Every passenger boards at stop 1. The stops cannot change once the route is saved.',
-          style: text.bodySmall),
+      Row(children: [
+        Text('Stops, in order', style: text.titleSmall),
+        const SizedBox(width: AppSpacing.xs),
+        const InfoTip('Every passenger boards at stop 1. The stops cannot change once the route is saved.',
+            size: 16),
+      ]),
       const SizedBox(height: AppSpacing.md),
       for (var i = 0; i < _stops.length; i++)
         Padding(
@@ -395,7 +414,7 @@ class _RouteEditFormState extends State<RouteEditForm> {
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('In service'),
-        subtitle: const Text('Out of service: passengers no longer find it and the timetable makes no '
+        subtitle: const Text('Out of service: passengers no longer find it and the trip schedules make no '
             'trips on it. Trips already made keep their bookings; void them on Trips if they will not run.'),
         value: _active,
         onChanged: (v) => setState(() => _active = v),

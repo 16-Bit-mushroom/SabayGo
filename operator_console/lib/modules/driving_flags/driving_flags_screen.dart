@@ -160,32 +160,71 @@ class _FlagCard extends StatelessWidget {
           : const StatusBadge('Recorded, not flagged'),
     };
     final open = f.flagged && f.reviewStatus == 'open' && f.disputeStatus != 'open';
-    return Panel(
-      title: '${kind(f.type)} · ${_time.format(f.start)}',
-      icon: f.type == 'overspeed' ? Icons.speed : Icons.pause_circle_outline,
-      trailing: badge,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FactLine(Icons.timeline, _what),
-          FactLine(Icons.place_outlined, f.place ?? 'Place not known'),
-          FactLine(Icons.directions_bus_outlined, f.tripLabel),
-          FactLine(Icons.badge_outlined,
-              'Operator ${f.operatorName ?? '—'}, licence ${f.operatorLicence ?? '—'}, plate ${f.plateNumber ?? '—'}'),
-          if (f.reviewedAt != null)
-            FactLine(Icons.rule, '${f.reviewStatus == 'dismissed' ? 'Dismissed' : 'Reviewed'} by '
-                '${f.reviewedBy ?? '—'}, ${_time.format(f.reviewedAt!)}${f.reviewNote != null ? ': ${f.reviewNote}' : ''}'),
-          if (open && records) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(spacing: AppSpacing.sm, children: [
-              if (manager) ...[
-                FilledButton.tonal(onPressed: () => _review(context), child: const Text('Mark reviewed')),
-                OutlinedButton(onPressed: () => _dismiss(context), child: const Text('Dismiss')),
-              ],
-              TextButton(onPressed: () => _dispute(context), child: const Text('Record operator\'s dispute')),
-            ]),
-          ],
-        ],
+    final text = Theme.of(context).textTheme;
+    final chipTone = f.flagged ? (AppColors.warningContainer, AppColors.warning) : (AppColors.surfaceSunken, AppColors.textMuted);
+    final details = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: chipTone.$1, borderRadius: BorderRadius.circular(6)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(f.type == 'overspeed' ? Icons.speed : Icons.pause_circle_outline, size: 14, color: chipTone.$2),
+            const SizedBox(width: 4),
+            Text(kind(f.type), style: TextStyle(color: chipTone.$2, fontWeight: FontWeight.w700, fontSize: 12.5)),
+          ]),
+        ),
+        if (f.plateNumber != null)
+          Text(f.plateNumber!, style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+        if (f.operatorName != null) Text(f.operatorName!, style: text.bodySmall),
+        Text(_time.format(f.start), style: text.bodySmall),
+        badge,
+      ]),
+      const SizedBox(height: AppSpacing.sm),
+      Row(children: [
+        const Icon(Icons.place_outlined, size: 16, color: AppColors.primary),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(f.place ?? 'Place not known',
+              style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: AppColors.primary)),
+        ),
+      ]),
+      const SizedBox(height: 2),
+      Text(_what, style: text.bodySmall?.copyWith(color: AppColors.textPrimary)),
+      Text('${f.tripLabel}${f.operatorLicence == null ? '' : ', licence ${f.operatorLicence}'}', style: text.bodySmall),
+      if (f.reviewedAt != null)
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
+          child: FactLine(Icons.rule, '${f.reviewStatus == 'dismissed' ? 'Dismissed' : 'Reviewed'} by '
+              '${f.reviewedBy ?? '—'}, ${_time.format(f.reviewedAt!)}${f.reviewNote != null ? ': ${f.reviewNote}' : ''}'),
+        ),
+    ]);
+    final buttons = open && records
+        ? Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, alignment: WrapAlignment.end, children: [
+            if (manager) ...[
+              FilledButton(onPressed: () => _review(context), child: const Text('Mark reviewed')),
+              OutlinedButton(onPressed: () => _dismiss(context), child: const Text('Dismiss')),
+            ],
+            TextButton(onPressed: () => _dispute(context), child: const Text('Record operator\'s dispute')),
+          ])
+        : null;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: LayoutBuilder(
+        builder: (context, c) => c.maxWidth >= 760 && buttons != null
+            ? Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                Expanded(child: details),
+                const SizedBox(width: AppSpacing.lg),
+                ConstrainedBox(constraints: const BoxConstraints(maxWidth: 360), child: buttons),
+              ])
+            : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                details,
+                if (buttons != null) ...[const SizedBox(height: AppSpacing.md), buttons],
+              ]),
       ),
     );
   }

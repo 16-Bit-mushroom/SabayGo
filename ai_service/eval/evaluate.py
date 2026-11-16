@@ -41,6 +41,10 @@ sys.path.insert(0, HERE)
 
 import inference                                    # noqa: E402
 import metrics                                      # noqa: E402
+from degrade import read_frame                      # noqa: E402
+
+# Network input size; None is Ultralytics' default (640). Set by --imgsz.
+IMGSZ: int | None = None
 
 BENCHMARKS = os.path.join(REPO, "docs", "benchmarks")
 SWEEP = [0.25, 0.35, 0.45, 0.55, 0.65]
@@ -58,12 +62,12 @@ def run(rows: list[dict], confs: list[float], progress_every: int) -> list[dict]
     done = 0
 
     for row in rows:
-        frame = cv2.imread(row["image_path"])
+        frame = read_frame(row)
         if frame is None:
             unreadable += 1
             continue
         for conf in confs:
-            det = inference.count_people(frame, conf=conf)
+            det = inference.count_people(frame, conf=conf, imgsz=IMGSZ)
             true_count = int(row["true_count"])
             results.append({
                 "image_path": row["image_path"],
@@ -151,7 +155,7 @@ def header(results: list[dict], rows: list[dict], confs: list[float],
         f"Cabin framing        : {min_rel_area}",
         "",
         "Counts come from inference.count_people(): the phone's weights and",
-        "thresholds, at 640 px input (the phone runs 320 or 416 px).",
+        f"thresholds, at {IMGSZ or 640} px input (the phone runs 320 or 416 px).",
     ]
 
 
@@ -341,11 +345,12 @@ def table_latency(results, conf) -> list[str]:
         out.append(f"{condition:<14}{m['n']:>6}{m['mean']:>9.1f}"
                    f"{m['median']:>9.1f}{m['p95']:>9.1f}{m['max']:>9.1f}")
     out += ["",
-            "Measured on the host named above. The Orange Pi 5 figure in",
-            "section 2.3.4's hardware table is NOT measured here and must not",
-            "be reported as if it were -- the van kit is not yet installed.",
+            "Measured on the host named above, with PyTorch, NOT on the phone.",
+            "The phone's speed is the edge app's bench Sweep",
+            "(docs/benchmarks/edge_sweep_2026-10-18.md) and must not be",
+            "read off this table.",
             "Resolution conditions do not change latency much because",
-            "Ultralytics letterboxes every frame to imgsz=640 regardless, so",
+            f"Ultralytics letterboxes every frame to imgsz={IMGSZ or 640} regardless, so",
             "res_half measures lost information, not a smaller workload."]
     return out
 
@@ -449,7 +454,11 @@ def main() -> int:
     ap.add_argument("--progress-every", type=int, default=250)
     ap.add_argument("--out-dir", default=BENCHMARKS)
     ap.add_argument("--tag", default="", help="suffix for the output filenames")
+    ap.add_argument("--imgsz", type=int, default=None,
+                    help="network input size (default 640; the phone runs 320 or 416)")
     args = ap.parse_args()
+    global IMGSZ
+    IMGSZ = args.imgsz
 
     if not os.path.exists(args.manifest):
         print(f"No manifest at {args.manifest}. "

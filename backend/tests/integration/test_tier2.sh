@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tier 2: policy config, fleet, schedule templates, trip generation.
 set -euo pipefail
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 STAMP=$(date +%s)
 j() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1)"; }
 

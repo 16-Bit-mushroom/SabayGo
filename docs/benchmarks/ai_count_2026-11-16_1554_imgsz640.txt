@@ -1,0 +1,165 @@
+======================================================================
+YOLOv8 PASSENGER-COUNT EVALUATION
+======================================================================
+
+Date                 : 2026-11-16
+Model                : yolov8n.pt (yolov8n-1.0)
+Deployed conf / iou  : 0.45 / 0.5
+Thresholds evaluated : 0.25, 0.35, 0.45, 0.55, 0.65
+Host                 : x86_64, cpu
+Manifest             : ai_service/eval/manifest.csv
+Sources              : coco
+Conditions           : dim_35, dim_60, jpeg_70, motion_blur, original, res_half, res_quarter
+Frames / inferences  : 11501 / 57505
+Cabin framing        : smallest person observed = 1.00% of frame area (11151 of 11501 rows recorded)
+
+Counts come from inference.count_people(): the phone's weights and
+thresholds, at 640 px input (the phone runs 320 or 416 px).
+
+TABLE 1  Counting accuracy by condition (conf = 0.45)
+======================================================================
+
+condition          n     MAE    RMSE    bias   exact  within1
+dim_35          1643   0.378   0.863  -0.335   73.3%    93.1%
+dim_60          1643   0.343   0.812  -0.295   75.0%    93.9%
+jpeg_70         1643   0.369   0.854  -0.321   73.6%    93.4%
+motion_blur     1643   0.452   0.990  -0.386   69.2%    91.8%
+original        1643   0.339   0.793  -0.278   74.7%    94.3%
+res_half        1643   0.355   0.821  -0.302   74.1%    93.9%
+res_quarter     1643   0.491   1.039  -0.441   66.6%    91.5%
+
+bias is signed: negative means the detector counts fewer people
+than are present, which is the direction that hides a passenger.
+
+TABLE 2  Counting accuracy by occupancy (original, conf = 0.45)
+======================================================================
+
+occupancy          n     MAE    RMSE    bias   exact  within1
+0 (empty)         50   0.000   0.000  +0.000  100.0%   100.0%
+1-3             1424   0.249   0.565  -0.189   78.3%    97.1%
+4-7              139   0.914   1.360  -0.856   43.2%    75.5%
+8-11              28   2.607   3.375  -2.464   10.7%    35.7%
+12-14              2   1.000   1.000  +0.000    0.0%   100.0%
+
+The empty-cabin row is the false-positive measurement: any count
+above zero there is the detector inventing a passenger.
+
+TABLE 3  Leakage detection (original, conf = 0.45)
+======================================================================
+
+Two alert rules, both of which the manuscript states somewhere:
+  strict   delta != 0   (section 2.3.2.1 reconciliation formula)
+  leakage  delta >  0   (section 2.3.4 functional requirement)
+
+                                      strict   leakage
+false alarm, honest crew (k=0)         25.3%      2.7%
+detection, 1 hidden passenger(s)       82.9%     77.5%
+detection, 2 hidden passenger(s)       96.2%     94.6%
+detection, 3 hidden passenger(s)       98.8%     98.4%
+
+false alarms that over-count            2.7%
+false alarms that under-count          22.5%
+
+Blind spot -- the strict rule misses leakage of exactly k only
+when the detector undercounts by exactly k, so the two errors
+cancel and delta reads zero:
+  err == -1 (hides 1) :  17.1%
+  err == -2 (hides 2) :   3.8%
+  err == -3 (hides 3) :   1.2%
+
+TABLE 3b  Leakage detection by occupancy (conf = 0.45)
+======================================================================
+
+The decision-relevant table. Read it before Table 3.
+
+                     ---- strict (delta != 0) ----   -- leakage (delta > 0) --
+occupancy        n  false alarm   det k=1  det k=2   false alarm   det k=1  det k=2
+0 (empty)       50         0.0%    100.0%   100.0%          0.0%    100.0%   100.0%
+1-3           1424        21.7%     83.7%    97.6%          2.7%     81.0%    97.3%
+4-7            139        56.8%     69.1%    84.9%          2.2%     45.3%    76.3%
+8-11            28        89.3%     82.1%    75.0%          7.1%     17.9%    35.7%
+12-14            2       100.0%     50.0%   100.0%         50.0%     50.0%   100.0%
+
+Both rules degrade as the van fills, in opposite ways. The
+strict rule accuses more and more honest crews; the leakage
+rule stays quiet but stops catching anything. The cause is the
+same in both: the detector undercounts when passengers occlude
+each other (see the bias column of Table 2), and on a full van
+an undercount of one or two is indistinguishable from a fare
+that was never logged.
+
+Any claim about catching revenue leakage has to be made at the
+occupancy the claim is about. A figure from a two-passenger
+frame does not transfer to a fourteen-seat cabin.
+
+TABLE 4  Threshold sweep (original frames)
+======================================================================
+
+Both rules, because they move in OPPOSITE directions here and a
+sweep showing only one invites the wrong conclusion.
+
+                         --- strict (delta != 0) ---   --- leakage (delta > 0) ---
+  conf     MAE   exact  false alarm  det k=1          false alarm  det k=1
+  0.25   0.282   78.1%        21.9%    90.3%                 9.6%    87.7%
+  0.35   0.283   78.2%        21.8%    86.7%                 4.6%    82.8%
+  0.45   0.339   74.7%        25.3%    82.9%                 2.7%    77.5%  <- deployed
+  0.55   0.427   70.7%        29.3%    79.5%                 1.3%    72.0%
+  0.65   0.554   64.9%        35.1%    76.4%                 0.7%    65.6%
+
+Read both halves before concluding anything. Lowering the
+threshold recovers missed people, so UNDERcounting falls -- and
+the strict rule, which fires on an undercount, improves. But
+the recovered detections are not all real, so OVERcounting
+rises, and the leakage rule fires only on an overcount, so its
+false-alarm rate gets worse. The two columns disagree, and a
+sweep that printed only the strict half would read as though a
+lower threshold were free.
+
+Which half matters depends on the alert rule the cooperative
+actually adopts (see TABLE 3b and MANUSCRIPT_CORRECTIONS.md
+section 9). Under delta > 0 a false alarm is a false ACCUSATION
+of an honest crew, so its cost is not symmetric with a miss.
+That is a policy judgement, not a number this table can settle;
+what the table does is price the choice.
+
+TABLE 5  Inference latency (conf = 0.45, ms)
+======================================================================
+
+condition          n     mean   median      p95      max
+dim_35          1643     24.9     25.0     31.0     43.0
+dim_60          1643     25.0     25.0     31.0     45.0
+jpeg_70         1643     25.3     25.0     32.0     39.0
+motion_blur     1643     25.0     25.0     31.0     38.0
+original        1643     24.4     24.0     32.0     44.0
+res_half        1643     25.4     25.0     32.0     53.0
+res_quarter     1643     25.2     25.0     32.0     50.0
+
+Measured on the host named above, with PyTorch, NOT on the phone.
+The phone's speed is the edge app's bench Sweep
+(docs/benchmarks/edge_sweep_2026-10-18.md) and must not be
+read off this table.
+Resolution conditions do not change latency much because
+Ultralytics letterboxes every frame to imgsz=640 regardless, so
+res_half measures lost information, not a smaller workload.
+
+WHAT THIS DOES NOT MEASURE
+======================================================================
+
+The COCO frames are held-out val2017 photographs filtered to
+van-like occupancy and framing. They are street photography, not
+footage from a camera mounted in a UV Express cabin.
+The degraded conditions (dim_35, dim_60, jpeg_70, motion_blur,
+res_half, res_quarter) stand in for cabin conditions by removing
+resolution, light and stillness from those same frames. They
+approximate the loss a cabin imposes; they do not reproduce a cabin.
+
+So these figures characterise the detector and the alert rules built
+on it at the system's operating point.
+In-cabin accuracy under real seat geometry, occlusion between
+rows and Davao afternoon glare remains to be established once
+the van kit is installed.
+
+Adding a staged set closes this: shoot a parked van at known
+occupancy, append the rows to the manifest with source=staged,
+and re-run. Table 1b then reports it beside these figures
+instead of averaging the two together.

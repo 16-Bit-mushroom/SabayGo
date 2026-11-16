@@ -114,7 +114,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                           const SizedBox(height: AppSpacing.xs + 2),
                           Text(
-                            'Book a space on your UV Express route.',
+                            'Book a seat on your UV Express route.',
                             style: Theme.of(context).textTheme.bodyMedium!
                                 .copyWith(color: AppColors.textMuted),
                           ),
@@ -212,6 +212,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                   icon: Icons.lock_outline,
                                   obscure: _obscure,
                                   suffix: IconButton(
+                                    tooltip: _obscure ? 'Show password' : 'Hide password',
                                     icon: Icon(
                                       _obscure
                                           ? Icons.visibility_off
@@ -257,7 +258,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                           height: 20,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2.4,
-                                            color: Colors.white,
+                                            color: AppColors.onAction,
                                           ),
                                         )
                                       : const Text('Create account'),
@@ -375,6 +376,7 @@ class _ErrorBanner extends StatelessWidget {
             ),
           ),
           IconButton(
+            tooltip: 'Dismiss',
             icon: const Icon(Icons.close, size: 18),
             color: AppColors.danger,
             onPressed: onDismiss,

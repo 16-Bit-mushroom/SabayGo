@@ -256,7 +256,7 @@ class MessagingService:
             peer_user_id=peer_id,
             peer_name=peer_name,
             peer_role=peer_role,
-            last_message=last.body if last else None,
+            last_message=(None if last is None else 'Message deleted' if last.deleted_at else last.body),
             unread_count=unread,
         )
 
@@ -304,6 +304,91 @@ class MessagingService:
         await self.session.refresh(msg)
         return msg
 
+    async def _own_text_message(self, user: User, conversation_id: str, message_id: str) -> Message:
+        """A message this person may change: in a conversation they can
+        open, sent by them (not by a colleague), text only, not deleted."""
+        conv = await self._get_conversation_for(conversation_id, user)
+        msg = await self.session.get(Message, message_id)
+        if msg is None or msg.conversation_id != conv.conversation_id:
+            raise NotFoundError("Message not found.")
+        if msg.sender_id != user.user_id:
+            raise PermissionDeniedError("You can only change your own messages.")
+        if msg.attachment_type is not None:
+            raise PolicyViolationError("A photo sent as proof cannot be edited or deleted.")
+        if msg.deleted_at is not None:
+            raise PolicyViolationError("This message was already deleted.")
+        return msg
+
+    async def edit_message(self, user: User, conversation_id: str, message_id: str, body: str) -> Message:
+        """Changes the text of one's own message (040); shown as edited."""
+        msg = await self._own_text_message(user, conversation_id, message_id)
+        body = body.strip()
+        if not body:
+            raise PolicyViolationError("Message cannot be empty.")
+        msg.body = body[:1000]
+        msg.edited_at = app_tz.now()
+        await self.session.commit()
+        await self.session.refresh(msg)
+        return msg
+
+    async def delete_message(self, user: User, conversation_id: str, message_id: str) -> Message:
+        """Deletes one's own message (040): the text is erased, the row
+        stays so the thread reads "Message deleted" where it was."""
+        msg = await self._own_text_message(user, conversation_id, message_id)
+        msg.body = ""
+        msg.deleted_at = app_tz.now()
+        await self.session.commit()
+        await self.session.refresh(msg)
+        return msg
+
+    async def _office_contacts(self) -> list[ContactRow]:
+        """Whom the office can start a message to (12 Nov, "New message"):
+        every active Dispatcher, then each passenger with a seat on a trip
+        from yesterday to a week ahead, labelled with that trip."""
+        out: list[ContactRow] = []
+        dispatchers = (
+            await self.session.execute(
+                select(User.user_id).where(
+                    User.role == Role.DISPATCHER.value, User.account_status == "active",
+                )
+            )
+        ).scalars().all()
+        for uid in dispatchers:
+            d = await self.session.get(User, uid)
+            if d is not None:
+                out.append(ContactRow(
+                    peer_user_id=uid, peer_role=Role.DISPATCHER.value,
+                    peer_name=_display_name(d), trip_id=None, trip_label=None,
+                ))
+        today = app_tz.now().date()
+        rows = await self.session.execute(
+            select(Booking.passenger_user_id, Trip.trip_id, Trip.departure_datetime, Route.route_name)
+            .join(Trip, Trip.trip_id == Booking.trip_id)
+            .join(Route, Route.route_id == Trip.route_id)
+            .where(
+                Booking.passenger_user_id.is_not(None),
+                Booking.status != BookingStatus.CANCELLED.value,
+                Trip.status != TripStatus.CANCELLED.value,
+                Trip.departure_datetime >= dt.datetime.combine(today - dt.timedelta(days=1), dt.time()),
+                Trip.departure_datetime < dt.datetime.combine(today + dt.timedelta(days=8), dt.time()),
+            )
+            .order_by(Trip.departure_datetime)
+        )
+        seen: set[str] = set()
+        for pid, trip_id, departure, route_name in rows:
+            if pid in seen:
+                continue
+            seen.add(pid)
+            p = await self.session.get(User, pid)
+            if p is not None:
+                out.append(ContactRow(
+                    peer_user_id=pid, peer_role=Role.PASSENGER.value,
+                    peer_name=_display_name(p), trip_id=trip_id,
+                    trip_label=_trip_label(route_name, departure),
+                ))
+        out.sort(key=lambda c: (c.peer_role != Role.DISPATCHER.value, c.peer_name.lower()))
+        return out
+
     async def add_image(
         self, conv: Conversation, sender: User, data: bytes, body: str,
     ) -> Message:
@@ -349,7 +434,7 @@ class MessagingService:
     # ------------------------------------------------------------------
     async def list_contacts(self, user: User) -> list[ContactRow]:
         if user.role in OFFICE_ROLES:
-            return []
+            return await self._office_contacts()
 
         contacts = [
             ContactRow(

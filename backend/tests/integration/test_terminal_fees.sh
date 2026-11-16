@@ -11,7 +11,7 @@
 # the same step. The Cashier records both.
 #
 # The sample trip, on Ecoland - Sta. Cruz - Digos: 11 booked seats to
-# Digos at P110 and 2 to Sta. Cruz at P80 (B = P1,370), one walk-up to
+# Digos at P110 and 2 to Sta. Cruz at P80 (B = P1,370), one walk-in to
 # Sta. Cruz at P80 (W = P80). The brief counts one of the 11 as a home
 # pickup; it is booked income either way, and test_home_pickup.sh covers
 # the pickup itself.
@@ -26,7 +26,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 ROUTE="ROUTE-ECO-DIG-0001"     # 1 Ecoland, 2 Sta. Cruz, 3 Digos
 VAN="VAN-0002"; PLATE="XYZ-9876"
 IDLE="VAN-0001"                 # ABC-1234: parked, no trip
@@ -73,7 +73,7 @@ reserve_paid() {  # TRIP ALIGHTING_STOP COUNT [DISPATCHER_TOKEN]: reserved in th
     [ "$(code POST "/bookings/$bid/mark-paid" '{}' "${4:-$DT}")" = "200" ] || return 1
   done
 }
-walk_up() { code POST /bookings/walk-in \
+walk_in() { code POST /bookings/walk-in \
               "{\"trip_id\":\"$1\",\"boarding_stop\":1,\"alighting_stop\":$2}" "$DT"; }
 crew() {  # TRIP VAN -> $CREW_T: the trip gets the first Dispatcher free then
   local n
@@ -135,9 +135,9 @@ reserve_paid "$TRIP" 3 11 && ok "11 seats to Digos reserved in the app and marke
   || bad "a Digos seat: $(cat /tmp/resp.json)"
 reserve_paid "$TRIP" 2 2 && ok "2 seats to Sta. Cruz reserved and marked Paid" \
   || bad "a Sta. Cruz seat: $(cat /tmp/resp.json)"
-is "$(walk_up "$TRIP" 2)" 201 "one walk-up to Sta. Cruz, paid in cash as it is listed"
+is "$(walk_in "$TRIP" 2)" 201 "one walk-in to Sta. Cruz, paid in cash as it is listed"
 
-is "$(stmt booked_income)/$(stmt walk_up_income)" 1370.00/80.00 "B = P1,370.00, W = P80.00"
+is "$(stmt booked_income)/$(stmt walk_in_income)" 1370.00/80.00 "B = P1,370.00, W = P80.00"
 is "$(stmt remittance_owed)" 217.50 "remittance owed = 0.15 x 1,450.00 = P217.50"
 is "$(stmt dcott_fees)/$(stmt parking_fee)" 75.00/50.00 \
    "the van's first trip of the day: one P75 DCOTT ticket and the day's P50 parking"
@@ -202,8 +202,8 @@ is "$(code POST /statements/$SID/operator-share '{"amount":"12.00"}' "$CT")" 200
    "the Cashier records the P12.00 handed over"
 is "$(field operator_share_differs)/$(field operator_share_given)" False/1219.50 "the flag clears"
 
-hdr "T69  a walk-up added after the payment, before Start"
-is "$(walk_up "$TRIP2" 2)" 201 "a P80 walk-up to Sta. Cruz is listed"
+hdr "T69  a walk-in added after the payment, before Start"
+is "$(walk_in "$TRIP2" 2)" 201 "a P80 walk-in to Sta. Cruz is listed"
 is "$(share "$TRIP2" amount_due)/$(field payment_status)" 12.00/unpaid "a P12.00 top-up, and the trip is unpaid again"
 python3 -c "import json;l=json.load(open('/tmp/resp.json'))['lines'];assert any(x['is_top_up'] and x['gross_fare']=='80.00' and x['share_amount']=='12.00' for x in l)" \
   && ok "the top-up line: P80.00, share P12.00" || bad "lines: $(cat /tmp/resp.json)"

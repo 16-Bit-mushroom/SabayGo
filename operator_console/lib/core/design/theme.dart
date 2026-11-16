@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'tokens.dart';
 
 /// The console's [ThemeData], dense enough for a desk, built from the one
-/// light palette in `tokens.dart` (the pila board: whiteboard white,
-/// terminal green, marker black and red).
+/// light palette in `tokens.dart` (a monochromatic emerald on clean white).
 ///
 /// What differs from `mobile/lib/core/design/theme.dart` is what a desktop
 /// dashboard needs and a phone does not:
@@ -14,13 +13,18 @@ import 'tokens.dart';
 ///   phone and throws inside a dialog's action row or a toolbar here.
 /// * **Data tables** get a sunken header row and a divider between rows, so
 ///   a column of fares can be scanned without a grid of borders.
-/// * **The sidebar** is terminal green; the current entry is a lighter
+/// * **The sidebar** is forest green; the current entry is a lighter
 ///   green with its icon on a white plate tile (`operator_shell.dart`).
 ///
-/// Typeface is Roboto, bundled from `assets/fonts` like the mobile app. On
-/// Flutter Web nothing declared a family before, so the console rendered in
-/// whatever the browser chose -- a different face on every demo machine.
-const _font = 'Roboto';
+/// Two bundled families (10 Nov). **Inter** is the interface: body, labels,
+/// tables and every amount, in tabular figures so a column of pesos lines
+/// up. **Plus Jakarta Sans** carries the page titles, dialog titles and the
+/// big figures on the cards: its rounder, geometric capitals give the page
+/// a heading voice Inter does not have, and it too has tabular figures.
+/// Both are bundled from `assets/fonts`, never fetched: a font that loads
+/// from the network is missing on exactly the demo machine without it.
+const _font = 'Inter';
+const _display = 'PlusJakartaSans';
 
 ThemeData buildConsoleTheme() {
   final scheme = ColorScheme.fromSeed(
@@ -57,13 +61,13 @@ ThemeData buildConsoleTheme() {
     horizontal: AppSpacing.xl, vertical: AppSpacing.md,
   );
   const buttonLabel =
-      TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w700);
+      TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w600);
   // 40 high, not mobile's 52: a mouse pointer is precise, and a toolbar of
   // 52px buttons pushes the table it controls below the fold.
   const buttonMin = Size(64, 40);
   // Keyboard focus is a 2px ring outside the control, so it never reads
-  // as a fill or a hover: terminal green on the page, marker ink around a
-  // green fill (green on green would vanish). WCAG 2.4.7.
+  // as a fill or a hover: forest on the page, ink around a green fill
+  // (green on green would vanish). WCAG 2.4.7.
   WidgetStateProperty<BorderSide?> focusSide(Color ring, [BorderSide? rest]) =>
       WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.focused)
           ? BorderSide(color: ring, width: AppSizing.focusOutline, strokeAlign: BorderSide.strokeAlignOutside)
@@ -74,6 +78,12 @@ ThemeData buildConsoleTheme() {
     fontFamily: _font,
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.surface,
+    // Every InkWell answers the pointer with the same see-through emerald
+    // (tokens.dart, "interaction"), not Material's grey.
+    hoverColor: AppColors.hoverWash,
+    focusColor: AppColors.focusWash,
+    highlightColor: AppColors.pressWash,
+    splashColor: AppColors.hoverWash,
     // Buttons look 40 high but take a 48px pointer target
     // (AppSizing.minTouchTarget); the web default shrink-wraps them.
     materialTapTargetSize: MaterialTapTargetSize.padded,
@@ -109,27 +119,27 @@ ThemeData buildConsoleTheme() {
     // ── type ──────────────────────────────────────────────────────────
     textTheme: TextTheme(
       headlineLarge: TextStyle(
-        fontFamily: _font, fontSize: 28, height: 1.25, fontWeight: FontWeight.w700,
+        fontFamily: _display, fontSize: 28, height: 1.25, fontWeight: FontWeight.w700,
         letterSpacing: -0.5, color: AppColors.textPrimary,
       ),
       headlineMedium: TextStyle(
-        fontFamily: _font, fontSize: 24, height: 1.3, fontWeight: FontWeight.w700,
+        fontFamily: _display, fontSize: 24, height: 1.3, fontWeight: FontWeight.w700,
         letterSpacing: -0.3, color: AppColors.textPrimary,
       ),
       headlineSmall: TextStyle(
-        fontFamily: _font, fontSize: 20, height: 1.3, fontWeight: FontWeight.w700,
+        fontFamily: _display, fontSize: 20, height: 1.3, fontWeight: FontWeight.w700,
         letterSpacing: -0.2, color: AppColors.textPrimary,
       ),
       titleLarge: TextStyle(
-        fontFamily: _font, fontSize: 18, height: 1.35, fontWeight: FontWeight.w700,
+        fontFamily: _display, fontSize: 18, height: 1.35, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       titleMedium: TextStyle(
-        fontFamily: _font, fontSize: 15, height: 1.4, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 15, height: 1.4, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
       titleSmall: TextStyle(
-        fontFamily: _font, fontSize: 14, height: 1.4, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 14, height: 1.4, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
       bodyLarge: TextStyle(
@@ -142,16 +152,16 @@ ThemeData buildConsoleTheme() {
         fontFamily: _font, fontSize: 12.5, height: 1.4, color: AppColors.textMuted,
       ),
       labelLarge: TextStyle(
-        fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
       labelMedium: TextStyle(
-        fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w600,
         color: AppColors.textMuted,
       ),
       // Uppercase micro-labels: table column heads, KPI captions.
       labelSmall: TextStyle(
-        fontFamily: _font, fontSize: 11.5, height: 1.3, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 11.5, height: 1.3, fontWeight: FontWeight.w600,
         letterSpacing: 0.6, color: AppColors.textMuted,
       ),
     ),
@@ -165,7 +175,7 @@ ThemeData buildConsoleTheme() {
       scrolledUnderElevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
-        fontFamily: _font, fontSize: 20, fontWeight: FontWeight.w700,
+        fontFamily: _display, fontSize: 20, fontWeight: FontWeight.w700,
         letterSpacing: -0.2, color: AppColors.textPrimary,
       ),
       shape: Border(bottom: BorderSide(color: AppColors.divider)),
@@ -176,35 +186,49 @@ ThemeData buildConsoleTheme() {
       indicatorColor: AppColors.primary,
       indicatorSize: TabBarIndicatorSize.label,
       dividerColor: AppColors.divider,
-      labelStyle: TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w700),
-      // Medium against Bold, so the selected tab reads by weight as well as
-      // colour. Roboto is bundled at 400, 500 and 700 only: a 600 or 800
-      // would be drawn as 700.
+      labelStyle: TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w600),
+      // Medium against SemiBold, so the selected tab reads by weight as
+      // well as colour. Inter is bundled at 400, 500, 600 and 700.
       unselectedLabelStyle:
           TextStyle(fontFamily: _font, fontSize: 14, fontWeight: FontWeight.w500),
+      // A tab under the pointer takes the wash in a rounded pill.
+      overlayColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.pressed)
+          ? AppColors.pressWash
+          : (s.contains(WidgetState.hovered) || s.contains(WidgetState.focused) ? AppColors.hoverWash : null)),
+      splashBorderRadius: BorderRadius.circular(AppRadius.sm),
     ),
 
     // ── actions ───────────────────────────────────────────────────────
+    // The main action is the emerald with dark text (white on it would be
+    // 1.83:1); a step darker under the pointer.
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.onFill,
+        foregroundColor: AppColors.onAction,
+        disabledForegroundColor: AppColors.disabled,
         minimumSize: buttonMin,
         padding: buttonPadding,
         shape: buttonShape,
         textStyle: buttonLabel,
-      ).copyWith(side: focusSide(AppColors.textPrimary)),
+      ).copyWith(
+        backgroundColor: _actionFill,
+        side: focusSide(AppColors.textPrimary),
+        // The main action rises under the pointer: a soft green lift.
+        elevation: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.disabled) ? 0 : (s.contains(WidgetState.hovered) ? 3 : 0)),
+        shadowColor: const WidgetStatePropertyAll(AppColors.liftShadow),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.onFill,
+        foregroundColor: AppColors.onAction,
+        disabledForegroundColor: AppColors.disabled,
         elevation: 0,
         minimumSize: buttonMin,
         padding: buttonPadding,
         shape: buttonShape,
         textStyle: buttonLabel,
-      ),
+      ).copyWith(backgroundColor: _actionFill),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
@@ -213,7 +237,16 @@ ThemeData buildConsoleTheme() {
         padding: buttonPadding,
         shape: buttonShape,
         textStyle: buttonLabel,
-      ).copyWith(side: focusSide(AppColors.primary, BorderSide(color: AppColors.border))),
+      ).copyWith(
+        // Under the pointer the outline turns the reference's 059669.
+        side: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.focused)
+            ? BorderSide(color: AppColors.primary, width: AppSizing.focusOutline, strokeAlign: BorderSide.strokeAlignOutside)
+            : BorderSide(color: s.contains(WidgetState.hovered) ? AppColors.primaryLight : AppColors.border)),
+        // ... and fills with the see-through wash.
+        overlayColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.pressed)
+            ? AppColors.pressWash
+            : (s.contains(WidgetState.hovered) ? AppColors.hoverWash : null)),
+      ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
@@ -221,7 +254,12 @@ ThemeData buildConsoleTheme() {
         minimumSize: const Size(48, 40),
         shape: buttonShape,
         textStyle: buttonLabel,
-      ).copyWith(side: focusSide(AppColors.primary)),
+      ).copyWith(
+        side: focusSide(AppColors.primary),
+        overlayColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.pressed)
+            ? AppColors.pressWash
+            : (s.contains(WidgetState.hovered) ? AppColors.hoverWash : null)),
+      ),
     ),
     iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(side: focusSide(AppColors.primary)),
@@ -243,9 +281,13 @@ ThemeData buildConsoleTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surfaceRaised,
+      // A field under the pointer takes the wash, like every other control.
+      hoverColor: AppColors.hoverWash,
       isDense: true,
+      // 14 + a 20 px line + 14: a text field is AppSizing.field (48) high,
+      // level with every dropdown and picker box beside it.
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md, vertical: AppSpacing.md,
+        horizontal: AppSpacing.md, vertical: 14,
       ),
       border: _fieldBorder(AppColors.border),
       enabledBorder: _fieldBorder(AppColors.border),
@@ -269,14 +311,14 @@ ThemeData buildConsoleTheme() {
     dataTableTheme: DataTableThemeData(
       headingRowColor: WidgetStatePropertyAll(AppColors.surfaceSunken),
       headingTextStyle: TextStyle(
-        fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w700,
+        fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w600,
         letterSpacing: 0.4, color: AppColors.textMuted,
       ),
       dataTextStyle: TextStyle(
         fontFamily: _font, fontSize: 14, color: AppColors.textPrimary,
       ),
       dataRowColor: WidgetStateProperty.resolveWith((s) =>
-          s.contains(WidgetState.hovered) ? AppColors.surfaceSunken : AppColors.surfaceRaised),
+          s.contains(WidgetState.hovered) ? AppColors.hoverWash : AppColors.surfaceRaised),
       dividerThickness: 1,
       horizontalMargin: AppSpacing.lg,
       columnSpacing: AppSpacing.xxl,
@@ -312,7 +354,7 @@ ThemeData buildConsoleTheme() {
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
       titleTextStyle: TextStyle(
-        fontFamily: _font, fontSize: 18, fontWeight: FontWeight.w700,
+        fontFamily: _display, fontSize: 18, fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       contentTextStyle: TextStyle(
@@ -372,3 +414,9 @@ OutlineInputBorder _fieldBorder(Color c, {double width = 1}) => OutlineInputBord
       borderRadius: BorderRadius.circular(AppRadius.sm),
       borderSide: BorderSide(color: c, width: width),
     );
+
+final WidgetStateProperty<Color?> _actionFill = WidgetStateProperty.resolveWith((s) {
+  if (s.contains(WidgetState.disabled)) return AppColors.surfaceSunken;
+  if (s.contains(WidgetState.hovered) || s.contains(WidgetState.pressed)) return AppColors.actionHover;
+  return AppColors.action;
+});

@@ -1,79 +1,85 @@
 ---
 name: SabayGo (Passenger and Dispatcher app)
-description: Ink on paper, a watchful red eye, a record that adds up. Clean and minimal, built to read in sunlight at a van door.
+description: The office console's balanced mid-green, sized for a thumb. Clean and minimal, built to read in sunlight at a van door.
 colors:
-  owl-ink: "#16161D"
-  owl-ink-soft: "#3A3A44"
-  ink-mist: "#ECECF0"
+  green-text: "#047857"
+  green-outline: "#059669"
+  emerald-tint: "#DCFCE7"
+  emerald: "#10B981"
+  kelly: "#22C55E"
+  on-emerald: "#0F2A20"
+  green-edge: "#86EFAC"
   pin-red: "#C8151D"
   pin-red-mist: "#FBE7E8"
-  paid-green: "#00713C"
-  paid-green-mist: "#E0EEE8"
+  paid-green: "#047857"
+  paid-green-mist: "#DCFCE7"
   ochre: "#8A5A00"
-  ochre-mist: "#F1EBE0"
+  ochre-mist: "#FFF4DB"
   sos-red: "#B3261E"
-  sos-red-mist: "#F6E5E4"
-  terminal-blue: "#1565C0"
-  terminal-blue-mist: "#E3EAF2"
-  morning-paper: "#F7F7FA"
+  sos-red-mist: "#FDECEA"
+  info-slate: "#1E3A2F"
+  info-mist: "#E6EFEA"
+  meadow-mist: "#F0FDF4"
   white-card: "#FFFFFF"
-  night-text: "#1A1A2E"
-  slate-note: "#5A5A6E"
-  control-edge: "#84849C"
-  hairline: "#DDDDE5"
+  sunken: "#E8F7EE"
+  slate-green: "#1E3A2F"
+  slate-note: "#4B6358"
+  control-edge: "#6B8579"
+  hairline: "#BBF7D0"
+  disabled: "#A3B8AD"
 typography:
   headline-large:
-    fontFamily: "Roboto"
+    fontFamily: "Plus Jakarta Sans"
     fontSize: "28px"
-    fontWeight: 700
+    fontWeight: 800
     lineHeight: 1.25
     letterSpacing: "-0.5px"
   headline-medium:
-    fontFamily: "Roboto"
+    fontFamily: "Plus Jakarta Sans"
     fontSize: "22px"
     fontWeight: 700
     lineHeight: 1.3
     letterSpacing: "-0.3px"
   app-bar-title:
-    fontFamily: "Roboto"
+    fontFamily: "Plus Jakarta Sans"
     fontSize: "20px"
     fontWeight: 700
     letterSpacing: "-0.2px"
   title-large:
-    fontFamily: "Roboto"
+    fontFamily: "Plus Jakarta Sans"
     fontSize: "18px"
-    fontWeight: 600
+    fontWeight: 700
     lineHeight: 1.35
   title-medium:
-    fontFamily: "Roboto"
+    fontFamily: "Inter"
     fontSize: "16px"
     fontWeight: 600
     lineHeight: 1.4
   body-large:
-    fontFamily: "Roboto"
+    fontFamily: "Inter"
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.5
   body-medium:
-    fontFamily: "Roboto"
+    fontFamily: "Inter"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.5
   body-small:
-    fontFamily: "Roboto"
+    fontFamily: "Inter"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.45
   label-button:
-    fontFamily: "Roboto"
+    fontFamily: "Inter"
     fontSize: "16px"
     fontWeight: 600
   label-small:
-    fontFamily: "Roboto"
-    fontSize: "11px"
-    fontWeight: 700
+    fontFamily: "Inter"
+    fontSize: "11.5px"
+    fontWeight: 600
     lineHeight: 1.3
-    letterSpacing: "0.8px"
+    letterSpacing: "0.4px"
 rounded:
   sm: "8px"
   md: "12px"
@@ -92,35 +98,38 @@ spacing:
   gutter: "16px"
 components:
   button-primary:
-    backgroundColor: "{colors.owl-ink}"
-    textColor: "{colors.white-card}"
+    backgroundColor: "{colors.emerald}"
+    textColor: "{colors.on-emerald}"
     typography: "{typography.label-button}"
     rounded: "{rounded.md}"
     height: "52px"
     width: "100%"
+  button-primary-pressed:
+    backgroundColor: "{colors.kelly}"
+    textColor: "{colors.on-emerald}"
+  button-primary-disabled:
+    backgroundColor: "{colors.sunken}"
+    textColor: "{colors.slate-note}"
   button-outlined:
-    textColor: "{colors.owl-ink}"
+    backgroundColor: "{colors.white-card}"
+    textColor: "{colors.green-text}"
     typography: "{typography.label-button}"
     rounded: "{rounded.md}"
     height: "52px"
     width: "100%"
   button-text:
-    textColor: "{colors.owl-ink}"
+    textColor: "{colors.green-text}"
     height: "48px"
   input-field:
     backgroundColor: "{colors.white-card}"
-    textColor: "{colors.night-text}"
+    textColor: "{colors.slate-green}"
     typography: "{typography.body-large}"
     rounded: "{rounded.md}"
     padding: "16px"
-  card-outlined:
+  card:
     backgroundColor: "{colors.white-card}"
     rounded: "{rounded.lg}"
     padding: "16px"
-  card-raised:
-    backgroundColor: "{colors.white-card}"
-    rounded: "{rounded.lg}"
-    padding: "20px"
   chip-status-success:
     backgroundColor: "{colors.paid-green-mist}"
     textColor: "{colors.paid-green}"
@@ -140,19 +149,19 @@ components:
     rounded: "{rounded.full}"
     padding: "6px 10px"
   chip-status-info:
-    backgroundColor: "{colors.terminal-blue-mist}"
-    textColor: "{colors.terminal-blue}"
+    backgroundColor: "{colors.info-mist}"
+    textColor: "{colors.info-slate}"
     typography: "{typography.label-small}"
     rounded: "{rounded.full}"
     padding: "6px 10px"
   chip-status-brand:
-    backgroundColor: "{colors.ink-mist}"
-    textColor: "{colors.owl-ink}"
+    backgroundColor: "{colors.emerald-tint}"
+    textColor: "{colors.green-text}"
     typography: "{typography.label-small}"
     rounded: "{rounded.full}"
     padding: "6px 10px"
   chip-status-muted:
-    backgroundColor: "{colors.morning-paper}"
+    backgroundColor: "{colors.meadow-mist}"
     textColor: "{colors.slate-note}"
     typography: "{typography.label-small}"
     rounded: "{rounded.full}"
@@ -162,21 +171,21 @@ components:
     padding: "16px"
   app-bar:
     backgroundColor: "{colors.white-card}"
-    textColor: "{colors.night-text}"
+    textColor: "{colors.slate-green}"
     typography: "{typography.app-bar-title}"
   navigation-bar:
     backgroundColor: "{colors.white-card}"
     textColor: "{colors.slate-note}"
     height: "68px"
   navigation-bar-selected:
-    backgroundColor: "{colors.ink-mist}"
-    textColor: "{colors.owl-ink}"
+    backgroundColor: "{colors.emerald}"
+    textColor: "{colors.green-text}"
     rounded: "{rounded.full}"
   bottom-sheet:
     backgroundColor: "{colors.white-card}"
     rounded: "{rounded.xl}"
   snackbar:
-    backgroundColor: "{colors.night-text}"
+    backgroundColor: "{colors.slate-green}"
     textColor: "{colors.white-card}"
     typography: "{typography.body-medium}"
     rounded: "{rounded.md}"
@@ -191,134 +200,138 @@ and `lib/core/design/components/`. Sizes below are Flutter logical pixels
 
 ## Overview
 
-**Creative North Star: "The Night Owl's Ledger"**
-
-The logo is an ink-black owl with a red eye, beside a route line that ends
-in a red pin. The app takes its two jobs from it. Ink is the hand that
-writes the record: every action, every selected state, every line of text
-someone acts on. Red is the eye on the route: it marks where a passenger
-boards and where they get off, and nothing else. The ledger part is the
-discipline: figures line up, each status is stated in a word, and nothing
-shows a fact the system does not have.
+**One product, three screens.** Since 10 Nov the phone app wears the office
+console's palette and type (`DESIGN.md` at the repo root, "VerdantPulse"):
+a passenger booking a space, the Dispatcher at the van door and the
+Terminal Manager at the office desk see the same greens, the same cards and
+the same buttons. The token names and values in `tokens.dart` match the
+console's; change one, change both.
 
 The app is clean and minimal, built to be read in sunlight at a van door.
-Paper-grey screens with white cards, one ink action per decision, status
-said in words on a tinted chip. It is calm and exact rather than
-expressive. Weight, spacing and alignment carry the hierarchy. The interface
-stays quiet, so a warning or an SOS stands out the moment it appears.
-Light theme only; the app has no dark theme.
+A meadow-mist page with white cards edged in mid-light green, one emerald
+action per decision, status said in words on a tinted chip. Calm and exact
+rather than expressive: weight, spacing and alignment carry the hierarchy,
+and the interface stays quiet so a warning or an SOS stands out the moment
+it appears. Light theme only; the app has no dark theme.
 
-The September purple (`#2D2059`) is retired. Anything still purple, or
-anything that describes a "purple brand", is out of date.
+The owl and its ink-black palette (3 Oct to 10 Nov) and the September
+purple (`#2D2059`) are retired. Anything still ink-black or purple, or that
+describes an "owl" brand, is out of date.
 
 **Key Characteristics:**
-- Ink (`#16161D`) does every action. Red marks route geometry only.
+- Emerald (`#10B981`) with dark text is the main action; green text is
+  `#047857`. Red marks route geometry and SOS only.
 - Status is a meaning (`StatusTone`), never a loose colour, and always comes
   with a word or an icon.
 - Every colour pair is measured against WCAG 2.1 AA; control edges clear
   3:1.
-- Roboto bundled at 400 / 500 / 700, so type is identical on every phone.
+- Inter for text and Plus Jakarta Sans for headings, bundled, so type is
+  identical on every phone and matches the console.
 - Full-width 52 px primary actions, 48 px minimum targets, one-handed reach.
-- Flat by default; soft ambient shadows only on raised cards.
+- Flat: cards are separated from the page by a green edge, never a shadow.
 
 ## Colors
 
-A near-monochrome ink-and-paper base, one red for the route, and four
-semantic tones that each come as a text colour with its own tinted
-container.
+A balanced mid-green: a mist page, white cards with a mid-light green edge,
+emerald for the action, a deep green for text and icons, and a slate
+green-grey for type. Four semantic tones each come as a text colour with
+its own tinted container. All ratios are computed.
 
 ### Primary
-- **Owl Ink** (`AppColors.primary`, 18.0:1 on white): filled buttons, focus
-  outlines, the selected tab and navigation item, progress indicators,
-  outlined and text button labels. It is the colour of "the thing you act
-  on".
-- **Owl Ink Soft** (`primaryLight`, 11.2:1): secondary surfaces and pressed
-  states.
-- **Ink Mist** (`primaryContainer`, Owl Ink on it 15.3:1): the selected
-  navigation pill, the neutral "brand" chip (for example SCHEDULED), default
-  chip fill.
+- **Emerald** (`AppColors.action`): filled buttons, the selected tab's pill,
+  the floating button. Never text (2.54:1 on white); everything on it is
+  **On Emerald** (`onAction`, `#0F2A20`, 6.03:1).
+- **Kelly** (`actionHover`, `#22C55E`): the main action while pressed
+  (On Emerald on it 6.72:1).
+- **Green Text** (`primary`, `#047857`, 5.48:1 on white, 5.24:1 on the
+  page, 4.99:1 on the tint): links, outlined and text button labels, the
+  selected tab's label, focus outlines, progress, icons in list tiles. White
+  on it is 5.48:1, so it is also the fill for a selected chip or segment.
+- **Green Outline** (`primaryLight`, `#059669`): an outlined button's edge
+  while pressed or focused.
+- **Emerald Tint** (`primaryContainer`, `#DCFCE7`): icon tiles, avatars, the
+  neutral "brand" chip (for example Scheduled), the progress track.
 
 ### Secondary
 - **Pin Red** (`brand`, 5.86:1 on white): the passenger's own boarding and
-  alighting markers on the journey strip and the live map. Allowed as text,
-  meant for markers.
+  alighting markers on the journey strip and the live map.
 - **Pin Red Mist** (`brandContainer`, Pin Red on it 4.9:1): the tint behind
-  a red marker label.
+  a red marker.
 
 ### Tertiary (semantic tones)
-- **Paid Green** (`success`, 6.13:1) on **Paid Green Mist**: confirmed, paid,
-  boarded.
-- **Ochre** (`warning`, 5.93:1) on **Ochre Mist**: awaiting payment, needs
-  attention, nothing has gone wrong yet. Amber is never used as text; it
-  fails on white.
-- **SOS Red** (`danger`, 6.54:1) on **SOS Red Mist**: cancelled, failed,
-  flagged, the SOS. Darker and more muted than Pin Red, so danger and route
-  never read alike.
-- **Terminal Blue** (`info`, 5.75:1) on **Terminal Blue Mist**:
-  informational, neither good nor bad (AT TERMINAL, queued to send).
+- **Paid Green** (`success`, 5.48:1) on **Emerald Tint** (4.99:1):
+  confirmed, paid, boarded.
+- **Ochre** (`warning`, 5.93:1) on **Ochre Mist** (5.42:1): awaiting
+  payment, needs attention. Amber is never used as text; it fails on white.
+- **SOS Red** (`danger`, 6.54:1) on **SOS Red Mist** (5.72:1): cancelled,
+  failed, flagged, the SOS. White on it 6.54:1.
+- **Info Slate** (`info`, the type colour) on **Info Mist** (10.52:1):
+  informational, neither good nor bad (At terminal, queued to send). It was
+  a blue until 10 Nov; the console's slate keeps the screen to one hue
+  family.
 
-### Neutral
-- **Morning Paper** (`surface`): every scaffold background, and the muted
+### Neutral (one green-grey ramp, `AppRamp`)
+- **Meadow Mist** (`surface`, `#F0FDF4`): every page background, the muted
   chip's fill.
 - **White Card** (`surfaceRaised`): cards, app bar, navigation bar, sheets,
   dialogs, input fills.
-- **Night Text** (`textPrimary`, 17.06:1): all primary text; the snackbar's
-  fill.
-- **Slate Note** (`textMuted`, 6.73:1): secondary text, labels, unselected
-  navigation, muted chips. Muted is still AA.
-- **Control Edge** (`border`, 3.64:1 on white, 3.41:1 on Morning Paper):
-  the outline of anything a user must find in order to operate it: input
-  outlines, outlined buttons, the journey rail.
-- **Hairline** (`divider`): decorative separation only: dividers, card
-  outlines, the sheet's drag handle.
+- **Sunken** (`surfaceSunken`, `#E8F7EE`): a disabled button, a step inside
+  a card.
+- **Slate Green** (`textPrimary`, `#1E3A2F`, 12.34:1; 11.79:1 on the page):
+  all primary text; the snackbar's fill.
+- **Slate Note** (`textMuted`, `#4B6358`, 6.51:1; 6.22:1 on the page):
+  secondary text, labels, unselected navigation. Muted is still AA.
+- **Control Edge** (`border`, `#6B8579`, 4.00:1 on white): the outline of
+  anything a user must find to operate it: inputs, outlined buttons, chips,
+  the journey rail.
+- **Green Edge** (`edge`, `#86EFAC`): card outlines and the app bar's rule.
+  Decorative.
+- **Hairline** (`divider`, `#BBF7D0`): dividers inside a card. Decorative.
 
 ### Named Rules
 
+**The Dark-on-Emerald Rule.** Text, icons and spinners on the emerald or
+the kelly are On Emerald, never white (2.54:1). White goes on Green Text,
+the status colours and SOS Red.
+
 **The One Meaning for Red Rule.** Pin Red marks route geometry and is never
-a button fill. On an action, red means stop or danger, and that is SOS Red.
-A red Book beside a red Cancel beside a red SOS would make all three look
-equally alarming.
+a button fill. On an action, red means stop or danger, and that is SOS Red,
+with white text. A red Book beside a red Cancel beside a red SOS would make
+all three look equally alarming.
 
 **The Pair Rule.** A status colour is chosen as a `StatusTone`, which hands
 over its text colour and container together, both verified. Never pick a
-foreground on its own, and never let hue alone carry the status: the label
-or an icon goes with it.
+foreground on its own, and never let hue alone carry the status.
 
 **The Edge Rule.** If a user must locate it to operate it, its boundary is
-Control Edge (3:1 or more). Hairline is for decoration, where nothing needs
-to be found.
+Control Edge (3:1 or more). Green Edge and Hairline are for decoration.
 
 ## Typography
 
-**Display Font:** Roboto (bundled; no fallback is ever reached)
-**Body Font:** Roboto
-**Label/Mono Font:** Roboto, with tabular figures for money
+**Heading font:** Plus Jakarta Sans 600 / 700 / 800 (bundled)
+**Text font:** Inter 400 / 500 / 600 / 700 (bundled), tabular figures for money
 
-**Character:** One family, and the hierarchy comes from weight, size and
-tracking. Headlines are bold and slightly tightened; body text is regular
-and generous in line height; micro-labels are small bold capitals with the
-tracking opened up.
+**Character:** the console's pair. Plus Jakarta Sans gives headings and the
+app bar a rounder, friendlier face; Inter carries everything a person reads
+or taps, at every weight it is set in, so no weight is synthesised.
 
 ### Hierarchy
-- **Headline Large** (700, 28 px, 1.25, −0.5 px): the largest step, kept
-  for a screen's single heading and used sparingly.
-- **Headline Medium** (700, 22 px, 1.3, −0.3 px): screen headings such as
-  sign-in, and the headline figure on the trip details sheet.
-- **App Bar Title** (700, 20 px, −0.2 px): left-aligned on the gutter.
-- **Title Large** (600, 18 px, 1.35): sheet titles, empty-state titles.
-- **Title Medium** (600, 16 px, 1.4): section headers, status band titles.
-- **Body Large** (400, 16 px, 1.5): primary reading text; info-row values
-  and journey stop names at 600.
-- **Body Medium** (400, 14 px, 1.5): standard body, status band body.
-- **Body Small** (400, 13 px, 1.45, Slate Note): notes under a value, sheet
-  subtitles.
-- **Label Button** (600, 16 px): filled and outlined buttons (text buttons
-  15 px).
-- **Label Small** (700, 11 px, 1.3, +0.8 px, UPPERCASE): status chips and
-  micro-labels such as BOARDING and AT TERMINAL.
-
-Only 400, 500 and 700 are bundled. The 600 weights above have no face of
-their own; the engine substitutes the nearest bundled one.
+- **Headline Large** (Jakarta 800, 28 px, 1.25, −0.5 px): a screen's single
+  heading, used sparingly.
+- **Headline Medium** (Jakarta 700, 22 px, 1.3, −0.3 px): screen headings
+  such as sign-in, the headline figure on the trip details sheet.
+- **App Bar Title** (Jakarta 700, 20 px, −0.2 px): left-aligned on the
+  gutter. Dialog titles match it.
+- **Title Large** (Jakarta 700, 18 px, 1.35): sheet titles, empty-state
+  titles.
+- **Title Medium** (Inter 600, 16 px, 1.4): section headers, status band
+  titles.
+- **Body Large / Medium / Small** (Inter 400; 16 / 14 / 13 px): reading
+  text; Small is Slate Note, for notes under a value.
+- **Label Button** (Inter 600, 16 px): filled and outlined buttons (text
+  buttons 15 px).
+- **Label Small** (Inter 600, 11.5 px, +0.4 px): status chips and
+  micro-labels.
 
 ### Named Rules
 
@@ -331,9 +344,10 @@ that are scanned show whole pesos (₱1,180); receipts show centavos
 hardcoded. Text must survive 200 % system scaling (WCAG 1.4.4), which is
 why headline sizes stay restrained.
 
-**The Carried Type Rule.** The family is bundled, never fetched and never
-borrowed from the phone. The app is used in connectivity dead zones, and a
-font that arrives over the network is missing exactly when it matters.
+**The Carried Type Rule.** The families are bundled, never fetched and
+never borrowed from the phone. The app is used in connectivity dead zones,
+and a font that arrives over the network is missing exactly when it
+matters. Both are SIL OFL (`assets/fonts/OFL-*.txt`).
 
 ## Layout
 
@@ -345,8 +359,7 @@ start on it. App bar titles sit left, never centred.
   shown. Inner tab bars (booking history, the Dispatcher's passenger list)
   sit under the app bar.
 - **Actions:** primary and outlined buttons fill the width and stand 52 px
-  tall, placed where a thumb reaches. Nothing tappable is under 48 × 48 px,
-  including icon buttons that look smaller.
+  tall, placed where a thumb reaches. Nothing tappable is under 48 × 48 px.
 - **Rows:** an info row splits 4 : 6, the label left in Slate Note and the
   value right-aligned in 600. List tiles use the gutter with 12 px vertical
   padding.
@@ -355,174 +368,147 @@ start on it. App bar titles sit left, never centred.
 - **Empty states:** centred, 40 px side padding, icon (48 px, Slate Note),
   title, one sentence, then an optional action. Still scrollable, so pull
   to refresh works.
-- **Motion:** short and consistent: 100 ms (instant), 180 ms (quick),
-  240 ms (normal). Material's ink sparkle on press. Anything that animates
-  honours the phone's reduce-motion setting
-  (`MediaQuery.disableAnimations`). Long transitions read as lag when a
-  queue is waiting.
+- **Motion:** 100 ms (instant), 180 ms (quick), 240 ms (normal). Material's
+  ink sparkle on press. Anything that animates honours reduce motion
+  (`MediaQuery.disableAnimations`).
 
 ## Elevation & Depth
 
-Flat by default. The theme sets zero elevation everywhere, the app bar does
-not lift when content scrolls under it, and the standard card is separated
-by a Hairline outline, not a shadow. Soft ambient shadows are allowed on
-raised cards: grouped settings, a profile summary, a saved destination, a
-bottom action bar. Depth there is a whisper, never a drop.
+Flat. The theme sets zero elevation everywhere; the app bar does not lift
+when content scrolls under it and is closed by a 1 px Green Edge rule
+instead. Cards, grouped settings, the profile summary and saved
+destinations are White Card with a 1 px Green Edge outline. A fixed action
+bar at the foot of a form has a Green Edge rule along its top.
 
-### Shadow Vocabulary
-- **Raised card** (`0 5px 15px rgba(0,0,0,0.04)`): a summary card that
-  heads a screen (profile).
-- **Raised group** (`0 4px 10px rgba(0,0,0,0.02)`): a group of settings
-  rows; a single row uses `0 4px 8px rgba(0,0,0,0.02)`.
-- **Bottom bar lift** (`0 -5px 10px rgba(0,0,0,0.05)`): a fixed action bar
-  at the foot of a form, lifted off the content scrolling under it.
-- **Map marker** (`0 0 3–8px rgba(0,0,0,0.12–0.38)`): the van and stop
-  markers over map tiles, which need to stand off busy streets.
+The only shadows are on the live map: the van and stop markers
+(`0 0 3–8px rgba(0,0,0,0.12–0.38)`) need to stand off busy streets, and the
+floating button keeps Material's elevation 2.
 
-### Named Rules
-
-**The Whisper Shadow Rule.** A card shadow is black at 5 % or less, 8 to
-15 px blur, 4 to 5 px offset. No hard, coloured or stacked shadows. Map
-markers are the only stronger ones.
-
-**The Border or Shadow Rule.** A card has a Hairline outline (outlined card)
-or a soft shadow (raised card), not both.
+**The Edge, Not Shadow Rule.** A card is told apart from the mist page by
+its green edge. A grey shadow muddies the green and reads as the generic
+card kit.
 
 ## Shapes
 
-Gently rounded throughout, with the radius growing with the size of the
-surface.
+Gently rounded throughout, with the radius growing with the surface.
 
 - **12 px:** buttons, input fields, status bands, the snackbar.
 - **16 px:** cards and dialogs.
-- **20 px:** the top corners of bottom sheets, and a screen-heading raised
-  card.
+- **20 px:** the top corners of bottom sheets, and the profile summary.
 - **Pill (999 px):** status chips, filter chips, the navigation indicator,
   avatars.
 - **8 px:** small inner elements.
 - **Journey geometry:** the boarding point is a hollow Pin Red ring (13 px,
   2.5 px stroke); the alighting point is a filled Pin Red square with 3 px
-  corners; the rail between them is a 2 px Control Edge line. A ring for
-  "you start here", a solid mark for "you stop here", the same as the
-  logo's pin.
-- **Drag handle:** 36 × 4 px Hairline bar, 2 px radius.
+  corners; the rail between them is a 2 px Control Edge line.
 
 ## Components
 
 ### Buttons
-Calm and exact: one ink slab per decision, no ornament.
-- **Shape:** gently rounded (12 px).
-- **Primary (filled):** Owl Ink with white 16 px / 600 label, full width,
-  52 px tall.
-- **Outlined:** Owl Ink label, 1 px Control Edge outline, same size. The
-  second choice beside a primary.
-- **Text:** Owl Ink, 15 px / 600, at least 48 × 48 px.
-- **Press / focus:** ink sparkle on press; focus is a 2 px Owl Ink outline,
-  a change in weight as well as hue.
-- **Verdict buttons:** after a scan, the Dispatcher's "Next passenger"
-  button takes the verdict's colour: Paid Green when accepted, SOS Red when
-  refused. Never Pin Red.
+- **Primary (filled):** Emerald with an On Emerald 16 px / 600 label, full
+  width, 52 px tall; Kelly while pressed; Sunken with a Slate Note label
+  when it cannot be used. A busy spinner on it is On Emerald.
+- **Danger (filled):** SOS Red with white text (sign out, the SOS). The SOS
+  send button stays red while it sends: an alert on its way must not look
+  switched off.
+- **Outlined:** White Card, Green Text label, 1 px Control Edge outline
+  (Green Outline, 2 px, when focused). The second choice beside a primary.
+- **Text:** Green Text, 15 px / 600, at least 48 × 48 px.
+- **Segmented:** Control Edge outline; the selected segment is Green Text
+  fill with white.
 
 ### Chips
-- **Status chip:** pill, tone container fill, tone text in Label Small
-  capitals, optional 13 px icon. Announced to screen readers as "status:
-  label".
-- **Tones:** success (Paid Green), info (Terminal Blue), warning (Ochre),
-  danger (SOS Red), brand (Ink on Ink Mist, a neutral default such as
-  SCHEDULED), muted (Slate Note on Morning Paper, so a finished trip
+- **Status chip:** pill, tone container fill, tone text in Label Small,
+  optional 13 px icon. Announced as "status: label".
+- **Tones:** success (Paid Green), info (Info Slate), warning (Ochre),
+  danger (SOS Red), brand (Green Text on Emerald Tint, a neutral default
+  such as Scheduled), muted (Slate Note on Meadow Mist, so a finished trip
   recedes).
-- **Filter chips:** Ink Mist fill, Owl Ink 12 px / 600 label, no outline,
-  pill.
+- **Filter chips** (time of day): White Card with a Control Edge outline;
+  selected, Green Text fill with a white bold label.
 
 ### Status Band
-The full-width statement of a state, for example the status on a boarding
-pass or the verdict after a scan. A tone container fill, a 1 px outline in
-the tone's colour at 30 % opacity, 12 px radius, 16 px padding. A 22 px
-icon on the left, a Title Medium headline in the tone's colour, then a
-Body Medium sentence. It can be marked as a live region, so a screen reader
-announces a change.
+The full-width statement of a state, for example the status on a booking.
+A tone container fill, a 1 px outline in the tone's colour at 30 % opacity,
+12 px radius, 16 px padding, a 22 px icon, a Title Medium headline in the
+tone's colour, then a Body Medium sentence. It can be a live region, so a
+screen reader announces a change.
 
 ### Cards / Containers
-- **Outlined card (default, `AppCard`):** White Card, 16 px radius, 1 px
-  Hairline outline, 16 px padding, no shadow. When tappable, the ink
+- **Card (`AppCard`, and the theme's `Card`):** White Card, 16 px radius,
+  1 px Green Edge outline, 16 px padding, no shadow. When tappable, the
   ripple is clipped to the radius.
-- **Raised card:** White Card, 16 px radius (20 px when it heads the
-  screen), 20 px padding, a whisper shadow, no outline.
 - **Bottom sheet (`AppSheet`):** White Card, 20 px top corners, drag
   handle, a Title Large header with an optional Body Small subtitle, and a
   Close icon button on the right.
-- **Dialog:** White Card, 16 px radius, no surface tint.
+- **Dialog:** White Card, 16 px radius, Jakarta title, no surface tint.
 
 ### Inputs / Fields
 - **Style:** filled White Card, 1 px Control Edge outline, 12 px radius,
-  16 px padding. The label is in Slate Note.
-- **Focus:** the outline goes to 2 px Owl Ink.
+  16 px padding. The label is Slate Note, Green Text once it floats.
+- **Focus:** the outline goes to 2 px Green Text.
 - **Error:** SOS Red outline (2 px when focused), and a 13 px / 500 SOS Red
   message that says what to do.
 - **Picker row (`AppPickerRow`):** a tappable row that shows the current
-  answer, or a placeholder until one is chosen, and is announced as "label:
-  value" or "label: not chosen".
+  answer, or a placeholder until one is chosen.
 
 ### Navigation
-- **App bar:** White Card, no elevation, Night Text, left-aligned 20 px /
-  700 title on the gutter.
+- **App bar:** White Card, no elevation, a 1 px Green Edge rule beneath,
+  Slate Green left-aligned Jakarta title on the gutter.
 - **Bottom navigation bar:** White Card, 68 px, labels always shown. The
-  selected item is shown three ways at once: an Ink Mist pill behind the
-  icon, the icon filled, and the label in Owl Ink at 700 (unselected: Slate
-  Note at 500).
-- **Tab bar:** Owl Ink label and indicator under the label, Slate Note
-  unselected, Hairline divider.
-- **Snackbar:** floating, Night Text fill, white 14 px text, 12 px radius.
+  selected item is the console's selected sidebar entry on a phone: an
+  Emerald pill behind an On Emerald icon, the icon filled, the label in
+  Green Text at 700 (unselected: Slate Note at 500).
+- **Tab bar:** Green Text label and indicator, Slate Note unselected,
+  Hairline divider.
+- **Snackbar:** floating, Slate Green fill, white 14 px text, Green Edge
+  action, 12 px radius.
 
 ### Journey Strip (signature)
 The passenger's journey as two stops on a rail: the boarding ring, a 2 px
-Control Edge rail 24 px tall, the alighting square, each with the stop name
-in Body Large 600 and an optional Body Small note. Read aloud as "From X.
-To Y." This is where Pin Red lives, and the live map's markers echo it.
+Control Edge rail, the alighting square, each with the stop name in Body
+Large 600 and an optional note. Read aloud as "From X. To Y." This is where
+Pin Red lives, and the live map's markers echo it.
 
 ### Money (signature)
 Tabular figures, ₱ prefix, whole pesos in lists and centavos on receipts.
-Right-aligned money columns stay columns.
 
 ### Empty State
 Icon, Title Large headline, one Slate Note sentence, optional action, all
 centred. The sentence says what to do next.
 
 ### Brand Logo
-The owl mark from `assets/branding/sabaygo_logo.png` at three sizes: 120 px
-(welcome), 72 px (screen header), 36 px (in a bar). Raster, scaled with high
-filter quality; never recoloured.
-
-### QR Scanner
-The camera view sits on black with a 50 % black overlay around the frame.
-That is the camera's own convention and the only black surface in the app.
+The console's van logo (`assets/branding/sabaygo_van_logo.png`): 120 px on
+the welcome and splash screens, 72 px as a screen header. In an app bar the
+van alone (`sabaygo_van_mark.png`, `BrandLogo(mark: true)`), because the
+wordmark is unreadable at 30–36 px. Black ink on transparent, so it is drawn
+only on a light surface; never recoloured.
 
 ## Do's and Don'ts
 
 ### Do:
 - **Do** take every colour from `AppColors` or the theme, and every status
   colour through `StatusTone`.
-- **Do** state a status in words (Label Small capitals) or with an icon,
-  never by colour alone.
-- **Do** make the primary action an Owl Ink slab, full width, 52 px tall,
-  within thumb reach.
+- **Do** state a status in words or with an icon, never by colour alone.
+- **Do** make the primary action an Emerald slab with dark text, full
+  width, 52 px tall, within thumb reach, and only one per screen.
+- **Do** give a button that sets its own dark fill (SOS Red, Green Text) a
+  white `foregroundColor`: the theme's label colour is On Emerald.
 - **Do** keep every tappable target at 48 × 48 px or more.
-- **Do** outline every control a user must find in Control Edge (3:1 or
-  more).
-- **Do** route every peso amount through `Money` (tabular figures).
-- **Do** start titles and content on the 16 px gutter, titles left-aligned.
-- **Do** keep motion at 100 / 180 / 240 ms and honour reduce motion.
+- **Do** outline every control a user must find in Control Edge.
+- **Do** route every peso amount through `Money`.
+- **Do** keep the palette in step with the console's `tokens.dart`.
 
 ### Don't:
+- **Don't** put white text, icons or spinners on the emerald or the kelly.
 - **Don't** fill a button with Pin Red, or use Pin Red for anything other
   than route geometry.
-- **Don't** bring back the retired purple (`#2D2059`) or a coloured app bar.
-- **Don't** write raw `Colors.*` or `Color(0x…)` in a screen. About 40 such
-  uses remain in the profile, messages and notification screens; they are
-  drift, not precedent.
+- **Don't** bring back the owl, its ink-black, the retired purple, or a
+  coloured app bar.
+- **Don't** write raw `Colors.*` or `Color(0x…)` in a screen. The remaining
+  uses are the live map's markers (white rings and their shadows over the
+  tiles) and white on dark fills; they are not precedent.
 - **Don't** use amber or yellow as text; it fails on white. Use Ochre.
-- **Don't** use gradients.
-- **Don't** give a card both an outline and a shadow, or a shadow heavier
-  than 5 % black.
+- **Don't** use gradients, or a shadow on a card.
 - **Don't** centre an app bar title or hide navigation labels.
 - **Don't** fetch a font at runtime or cap text size.

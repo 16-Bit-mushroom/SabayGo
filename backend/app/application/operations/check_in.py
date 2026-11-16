@@ -34,12 +34,13 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.notifications.service import NotificationService
 from app.application.tracking.geometry import haversine_m
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError, PolicyViolationError
 from app.domain.enums import BookingStatus
 from app.infrastructure.models import Booking as BookingRow
-from app.infrastructure.models import CheckIn, RouteStop, Trip
+from app.infrastructure.models import CheckIn, Notification, PassengerProfile, RouteStop, Trip
 from app.infrastructure.repositories.policy_repository import PolicyRepository
 
 log = logging.getLogger(__name__)
@@ -165,6 +166,30 @@ class CheckInUseCase:
         if accepted:
             booking.status = BookingStatus.CHECKED_IN.value
             booking.updated_at = now
+            # "I'm here to pay" (12 Nov, the owner's decision): the
+            # Dispatcher is told who is waiting at the terminal with cash,
+            # so they can find the passenger and mark the seat Paid.
+            # Once: pressed again after an undo, the unread notice stands.
+            already = await self.session.scalar(
+                select(Notification.notification_id).where(
+                    Notification.user_id == trip.dispatcher_id,
+                    Notification.related_entity_id == booking.booking_id,
+                    Notification.title == "Here to pay",
+                    Notification.is_read.is_(False),
+                ).limit(1)
+            ) if trip.dispatcher_id else None
+            if trip.dispatcher_id and booking.payment_status != "paid" and already is None:
+                who = await self.session.get(PassengerProfile, booking.passenger_user_id)
+                name = f"{who.first_name} {who.last_name}" if who else "A passenger"
+                await NotificationService(self.session).notify_staff(
+                    type="trip_update",
+                    title="Here to pay",
+                    message=(f"{name} is at {terminal.terminal_name} to pay "
+                             f"₱{booking.fare_amount:,.2f} for seat {booking.booking_code}."),
+                    roles=(),
+                    entity=("booking", booking.booking_id),
+                    also=[trip.dispatcher_id],
+                )
 
         await self.session.commit()
         log.info(
@@ -208,11 +233,11 @@ class UndoCheckInResult:
 
 
 class UndoCheckInUseCase:
-    """D.2: withdraw an accidental "I'm here".
+    """D.2: withdraw an accidental "I'm here to pay".
 
-    Allowed only while the booking is `checked_in`. Once the Dispatcher has
-    scanned the ticket the passenger is aboard and presence is no longer
-    the phone's claim to retract.
+    Allowed only while the booking is `checked_in` and unpaid. A paid seat
+    was paid at the terminal (12 Nov: paying is the check-in), so presence
+    is the Dispatcher's record, not the phone's claim to retract.
     """
 
     def __init__(self, session: AsyncSession):
@@ -226,6 +251,8 @@ class UndoCheckInUseCase:
             raise NotFoundError("Booking not found.")
         if booking.status == BookingStatus.BOARDED.value:
             raise ConflictError("You have already boarded; check-in cannot be undone.")
+        if booking.payment_status == "paid":
+            raise ConflictError("You paid at the terminal, so you are there: nothing to undo.")
         if booking.status != BookingStatus.CHECKED_IN.value:
             raise ConflictError(
                 f"This booking is {booking.status}, not checked in."

@@ -12,6 +12,8 @@ import '../../../core/network/api_exception.dart';
 import '../../../data/repositories/dispatch_repository.dart';
 import '../../../data/repositories/tracking_repository.dart';
 import '../../../core/design/tokens.dart';
+import '../live_vans_panel.dart';
+import '../today_panel.dart';
 
 /// Overview: the cooperative's view of NAHGM -- every van currently
 /// reporting, on one map, and a card for whichever one is selected.
@@ -161,17 +163,22 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
         children: [
           PageHeader(
             title: 'Overview',
-            description: 'Where every van on a trip is right now. Click a van to see '
-                'its trip. Updates every ${_refreshInterval.inSeconds} seconds.',
+            description: 'Today at a glance, and where every van on a trip is right now. Click a van to '
+                'see its trip. Updates every ${_refreshInterval.inSeconds} seconds.',
             actions: [RefreshButton(onPressed: _refresh)],
           ),
+          const TodayPanel(),
+          const SizedBox(height: AppSpacing.lg),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: Text(_error!, style: TextStyle(color: AppColors.danger)),
             ),
+          // The map, and beside it every van under way as its door camera
+          // and GPS see it.
           Expanded(
-            child: ClipRRect(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(flex: 8, child: ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.xl),
               child: Stack(
                 children: [
@@ -213,7 +220,11 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
                   if (_loading) const Center(child: CircularProgressIndicator()),
                 ],
               ),
-            ),
+            )),
+            const SizedBox(width: AppSpacing.lg),
+            // The map wider than the live vans, eight to four (12 Nov: "expound the map").
+            const Expanded(flex: 4, child: LiveVansPanel()),
+          ]),
           ),
         ],
       ),
@@ -711,7 +722,7 @@ class _AboardTile extends StatelessWidget {
                   Text(known ? '$aboard' : '—',
                       style: TextStyle(
                           color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
-                  Text(known ? 'of $seats spaces' : 'no data', style: text.bodySmall),
+                  Text(known ? 'of $seats seats' : 'no data', style: text.bodySmall),
                 ],
               ),
             ],

@@ -105,7 +105,7 @@ class TripDetailsSheet extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             AppInfoRow(
-              label: 'Space left',
+              label: 'Seat left',
               // Not a seat count. UV Express assigns no seat numbers —
               // capacity is counted per section of road, and a passenger is
               // never given a position in the van.
@@ -137,14 +137,15 @@ class TripDetailsSheet extends StatelessWidget {
               // held before there is anything to charge for.
               onPressed: trip.isFull ? null : onBook,
               child: Text(
-                trip.isFull ? 'This trip is full' : 'Reserve a space',
+                trip.isFull ? 'This trip is full' : 'Reserve a seat',
               ),
             ),
             if (!trip.isFull) ...[
               const SizedBox(height: AppSpacing.md),
               Text(
-                'You pay on the next screen. The space is held while the '
-                'payment is pending.',
+                // Cash only (rev 721): there is no next payment screen.
+                'You pay in cash to the Dispatcher at the terminal. A seat '
+                'still unpaid shortly before departure goes to someone else.',
                 textAlign: TextAlign.center,
                 style: text.bodySmall,
               ),

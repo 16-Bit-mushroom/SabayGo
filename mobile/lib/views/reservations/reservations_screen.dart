@@ -7,6 +7,7 @@ import '../../core/design/components/empty_state.dart';
 import '../../core/design/components/money.dart';
 import '../../core/design/components/journey_strip.dart';
 import '../../core/design/components/section_header.dart';
+import '../../core/design/components/status_band.dart';
 import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
@@ -29,7 +30,13 @@ import 'reservation_screen.dart';
 /// Now the card is a card and the *chip* carries the status. That is the one
 /// element whose job is to be noticed, and against white it can be.
 class ReservationsScreen extends StatefulWidget {
-  const ReservationsScreen({super.key});
+  const ReservationsScreen({super.key, this.visible = true});
+
+  /// Whether its tab is the one showing. The tab bar keeps every screen
+  /// alive, so without this a booking made on Home never reached My trips
+  /// until a pull-to-refresh (found in the 12 Nov UI run): the list now
+  /// reloads each time the tab comes into view.
+  final bool visible;
 
   @override
   State<ReservationsScreen> createState() => _ReservationsScreenState();
@@ -45,6 +52,12 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     _vm = ReservationsViewModel(BookingRepository(api))
       ..addListener(_onChanged);
     _vm.load();
+  }
+
+  @override
+  void didUpdateWidget(ReservationsScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.visible && !old.visible) _vm.load();
   }
 
   void _onChanged() {
@@ -79,7 +92,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel this reservation?'),
         content: const Text(
-          'Your space will be released for someone else. You have not paid, '
+          'Your seat will be released for someone else. You have not paid, '
           'so there is nothing to hand back.',
         ),
         actions: [
@@ -97,7 +110,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
     if (ok != true) return;
     final err = await _vm.cancel(b.bookingId);
-    _snack(err ?? 'Reservation cancelled. The space has been released.');
+    _snack(err ?? 'Reservation cancelled. The seat has been released.');
   }
 
   @override
@@ -271,6 +284,47 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
+  /// What the passenger does next, in one band: pay the Dispatcher by the
+  /// cutoff (with how long is left), show the code at the van door, or
+  /// nothing more. The cutoff is the server's, never worked out here.
+  Widget _nextStepBand(BookingSummary b) {
+    if (b.isBoarded) {
+      return const StatusBand(
+        tone: StatusTone.success,
+        icon: Icons.directions_bus_outlined,
+        title: 'You are aboard',
+        body: 'Have a safe trip.',
+      );
+    }
+    if (b.isPaid) {
+      return StatusBand(
+        tone: StatusTone.success,
+        icon: Icons.verified_outlined,
+        title: 'Paid. Your seat is yours.',
+        body: 'Show this code to the Dispatcher at the van door at ${b.boardingTerminal}, '
+            'before ${clockTime(b.departure)}.',
+      );
+    }
+    final due = b.payBy;
+    final left = due?.difference(DateTime.now());
+    final soon = left == null
+        ? ''
+        : left.isNegative
+            ? ''
+            : left.inMinutes < 60
+                ? ' (in ${left.inMinutes} min)'
+                : ' (in ${left.inHours} h ${left.inMinutes % 60} min)';
+    return StatusBand(
+      tone: StatusTone.warning,
+      icon: Icons.payments_outlined,
+      title: due == null
+          ? 'Pay ${Money.format(b.fare)} in cash at the terminal'
+          : 'Pay ${Money.format(b.fare)} in cash by ${clockTime(due)}$soon',
+      body: 'Hand it to the Dispatcher at ${b.boardingTerminal} and show this code. '
+          '${due == null ? '' : 'A seat still unpaid at ${clockTime(due)} is released for someone else.'}',
+    );
+  }
+
   /// The one booking that matters right now, in full.
   Widget _nextTripCard(BookingSummary b) {
     final busy = _vm.isBusy(b.bookingId);
@@ -324,24 +378,54 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       originNote: 'Departs ${clockTime(b.departure)}',
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            b.isPaid
-                                ? 'Code ${b.bookingCode}'
-                                : 'Code ${b.bookingCode} · pay in cash'
-                                    '${b.payBy != null ? ' by ${clockTime(b.payBy!)}' : ' at the terminal'}',
-                            style: text.bodySmall,
+                    // The ticket stub: the code the Dispatcher looks for,
+                    // large enough to read off the phone at arm's length,
+                    // with the fare beside it.
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('BOOKING CODE',
+                                    style: text.labelSmall!.copyWith(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1)),
+                                const SizedBox(height: 2),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    b.bookingCode,
+                                    style: text.headlineSmall!.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 3,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        Money(
-                          b.fare,
-                          style: text.titleMedium!
-                              .copyWith(color: AppColors.primary),
-                        ),
-                      ],
+                          const SizedBox(width: AppSpacing.md),
+                          Money(
+                            b.fare,
+                            style: text.titleLarge!
+                                .copyWith(color: AppColors.primary, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    _nextStepBand(b),
                   ],
                 ),
               ),

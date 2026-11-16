@@ -236,6 +236,10 @@ class MyBookingOut(BaseModel):
     alighting_terminal: str
     fare_amount: Decimal
     status: str
+    # The trip's own state (12 Nov). A paid seat is 'boarded' from Depart
+    # on, and stays the passenger's current trip -- tracking, the SOS --
+    # until this says 'completed'.
+    trip_status: str
     # Cash only: 'unpaid' until the Dispatcher marks the seat Paid at the
     # terminal. An unpaid reservation is not on the passenger list.
     payment_status: str
@@ -335,6 +339,7 @@ async def _render_bookings(
                 ),
                 fare_amount=booking.fare_amount,
                 status=booking.status,
+                trip_status=trip.status,
                 payment_status=booking.payment_status,
                 paid_at=booking.paid_at,
                 can_cancel=(

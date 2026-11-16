@@ -168,7 +168,63 @@ class Disputes:
         self, dispute_id: str, *, by: User, outcome: str, note: str,
         adjusted_amount: Decimal | None = None,
     ) -> Dispute:
-        """The Terminal Manager's decision (the guard is the endpoint's)."""
+        """The Terminal Manager's decision (the guard is the endpoint's).
+
+        A decision that leaves the operator holding more of the share than
+        is now owed (an upheld line takes its fares off the statement)
+        tells the Cashier, who records the excess when it comes back."""
+        dispute, trip, account = await self._decide(
+            dispute_id, by=by, outcome=outcome, note=note, adjusted_amount=adjusted_amount)
+        over = self.money.share_over(account) if dispute.subject == "fare_line" else Decimal("0")
+        if over > 0:
+            await self.session.flush()
+            await NotificationService(self.session).notify_trip(
+                trip=trip, type="share_over_given", title="Operator's share to come back",
+                message=(f"Dispute {outcome} on {trip_label(trip)}: the operator holds "
+                         f"₱{over:,.2f} more than the share now owed "
+                         f"(₱{account.operator_share_owed:,.2f}). Record it on Money when "
+                         f"it is handed back."),
+                roles=(Role.CASHIER, Role.TERMINAL_MANAGER), skip_user_id=by.user_id,
+            )
+        await self.session.commit()
+        log.info("Dispute %s %s by %s.", dispute_id, outcome, by.user_id)
+        return dispute
+
+    async def preview(
+        self, dispute_id: str, *, by: User, outcome: str,
+        adjusted_amount: Decimal | None = None,
+    ) -> tuple[dict, dict]:
+        """What a decision would do to the van's statement, before it is
+        made: the real decision, run in a savepoint, read, rolled back. One
+        path for both, so the preview cannot disagree with the decision."""
+        _, _, account = await self._locked(dispute_id)
+        before = await self._figures(account)
+        nested = await self.session.begin_nested()
+        try:
+            _, _, account = await self._decide(
+                dispute_id, by=by, outcome=outcome, note="(preview)",
+                adjusted_amount=adjusted_amount)
+            after = await self._figures(account)
+        finally:
+            await nested.rollback()
+        return before, after
+
+    async def _figures(self, account: Remittance) -> dict:
+        return {
+            "fares": account.booked_income + account.walk_in_income,
+            "terminal_fees_owed": account.terminal_fees_owed,
+            "amount_due": await self.money.due(account),
+            "disputed": await self.money.disputed(account),
+            "operator_share_owed": account.operator_share_owed,
+            "operator_share_held": self.money.share_held(account),
+            "operator_share_over": self.money.share_over(account),
+        }
+
+    async def _decide(
+        self, dispute_id: str, *, by: User, outcome: str, note: str,
+        adjusted_amount: Decimal | None,
+    ) -> tuple[Dispute, Trip, Remittance]:
+        """The decision's writes, without the commit."""
         if outcome not in OUTCOMES:
             raise InvalidInputError("Decide upheld, rejected or adjusted.")
         note = _text(note, limit=255, what="the reason for the decision")
@@ -199,9 +255,7 @@ class Disputes:
             flag.reviewed_by, flag.reviewed_at = by.user_id, dispute.decided_at
             flag.review_note = f"Dispute {outcome}: {note}"[:255]
         await self._settle(dispute, trip, account)
-        await self.session.commit()
-        log.info("Dispute %s %s by %s.", dispute_id, outcome, by.user_id)
-        return dispute
+        return dispute, trip, account
 
     # ----------------------------------------------------------- helpers
     async def _recorder_trip(self, trip_id: str, by: User) -> Trip:

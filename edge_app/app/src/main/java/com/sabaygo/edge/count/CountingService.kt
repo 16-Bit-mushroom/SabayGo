@@ -163,7 +163,7 @@ class CountingService : LifecycleService() {
         }
         val received = System.currentTimeMillis()
         if (!reply.ok) {
-            Live.sessionError = if (reply.code == 401) "the server refused this phone's token" else "server ${reply.code}"
+            Live.sessionError = if (reply.code == 401) "the server refused this phone's set-up code" else "server ${reply.code}"
             return
         }
         val j = reply.json()

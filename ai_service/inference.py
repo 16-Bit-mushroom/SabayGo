@@ -107,15 +107,19 @@ class Detections:
 
 def count_people(frame: np.ndarray,
                  conf: float | None = None,
-                 iou: float | None = None) -> Detections:
+                 iou: float | None = None,
+                 imgsz: int | None = None) -> Detections:
     """
     Count the people in one frame.
 
     `conf` and `iou` override the configured thresholds. They exist for the
     evaluation harness's threshold sweep; passing neither gives exactly the
-    configured operating point, the one the phone uses.
+    configured operating point, the one the phone uses. `imgsz` sets the
+    network's input size (Ultralytics' default is 640); the harness passes
+    320 or 416 to measure the sizes the phone actually runs.
     """
     model = load_model()
+    extra = {} if imgsz is None else {"imgsz": imgsz}
     t0 = time.perf_counter()
     results = model(
         frame,
@@ -123,6 +127,7 @@ def count_people(frame: np.ndarray,
         conf=CONF_THRESHOLD if conf is None else conf,
         iou=IOU_THRESHOLD if iou is None else iou,
         verbose=False,
+        **extra,
     )
     inference_ms = int((time.perf_counter() - t0) * 1000)
 
