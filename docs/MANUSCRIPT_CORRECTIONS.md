@@ -339,3 +339,58 @@ at Ultralytics' default 640 px input; the phone runs the same weights and
 thresholds at 320 or 416 px, chosen by the on-device benchmark
 (`docs/benchmarks/`). Until a re-run at the phone's size exists, say that
 the reported counting error is at 640 px.
+
+## 13. The owner's decisions of 12 Nov: walk-in, and who rode
+
+**"Walk-up" becomes "Walk-in" (rev 721 income groups, the data
+dictionary, every table and figure that names the group).** The owner
+chose the word the cooperative uses: a passenger the Dispatcher lists at
+the van is a *walk-in*, before departure and after. The letter stays W.
+Replace "Walk-up (W)" with "Walk-in (W)" throughout, and in the data
+dictionary `walk_up_income` with `walk_in_income` and the income group
+value `walk_up` with `walk_in` (migration 039). Suggested sentence where
+the groups are introduced: "Fares are grouped as Booked (B), reserved in
+the app and marked paid by the Dispatcher, and Walk-in (W), listed by the
+Dispatcher as the passenger pays at the van."
+
+**Who rode, now that no ticket is scanned (rev 721 removed the QR scan;
+the paper's T8 still reads as if one existed).** A paid seat is recorded
+as boarded when the van departs; only an unpaid reservation left at
+departure is a no-show. The camera's count against the list is what
+reveals a paid passenger who did not come ("fewer aboard than listed").
+Suggested replacement for T8: "At departure, every paid seat on the
+passenger list is recorded as boarded and every unpaid one as a no-show.
+The door camera's count against the list shows the Terminal Manager where
+the two differ." The passenger's app keeps the trip as current, with live
+tracking and the emergency button, until the Dispatcher marks it arrived.
+
+## 14. The owner's decisions of 12 Nov (second set): seat, paying is the check-in, terms
+
+**One word: seat.** Every screen, message and notice says *seat* for a
+passenger's place in the van (the app had mixed "seat" and "space"). No
+seat numbers are assigned or shown: `seat_number` stays an internal slot
+counter. Where the paper says "space" for a passenger's place, use
+"seat"; keep the sentence that UV Express assigns no seat numbers.
+
+**Objective 1.3.2.1, reworded** (it reads: "Provide a location-based
+check-in process, backed by a database locking mechanism, that prevents
+double-booking, confirms a passenger's presence at the boarding
+terminal …"). Paying happens only at the terminal, so paying *is* the
+check-in; the passenger's button now says what it does. Suggested
+replacement: "Provide a reservation process, backed by a database
+reservation lock, that prevents overbooking (the same seat reserved
+twice), and an 'I'm here to pay' notice by which a passenger tells the
+Dispatcher, from the boarding terminal, that they are waiting to pay;
+the Dispatcher's Paid mark confirms both the payment and the passenger's
+presence."
+
+**Process section ("the system executes MySQL pessimistic locking
+(SELECT … FOR UPDATE) to manage concurrency; this securely prevents
+double-booking …").** Replace "double-booking" with "overbooking", and
+name the mechanism once in plain words: "a reservation lock: while one
+reservation is being saved, no other can take that seat (MySQL
+pessimistic locking, SELECT … FOR UPDATE)". Avoid "seat lock".
+
+**"Hitbox" → "bounding box"** wherever the paper or the slides describe
+what YOLOv8 draws around a detected person (bounding box is the standard
+term in object detection; "bounded box" is not used in the field).

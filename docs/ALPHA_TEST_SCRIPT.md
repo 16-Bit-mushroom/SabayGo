@@ -60,7 +60,7 @@ On `TRIP-A2Z-LIVE-SOON`. Do the steps in order.
 | 1 | A | **Home**: From **Ecoland Terminal**, To **Tagum City Overland Terminal**, today → **Search departures** | The trip about 2 h out is listed with fare and spaces left |
 | 2 | A | Tap it → **Reserve a space** | **Reservation** screen: booking code `SG-…`, fare, **Unpaid**, "Pay … in cash to the Dispatcher at Ecoland before HH:MM" |
 | 3 | A | **Copy** the code. Back to **Trips** tab | The trip at the top, chip **UNPAID**, "Code SG-… · pay in cash by HH:MM" |
-| 4 | B | Open the trip from **your trips** | Trip screen: status, plate NBC-7788 and operator, counters, **RESERVATIONS AND WALK-UPS** |
+| 4 | B | Open the trip from **your trips** | Trip screen: status, plate NBC-7788 and operator, counters, **RESERVATIONS AND WALK-INS** |
 | 5 | B | Type part of the code (or the passenger's name) in **Name or booking code** | Only that reservation stays; chip **UNPAID** |
 | 6 | B | **Mark as Paid** → confirm | Chip **PAID**; "… is Paid and on the passenger list" |
 | 7 | A | Wait up to 15 s, or tap **I have paid — check again** | Band turns green: "Paid: you are on the passenger list". **Cancel** is gone; "To cancel a paid seat, ask the Dispatcher" |
@@ -68,7 +68,7 @@ On `TRIP-A2Z-LIVE-SOON`. Do the steps in order.
 | 9 | B | That seat → ⋮ → **Cancel reservation** → **Nobody came for it** | It leaves the list |
 | 10 | A | Open the second reservation | "Cancelled by the Dispatcher: nobody came for it." |
 | 11 | A | Reserve a third seat → **Cancel reservation** → confirm | "Cancelled"; the space is free again |
-| 12 | B | **Walk-in** → tap a destination → **COLLECT** → **Done** | The walk-up is on the list as PAID ("walk-up") |
+| 12 | B | **Walk-in** → tap a destination → **COLLECT** → **Done** | The walk-in is on the list as PAID ("walk-in") |
 | 13 | B | Scroll to **Terminal fees** | "Hand ₱X to the Cashier" (15 % of the lines + ₱75 ticket + ₱50 parking if unpaid) and "Give the operator ₱Y" |
 | 14 | D | **Trips** → pick the trip → **Start and departure** panel | Says the terminal fees are not recorded; **Start trip** waits |
 | 15 | D | **Record terminal fees** | Dialog: lines, **Due now** = the same ₱X as step 13, operator's share prefilled |
@@ -76,7 +76,7 @@ On `TRIP-A2Z-LIVE-SOON`. Do the steps in order.
 | 17 | D | **Start trip** → confirm | Status **Boarding**; operator name, licence and plate copied |
 | 18 | B | Pull down to refresh → **Depart** → confirm | Status DEPARTED; the list shows who was on it |
 | 19 | B | **Arrived** → confirm | "Trip completed." |
-| 20 | D | **Money** → **Remittance**, van NBC-7788 | Booked (B), Walk-up (W), A2Z's 15 %, DCOTT tickets (n × ₱75), Parking ₱50, **Terminal fees owed**, Paid, **Due now ₱0**, operator's share owed and given |
+| 20 | D | **Money** → **Remittance**, van NBC-7788 | Booked (B), Walk-in (W), A2Z's 15 %, DCOTT tickets (n × ₱75), Parking ₱50, **Terminal fees owed**, Paid, **Due now ₱0**, operator's share owed and given |
 | 21 | C | The bell; **Trips** → the trip; **Reviews** → **Boarding Audit** | Alert **Unaudited trip · no phone** at Start; the trip panel says Unaudited (correct, no edge phone went out). Boarding Audit: "Nothing to review on this day" (it lists only what a phone reported) |
 | 22 | A | **Trips** tab → **History** | The trip reads "Trip departed" or completed, never "Missed" |
 
@@ -175,13 +175,13 @@ that they are missing, not just refused.
 - [ ] **Disputes**: open / decided; **Decide** (C only): Upheld, Rejected, Adjusted with the share due; **Withdraw**.
 - [ ] **Remittance** (D): each van's statement; **Record payment** (amount, receipt number, operator's share); **Record operator's share** (a later difference) → "Operator share differs" if it does not match; **Parking-only charge** → pick a van with no trip today → a ₱50 statement → pay it; **Record dispute** on a line; previous days with the day picker.
 - [ ] **Messages**: conversations; reply as the cooperative office.
-- [ ] **Setup**, in order: **Terminals** (add, staffed, zone), **Route** (add, stops in order with minutes, in service), **Fares** (per pair, takes effect on a date), **Operators & vans** (add operator with licence, add van with plate and spaces; validate in the roster; import/export CSV or PDF), **Staff** (add a Dispatcher with a temporary password; validate; the new Dispatcher signs in on the app), **Timetable** (add a regular departure → **Create upcoming trips**), **Phones** (add phone, issue token, **Check out** to a Dispatcher and van, **Record return**, retire), **Rules & Settings** (edit, save; values show units).
+- [ ] **Setup**, in order: **Terminals** (add, staffed, zone), **Route** (add, stops in order with minutes, in service), **Fares** (per pair, takes effect on a date), **Operators & vans** (add operator with licence, add van with plate and spaces; validate in the roster; import/export CSV or PDF), **Staff** (add a Dispatcher with a temporary password; validate; the new Dispatcher signs in on the app), **Timetable** (add a regular departure → **Trips → Post the timetable for 7 days** (was "Create upcoming trips" on the Timetable)), **Phones** (add phone, issue token, **Check out** to a Dispatcher and van, **Record return**, retire), **Rules & Settings** (edit, save; values show units).
 - [ ] **Emergencies (SOS)**: an SOS from the app appears → **Mark as responding** → **Close with a note** → in History. Texts are not sent (`SMS_PROVIDER=disabled`); the dispatch rows say so.
 - [ ] Bell: notifications; profile dialog (change password); sign out; light/dark switch in the top bar.
 
 ## 8. What a browser cannot test
 
-- **Offline Mark as Paid and walk-ups**: the offline queue uses on-device
+- **Offline Mark as Paid and walk-ins**: the offline queue uses on-device
   storage, which a browser does not have. Test it on the Android app:
   airplane mode, mark a seat Paid, turn airplane mode off, see it sync.
 - **The edge phone** (door counting, blurred stills): needs the Kotlin

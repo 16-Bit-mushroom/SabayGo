@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -81,12 +83,25 @@ class _ReservationScreenState extends State<ReservationScreen> {
       reservation: widget.reservation,
       booking: widget.booking,
     )..addListener(_onStateChanged);
+    // Opened from My trips, the screen starts from the list's copy, which
+    // can be minutes old: the Dispatcher may have marked it Paid since
+    // (12 Nov UI run: Lea, paid at 10:36, was still told to pay at 10:45).
+    // Ask the server at once, then every 30 s while it can still change.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _viewModel.refresh();
+    });
+    _poll = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && !_viewModel.isCancelled) _viewModel.refresh();
+    });
   }
+
+  Timer? _poll;
 
   void _onStateChanged() => setState(() {});
 
   @override
   void dispose() {
+    _poll?.cancel();
     _viewModel.removeListener(_onStateChanged);
     _viewModel.dispose();
     super.dispose();
@@ -177,8 +192,11 @@ class _ReservationScreenState extends State<ReservationScreen> {
                     icon: const Icon(Icons.copy, size: 16),
                     label: const Text('Copy'),
                   ),
-                Text(
-                  'Give this code or your name to the Dispatcher when you pay',
+                if (!_viewModel.isCancelled) Text(
+                  // Nothing to hand over on a cancelled booking (12 Nov UI run).
+                  _viewModel.isPaid
+                      ? 'Show this code at the van door'
+                      : 'Give this code or your name to the Dispatcher when you pay',
                   textAlign: TextAlign.center,
                   style: text.bodySmall,
                 ),
@@ -223,7 +241,9 @@ class _ReservationScreenState extends State<ReservationScreen> {
                   label: 'Payment',
                   value: _viewModel.isPaid
                       ? 'Paid in cash${_viewModel.paidAt != null ? ' at ${clockTime(_viewModel.paidAt!)}' : ''}'
-                      : 'Unpaid: cash to the Dispatcher',
+                      : _viewModel.isCancelled
+                          ? 'None: cancelled before payment'
+                          : 'Unpaid: cash to the Dispatcher',
                 ),
                 if (_viewModel.payBy != null) ...[
                   const SizedBox(height: AppSpacing.md),
@@ -308,22 +328,32 @@ class _ReservationScreenState extends State<ReservationScreen> {
               ? const _Spinner()
               : const Icon(Icons.location_on_outlined),
           label: Text(
-            vm.isCheckingIn ? 'Checking in…' : "I'm at the terminal",
+            vm.isCheckingIn ? 'Telling the Dispatcher…' : "I'm here to pay",
           ),
         ),
       );
-      if (vm.checkinOpensAt != null) {
-        actions.add(
-          Text(
-            'Check-in opens '
-            '${clockTime(vm.checkinOpensAt!)} at '
-            '${trip.origin.name}. It tells the Dispatcher you are there; it '
-            'does not pay for or hold your seat.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        );
-      }
+      actions.add(
+        Text(
+          '${vm.checkinOpensAt != null ? 'From ${clockTime(vm.checkinOpensAt!)} at ${trip.origin.name}: ' : ''}'
+          'tap it when you arrive. The Dispatcher is told you are here to pay '
+          '${vm.fare > 0 ? Money.format(vm.fare) : 'the fare'}, takes the cash and marks your seat Paid.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      );
+    }
+
+    // Pressed, not yet paid: the Dispatcher has the passenger on their list.
+    if (vm.isWaitingToPay) {
+      actions.add(
+        Text(
+          'The Dispatcher knows you are here. Hand over the cash and show your code: '
+          'your seat turns Paid on this screen.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.primary, fontWeight: FontWeight.w600),
+        ),
+      );
     }
 
     if (vm.hasLiveBooking && !vm.isPaid && vm.isActive) {
@@ -357,19 +387,6 @@ class _ReservationScreenState extends State<ReservationScreen> {
           ),
           icon: const Icon(Icons.map_outlined),
           label: const Text('Track the van'),
-        ),
-      );
-    }
-
-    // D.2: an accidental "I'm here" can be taken back.
-    if (vm.canUndoCheckIn) {
-      actions.add(
-        TextButton.icon(
-          onPressed: vm.isUndoingCheckIn ? null : vm.undoCheckIn,
-          icon: const Icon(Icons.undo, size: 18),
-          label: Text(
-            vm.isUndoingCheckIn ? 'Undoing…' : 'Undo check-in',
-          ),
         ),
       );
     }
@@ -457,7 +474,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
       title: 'Reserved: pay at the terminal',
       body: 'Pay ${Money.format(vm.fare)} in cash to the Dispatcher at '
           '${trip.origin.name} $payBy. An unpaid reservation is released '
-          'then and the space goes to someone else.',
+          'then and the seat goes to someone else.',
     );
   }
 
@@ -467,7 +484,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel this reservation?'),
         content: const Text(
-          'Your space will be released for someone else. You have not paid, '
+          'Your seat will be released for someone else. You have not paid, '
           'so there is nothing to hand back.',
         ),
         actions: [
@@ -488,7 +505,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
 }
 
 class _Spinner extends StatelessWidget {
-  const _Spinner({this.color = Colors.white});
+  const _Spinner({this.color = AppColors.onAction});
 
   final Color color;
 

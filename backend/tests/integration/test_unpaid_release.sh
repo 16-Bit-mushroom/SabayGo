@@ -8,7 +8,7 @@
 # holds one of the 14 seats but is not on the passenger list and adds
 # nothing to what the van owes, so the system releases it a set number of
 # minutes before departure (`unpaid_cutoff_min`) and offers the seat to a
-# walk-up. Only the Dispatcher's Mark as Paid stops that -- a check-in
+# walk-in. Only the Dispatcher's Mark as Paid stops that -- a check-in
 # does not (T61).
 #
 # T57 (a boarding on an unpaid reservation) needs the van's door events
@@ -24,7 +24,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 TRIP="TRIP-DEMO-00000001"
 STAMP=$(date +%s)
 LAT=7.052400; LNG=125.593100          # Ecoland Terminal
@@ -59,10 +59,10 @@ PY
 MYSQL_PW=$(grep -m1 '^MYSQL_ROOT_PASSWORD=' ../.env | cut -d= -f2-)
 db() {
   ( cd .. && docker compose exec -T -e MYSQL_PWD="$MYSQL_PW" \
-      mysql mysql -u root --silent sabaygo -e "$1" 2>/dev/null )
+      mysql mysql -u root --silent "${SABAYGO_DB:-sabaygo}" -e "$1" 2>/dev/null )
 }
 
-curl -sf http://127.0.0.1:8000/health >/dev/null || { echo "API not running"; exit 1; }
+curl -sf "${API%/api/v1}/health" >/dev/null || { echo "API not running"; exit 1; }
 
 # ═══════════════════════════════════════════════ 0. sign in
 hdr "0. Accounts"
@@ -147,12 +147,12 @@ is "$(mine "$D" status)" "cancelled" "the job released it"
 is "$(mine "$D" cancel_reason)" "auto_release" "recorded as auto_release"
 is "$(db "SELECT cancelled_by IS NULL FROM bookings WHERE booking_id='$D'")" "1" \
    "with nobody's name against it -- no person decided it"
-is "$(free_seats)" "$((BEFORE_SWEEP_FREE + 1))" "the seat is free for a walk-up"
+is "$(free_seats)" "$((BEFORE_SWEEP_FREE + 1))" "the seat is free for a walk-in"
 N=$(db "SELECT COUNT(*) FROM notifications WHERE related_entity_id='$D'
           AND title='Reservation released'")
 is "$N" "1" "the passenger is told"
 is "$(mine "$A" payment_status)" "paid" "the seat marked Paid is untouched"
-is "$(mine "$A" status)" "confirmed" "and still stands"
+is "$(mine "$A" status)" "checked_in" "and still stands (12 Nov: paid, so at the terminal)"
 
 sweep
 is "$(db "SELECT COUNT(*) FROM notifications WHERE related_entity_id='$D'")" "1" \
@@ -224,14 +224,14 @@ N=$(db "SELECT COUNT(*) FROM notifications WHERE related_entity_id='$F'
 is "$N" "1" "the passenger is told the seat came back"
 
 # ═══════════════════════════════════════════════ T63 ... and the trip is full
-hdr "T63  the same, but a walk-up has taken the seat"
+hdr "T63  the same, but a walk-in has taken the seat"
 code PUT /config/policies/unpaid_cutoff_min '{"policy_value":"5"}' "$OT" >/dev/null
 reserve; G=$BID; G_CODE=$CODE
 code PUT /config/policies/unpaid_cutoff_min '{"policy_value":"60"}' "$OT" >/dev/null
 sweep
 is "$(mine "$G" status)" "cancelled" "released at the cutoff"
 
-# Fill the van with walk-ups, as a terminal would while the list is open.
+# Fill the van with walk-ins, as a terminal would while the list is open.
 FILLED=0
 while [ "$(free_seats)" -gt 0 ] && [ "$FILLED" -lt 20 ]; do
   S=$(code POST /bookings/walk-in \
@@ -239,7 +239,7 @@ while [ "$(free_seats)" -gt 0 ] && [ "$FILLED" -lt 20 ]; do
   [ "$S" = "201" ] || break
   FILLED=$((FILLED + 1))
 done
-is "$(free_seats)" "0" "the trip is full ($FILLED walk-up(s) listed)"
+is "$(free_seats)" "0" "the trip is full ($FILLED walk-in(s) listed)"
 
 BEFORE_ALERTS=$(db "SELECT COUNT(*) FROM notifications WHERE type='paid_after_release'")
 S=$(code POST "/bookings/$G/mark-paid" '{}' "$DT")

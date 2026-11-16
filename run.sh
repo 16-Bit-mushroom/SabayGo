@@ -336,8 +336,11 @@ if [ "$WITH_CONSOLE" = 1 ] && [ "$HAVE_FLUTTER" = 1 ]; then
 
   # ThreadingHTTPServer since Python 3.7, so the app's many asset requests
   # are not serialised behind each other.
+  # tool/serve_web.py, not `python3 -m http.server`: it sends
+  # Cache-Control: no-cache, so a rebuilt console (a new logo included)
+  # reaches every browser on its next load instead of days later.
   start console "$CONSOLE_WEB" "$LOGS/console.log" \
-    python3 -m http.server "$PORT_CONSOLE" --bind 0.0.0.0 --directory "$CONSOLE_WEB"
+    python3 "$ROOT/operator_console/tool/serve_web.py" "$PORT_CONSOLE" "$CONSOLE_WEB"
   wait_for console "http://127.0.0.1:$PORT_CONSOLE/" 30 "$LOGS/console.log"
   if command -v xdg-open >/dev/null 2>&1; then
     xdg-open "http://localhost:$PORT_CONSOLE" >/dev/null 2>&1 || true

@@ -11,7 +11,7 @@
 # not whether one falls inside a window.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 BACKEND="$(cd "$(dirname "$0")/../.." && pwd)"
 TRIP=TRIP-DEMO-00000001
 STAMP=$(date +%s)

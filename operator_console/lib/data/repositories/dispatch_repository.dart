@@ -291,6 +291,18 @@ class DispatchRepository {
   // The office assigns, starts and departs; the Terminal Manager alone
   // reviews an automatic start, changes a started trip's van or voids it.
 
+  /// A trip posted for passengers (11 Nov, Trips → Post): a one-off
+  /// departure on the route, bookable at once. The van and Dispatcher may
+  /// come now or at the van's turn. The server refuses a time already past.
+  Future<void> postTrip({required String routeId, required DateTime departure, String? vanId, String? dispatcherId}) =>
+      _api.post('/config/trips/special', body: {
+        'route_id': routeId,
+        // Local wall time, no zone: the server reads naive times as Manila.
+        'departure_datetime': departure.toIso8601String(),
+        if (vanId != null) 'van_id': vanId,
+        if (dispatcherId != null) 'dispatcher_id': dispatcherId,
+      });
+
   Future<void> assign(String tripId, {String? vanId, String? dispatcherId}) =>
       _api.put('/trips/$tripId/assignment', body: {
         'van_id': vanId,
@@ -336,10 +348,11 @@ class DispatchRepository {
   /// Before departure the payment is the trip's; after, it goes on the
   /// van's statement, where a trip that left unpaid is still owed.
   Future<void> recordPayment(TripShare share,
-      {required String amount, String? reference, String? operatorShare}) {
+      {required String amount, String? reference, String? operatorShare, String? handedOverBy}) {
     final body = {
       'amount': amount,
       if (reference != null && reference.isNotEmpty) 'reference': reference,
+      if (handedOverBy != null) 'handed_over_by': handedOverBy,
       if (operatorShare != null && operatorShare.isNotEmpty) 'operator_share': operatorShare,
     };
     return share.beforeDeparture
@@ -365,6 +378,8 @@ class TripShare {
     required this.disputed,
     required this.operatorShareOwed,
     required this.operatorShareGiven,
+    required this.operatorShareHeld,
+    required this.operatorShareOver,
     required this.lines,
     required this.beforeDeparture,
   });
@@ -376,8 +391,18 @@ class TripShare {
   final double disputed;
   final double operatorShareOwed;
   final double operatorShareGiven;
+  /// What the operator holds: given less handed back (038).
+  final double operatorShareHeld;
+  /// Held over the share owed, to come back from the operator.
+  final double operatorShareOver;
   final List<ShareLine> lines;
   final bool beforeDeparture;
+
+  /// Still to give the operator; 0 when nothing is.
+  double get operatorShareLeft {
+    final left = operatorShareOwed - operatorShareHeld;
+    return left > 0.004 ? left : 0;
+  }
 
   factory TripShare.fromJson(Map<String, dynamic> j, {required bool beforeDeparture}) => TripShare(
         tripId: j['trip_id'] as String,
@@ -387,6 +412,8 @@ class TripShare {
         disputed: double.parse(j['disputed'].toString()),
         operatorShareOwed: double.parse((j['operator_share_owed'] ?? 0).toString()),
         operatorShareGiven: double.parse((j['operator_share_given'] ?? 0).toString()),
+        operatorShareHeld: double.parse((j['operator_share_held'] ?? j['operator_share_given'] ?? 0).toString()),
+        operatorShareOver: double.parse((j['operator_share_over'] ?? 0).toString()),
         lines: (j['lines'] as List).map((e) => ShareLine.fromJson(e as Map<String, dynamic>)).toList(),
         beforeDeparture: beforeDeparture,
       );

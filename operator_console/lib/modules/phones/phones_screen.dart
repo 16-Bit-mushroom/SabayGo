@@ -60,7 +60,7 @@ class _PhonesScreenState extends State<PhonesScreen> {
     final phones = _phones ?? const <Phone>[];
     return StepFrame(
       title: 'Phones',
-      description: 'The phones that ride in the vans. Add each phone once and enter its token in its app, '
+      description: 'The phones that ride in the vans. Add each phone once and enter its set-up code in its app, '
           'run its checklist, then check it out to a Dispatcher and van.',
       actions: [RefreshButton(onPressed: _load, busy: _loading)],
       list: _loading && _phones == null
@@ -72,16 +72,16 @@ class _PhonesScreenState extends State<PhonesScreen> {
                       icon: Icons.phone_android,
                       title: 'No phones in the pool',
                       hint: manager
-                          ? 'Add the first phone with the form. Its token is shown once.'
+                          ? 'Add the first phone with the form. Its set-up code is shown once.'
                           : 'The Terminal Manager adds each phone once.')
                   : ListView.separated(
                       itemCount: phones.length,
                       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
                       itemBuilder: (_, i) => _PhoneCard(phone: phones[i], manager: manager, onChanged: _changed),
                     ),
-      side: manager
-          ? SidePanel(title: 'Add phone', child: _AddPhoneForm(key: ValueKey(_blank), onSave: _add))
-          : null,
+      addLabel: 'Add phone',
+      openWhenEmpty: _phones != null && phones.isEmpty,
+      addForm: manager ? SidePanel(title: 'Add phone', child: _AddPhoneForm(key: ValueKey(_blank), onSave: _add)) : null,
     );
   }
 
@@ -107,12 +107,12 @@ Future<void> showToken(BuildContext context, String token) => showDialog<void>(
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         icon: Icon(Icons.key, color: AppColors.warning),
-        title: const Text('The phone\'s token'),
+        title: const Text('The phone\'s set-up code'),
         content: SizedBox(
           width: 460,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Enter it in the phone\'s app now. It is shown only this once; only its '
-                'fingerprint is kept. Issue a new one if it is lost.'),
+            const Text('Enter it in the phone\'s app now. It is shown only this once and the system '
+                'does not keep a readable copy. Make a new one if it is lost.'),
             const SizedBox(height: AppSpacing.md),
             SelectableText(token, style: const TextStyle(fontFamily: 'monospace', fontSize: 15)),
           ]),
@@ -182,7 +182,7 @@ class _PhoneCard extends StatelessWidget {
               label: const Text('Record return'),
             ),
           if (manager && p.status != 'retired') ...[
-            OutlinedButton(onPressed: () => _newToken(context), child: const Text('Issue new token')),
+            OutlinedButton(onPressed: () => _newToken(context), child: const Text('New set-up code')),
             if (p.status == 'in_office')
               OutlinedButton(
                 onPressed: () => _retire(context),
@@ -238,19 +238,19 @@ class _PhoneCard extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Issue a new token?'),
-        content: const Text('The phone\'s old token stops working at once. Enter the new one in the '
+        title: const Text('Make a new set-up code?'),
+        content: const Text('The phone\'s old code stops working at once. Enter the new one in the '
             'phone\'s app.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Issue token')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Make new code')),
         ],
       ),
     );
     if (ok != true || !context.mounted) return;
     String? token;
     if (await runAction(context, () async => token = await devices.reissueToken(phone.deviceId),
-            'New token issued.') &&
+            'New set-up code made.') &&
         context.mounted) {
       await showToken(context, token!);
     }
@@ -267,7 +267,7 @@ class _PhoneCard extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: AppColors.onFill),
             child: const Text('Retire'),
           ),
         ],
@@ -316,7 +316,7 @@ class _AddPhoneFormState extends State<_AddPhoneForm> {
       const SizedBox(height: AppSpacing.md),
       TextField(controller: _android, decoration: const InputDecoration(labelText: 'Android version (optional)')),
       const SizedBox(height: AppSpacing.sm),
-      Text('Its token is shown once, right after it is added: have the phone at hand.',
+      Text('Its set-up code is shown once, right after it is added: have the phone at hand.',
           style: Theme.of(context).textTheme.bodySmall),
       FormButtons(
         adding: false,

@@ -2,7 +2,7 @@
 
 The edge phone is a trip's only camera witness. A trip it could not watch
 is Unaudited: the statement counts only its passenger list (the seats
-marked Paid and the walk-ups the Dispatcher listed), and nothing the camera says is held against the trip. Never a refusal --
+marked Paid and the walk-ins the Dispatcher listed), and nothing the camera says is held against the trip. Never a refusal --
 the service always continues. Four reasons:
 
   no_phone         no phone was checked out with the van at the start

@@ -492,7 +492,7 @@ SELECT UUID(), r.remittance_id, t.trip_id, o.terminal_id, d.terminal_id, g.incom
        g.fare_amount, g.seats, g.fare_amount * g.seats,
        ROUND(g.fare_amount * g.seats * 0.15, 2), FALSE, t.started_at - INTERVAL 2 MINUTE
   FROM (SELECT b.trip_id, b.alighting_stop_sequence, b.fare_amount,
-               IF(b.booking_type = 'app', 'booked', 'walk_up') AS income_group,
+               IF(b.booking_type = 'app', 'booked', 'walk_in') AS income_group,
                COUNT(*) AS seats
           FROM bookings b
          WHERE b.status IN ('confirmed','checked_in','boarded','completed','no_show')
@@ -510,7 +510,7 @@ SELECT UUID(), r.remittance_id, t.trip_id, o.terminal_id, d.terminal_id, g.incom
 UPDATE remittances r
   JOIN (SELECT r2.remittance_id,
                COALESCE(SUM(IF(l.income_group = 'booked', l.gross_fare, 0)), 0) AS b,
-               COALESCE(SUM(IF(l.income_group = 'walk_up', l.gross_fare, 0)), 0) AS w,
+               COALESCE(SUM(IF(l.income_group = 'walk_in', l.gross_fare, 0)), 0) AS w,
                COALESCE(SUM(l.share_amount), 0) AS owed,
                COALESCE(MAX(l.created_at), r2.created_at) AS paid_at
           FROM remittances r2
@@ -521,7 +521,7 @@ UPDATE remittances r
          WHERE status IN ('boarding','departed','completed')
          GROUP BY van_id, service_date) n
     ON n.van_id = r.van_id AND n.service_date = r.service_date
-   SET r.booked_income = x.b, r.walk_up_income = x.w, r.remittance_owed = x.owed,
+   SET r.booked_income = x.b, r.walk_in_income = x.w, r.remittance_owed = x.owed,
        r.dcott_fees = 75.00 * n.trips,
        r.terminal_fees_owed = x.owed + 75.00 * n.trips + 50.00,
        r.operator_share_owed = GREATEST(x.b + x.w - x.owed - 75.00 * n.trips - 50.00, 0),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/empty_state.dart';
+import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/messaging_repository.dart';
 import '../../models/message_model.dart';
@@ -83,38 +85,17 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_viewModel.error != null && conversations.isEmpty) {
-      return ListView(
-        children: [
-          const SizedBox(height: 120),
-          Icon(Icons.cloud_off_outlined, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          Text(
-            'Could not load messages.\nPull down to try again.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-          ),
-        ],
+      return const AppEmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'Could not load messages',
+        body: 'Check your connection, then pull down to try again.',
       );
     }
     if (conversations.isEmpty) {
-      return ListView(
-        children: [
-          SizedBox(
-            height: 320,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey.shade300),
-                  const SizedBox(height: 16),
-                  Text('No messages yet', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
-                  const SizedBox(height: 4),
-                  Text('Tap the pencil to start one', style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-                ],
-              ),
-            ),
-          ),
-        ],
+      return const AppEmptyState(
+        icon: Icons.chat_bubble_outline,
+        title: 'No messages yet',
+        body: 'Tap the pencil to start a conversation.',
       );
     }
     return ListView.separated(
@@ -128,28 +109,30 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     final unread = c.unreadCount > 0;
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: Colors.grey.shade200,
-        child: Icon(_iconFor(c.peerRole), color: Colors.grey.shade700),
+        backgroundColor: AppColors.primaryContainer,
+        child: Icon(_iconFor(c.peerRole), color: AppColors.primary),
       ),
-      title: Text(c.peerName, style: TextStyle(fontWeight: unread ? FontWeight.bold : FontWeight.w500)),
+      title: Text(c.peerName, style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500)),
       subtitle: Text(
         c.lastMessage ?? 'No messages yet',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: unread ? Colors.black87 : Colors.grey.shade600),
+        style: TextStyle(color: unread ? AppColors.textPrimary : AppColors.textMuted),
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (c.lastMessageAt != null)
-            Text(_formatTimestamp(c.lastMessageAt!), style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            Text(_formatTimestamp(c.lastMessageAt!), style: Theme.of(context).textTheme.bodySmall),
           if (unread)
             Container(
               margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(10)),
-              child: Text('${c.unreadCount}', style: const TextStyle(fontSize: 11, color: Colors.white)),
+              decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppRadius.full)),
+              child: Text('${c.unreadCount}',
+                  semanticsLabel: '${c.unreadCount} unread',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.surfaceRaised)),
             ),
         ],
       ),

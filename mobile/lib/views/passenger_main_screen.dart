@@ -82,7 +82,7 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
         // is spent inside the app. Every other tab says where you are,
         // because there a title is wayfinding, not branding.
         title: _index == 0
-            ? const BrandLogo(height: BrandLogoSize.bar)
+            ? const BrandLogo(height: BrandLogoSize.bar, mark: true)
             : Text(_destinations[_index].title),
         actions: [
           if (_index == 0)
@@ -99,7 +99,7 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
         index: _index,
         children: [
           const HomeScreen(),
-          const ReservationsScreen(),
+          ReservationsScreen(visible: _index == 1),
           ConversationsScreen(viewModel: _conversations),
           NotificationsScreen(viewModel: _notifications),
           const ProfileScreen(),

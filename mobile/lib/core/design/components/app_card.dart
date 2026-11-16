@@ -52,7 +52,7 @@ class AppCard extends StatelessWidget {
     surface = DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,
-        border: Border.all(color: AppColors.divider),
+        border: Border.all(color: AppColors.edge),
       ),
       child: surface,
     );

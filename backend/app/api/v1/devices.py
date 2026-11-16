@@ -24,7 +24,7 @@ import uuid
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep
 from app.core.db import commit_or_conflict
@@ -33,9 +33,13 @@ from app.core.security import new_device_token
 from app.core.timezone import now
 from app.domain.enums import Role
 from app.infrastructure.models import (
+    Booking,
     DeviceCheckout,
+    DeviceHeartbeat,
     EdgeDevice,
+    PassengerEvent,
     StaffProfile,
+    Trip,
     User,
     Van,
 )
@@ -281,3 +285,127 @@ async def retire(device_id: str, session: SessionDep) -> DeviceOut:
     device.token_hash = None  # it uploads nothing more
     await session.commit()
     return (await _out(session, [device]))[0]
+
+
+# ------------------------------------------------------------- live monitor
+# The door cameras as the Terminal Manager watches them (12 Nov, the
+# owner's decision): each phone's latest report, the last two hours of
+# reports for a chart, today's door counts, and the trip its van is on.
+# Only what the phone reported: a reading it did not send is None, never a
+# zero (the rule the whole design keeps -- no fabricated count).
+class ReportPoint(BaseModel):
+    at: dt.datetime
+    detection_rate_hz: float | None
+    battery_temp_c: float | None
+    battery_pct: int | None
+
+
+class LiveTrip(BaseModel):
+    trip_id: str
+    departure_datetime: dt.datetime
+    trip_label: str | None
+    status: str
+    listed: int
+    boarded: int
+    alighted: int
+    aboard: int
+
+
+class DeviceLiveOut(DeviceOut):
+    charging: bool | None
+    lens_blocked: bool | None
+    detection_rate_hz: float | None
+    report_count_window: int
+    history: list[ReportPoint]
+    boarded_today: int
+    alighted_today: int
+    trip: LiveTrip | None
+
+
+@router.get("/live", response_model=list[DeviceLiveOut], dependencies=[Depends(OFFICE)])
+async def live_devices(session: SessionDep, minutes: int = 120) -> list[DeviceLiveOut]:
+    minutes = max(10, min(minutes, 720))
+    devices = list((await session.execute(
+        select(EdgeDevice).where(EdgeDevice.status != "retired").order_by(EdgeDevice.registered_at)
+    )).scalars())
+    base = {d.device_id: d for d in await _out(session, devices)}
+    at = _now()
+    since = at - dt.timedelta(minutes=minutes)
+    today = at.date()
+    out: list[DeviceLiveOut] = []
+    for device in devices:
+        reports = list((await session.execute(
+            select(DeviceHeartbeat)
+            .where(DeviceHeartbeat.device_id == device.device_id, DeviceHeartbeat.recorded_at >= since)
+            .order_by(DeviceHeartbeat.recorded_at)
+        )).scalars())
+        latest = reports[-1] if reports else (await session.execute(
+            select(DeviceHeartbeat).where(DeviceHeartbeat.device_id == device.device_id)
+            .order_by(DeviceHeartbeat.recorded_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        # At most 60 points for the chart, evenly picked, the last kept.
+        step = max(1, len(reports) // 60)
+        picked = reports[::step]
+        if reports and picked[-1] is not reports[-1]:
+            picked.append(reports[-1])
+        history = [
+            ReportPoint(
+                at=r.recorded_at,
+                detection_rate_hz=None if r.detection_rate_hz is None else float(r.detection_rate_hz),
+                battery_temp_c=None if r.battery_temp_c is None else float(r.battery_temp_c),
+                battery_pct=r.battery_pct,
+            )
+            for r in picked
+        ]
+        board, alight = (await session.execute(
+            select(func.coalesce(func.sum(case((PassengerEvent.event_type == "board", 1), else_=0)), 0),
+                   func.coalesce(func.sum(case((PassengerEvent.event_type == "alight", 1), else_=0)), 0))
+            .where(PassengerEvent.device_id == device.device_id,
+                   func.date(PassengerEvent.event_at) == today)
+        )).one()
+        info = base[device.device_id]
+        trip = await _van_trip(session, info.checkout.van_id, today) if info.checkout else None
+        out.append(DeviceLiveOut(
+            **info.model_dump(),
+            charging=latest.charging if latest else None,
+            lens_blocked=latest.lens_blocked if latest else None,
+            detection_rate_hz=(None if latest is None or latest.detection_rate_hz is None
+                               else float(latest.detection_rate_hz)),
+            report_count_window=len(reports),
+            history=history,
+            boarded_today=int(board),
+            alighted_today=int(alight),
+            trip=trip,
+        ))
+    return out
+
+
+async def _van_trip(session, van_id: str, today: dt.date) -> LiveTrip | None:
+    """The van's trip that matters now: one boarding or on the road, else
+    today's next one still to leave, else today's last."""
+    trips = list((await session.execute(
+        select(Trip).where(Trip.van_id == van_id, Trip.service_date == today,
+                           Trip.status != "cancelled")
+        .order_by(Trip.departure_datetime)
+    )).scalars())
+    if not trips:
+        return None
+    live = [t for t in trips if t.status in ("boarding", "departed")]
+    ahead = [t for t in trips if t.status == "scheduled" and t.departure_datetime >= _now()]
+    trip = (live or ahead or trips[-1:])[0]
+    listed = await session.scalar(
+        select(func.count()).select_from(Booking).where(
+            Booking.trip_id == trip.trip_id,
+            Booking.status.in_(("confirmed", "checked_in", "boarded", "completed")),
+            Booking.payment_status == "paid",
+        ))
+    board, alight = (await session.execute(
+        select(func.coalesce(func.sum(case((PassengerEvent.event_type == "board", 1), else_=0)), 0),
+               func.coalesce(func.sum(case((PassengerEvent.event_type == "alight", 1), else_=0)), 0))
+        .where(PassengerEvent.trip_id == trip.trip_id)
+    )).one()
+    return LiveTrip(
+        trip_id=trip.trip_id, departure_datetime=trip.departure_datetime, trip_label=trip.trip_label,
+        status=trip.status, listed=int(listed or 0), boarded=int(board), alighted=int(alight),
+        aboard=max(0, int(board) - int(alight) - (1 if trip.crew_aboard else 0)),
+    )

@@ -32,4 +32,15 @@ class MessagingRepository {
     final json = await _api.post('/conversations/$conversationId/messages', body: {'body': body});
     return ChatMessage.fromJson(json as Map<String, dynamic>);
   }
+
+  Future<ChatMessage> editMessage(String conversationId, String messageId, String body) async {
+    final json = await _api.patch('/conversations/$conversationId/messages/$messageId',
+        body: {'body': body});
+    return ChatMessage.fromJson(json as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage> deleteMessage(String conversationId, String messageId) async {
+    final json = await _api.delete('/conversations/$conversationId/messages/$messageId');
+    return ChatMessage.fromJson(json as Map<String, dynamic>);
+  }
 }

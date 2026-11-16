@@ -16,7 +16,7 @@ class FocusRing extends StatefulWidget {
 
   final Widget child;
 
-  /// Terminal green by default; white on the green rail.
+  /// Forest green by default.
   final Color? color;
   final double radius;
 

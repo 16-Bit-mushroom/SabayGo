@@ -27,6 +27,7 @@ class ReviewCounts extends ChangeNotifier {
   }) {
     refresh();
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => refresh());
+    consoleChanged.addListener(refresh);
   }
 
   final DispatchRepository dispatch;
@@ -81,6 +82,7 @@ class ReviewCounts extends ChangeNotifier {
   void dispose() {
     _timer?.cancel();
     _timer = null;
+    consoleChanged.removeListener(refresh);
     super.dispose();
   }
 }

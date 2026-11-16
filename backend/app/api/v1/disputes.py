@@ -178,6 +178,40 @@ async def withdraw_dispute(
     return (await _out(session, [dispute]))[0]
 
 
+class FiguresOut(BaseModel):
+    fares: Decimal
+    terminal_fees_owed: Decimal
+    amount_due: Decimal
+    disputed: Decimal
+    operator_share_owed: Decimal
+    operator_share_held: Decimal
+    operator_share_over: Decimal
+
+
+class PreviewOut(BaseModel):
+    """The van's statement now, and as it would be after the decision."""
+    before: FiguresOut
+    after: FiguresOut
+
+
+class PreviewIn(BaseModel):
+    outcome: Literal["upheld", "rejected", "adjusted"]
+    adjusted_amount: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+
+
+@router.post("/{dispute_id}/preview", response_model=PreviewOut)
+async def preview_decision(
+    dispute_id: str, payload: PreviewIn, session: SessionDep,
+    user: Annotated[User, Depends(MANAGER)],
+) -> PreviewOut:
+    """What a decision would change on the van's statement, before the
+    Terminal Manager makes it. Nothing is written."""
+    before, after = await Disputes(session).preview(
+        dispute_id, by=user, outcome=payload.outcome, adjusted_amount=payload.adjusted_amount)
+    await session.rollback()
+    return PreviewOut(before=FiguresOut(**before), after=FiguresOut(**after))
+
+
 @router.post("/{dispute_id}/decide", response_model=DisputeOut)
 async def decide_dispute(
     dispute_id: str, payload: DecisionIn, session: SessionDep,

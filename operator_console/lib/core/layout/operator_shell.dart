@@ -1,12 +1,17 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../modules/boarding_audit/boarding_audit_screen.dart';
+import '../../modules/door_cameras/door_cameras_screen.dart';
 import '../../modules/disputes/disputes_screen.dart';
 import '../../modules/driving_flags/driving_flags_screen.dart';
 import '../../modules/remittance/remittance_screen.dart';
 import '../../modules/setup/setup_screen.dart';
+import '../../modules/setup/setup_status.dart' show SetupStep;
 import '../../modules/start_review/start_review_screen.dart';
 import '../../modules/van_board/van_board_screen.dart';
+import '../../modules/schedule_management/screens/schedule_screen.dart';
 import '../../modules/special_trips/special_trips_screen.dart';
 import '../../modules/messaging/screens/messages_screen.dart';
 import '../../modules/live_map/screens/fleet_map_screen.dart';
@@ -24,7 +29,8 @@ import '../design/components/brand_logo.dart';
 import '../design/components/focus_ring.dart';
 import '../design/tokens.dart';
 import 'notification_bell.dart';
-import 'profile_dialog.dart';
+import 'account_screen.dart';
+import 'console_router.dart';
 import 'review_counts.dart';
 import 'today_strip.dart';
 
@@ -47,7 +53,13 @@ class OperatorShell extends StatefulWidget {
 class _OperatorShellState extends State<OperatorShell> {
   int _hub = 0;
   final Map<int, int> _tab = {};
-  bool _collapsed = false;
+  bool _account = false;
+  /// The person's own choice of menu width; null until they make one.
+  /// Until then the menu folds to its icons on a screen under 1500 px, so
+  /// a laptop's trip sheet keeps its Next step column (12 Nov UI run: at
+  /// 1440 px the sheet's actions were off the right edge).
+  bool? _collapsedChoice;
+  late final ConsoleLocation _location = context.read<ConsoleLocation>();
   late final NotificationProvider _notifications;
   late final ReviewCounts _reviews;
   late final bool _manager = context.read<AuthProvider>().profile?.role.isManager ?? false;
@@ -66,10 +78,13 @@ class _OperatorShellState extends State<OperatorShell> {
       messaging: MessagingRepository(context.read<ApiClient>()),
       manager: _manager,
     );
+    _read();
+    _location.addListener(_onLocation);
   }
 
   @override
   void dispose() {
+    _location.removeListener(_onLocation);
     _notifications.dispose();
     _reviews.dispose();
     super.dispose();
@@ -79,9 +94,21 @@ class _OperatorShellState extends State<OperatorShell> {
   // point a notification at the wrong place. Emergencies is last: the
   // sidebar pins it to its foot.
   late final List<_Hub> _all = [
-    _Hub('Overview', Icons.map_outlined, Icons.map, [_Page('Overview', const FleetMapScreen())]),
+    _Hub('Overview', Icons.map_outlined, Icons.map, [
+      _Page('Overview', const FleetMapScreen()),
+      // What each van's phone reads at the door and how it holds up (12 Nov).
+      _Page('Door cameras', const DoorCamerasScreen(), managerOnly: true),
+    ]),
     _Hub('Trips', Icons.departure_board_outlined, Icons.departure_board, [
       _Page('Trips', const TripMonitorScreen()),
+      // The timetable sits with the trips it makes and the post box that
+      // posts it (11 Nov), not in Setup.
+      _Page('Trip Schedules', TimetablePage(onOpenRoute: () {
+        // Straight to Setup's Route step with its Add route form open.
+        SetupScreen.requested = SetupStep.route;
+        SetupScreen.requestAdd = true;
+        _show((w) => w is SetupScreen);
+      }), managerOnly: true),
       _Page('Van Status Board', const VanBoardScreen()),
       // The Terminal Manager and the Cashier both review requests and
       // enter walk-ins (brief 3).
@@ -97,7 +124,7 @@ class _OperatorShellState extends State<OperatorShell> {
     _Hub('Messages', Icons.chat_bubble_outline, Icons.chat_bubble, [_Page('Messages', const MessagesScreen())],
         count: () => _reviews.messages),
     _Hub('Setup', Icons.tune_outlined, Icons.tune,
-        [_Page('Setup', SetupScreen(onOpenTrips: () => _show((w) => w is TripMonitorScreen)))]),
+        [_Page('Setup', SetupScreen(onOpenTimetable: () => _show((w) => w is TimetablePage)))]),
     _Hub('Emergencies (SOS)', Icons.emergency_outlined, Icons.emergency,
         [_Page('Emergencies (SOS)', const SosConsoleScreen())], urgent: true),
   ];
@@ -110,17 +137,41 @@ class _OperatorShellState extends State<OperatorShell> {
       if (h.pagesFor(_manager).isNotEmpty) h,
   ];
 
+  // The address is the page (console_router.dart): every way of opening a
+  // page -- the menu, a tab, an alert, a figure in the top bar, the
+  // browser's Back -- moves the address, and the shell follows it.
+  void _onLocation() => setState(_read);
+
+  /// The page the address names. Overview for an address that names no
+  /// page, or a page this person is not shown.
+  void _read() {
+    final parts = _location.path.split('/').where((s) => s.isNotEmpty).toList();
+    _account = parts.isNotEmpty && parts.first == 'account';
+    if (_account) return;
+    final h = parts.isEmpty ? -1 : _hubs.indexWhere((x) => slug(x.label) == parts.first);
+    _hub = h < 0 ? 0 : h;
+    if (parts.length > 1) {
+      final t = _hubs[_hub].pagesFor(_manager).indexWhere((p) => slug(p.label) == parts[1]);
+      if (t >= 0) _tab[_hub] = t;
+    }
+  }
+
+  /// Opens a menu entry, on [tab] or on the tab last used there.
+  void _go(int hub, [int? tab]) {
+    final pages = _hubs[hub].pagesFor(_manager);
+    final t = (tab ?? _tab[hub] ?? 0).clamp(0, pages.length - 1);
+    _tab[hub] = t;
+    final entry = slug(_hubs[hub].label);
+    _location.go(pages.length > 1 ? '/$entry/${slug(pages[t].label)}' : '/$entry');
+  }
+
   /// Looked up by screen type rather than written out as an index. False
   /// when this person is not shown that page.
   bool _show(bool Function(Widget) test) {
     for (var h = 0; h < _hubs.length; h++) {
-      final pages = _hubs[h].pagesFor(_manager);
-      final t = pages.indexWhere((p) => test(p.screen));
+      final t = _hubs[h].pagesFor(_manager).indexWhere((p) => test(p.screen));
       if (t >= 0) {
-        setState(() {
-          _hub = h;
-          _tab[h] = t;
-        });
+        _go(h, t);
         return true;
       }
     }
@@ -137,6 +188,8 @@ class _OperatorShellState extends State<OperatorShell> {
       'driving_flag' => _show((w) => w is DrivingFlagsScreen),
       'dispute_raised' => _show((w) => w is DisputesScreen),
       'left_unpaid' => _show((w) => w is RemittanceScreen),
+      // A decision left the operator holding more than the share (038).
+      'share_over_given' => _show((w) => w is RemittanceScreen),
       'special_trip_request' => _show((w) => w is SpecialTripsScreen),
       'unconfirmed_trip_start' => _show((w) => w is StartReviewScreen) || _show((w) => w is TripMonitorScreen),
       _ when n.isTripAlert => _show((w) => w is TripMonitorScreen),
@@ -156,6 +209,8 @@ class _OperatorShellState extends State<OperatorShell> {
     final hub = _hubs[_hub];
     final pages = hub.pagesFor(_manager);
     final tab = (_tab[_hub] ?? 0).clamp(0, pages.length - 1);
+    final title = _account ? 'My account' : pages[tab].label;
+    final collapsed = _collapsedChoice ?? MediaQuery.sizeOf(context).width < 1500;
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<NotificationProvider>.value(value: _notifications),
@@ -172,30 +227,39 @@ class _OperatorShellState extends State<OperatorShell> {
             children: [
               _region(1, _Sidebar(
                 hubs: _hubs,
-                selected: _hub,
-                collapsed: _collapsed,
-                onSelect: (i) => setState(() => _hub = i),
-                onToggle: () => setState(() => _collapsed = !_collapsed),
+                selected: _account ? -1 : _hub,
+                collapsed: collapsed,
+                onSelect: _go,
+                onToggle: () => setState(() => _collapsedChoice = !collapsed),
               )),
               Expanded(
-                child: Column(
+                child: _Ambient(
+                  child: Column(
                   children: [
                     _region(2, _TopBar(
                       strip: TodayStrip(onOpen: _openToday),
                       bell: NotificationBell(onOpen: _openFor),
                     )),
-                    if (pages.length > 1)
+                    if (!_account && pages.length > 1)
                       _region(3, _Tabs(
                         key: ValueKey(hub.label),
                         pages: pages,
                         selected: tab,
-                        onSelect: (t) => setState(() => _tab[_hub] = t),
+                        onSelect: (t) => _go(_hub, t),
                       )),
                     Expanded(
-                      child: _region(4,
-                          KeyedSubtree(key: ValueKey('${hub.label}/$tab'), child: pages[tab].screen)),
+                      // The browser tab names the page, so several open
+                      // tabs are told apart.
+                      child: Title(
+                        title: '$title | SabayGo',
+                        color: AppColors.primary,
+                        child: _region(4, _account
+                            ? const KeyedSubtree(key: ValueKey('account'), child: AccountScreen())
+                            : KeyedSubtree(key: ValueKey('${hub.label}/$tab'), child: pages[tab].screen)),
+                      ),
                     ),
                   ],
+                  ),
                 ),
               ),
             ],
@@ -242,13 +306,8 @@ class _TabsState extends State<_Tabs> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     context.watch<ReviewCounts>();
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceRaised,
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
-      ),
+    return _Glass(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      alignment: Alignment.centerLeft,
       child: TabBar(
         controller: _controller,
         isScrollable: true,
@@ -303,6 +362,64 @@ class _CountPill extends StatelessWidget {
   }
 }
 
+// ------------------------------------------------------------- the surfaces
+/// The page's light (11 Nov, "transparency"): the meadow mist with two
+/// soft emerald glows, top right and bottom left, so the frosted bars and
+/// the see-through washes have something to show. Behind the panels only;
+/// every panel that holds data stays solid white, so no figure is read
+/// through a gradient.
+class _Ambient extends StatelessWidget {
+  const _Ambient({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(1.1, -1.2),
+            radius: 1.4,
+            colors: [Color(0x2E22C55E), Color(0x0022C55E)],
+          ),
+        ),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(-1.0, 1.3),
+              radius: 1.2,
+              colors: [Color(0x1F10B981), Color(0x0010B981)],
+            ),
+          ),
+          child: child,
+        ),
+      );
+}
+
+/// A bar over the page -- the top bar, the hub's tabs: frosted glass,
+/// white at 78 % over a 14 px blur, with a hairline under it.
+class _Glass extends StatelessWidget {
+  const _Glass({required this.child, this.height, this.padding});
+  final Widget child;
+  final double? height;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            height: height,
+            padding: padding,
+            alignment: Alignment.centerLeft,
+            decoration: const BoxDecoration(
+              color: AppColors.glass,
+              border: Border(bottom: BorderSide(color: AppColors.divider)),
+            ),
+            child: child,
+          ),
+        ),
+      );
+}
+
 // ------------------------------------------------------------------ top bar
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.strip, required this.bell});
@@ -312,21 +429,84 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return _Glass(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceRaised,
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
-      ),
       child: Row(
         children: [
           Expanded(child: strip),
           const SizedBox(width: AppSpacing.md),
+          const _RoleChip(),
+          const SizedBox(width: AppSpacing.sm),
           bell,
           const SizedBox(width: AppSpacing.sm),
           const _ProfileMenu(),
         ],
+      ),
+    );
+  }
+}
+
+/// The separation of duties, one click away (11 Nov, the owner's
+/// reference): what this role may do, and what the other one does.
+class _RoleChip extends StatelessWidget {
+  const _RoleChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final role = context.watch<AuthProvider>().profile?.role;
+    final manager = role?.isManager ?? false;
+    final cashier = role?.isCashier ?? false;
+    if (!manager && !cashier) return const SizedBox.shrink();
+    final duties = manager
+        ? const [
+            'Keep the records: terminals, route, fares, trip schedules, staff, vans and phones, and the rules.',
+            'Post trips for passengers and assign each one a van and a Dispatcher.',
+            'Lift a trip\'s payment block, with a written reason.',
+            'Review an automatic start, change a started trip\'s van, or void a trip.',
+            'Decide disputes: upheld, rejected or adjusted.',
+          ]
+        : const [
+            'Record the terminal fees the Dispatcher hands over, and the operator\'s share.',
+            'Start a trip once its fees are recorded.',
+            'Record an operator\'s dispute; the Terminal Manager decides it.',
+          ];
+    final other = manager
+        ? 'The Cashier records the cash. The system holds no money.'
+        : 'The Terminal Manager sets the rules, lifts payment blocks and decides disputes.';
+    return Tooltip(
+      message: manager ? 'What only the Terminal Manager can do' : 'What the Cashier does',
+      child: ActionChip(
+        avatar: Icon(manager ? Icons.verified_user_outlined : Icons.point_of_sale_outlined,
+            size: 16, color: AppColors.primary),
+        label: Text(manager ? 'Manager authority' : 'Cashier duties',
+            style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary)),
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(manager ? 'As Terminal Manager you' : 'As Cashier you'),
+            content: SizedBox(
+              width: 440,
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                for (final d in duties)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(Icons.check, size: 16, color: AppColors.primary),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(child: Text(d)),
+                    ]),
+                  ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(other, style: Theme.of(ctx).textTheme.bodySmall),
+              ]),
+            ),
+            actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+          ),
+        ),
       ),
     );
   }
@@ -346,20 +526,20 @@ class _ProfileMenu extends StatelessWidget {
       tooltip: 'My account',
       offset: const Offset(0, 52),
       onSelected: (v) {
-        if (v == 'profile') {
-          showDialog<void>(context: context, builder: (_) => const ProfileDialog());
+        if (v == 'account') {
+          context.read<ConsoleLocation>().go('/account');
         } else {
           auth.signOut();
         }
       },
       itemBuilder: (_) => const [
         PopupMenuItem(
-          value: 'profile',
+          value: 'account',
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.person_outline),
-            title: Text('My profile'),
+            title: Text('My account'),
           ),
         ),
         PopupMenuItem(
@@ -443,29 +623,47 @@ class _Sidebar extends StatelessWidget {
       duration: MediaQuery.of(context).disableAnimations ? Duration.zero : AppDuration.normal,
       curve: Curves.easeOut,
       width: collapsed ? 76 : 248,
-      color: AppColors.sidebar,
+      decoration: BoxDecoration(
+        color: AppColors.sidebar,
+        border: Border(right: BorderSide(color: AppColors.sidebarEdge)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The mark is black ink on transparent and is drawn only on a
-          // light surface, so it sits on its white plate.
+          // The logo on the white sidebar: whole when the menu is open, the
+          // van alone when it is folded to icons.
           Padding(
             padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.lg, AppSpacing.md, 0),
-            child: BrandPlate(height: collapsed ? 24 : 40),
+            child: Center(
+              child: collapsed
+                  ? const BrandLogo(mark: true, height: 30, width: 52)
+                  : const BrandLogo(height: 80),
+            ),
           ),
           if (!collapsed)
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 0),
               child: Text('A2Z cooperative office',
+                  textAlign: TextAlign.center,
                   style: text.bodySmall!.copyWith(color: AppColors.onSidebarMuted)),
             ),
           const SizedBox(height: AppSpacing.lg),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              // Grouped as the work goes: the day's pages, then the set-up.
               children: [
+                if (!collapsed) const _SectionName('Daily work'),
                 for (var i = 0; i < hubs.length; i++)
-                  if (i != sos) item(i),
+                  if (i != sos) ...[
+                    if (hubs[i].label == 'Setup')
+                      collapsed
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                              child: Divider(color: AppColors.sidebarEdge, height: 1))
+                          : const _SectionName('System'),
+                    item(i),
+                  ],
               ],
             ),
           ),
@@ -490,8 +688,8 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-/// One entry. Selection is carried three ways -- a lighter fill, the icon
-/// set on a white plate tile (the pila board's magnet), a bold label -- so
+/// One entry. Selection is carried three ways -- the emerald fill, the
+/// icon set on a white tile (the pila board's magnet), a bold label -- so
 /// it never rests on hue alone (WCAG 1.4.1). Emergencies keeps a red icon
 /// tile in every state and turns red when open: it is the one page that is
 /// an alarm.
@@ -525,7 +723,9 @@ class _SidebarItem extends StatelessWidget {
           child: Icon(glyph, size: 18, color: colour),
         );
     final icon = selected
-        ? tile(AppColors.onSidebar, hub.selectedIcon, hub.urgent ? AppColors.danger : AppColors.primary)
+        ? hub.urgent
+            ? tile(AppColors.onFill, hub.selectedIcon, AppColors.danger)
+            : tile(AppColors.surfaceRaised, hub.selectedIcon, AppColors.primary)
         : hub.urgent
             ? tile(AppColors.danger, hub.icon, AppColors.onFill)
             : tile(null, hub.icon, AppColors.onSidebarMuted);
@@ -545,7 +745,12 @@ class _SidebarItem extends StatelessWidget {
               hub.label,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: AppColors.onSidebar,
+                // On the open Emergencies' red fill the label is white.
+                color: !selected
+                    ? AppColors.onSidebar
+                    : hub.urgent
+                        ? AppColors.onFill
+                        : AppColors.onAction,
                 fontSize: 14,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
@@ -566,7 +771,6 @@ class _SidebarItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.md),
           clipBehavior: Clip.antiAlias,
           child: FocusRing(
-            color: AppColors.onSidebar,
             child: InkWell(
               hoverColor: AppColors.sidebarHover,
               focusColor: AppColors.sidebarHover,
@@ -611,7 +815,6 @@ class _SidebarButton extends StatelessWidget {
     final button = Semantics(
       button: true,
       child: FocusRing(
-        color: AppColors.onSidebar,
         child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.md),
         hoverColor: AppColors.sidebarHover,
@@ -671,4 +874,22 @@ class _Page {
   final bool managerOnly;
 
   final int? Function()? count;
+}
+
+/// A group's name in the sidebar: "Daily work", "System". Sentence case,
+/// muted, and a heading for a screen reader.
+class _SectionName extends StatelessWidget {
+  const _SectionName(this.name);
+  final String name;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.lg, AppSpacing.md, AppSpacing.xs),
+        child: Semantics(
+          header: true,
+          child: Text(name,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600, color: AppColors.onSidebarMuted)),
+        ),
+      );
 }

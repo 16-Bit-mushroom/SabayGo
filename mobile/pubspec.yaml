@@ -59,7 +59,8 @@ flutter:
   # The official SABAY GO mark. Drawn by `BrandLogo`, never by a screen
   # directly, so its size steps and screen-reader name have one owner.
   assets:
-    - assets/branding/sabaygo_logo.png
+    - assets/branding/sabaygo_van_logo.png
+    - assets/branding/sabaygo_van_mark.png
 
   # Bundled, not fetched and not borrowed from the platform.
   #
@@ -71,12 +72,25 @@ flutter:
   # google_fonts was the alternative and is the wrong tool here: it fetches
   # at first run, and this app is used in connectivity dead zones by design.
   # A font that arrives over the network is missing exactly when it matters.
+  # Inter for text, Plus Jakarta Sans for headings: the office console's
+  # pair (10 Nov), so the two apps read as one product. Static instances,
+  # SIL OFL (assets/fonts/OFL-*.txt).
   fonts:
-    - family: Roboto
+    - family: Inter
       fonts:
-        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Inter-Regular.ttf
           weight: 400
-        - asset: assets/fonts/Roboto-Medium.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Roboto-Bold.ttf
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
           weight: 700
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800

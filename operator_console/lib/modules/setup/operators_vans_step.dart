@@ -115,7 +115,11 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
               : list == 'vans'
                   ? _vanList()
                   : _operatorList(),
-      side: _side(list),
+      detail: _detail(list),
+      addForm: _addForm(list),
+      addLabel: list == 'vans' ? 'Add van' : 'Add operator',
+      onAdd: () => setState(() => _selected = null),
+      openWhenEmpty: list == 'vans' ? (_vans != null && _vans!.isEmpty) : (_operators != null && _operators!.isEmpty),
     );
   }
 
@@ -131,11 +135,17 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
 
   Widget _operatorList() {
     final ops = _operators ?? const <OperatorRecord>[];
+    const columns = [
+      RecordColumn('Operator', flex: 4),
+      RecordColumn('Licence', flex: 3),
+      RecordColumn('Van', flex: 2),
+      RecordColumn('Validation', flex: 2),
+    ];
     return RecordList(
       title: 'Operators',
       header: _switch('operators'),
-      addLabel: _canEdit ? 'Add operator' : null,
-      onAdd: _canEdit && _selected != null ? () => setState(() => _selected = null) : null,
+      columns: columns,
+      leadingWidth: 44,
       empty: const EmptyState(
         icon: Icons.person_outline,
         title: 'No operators yet',
@@ -150,10 +160,20 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
               child: Text(op.fullName.characters.first.toUpperCase(),
                   style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
             ),
+            leadingWidth: 44,
             title: op.fullName,
-            subtitle: '${op.licenseNumber}${op.licenseExpired ? ' · licence expired' : ''}'
-                ' · ${op.plateNumber ?? 'no van yet'}',
-            badges: [Roster.validationBadge(op.validationStatus)],
+            columns: columns,
+            cells: [
+              CellText(op.fullName, strong: true),
+              op.licenseExpired
+                  ? Wrap(spacing: AppSpacing.xs, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      CellText(op.licenseNumber),
+                      const StatusBadge('Expired', tone: Tone.danger),
+                    ])
+                  : CellText(op.licenseNumber),
+              op.plateNumber == null ? const CellText('No van yet', muted: true) : PlateTag(op.plateNumber!),
+              Roster.validationBadge(op.validationStatus),
+            ],
             selected: op.operatorId == _selected,
             semanticLabel: '${op.fullName}, ${Roster.validationWord(op.validationStatus)}. Opens the record.',
             onTap: () => setState(() => _selected = op.operatorId),
@@ -164,11 +184,17 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
 
   Widget _vanList() {
     final vans = _vans ?? const <Van>[];
+    const columns = [
+      RecordColumn('Plate', flex: 2),
+      RecordColumn('Operator', flex: 4),
+      RecordColumn('Condition', flex: 3),
+      RecordColumn('Photos', flex: 2, end: true),
+      RecordColumn('Validation', flex: 2),
+    ];
     return RecordList(
       title: 'Vans',
       header: _switch('vans'),
-      addLabel: _canEdit ? 'Add van' : null,
-      onAdd: _canEdit && _selected != null ? () => setState(() => _selected = null) : null,
+      columns: columns,
       empty: const EmptyState(
         icon: Icons.airport_shuttle_outlined,
         title: 'No vans yet',
@@ -177,10 +203,15 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
       rows: [
         for (final van in vans)
           RecordRow(
-            leading: SizedBox(width: 92, child: Align(alignment: Alignment.centerLeft, child: PlateTag(van.plateNumber))),
-            title: van.operatorName ?? 'No operator',
-            subtitle: '${Roster.vanStatus(van.operationalStatus)} · ${van.photos.length} of 4 photos',
-            badges: [Roster.validationBadge(van.validationStatus)],
+            title: van.plateNumber,
+            columns: columns,
+            cells: [
+              PlateTag(van.plateNumber),
+              CellText(van.operatorName ?? 'No operator', strong: van.operatorName != null, muted: van.operatorName == null),
+              CellText(Roster.vanStatus(van.operationalStatus)),
+              CellText('${van.photos.length} of 4', muted: van.photos.length < 4),
+              Roster.validationBadge(van.validationStatus),
+            ],
             selected: van.vanId == _selected,
             semanticLabel: '${van.plateNumber}, ${Roster.validationWord(van.validationStatus)}. Opens the record.',
             onTap: () => setState(() => _selected = van.vanId),
@@ -189,11 +220,20 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
     );
   }
 
-  Widget? _side(String list) {
+  /// The record open in the panel, if any.
+  Widget? _detail(String list) {
     if (list == 'operators') {
       final op = (_operators ?? const <OperatorRecord>[]).where((o) => o.operatorId == _selected).firstOrNull;
-      if (op != null) return _operatorPanel(op);
-      if (!_canEdit) return null;
+      return op == null ? null : _operatorPanel(op);
+    }
+    final van = (_vans ?? const <Van>[]).where((v) => v.vanId == _selected).firstOrNull;
+    return van == null ? null : _vanPanel(van);
+  }
+
+  /// The add form for the list shown; null when this person may not add.
+  Widget? _addForm(String list) {
+    if (!_canEdit) return null;
+    if (list == 'operators') {
       return SidePanel(
         title: 'Add operator',
         child: OperatorForm(
@@ -203,9 +243,6 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
         ),
       );
     }
-    final van = (_vans ?? const <Van>[]).where((v) => v.vanId == _selected).firstOrNull;
-    if (van != null) return _vanPanel(van);
-    if (!_canEdit) return null;
     final free = [for (final o in _operators ?? const <OperatorRecord>[]) if (o.vanId == null) o];
     if (_operators != null && free.isEmpty) {
       return SidePanel(
@@ -236,7 +273,6 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
     return SidePanel(
       title: op.fullName,
       onClose: () => setState(() => _selected = null),
-      closeLabel: _canEdit ? 'Back to adding' : 'Close',
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         FactRow('Licence', op.licenseNumber),
         FactRow('Licence expires', expiry == null ? 'Not recorded' : '${Roster.day(expiry)}${op.licenseExpired ? ' (expired)' : ''}',
@@ -272,7 +308,6 @@ class _OperatorsVansStepState extends State<OperatorsVansStep> {
     return SidePanel(
       title: van.plateNumber,
       onClose: () => setState(() => _selected = null),
-      closeLabel: _canEdit ? 'Back to adding' : 'Close',
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         FactRow('Operator', van.operatorName ?? 'None'),
         FactRow('Registered route', route?.routeName ?? 'Not recorded'),
@@ -523,7 +558,7 @@ class _VanFormState extends State<VanForm> {
         TextFormField(
           controller: _seats,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Passenger spaces', helperText: 'A2Z\'s rule is 14'),
+          decoration: const InputDecoration(labelText: 'Passenger seats', helperText: 'A2Z\'s rule is 14'),
           validator: (v) {
             final n = int.tryParse(v ?? '');
             return n == null || n < 1 || n > 14 ? '1 to 14' : null;

@@ -8,7 +8,7 @@ terminal, Equation (2):
     remittance owed = rate x (B + W)
 
 B (booked) is the seats reserved in the app that the Dispatcher marked
-as paid, a home-pickup seat among them; W (walk-up) the cash walk-ups
+as paid, a home-pickup seat among them; W (walk-in) the cash walk-ins
 the Dispatcher listed (rev 721 item 3). Every fare is cash, handed to
 the Dispatcher at the terminal: the group says where the seat came
 from, not how it was paid. A seat counts whether or not its passenger
@@ -59,10 +59,16 @@ lines and its trips whenever they change, so its totals cannot drift:
   - the balance is terminal fees + held - settled. The share of an open
     fare-line dispute waits: the undisputed balance leaves it out.
 Payments are recorded against a statement and add up in settled_amount;
-the operator's share handed over adds up in operator_share_given. Once
-every trip's list on the statement is locked, a given share that differs
-from the owed one is flagged (`share_difference`). The flag blocks
-nothing: it is for the Terminal Manager to look at.
+the operator's share handed over adds up in operator_share_given, and
+what the operator hands back in operator_share_returned (038); the share
+the operator holds is given - returned (`share_held`). Once every trip's
+list on the statement is locked, a held share that differs from the owed
+one is flagged (`share_difference`). The flag blocks nothing: it is for
+the Terminal Manager to look at. A share held *over* what is owed is
+reported at once (`share_over`), lists locked or not, because it is cash
+the operator holds that is not theirs -- typically after a dispute was
+upheld and its fares left the statement -- and the Cashier records it
+coming back (`record_share_returned`), never more than the excess.
 
 A decided dispute (`application/finance/disputes.py`) changes its line's
 count here: upheld, the line leaves the statement (fares and share);
@@ -131,10 +137,10 @@ PAID_SEAT = (
     Booking.payment_status == PaymentStatus.PAID.value,
     Booking.status != BookingStatus.CANCELLED.value,
 )
-# The Dispatcher's own entries: a walk-up, in group W. Every other paid
+# The Dispatcher's own entries: a walk-in, in group W. Every other paid
 # seat was reserved in the app, in group B.
-WALK_UP_TYPES = (BookingType.WALK_IN.value, BookingType.DRIVER_ISSUED.value)
-BOOKED, WALK_UP = "booked", "walk_up"
+WALK_IN_TYPES = (BookingType.WALK_IN.value, BookingType.DRIVER_ISSUED.value)
+BOOKED, WALK_IN = "booked", "walk_in"
 BEFORE_DEPARTURE = (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value)
 
 
@@ -155,7 +161,7 @@ def share_of(gross: Decimal, rate_pct: Decimal) -> Decimal:
 class LineKey:
     dest_terminal_id: str | None    # None on a rental
     fare: Decimal
-    group: str          # BOOKED | WALK_UP
+    group: str          # BOOKED | WALK_IN
     request_id: str | None = None   # a rental fee's request
 
 
@@ -179,9 +185,9 @@ class Statements:
             # Brief 2.5: the fee is the whole income of the trip, and
             # which group it falls in is where the rental came from --
             # booked when the passenger requested it in the app,
-            # walk-up when it was entered at the counter. The Dispatcher
+            # walk-in when it was entered at the counter. The Dispatcher
             # takes the cash either way.
-            group = BOOKED if rental.passenger_user_id else WALK_UP
+            group = BOOKED if rental.passenger_user_id else WALK_IN
             return {LineKey(None, Decimal(rental.rental_fee), group, rental.request_id): 1}
         terminal_at = await self._terminals(trip)
         rows = (await self.session.execute(
@@ -191,7 +197,7 @@ class Statements:
         out: dict[LineKey, int] = {}
         for alight, fare, kind in rows:
             key = LineKey(terminal_at[alight], Decimal(fare),
-                          WALK_UP if kind in WALK_UP_TYPES else BOOKED)
+                          WALK_IN if kind in WALK_IN_TYPES else BOOKED)
             out[key] = out.get(key, 0) + 1
         return out
 
@@ -411,7 +417,7 @@ class Statements:
             .where(RemittanceLine.remittance_id == statement.remittance_id,
                    Trip.status != TripStatus.CANCELLED.value)
         )).all()
-        booked = walk_up = owed = held = ZERO
+        booked = walk_in = owed = held = ZERO
         counted = 0
         for review, trips in (await self.session.execute(
             select(Trip.start_review_status, func.count())
@@ -434,13 +440,13 @@ class Statements:
             if group == BOOKED:
                 booked += gross
             else:
-                walk_up += gross
+                walk_in += gross
         statement.booked_income = booked
-        statement.walk_up_income = walk_up
+        statement.walk_in_income = walk_in
         statement.remittance_owed = owed
         statement.dcott_fees = statement.dcott_ticket_fee * counted
         statement.terminal_fees_owed = owed + statement.dcott_fees + statement.parking_fee
-        statement.operator_share_owed = max(booked + walk_up - statement.terminal_fees_owed, ZERO)
+        statement.operator_share_owed = max(booked + walk_in - statement.terminal_fees_owed, ZERO)
         statement.held_share = held
         settled = statement.terminal_fees_owed + held - statement.settled_amount <= 0
         statement.status = "settled" if settled and statement.recorded_by else "open"
@@ -499,7 +505,20 @@ class Statements:
             ))
         if open_list:
             return None
-        return statement.operator_share_owed - statement.operator_share_given
+        return statement.operator_share_owed - self.share_held(statement)
+
+    @staticmethod
+    def share_held(statement: Remittance) -> Decimal:
+        """The operator's share the operator holds: given less returned."""
+        return statement.operator_share_given - statement.operator_share_returned
+
+    @classmethod
+    def share_over(cls, statement: Remittance) -> Decimal:
+        """How much more than the share owed the operator holds; 0.00 when
+        not over. Read at any time, unlike `share_difference`: more fares
+        can still raise what is owed before the lists lock, but until they
+        do this is cash the operator holds that is not theirs."""
+        return max(cls.share_held(statement) - statement.operator_share_owed, ZERO)
 
     # ---------------------------------------------------------- payments
     async def record_payment(
@@ -560,6 +579,28 @@ class Statements:
             raise ConflictError("Record an amount above zero.")
         self._give_share(statement, by=by, amount=amount, at=_now())
         await self.recompute(statement)
+        return statement
+
+    async def record_share_returned(
+        self, statement: Remittance, *, by: User, amount: Decimal,
+    ) -> Remittance:
+        """The operator hands back a share held over what is owed (038),
+        for example after a dispute was upheld. Never more than the excess,
+        so a return cannot leave the operator short. The caller commits."""
+        amount = Decimal(amount).quantize(CENT)
+        if amount <= 0:
+            raise ConflictError("Record an amount above zero.")
+        await self.recompute(statement)
+        over = self.share_over(statement)
+        if over == 0:
+            raise ConflictError(
+                "The operator holds no more than the share owed: nothing is to come back.")
+        if amount > over:
+            raise ConflictError(
+                f"The operator holds ₱{over:,.2f} over the share; record that amount or less.")
+        statement.operator_share_returned += amount
+        statement.operator_share_returned_at = _now()
+        statement.operator_share_returned_by = by.user_id
         return statement
 
     @staticmethod

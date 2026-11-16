@@ -198,7 +198,7 @@ class OfflineSyncService extends ChangeNotifier {
     _flushing = true;
     try {
       // Marks first: a Paid mark that reaches the server before the cutoff
-      // keeps the seat, and a walk-up may be waiting for a cancelled one.
+      // keeps the seat, and a walk-in may be waiting for a cancelled one.
       for (final mark in await _marks.all()) {
         try {
           final notice = await _submitMark(mark);
@@ -243,7 +243,7 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   // Not 1 << 32: on the web shifts are 32-bit, that is 0, and nextInt(0)
-  // throws -- the walk-up was never sent.
+  // throws -- the walk-in was never sent.
   String _newRequestId() =>
       '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}';
 

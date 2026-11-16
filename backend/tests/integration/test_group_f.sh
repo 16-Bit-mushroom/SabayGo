@@ -2,7 +2,7 @@
 # Group F: scheduling conflicts, crew restriction, who may cancel a seat,
 # and the release of unpaid reservations (rev 721).
 set -uo pipefail
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 TRIP="TRIP-DEMO-00000001"
 STAMP=$(date +%s)
 P=0; F=0; G=0

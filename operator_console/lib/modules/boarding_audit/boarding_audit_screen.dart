@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -28,18 +30,29 @@ class _BoardingAuditScreenState extends State<BoardingAuditScreen> {
   List<TripAudit>? _trips;
   bool _loading = true;
   String? _error;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Live: a door event the phone sends shows up without a refresh.
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _load(quiet: true));
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final trips = await _oversight.boardingAudit(isoDay(_day));
       if (mounted) setState(() => _trips = trips);
@@ -66,7 +79,7 @@ class _BoardingAuditScreenState extends State<BoardingAuditScreen> {
           PageHeader(
             title: 'Boarding Audit',
             description: 'Boardings the phone counted that were not on the passenger list, what the '
-                'Dispatcher did about each, and every time a van carried more than its spaces.',
+                'Dispatcher did about each, and every time a van carried more than its seats.',
             actions: [
               DayPicker(day: _day, onShift: _shift),
               RefreshButton(onPressed: _load, busy: _loading),
@@ -84,7 +97,7 @@ class _BoardingAuditScreenState extends State<BoardingAuditScreen> {
                             icon: Icons.fact_check_outlined,
                             title: 'Nothing to review on this day',
                             hint: 'No phone reported a boarding that was not on the list, a van '
-                                'over its spaces, or a departure with more aboard than listed. '
+                                'over its seats, or a departure with more aboard than listed. '
                                 'A trip whose phone sent nothing is Unaudited, not cleared: its '
                                 'status is on Trips.')
                         : ListView.separated(
@@ -110,44 +123,90 @@ class _TripAuditPanel extends StatelessWidget {
     final a = audit;
     final text = Theme.of(context).textTheme;
     final pending = a.unlisted.where((u) => u.resolution == 'pending').length;
-    return Panel(
-      title: a.tripLabel,
-      icon: Icons.directions_bus_outlined,
-      trailing: StatusBadge.trip(a.status),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FactLine(Icons.badge_outlined,
-              'Operator ${a.operatorName ?? '—'}, licence ${a.operatorLicence ?? '—'}, plate ${a.plateNumber ?? '—'}'
-              ' · Dispatcher ${a.dispatcherName ?? 'none'}'),
-          a.chainVerified
-              ? FactLine(Icons.link, 'Hash chain holds over ${a.chainEvents} door events: none was '
-                  'changed, removed or reordered.', colour: AppColors.success)
-              : FactLine(Icons.link_off, 'Hash chain broken at event ${a.chainBrokenAt}: the record '
-                  'from there on was altered.', colour: AppColors.danger),
-          if (a.departedWithMore != null)
-            FactLine(Icons.warning_amber_rounded, a.departedWithMore!, colour: AppColors.danger),
-          if (a.unlisted.isNotEmpty) ...[
-            const Divider(height: AppSpacing.xl),
-            Text('Boardings not on the passenger list (${a.unlisted.length}'
-                '${pending > 0 ? ', $pending not resolved' : ''})', style: text.titleSmall),
-            if (a.crewAboard)
-              Text('The Dispatcher marked themselves crew: one of these boardings is theirs.',
-                  style: text.bodySmall),
-            const SizedBox(height: AppSpacing.xs),
-            for (final u in a.unlisted) _UnlistedRow(boarding: u),
-          ],
-          if (a.capacityAlerts.isNotEmpty) ...[
-            const Divider(height: AppSpacing.xl),
-            Text('Above the van\'s spaces (${a.capacityAlerts.length})', style: text.titleSmall),
-            const SizedBox(height: AppSpacing.xs),
-            for (final c in a.capacityAlerts)
-              FactLine(Icons.groups_outlined,
-                  '${_time.format(c.at)}: ${c.aboard} aboard, ${c.capacity} spaces, ${c.place ?? 'place not known'}',
-                  colour: AppColors.warning),
-          ],
-        ],
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: a.departedWithMore != null ? AppColors.danger.withValues(alpha: 0.4) : AppColors.divider),
       ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: AppColors.textPrimary, borderRadius: BorderRadius.circular(6)),
+            child: Text(a.plateNumber ?? 'No van',
+                style: const TextStyle(color: AppColors.onFill, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5)),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(a.tripLabel, style: text.titleSmall),
+              Text('Operator ${a.operatorName ?? '—'}${a.operatorLicence == null ? '' : ', licence ${a.operatorLicence}'}'
+                  ', Dispatcher ${a.dispatcherName ?? 'none'}', style: text.bodySmall),
+            ]),
+          ),
+          StatusBadge.trip(a.status),
+        ]),
+        const SizedBox(height: AppSpacing.md),
+        Wrap(spacing: AppSpacing.xs, runSpacing: AppSpacing.xs, children: [
+          if (a.departedWithMore != null) const StatusBadge('More aboard than listed', tone: Tone.danger),
+          if (pending > 0) StatusBadge('$pending boarding${pending == 1 ? '' : 's'} not resolved', tone: Tone.warning),
+          if (a.unlisted.isNotEmpty && pending == 0)
+            const StatusBadge('Every boarding resolved', tone: Tone.success),
+          if (a.capacityAlerts.isNotEmpty) const StatusBadge('Above the van\'s seats', tone: Tone.warning),
+        ]),
+        if (a.departedWithMore != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(a.departedWithMore!, style: text.bodyMedium?.copyWith(color: AppColors.danger)),
+        ],
+        const SizedBox(height: AppSpacing.md),
+        // The door camera's record and whether it is intact (the
+        // reference's evidence block, with what the phones really sent).
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(color: AppColors.textPrimary, borderRadius: BorderRadius.circular(AppRadius.md)),
+          child: Row(children: [
+            Icon(a.chainVerified ? Icons.verified_outlined : Icons.gpp_bad_outlined,
+                size: 18, color: a.chainVerified ? AppColors.edge : const Color(0xFFFCA5A5)),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                // Plain words (12 Nov): the check underneath is a hash
+                // chain over the door events, but the office reads only
+                // what it means for trusting the count.
+                a.chainVerified
+                    ? 'Door camera record: someone got on or off ${a.chainEvents == 1 ? 'once' : '${a.chainEvents} times'}, '
+                        'as the van\'s phone saw it. The record is untouched: nothing was changed or removed.'
+                    : 'Door camera record changed: from entry ${a.chainBrokenAt} on, it is not what the phone sent. '
+                        'Do not rely on the count from there.',
+                style: const TextStyle(color: AppColors.onFill, fontSize: 13),
+              ),
+            ),
+          ]),
+        ),
+        if (a.unlisted.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.lg),
+          Text('Boardings not on the passenger list (${a.unlisted.length})', style: text.titleSmall),
+          if (a.crewAboard)
+            Text('The Dispatcher marked themselves crew: one of these boardings is theirs.', style: text.bodySmall),
+          const SizedBox(height: AppSpacing.xs),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+            decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppRadius.md)),
+            child: Column(children: [for (final u in a.unlisted) _UnlistedRow(boarding: u)]),
+          ),
+        ],
+        if (a.capacityAlerts.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.lg),
+          Text('Above the van\'s seats (${a.capacityAlerts.length})', style: text.titleSmall),
+          const SizedBox(height: AppSpacing.xs),
+          for (final c in a.capacityAlerts)
+            FactLine(Icons.groups_outlined,
+                '${_time.format(c.at)}: ${c.aboard} aboard, ${c.capacity} seats, ${c.place ?? 'place not known'}',
+                colour: AppColors.warning),
+        ],
+      ]),
     );
   }
 }

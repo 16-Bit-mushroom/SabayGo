@@ -84,28 +84,81 @@ class _DispatcherTripsScreenState extends State<DispatcherTripsScreen> {
       );
     }
 
+    // The trip to work on now first, large, with its own Open button; the
+    // rest of the day under it; finished trips last. The Dispatcher's first
+    // tap of a shift is always the same one.
+    final open = [for (final t in shift.trips) if (!t.isCompleted) t]
+      ..sort((a, b) => a.departure.compareTo(b.departure));
+    final done = [for (final t in shift.trips) if (t.isCompleted) t];
+    final next = open.isEmpty ? null : open.first;
+    final later = open.skip(1).toList();
+    Widget card(CrewTrip t, {bool hero = false}) => _TripCard(
+          trip: t,
+          hero: hero,
+          isActive: shift.active?.tripId == t.tripId,
+          onTap: () => _open(t),
+        );
+
     return RefreshIndicator(
       onRefresh: shift.load,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        itemCount: shift.trips.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (_, i) => _TripCard(
-          trip: shift.trips[i],
-          isActive: shift.active?.tripId == shift.trips[i].tripId,
-          onTap: () => _open(shift.trips[i]),
-        ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+        children: [
+          if (next != null) ...[
+            const _Heading('Next'),
+            card(next, hero: true),
+          ],
+          if (later.isNotEmpty) ...[
+            _Heading('Later', count: later.length),
+            for (final (i, t) in later.indexed) ...[if (i > 0) const SizedBox(height: 12), card(t)],
+          ],
+          if (done.isNotEmpty) ...[
+            _Heading('Done', count: done.length),
+            for (final (i, t) in done.indexed) ...[if (i > 0) const SizedBox(height: 12), card(t)],
+          ],
+        ],
       ),
     );
   }
 }
 
+class _Heading extends StatelessWidget {
+  const _Heading(this.text, {this.count});
+  final String text;
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+        child: Semantics(
+          header: true,
+          child: Text(
+            '${text.toUpperCase()}${count == null ? '' : '  ·  $count'}',
+            style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: AppColors.textMuted),
+          ),
+        ),
+      );
+}
+
+/// "Leaves in 25 min", "Left 40 min ago": the clock read for you.
+String _relative(DateTime at) {
+  final d = at.difference(DateTime.now());
+  final mins = d.inMinutes.abs();
+  if (mins == 0) return 'Leaves now';
+  final span = mins < 60 ? '$mins min' : '${mins ~/ 60} h${mins % 60 == 0 ? '' : ' ${mins % 60} min'}';
+  return d.isNegative ? 'Left $span ago' : 'Leaves in $span';
+}
+
 class _TripCard extends StatelessWidget {
-  const _TripCard({required this.trip, required this.isActive, required this.onTap});
+  const _TripCard({required this.trip, required this.isActive, required this.onTap, this.hero = false});
 
   final CrewTrip trip;
   final bool isActive;
   final VoidCallback onTap;
+
+  /// The next trip: a countdown and a full-width Open button.
+  final bool hero;
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +166,7 @@ class _TripCard extends StatelessWidget {
     final last = trip.stops.isEmpty ? '' : trip.stops.last.terminalName;
     final (label, tone) = switch (trip.status) {
       'boarding' => ('BOARDING', StatusTone.success),
-      'departed' => ('DEPARTED', StatusTone.muted),
+      'departed' => ('ON THE ROAD', StatusTone.muted),
       'completed' => ('COMPLETED', StatusTone.muted),
       _ => ('SCHEDULED', StatusTone.brand),
     };
@@ -169,8 +222,13 @@ class _TripCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            DateFormat('EEE, MMM d').format(trip.departure),
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                            hero && !trip.isDeparted
+                                ? '${DateFormat('EEE, MMM d').format(trip.departure)} · ${_relative(trip.departure)}'
+                                : DateFormat('EEE, MMM d').format(trip.departure),
+                            style: TextStyle(
+                                color: hero ? AppColors.primary : AppColors.textMuted,
+                                fontSize: 13,
+                                fontWeight: hero ? FontWeight.w700 : FontWeight.w400),
                           ),
                         ],
                       ),
@@ -198,6 +256,19 @@ class _TripCard extends StatelessWidget {
                       Text(trip.plateNumber!,
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                     ],
+                  ),
+                ],
+                if (hero) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  // A visible button as well as the whole card: the card is
+                  // the target, the button says that it opens.
+                  ExcludeSemantics(
+                    child: FilledButton.icon(
+                      onPressed: onTap,
+                      icon: const Icon(Icons.arrow_forward),
+                      label: Text(trip.isDeparted ? 'Open trip' : 'Open passenger list'),
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                    ),
                   ),
                 ],
               ],

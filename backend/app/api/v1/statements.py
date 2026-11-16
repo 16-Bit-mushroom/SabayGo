@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import datetime as dt
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.v1.deps import CASHIER, OFFICE, SessionDep, require_roles
 from app.application.finance.statement import BEFORE_DEPARTURE, ZERO, Statements
@@ -45,7 +45,7 @@ class LineOut(BaseModel):
     trip_id: str
     dest_terminal_id: str | None
     dest_terminal_name: str | None
-    income_group: str           # 'booked' | 'walk_up'
+    income_group: str           # 'booked' | 'walk_in'
     fare_per_passenger: Decimal
     passenger_count: int
     gross_fare: Decimal
@@ -70,6 +70,10 @@ class ShareOut(BaseModel):
     # the Cashier has recorded so far, on the van's statement for the day.
     operator_share_owed: Decimal
     operator_share_given: Decimal
+    # What the operator holds (given less returned, 038), and how much of
+    # it is over the share owed. "Still to give" is owed - held.
+    operator_share_held: Decimal
+    operator_share_over: Decimal
     lines: list[LineOut]
 
 
@@ -81,7 +85,7 @@ class StatementOut(BaseModel):
     service_date: dt.date
     rate_pct: Decimal
     booked_income: Decimal
-    walk_up_income: Decimal
+    walk_in_income: Decimal
     remittance_owed: Decimal
     dcott_ticket_fee: Decimal
     dcott_fees: Decimal
@@ -95,6 +99,14 @@ class StatementOut(BaseModel):
     operator_share_given: Decimal
     operator_share_given_at: dt.datetime | None
     operator_share_recorded_by_name: str | None
+    # Handed back by the operator (038): kept beside what was given, so the
+    # statement shows both moves. Held is given - returned; over is the
+    # part of held above the share owed, reported at once.
+    operator_share_returned: Decimal
+    operator_share_returned_at: dt.datetime | None
+    operator_share_returned_by_name: str | None
+    operator_share_held: Decimal
+    operator_share_over: Decimal
     # 'Operator share differs' (T68): owed less given, positive when the
     # operator got less. None until every trip's list is locked; it
     # blocks nothing.
@@ -158,6 +170,8 @@ async def _share(session, trip: Trip, statement: Remittance | None) -> ShareOut:
         disputed=await money.disputed(statement) if statement else ZERO,
         operator_share_owed=statement.operator_share_owed if statement else ZERO,
         operator_share_given=statement.operator_share_given if statement else ZERO,
+        operator_share_held=money.share_held(statement) if statement else ZERO,
+        operator_share_over=money.share_over(statement) if statement else ZERO,
         lines=await _lines(session, RemittanceLine.trip_id == trip.trip_id),
     )
 
@@ -170,7 +184,7 @@ async def _statement(session, statement: Remittance) -> StatementOut:
         remittance_id=statement.remittance_id, van_id=statement.van_id,
         plate_number=van.plate_number, operator_id=statement.operator_id,
         service_date=statement.service_date, rate_pct=statement.rate_pct,
-        booked_income=statement.booked_income, walk_up_income=statement.walk_up_income,
+        booked_income=statement.booked_income, walk_in_income=statement.walk_in_income,
         remittance_owed=statement.remittance_owed,
         dcott_ticket_fee=statement.dcott_ticket_fee, dcott_fees=statement.dcott_fees,
         parking_fee=statement.parking_fee, terminal_fees_owed=statement.terminal_fees_owed,
@@ -181,6 +195,11 @@ async def _statement(session, statement: Remittance) -> StatementOut:
         operator_share_given=statement.operator_share_given,
         operator_share_given_at=statement.operator_share_given_at,
         operator_share_recorded_by_name=await _name(session, statement.operator_share_recorded_by),
+        operator_share_returned=statement.operator_share_returned,
+        operator_share_returned_at=statement.operator_share_returned_at,
+        operator_share_returned_by_name=await _name(session, statement.operator_share_returned_by),
+        operator_share_held=money.share_held(statement),
+        operator_share_over=money.share_over(statement),
         operator_share_difference=difference,
         operator_share_differs=bool(difference),
         status=statement.status,
@@ -239,16 +258,22 @@ async def pay_trip(
     return out
 
 
-@router.get("/statements", response_model=list[StatementOut], dependencies=[Depends(OFFICE)])
-async def statements(session: SessionDep, date: dt.date | None = None) -> list[StatementOut]:
-    """The day's statements, one per van, with their fare lines."""
-    day = date or app_tz.now().date()
+async def _sync_day(session: SessionDep, day: dt.date) -> None:
+    """Bring the day's statements up to date with trips still before
+    departure, whose lists can still change."""
     money = Statements(session)
     for trip in (await session.execute(
         select(Trip).where(Trip.service_date == day, Trip.van_id.is_not(None),
                            Trip.status.in_(BEFORE_DEPARTURE))
     )).scalars():
         await money.sync(trip)
+
+
+@router.get("/statements", response_model=list[StatementOut], dependencies=[Depends(OFFICE)])
+async def statements(session: SessionDep, date: dt.date | None = None) -> list[StatementOut]:
+    """The day's statements, one per van, with their fare lines."""
+    day = date or app_tz.now().date()
+    await _sync_day(session, day)
     rows = (await session.execute(
         select(Remittance).where(Remittance.service_date == day)
         .order_by(Remittance.created_at)
@@ -256,6 +281,53 @@ async def statements(session: SessionDep, date: dt.date | None = None) -> list[S
     out = [await _statement(session, s) for s in rows]
     await session.commit()
     return out
+
+
+class FeePeriodOut(BaseModel):
+    """One day, or one month, of what the statements recorded."""
+    period: dt.date
+    fares: Decimal
+    terminal_fees: Decimal
+    paid: Decimal
+
+
+@router.get("/statements/history", response_model=list[FeePeriodOut], dependencies=[Depends(OFFICE)])
+async def statement_history(
+    session: SessionDep,
+    days: Annotated[int, Query(ge=1, le=366)] = 30,
+    by: Literal["day", "month"] = "day",
+) -> list[FeePeriodOut]:
+    """What the statements recorded over the last `days` days up to today,
+    for the Money chart: the fares on the passenger lists (B + W), the
+    terminal fees owed (with any share held from a trip that left unpaid,
+    as the Money totals count it) and the amount paid, by day or by month
+    (a month is keyed by its first day).
+
+    Sums of stored statements: recorded, never estimated. A day with no
+    statement recorded nothing, so it is a true zero and the chart's axis
+    has no holes. Today's statements are brought up to date first, as the
+    day's list does."""
+    today = app_tz.now().date()
+    start = today - dt.timedelta(days=days - 1)
+    await _sync_day(session, today)
+    rows = (await session.execute(
+        select(Remittance.service_date,
+               func.sum(Remittance.booked_income + Remittance.walk_in_income),
+               func.sum(Remittance.terminal_fees_owed + Remittance.held_share),
+               func.sum(Remittance.settled_amount))
+        .where(Remittance.service_date.between(start, today))
+        .group_by(Remittance.service_date)
+    )).all()
+    await session.commit()
+    per_day = {d: (f or ZERO, t or ZERO, p or ZERO) for d, f, t, p in rows}
+    buckets: dict[dt.date, list[Decimal]] = {}
+    day = start
+    while day <= today:
+        acc = buckets.setdefault(day.replace(day=1) if by == "month" else day, [ZERO, ZERO, ZERO])
+        for i, v in enumerate(per_day.get(day, (ZERO, ZERO, ZERO))):
+            acc[i] += v
+        day += dt.timedelta(days=1)
+    return [FeePeriodOut(period=k, fares=v[0], terminal_fees=v[1], paid=v[2]) for k, v in buckets.items()]
 
 
 @router.post("/statements/{remittance_id}/payments", response_model=StatementOut)
@@ -285,6 +357,20 @@ async def record_operator_share(
     after the payment."""
     statement = await _locked(session, remittance_id)
     await Statements(session).record_operator_share(statement, by=user, amount=payload.amount)
+    out = await _statement(session, statement)
+    await session.commit()
+    return out
+
+
+@router.post("/statements/{remittance_id}/operator-share-returned", response_model=StatementOut)
+async def record_share_returned(
+    remittance_id: str, payload: OperatorShareIn, session: SessionDep,
+    user: Annotated[User, Depends(CASHIER)],
+) -> StatementOut:
+    """The operator handed back a share held over what is owed (038),
+    up to that excess."""
+    statement = await _locked(session, remittance_id)
+    await Statements(session).record_share_returned(statement, by=user, amount=payload.amount)
     out = await _statement(session, statement)
     await session.commit()
     return out

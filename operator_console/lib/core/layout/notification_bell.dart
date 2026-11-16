@@ -93,6 +93,7 @@ class _NotificationPanel extends StatelessWidget {
                         icon: const Icon(Icons.refresh, size: 18),
                       ),
                       IconButton(
+                        tooltip: 'Close',
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close, size: 18),
                       ),

@@ -62,6 +62,9 @@ from build_coco_manifest import MANIFEST_COLUMNS  # noqa: E402
 
 DEFAULT_MANIFEST = os.path.join(HERE, "manifest.csv")
 DEGRADED_DIR = os.path.join(HERE, "data", "degraded")
+# A manifest row whose image_path starts with this names the original; the
+# condition is applied when the frame is read (see read_frame).
+MEMORY_PREFIX = "memory:"
 
 
 def _scale(frame: np.ndarray, factor: float) -> np.ndarray:
@@ -102,6 +105,18 @@ CONDITIONS = {
 }
 
 
+def read_frame(row: dict) -> np.ndarray | None:
+    """The frame a manifest row describes: a file, or an original with the
+    row's condition applied in memory (`--in-memory`)."""
+    path = row["image_path"]
+    if not path.startswith(MEMORY_PREFIX):
+        return cv2.imread(path)
+    frame = cv2.imread(path[len(MEMORY_PREFIX):])
+    if frame is None:
+        return None
+    return CONDITIONS[row["condition"]](frame)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -110,6 +125,10 @@ def main() -> int:
                     help="run one condition (repeatable); default is all")
     ap.add_argument("--limit", type=int, default=None,
                     help="degrade only the first N original rows")
+    ap.add_argument("--in-memory", action="store_true",
+                    help="write no files: each row names its original as "
+                         "'memory:<path>' and evaluate.py applies the same "
+                         "transform when it reads the frame")
     args = ap.parse_args()
 
     if not os.path.exists(args.manifest):
@@ -140,6 +159,18 @@ def main() -> int:
         transform = CONDITIONS[condition]
         failed = 0
         for row in base:
+            if args.in_memory:
+                # The PNG round-trip is lossless, so applying the transform
+                # at read time gives the detector the very same pixels; it
+                # only saves the ~3 GB the written frames would take.
+                new_rows.append({
+                    "image_path": MEMORY_PREFIX + row["image_path"],
+                    "true_count": row["true_count"],
+                    "source": row["source"],
+                    "condition": condition,
+                    "min_rel_area": row["min_rel_area"],
+                })
+                continue
             frame = cv2.imread(row["image_path"])
             if frame is None:
                 failed += 1
@@ -158,7 +189,8 @@ def main() -> int:
                 "min_rel_area": row["min_rel_area"],
             })
         note = f"  ({failed} unreadable, skipped)" if failed else ""
-        print(f"{condition:<12} {len(base) - failed:>5} frames -> {out_dir}{note}")
+        where = "applied when read" if args.in_memory else out_dir
+        print(f"{condition:<12} {len(base) - failed:>5} frames -> {where}{note}")
 
     with open(args.manifest, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=MANIFEST_COLUMNS)

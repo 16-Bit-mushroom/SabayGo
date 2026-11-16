@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../tokens.dart';
 
-/// The official SABAY GO mark. Same asset and contract as the mobile app's
-/// `BrandLogo`: announced as "SabayGo", drawn only on light surfaces. The
-/// console can be dark, so it shows the mark inside a [BrandPlate].
+/// The SabayGo logo (10 Nov): a light-green van carrying passengers in the
+/// camera's detection boxes, with the GPS signal at its windscreen, over
+/// the "SabayGo" wordmark -- the system's two witnesses, the door camera
+/// and the GPS, in one picture. Announced as "SabayGo"; drawn on light
+/// surfaces, its background cut away so it sits on white or the page.
+///
+/// [mark] draws the van alone, for the folded sidebar and the browser's
+/// icons: the wordmark is unreadable at those sizes. The swoosh runs
+/// through the wordmark, so the full logo is never split into a
+/// side-by-side lockup.
 class BrandLogo extends StatelessWidget {
-  const BrandLogo({this.height = 64, super.key});
+  const BrandLogo({this.height = 64, this.width, this.mark = false, super.key});
 
   final double height;
+  final double? width;
+  final bool mark;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -16,8 +25,10 @@ class BrandLogo extends StatelessWidget {
         image: true,
         child: ExcludeSemantics(
           child: Image.asset(
-            'assets/branding/sabaygo_logo.png',
+            // New names on 10 Nov: browsers had the owl cached under the old one.
+            mark ? 'assets/branding/sabaygo_van_mark.png' : 'assets/branding/sabaygo_van_logo.png',
             height: height,
+            width: width,
             fit: BoxFit.contain,
             filterQuality: FilterQuality.medium,
           ),
@@ -25,13 +36,11 @@ class BrandLogo extends StatelessWidget {
       );
 }
 
-/// The mark on its own light tile -- the ink owl would vanish on the dark
-/// palette, and recolouring a logo is not ours to do. In the light palette
-/// the tile is the page's own white.
+/// The logo on its own light tile, for a surface that is not white.
 class BrandPlate extends StatelessWidget {
   const BrandPlate({this.height = 44, super.key});
 
-  /// Height of the mark inside the plate.
+  /// Height of the logo inside the plate.
   final double height;
 
   @override

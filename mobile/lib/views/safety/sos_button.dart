@@ -46,7 +46,8 @@ class SosButton extends StatelessWidget {
     }
     return FilledButton.icon(
       onPressed: () => _open(context),
-      style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+      style: FilledButton.styleFrom(
+          backgroundColor: AppColors.danger, foregroundColor: AppColors.onFill),
       icon: const Icon(Icons.emergency_share),
       label: const Text('Emergency SOS'),
     );
@@ -137,6 +138,7 @@ class _SosSheetState extends State<_SosSheet> {
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               const Spacer(),
               IconButton(
+                tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
               ),
@@ -182,7 +184,14 @@ class _SosSheetState extends State<_SosSheet> {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: _sending ? null : _send,
-              style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: AppColors.onFill,
+                // Red while sending: an alert on its way must not look
+                // switched off.
+                disabledBackgroundColor: AppColors.danger,
+                disabledForegroundColor: AppColors.onFill,
+              ),
               icon: _sending
                   ? const SizedBox(
                       width: 18,

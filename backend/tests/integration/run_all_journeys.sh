@@ -198,6 +198,53 @@ else
   ./tests/integration/test_terminal_fees.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
 fi
 
+# 10 Nov: the Money chart's history (GET /statements/history): its
+# shape, today's figures against today's statements, and a true zero.
+{
+  echo
+  echo "==================================================================="
+  echo "  FEE HISTORY (Money chart)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_fee_history.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_fee_history.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# 12 Nov: create/read/update/delete in Messages (migration 040: edit and
+# delete one's own text message) and in Trip Schedules (edit, delete, a
+# clash refused in words).
+{
+  echo
+  echo "==================================================================="
+  echo "  MESSAGES AND TRIP SCHEDULES (edit, delete)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_messages_schedules.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_messages_schedules.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
+# 12 Nov, the group's decision C5: a van's position and trail need a
+# sign-in; a passenger sees only a trip they hold a seat on, while it is
+# boarding or on the road; the office and crew see every van.
+{
+  echo
+  echo "==================================================================="
+  echo "  WHO MAY SEE WHERE A VAN IS (C5)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/reset-dev.sh >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  ./tests/integration/test_van_location_access.sh 2>&1 | strip_ansi >> "$REPORT"
+else
+  ./tests/integration/test_van_location_access.sh 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
+
 # Rev 721 S3: release of unpaid reservations, and the Paid mark that
 # arrives after it (T53-T56, T61-T63). It fills the van to prove T63, so
 # it takes the reset before it rather than after.
@@ -303,6 +350,21 @@ else
 fi
 
 sleep 1   # let the tee subshells finish flushing before counting
+
+# 10 Nov alpha run: A2Z trip ticket Nº 0012223 replayed on the Day 1 data,
+# five trips checked to the peso (docs/ALPHA_TEST_CASE_TRIP_TICKET.md).
+{
+  echo
+  echo "==================================================================="
+  echo "  TRIP TICKET (alpha test case, Day 1 data)"
+  echo "==================================================================="
+} | tee -a "$REPORT"
+( cd .. && ./db/load-day1.sh >/dev/null 2>&1 )
+if [ "$QUIET" = "1" ]; then
+  python tests/integration/test_trip_ticket.py 2>&1 | strip_ansi >> "$REPORT"
+else
+  python tests/integration/test_trip_ticket.py 2>&1 | tee >(strip_ansi >> "$REPORT")
+fi
 
 # ── totals ────────────────────────────────────────────────────────────
 P=$(grep -c '^  PASS' "$REPORT" || true)

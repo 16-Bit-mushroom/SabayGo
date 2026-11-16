@@ -74,11 +74,11 @@ class PolicyViolationException extends ApiException {
       : super(statusCode: 422);
 }
 
-/// 503 — lost the race for a seat lock. Worth retrying automatically;
-/// a sold-out trip (409) is not.
+/// 503 — another reservation held the reservation lock for that seat.
+/// Worth retrying automatically; a sold-out trip (409) is not.
 class ContentionException extends ApiException {
   const ContentionException([
-    super.message = 'The seat map is busy. Trying again.',
+    super.message = 'Many people are booking this trip right now. Trying again…',
   ]) : super(statusCode: 503);
 }
 

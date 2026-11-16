@@ -64,6 +64,30 @@ class ConversationThreadViewModel extends ChangeNotifier {
     }
   }
 
+  void _replace(ChatMessage m) {
+    _messages = [for (final x in _messages) x.id == m.id ? m : x];
+    notifyListeners();
+  }
+
+  /// Null when done, else why not (the server's words).
+  Future<String?> edit(ChatMessage m, String body) async {
+    try {
+      _replace(await _repo.editMessage(conversationId, m.id, body.trim()));
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> delete(ChatMessage m) async {
+    try {
+      _replace(await _repo.deleteMessage(conversationId, m.id));
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   @override
   void dispose() {
     _timer?.cancel();

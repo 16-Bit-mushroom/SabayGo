@@ -10,7 +10,7 @@
 # by calling its tick. Brief acceptance tests are named (T6, T12, ...).
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 BACKEND="$(cd "$(dirname "$0")/../.." && pwd)"
 PY="$BACKEND/venv/bin/python"
 PASS_N=0; FAIL_N=0
@@ -363,6 +363,14 @@ is "$(edge PUT /edge/door-layout "$LAYOUT" "$TB")" 409 "a phone back in the offi
 code POST /devices/$IDB/retire "" "$OT" >/dev/null
 is "$(edge GET /edge/session "" "$TB")" 401 "its token stops working"
 
+# The door-camera page (12 Nov): every phone's readings, office only.
+is "$(code GET /devices/live "" "$DT")" 403 "a Dispatcher cannot read the door-camera page"
+is "$(code GET /devices/live "" "$OT")" 200 "the Terminal Manager reads every phone's readings"
+python3 -c "
+import json; d={x['device_id']:x for x in json.load(open('/tmp/resp.json'))}['$IDA']
+assert all(k in d for k in ('history','boarded_today','alighted_today','detection_rate_hz','trip','silent'))
+assert d['report_count_window'] >= 0 and isinstance(d['history'], list)
+" && ok "  with its reports, its door counts today and its van's trip" || bad "the live readings are incomplete"
 for P in A C D; do eval "code POST /devices/\$ID$P/return '{}' \"\$CT\" >/dev/null"; done
 zone "" ""
 

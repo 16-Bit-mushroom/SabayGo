@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:mobile_v2_uv_express/core/design/components/app_card.dart';
 import 'package:mobile_v2_uv_express/core/design/components/empty_state.dart';
 import 'package:mobile_v2_uv_express/core/design/components/info_row.dart';
@@ -8,16 +10,39 @@ import 'package:mobile_v2_uv_express/core/design/components/money.dart';
 import 'package:mobile_v2_uv_express/core/design/components/picker_row.dart';
 import 'package:mobile_v2_uv_express/core/design/components/status_band.dart';
 import 'package:mobile_v2_uv_express/core/design/components/status_chip.dart';
+import 'package:mobile_v2_uv_express/core/network/api_client.dart';
+import 'package:mobile_v2_uv_express/core/storage/token_storage.dart';
 import 'package:mobile_v2_uv_express/models/transit_node_model.dart';
 import 'package:mobile_v2_uv_express/models/uv_trip_model.dart';
+import 'package:mobile_v2_uv_express/data/repositories/trip_repository.dart';
 import 'package:mobile_v2_uv_express/viewmodels/home_search_viewmodel.dart';
 import 'package:mobile_v2_uv_express/views/auth/welcome_screen.dart';
+import 'package:mobile_v2_uv_express/views/home_search/widgets/journey_picker_card.dart';
 import 'package:mobile_v2_uv_express/views/home_search/widgets/time_block_filter.dart';
 import 'package:mobile_v2_uv_express/views/home_search/widgets/trip_card.dart';
 import 'package:mobile_v2_uv_express/views/home_search/widgets/trip_details_sheet.dart';
 import 'package:mobile_v2_uv_express/views/passenger_main_screen.dart';
 
+import 'package:provider/provider.dart';
+
 import 'support/harness.dart';
+
+/// No token stored: the sheet's camera notice asks for A2Z's settings.
+class _NoTokens extends TokenStorage {
+  @override
+  Future<String?> readAccessToken() async => null;
+
+  @override
+  Future<void> clear() async {}
+}
+
+/// An offline server, so the camera notice takes its no-number wording,
+/// the longer of its two layouts.
+final _offlineApi = ApiClient(
+  tokenStorage: _NoTokens(),
+  httpClient: MockClient((_) async => http.Response('', 503)),
+  baseUrl: 'http://x/api/v1',
+);
 
 /// Layout, at the sizes and text scales real passengers use.
 ///
@@ -58,7 +83,7 @@ void main() {
   /// Every case runs at both scales on the smallest phone, because that is
   /// where the width runs out, and once at a comfortable size to be sure the
   /// layout has not been built only to survive the hard case.
-  void layoutCase(String name, Widget Function() build) {
+  void layoutCase(String name, Widget Function() build, {bool checkContrast = true}) {
     for (final scale in const [1.0, 2.0]) {
       testWidgets('$name · 320dp · ${(scale * 100).round()}% text',
           (tester) async {
@@ -69,8 +94,15 @@ void main() {
     }
 
     testWidgets('$name · 390dp · 100% text', (tester) async {
+      final semantics = tester.ensureSemantics();
       await pumpScreen(tester, build());
       expect(tester.takeException(), isNull);
+      // WCAG checks flutter_test ships with: 48dp targets, a name on every
+      // tappable thing, AA text contrast.
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      if (checkContrast) await expectLater(tester, meetsGuideline(textContrastGuideline));
+      semantics.dispose();
     });
   }
 
@@ -106,9 +138,15 @@ void main() {
 
   layoutCase(
     'reserve sheet',
-    () => Scaffold(
-      body: TripDetailsSheet(trip: trip(seats: 2), onBook: () {}),
+    () => Provider<ApiClient>.value(
+      value: _offlineApi,
+      child: Scaffold(
+        body: TripDetailsSheet(trip: trip(seats: 2), onBook: () {}),
+      ),
     ),
+    // The checker reads the subtitle as 1.41:1 off pixels where no glyph is
+    // painted; rendered, it is Slate Note on white (6.73:1, checked 10 Nov).
+    checkContrast: false,
   );
 
   // ── components ─────────────────────────────────────────────────────────
@@ -220,6 +258,18 @@ void main() {
         title: 'Where are you going?',
         body: 'Pick your boarding terminal and destination to see the '
             'departures running that journey.',
+      ),
+    ),
+  );
+
+  // The search card (12 Nov): From, To and the day as three chips, with
+  // the note that says what is missing. The chips must wrap, not overflow,
+  // on the smallest phone at 200 % text.
+  layoutCase(
+    'journey picker',
+    () => Scaffold(
+      body: SingleChildScrollView(
+        child: JourneyPickerCard(vm: HomeSearchViewModel(TripRepository(_offlineApi))),
       ),
     ),
   );

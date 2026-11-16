@@ -14,9 +14,9 @@ const kSmallPhone = Size(320, 640);
 const kPhone = Size(390, 844);
 const kWide = Size(760, 1024);
 
-/// Registers the app's own bundled Roboto.
+/// Registers the app's own bundled Inter and Plus Jakarta Sans.
 ///
-/// Without it `flutter test` measures every string in Ahem — a fixed-pitch
+/// Without them `flutter test` measures every string in Ahem — a fixed-pitch
 /// block font whose metrics match nothing — so a layout that overflows on a
 /// handset can pass here, and one that fits can fail. These are the same
 /// files `pubspec.yaml` ships, so the widths measured are the widths the
@@ -25,20 +25,21 @@ Future<void> loadRealFonts() async {
   final dir = Directory('assets/fonts');
   if (!dir.existsSync()) return;
 
-  final loader = FontLoader('Roboto');
-  for (final name in const [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
+  for (final (family, files) in const [
+    ('Inter', ['Inter-Regular.ttf', 'Inter-Medium.ttf', 'Inter-SemiBold.ttf', 'Inter-Bold.ttf']),
+    ('PlusJakartaSans', ['PlusJakartaSans-SemiBold.ttf', 'PlusJakartaSans-Bold.ttf', 'PlusJakartaSans-ExtraBold.ttf']),
   ]) {
-    final file = File('${dir.path}/$name');
-    if (file.existsSync()) {
-      loader.addFont(
-        Future.value(ByteData.sublistView(file.readAsBytesSync())),
-      );
+    final loader = FontLoader(family);
+    for (final name in files) {
+      final file = File('${dir.path}/$name');
+      if (file.existsSync()) {
+        loader.addFont(
+          Future.value(ByteData.sublistView(file.readAsBytesSync())),
+        );
+      }
     }
+    await loader.load();
   }
-  await loader.load();
   await _loadMaterialIcons();
 }
 

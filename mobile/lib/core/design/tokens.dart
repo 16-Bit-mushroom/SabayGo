@@ -1,126 +1,131 @@
 import 'package:flutter/material.dart';
 
 /// Design tokens: the single place that owns colour, spacing, radius and
-/// motion for the passenger and crew apps.
+/// motion for the passenger and Dispatcher apps.
 ///
-/// These used to live in `core/config/app_config.dart` beside the API base
-/// URL. Build configuration and visual design are different concerns with
-/// different reviewers, and mixing them meant 18 screens imported the API
-/// host in order to read a colour. They are split.
+/// **The palette is the office console's** (10 Nov, VerdantPulse: balanced
+/// mid-green), so a passenger, a Dispatcher and the Terminal Manager see
+/// one product. Values and names match `operator_console/lib/core/design/
+/// tokens.dart`; change one, change both.
+///   F0FDF4 meadow mist      the page
+///   FFFFFF / DCFCE7         cards; the soft emerald tint
+///   86EFAC                  card edges, the app bar's rule
+///   10B981 emerald          the main action, the selected tab
+///   22C55E kelly            the main action pressed
+///   047857                  green text and icons, focus, paid
+///   1E3A2F slate green-grey the type
 ///
-/// **Every colour pair here is verified against WCAG 2.1 AA**, and the
-/// ratios in the comments are measured, not estimated. Three rules the
-/// palette exists to keep:
+/// **Every pairing is measured against WCAG 2.1 AA** (computed, not
+/// estimated). White text on the emerald is 2.54:1, so anything drawn on
+/// the emerald or the kelly is [onAction], dark; green *text* is
+/// [primary]. Three rules:
 ///
-/// 1. A base colour serves both as *text on a light background* and as *a
-///    fill behind white text*, because both reduce to the same constraint:
-///    contrast against white of at least 4.5:1. One token, two jobs, no
-///    chance of the pair drifting apart.
+/// 1. A status colour is legible as *text on any card*, and anything drawn
+///    *on* a dark filled colour uses [AppColors.onFill]; on the emerald,
+///    [AppColors.onAction].
 /// 2. Status is never carried by hue alone (WCAG 1.4.1). Every semantic
-///    role ships a `container`/`on` pair so a chip can state its meaning in
-///    words on a legible tint, and callers are expected to include the
-///    label or an icon, not just the colour.
-/// 3. Anything a finger lands on is at least [minTouchTarget].
+///    role ships a `container` tint so a chip states its meaning in words,
+///    and callers include the label or an icon, not just the colour.
+/// 3. Anything a finger lands on is at least [AppSizing.minTouchTarget].
 ///
-/// The previous palette failed AA in two places that mattered most: the
-/// green `accent` (3.11:1) and the amber `warning` (1.97:1) were used for
-/// boarding status and unpaid-fare warnings — information a Dispatcher reads
-/// at a van door in direct sunlight. Both are corrected below.
+/// A Dispatcher reads these at a van door in direct sunlight, which is why
+/// the status colours are the deep ones and the tints carry them.
+class AppRamp {
+  static const Color n0 = Color(0xFFFFFFFF);
+  static const Color n50 = Color(0xFFF0FDF4);
+  static const Color n100 = Color(0xFFE8F7EE);
+  static const Color n200 = Color(0xFFBBF7D0);
+  static const Color n400 = Color(0xFFA3B8AD);
+  static const Color n500 = Color(0xFF6B8579);
+  static const Color n700 = Color(0xFF4B6358);
+  static const Color n900 = Color(0xFF1E3A2F);
+}
+
 class AppColors {
   // ── brand ──────────────────────────────────────────────────────────
-  // The SABAY GO mark is an ink-black owl with a red eye and a red route
-  // pin. Those two colours split into two jobs, deliberately unequal.
-  //
-  // *Ink* is the action colour: every filled button, focus ring, selected
-  // tab. Black on white is the highest contrast a light UI can offer, and
-  // it is the colour a passenger already reads as "the text you act on".
-  //
-  // *Red* is the accent, spent sparingly on route geometry — the passenger's
-  // own boarding and alighting stops, the way the logo's pin marks a
-  // destination. It is never a button fill. A red "Book" sitting beside a
-  // red "Cancel booking" and a red SOS would make all three look equally
-  // alarming, and a colour used everywhere stops drawing the eye anywhere
-  // (Von Restorff). Red keeps one meaning on an action: stop, or danger.
+  /// Green as text and icon, and a dark fill behind white text: links, the
+  /// selected tab's label, focus rings, the map's centre button. 5.48:1
+  /// on white, 5.24:1 on the page, 4.99:1 on the tint; white on it 5.48:1.
+  static const Color primary = Color(0xFF047857);
 
-  /// Ink, from the owl. 18.0:1 on white. Was the old purple #2D2059.
-  static const Color primary = Color(0xFF16161D);
+  /// An outline under the finger. 3.77:1, enough for an edge, not text.
+  static const Color primaryLight = Color(0xFF059669);
 
-  /// 11.2:1 on white. Secondary surfaces and pressed states.
-  static const Color primaryLight = Color(0xFF3A3A44);
+  /// The soft emerald tint: icon tiles, a selected row, a chip, the
+  /// progress track. [primary] on it 4.99:1.
+  static const Color primaryContainer = Color(0xFFDCFCE7);
 
-  /// Neutral tint behind [primary] text (selected pill, brand chip): 15.3:1.
-  static const Color primaryContainer = Color(0xFFECECF0);
+  /// The main action: one filled button per screen, the selected tab's
+  /// pill, the floating button. Emerald, never text: 2.54:1 on white.
+  static const Color action = Color(0xFF10B981);
 
-  /// The logo's red. 5.86:1 on white, so it may carry text, but it is meant
-  /// for markers and accents — see the note above.
+  /// The main action pressed: kelly. [onAction] on it 6.7:1.
+  static const Color actionHover = Color(0xFF22C55E);
+
+  /// Text, icons and spinners on [action] and [actionHover]: 6.03:1 on the
+  /// emerald, and still legible on a disabled button's [surfaceSunken].
+  static const Color onAction = Color(0xFF0F2A20);
+
+  /// Card edges and the app bar's rule: mid-light green. Decorative,
+  /// 1.40:1, so a control a person must find has [border].
+  static const Color edge = Color(0xFF86EFAC);
+
+  /// Text and icons on any *dark* filled colour -- [primary] and every
+  /// status colour. The lowest pairing, on [primary], is 5.48:1.
+  static const Color onFill = Color(0xFFFFFFFF);
+
+  /// The logo's red: the passenger's own stops on the journey strip and
+  /// the map. Never a button fill, so a red SOS never sits beside a red
+  /// "Book". 5.86:1 on white.
   static const Color brand = Color(0xFFC8151D);
 
   /// A light tint of [brand]. Pair with [brand] as text: 4.9:1.
   static const Color brandContainer = Color(0xFFFBE7E8);
 
   // ── semantic roles ─────────────────────────────────────────────────
-  /// Confirmed, paid, boarded. 6.13:1 on white, 5.12:1 on
-  /// [successContainer].
-  ///
-  /// Was `accent` at #00A859 — 3.11:1, which failed even the 3:1 floor for
-  /// large text. Darkened along its own hue so the brand's green reads the
-  /// same, and now carries text.
-  static const Color success = Color(0xFF00713C);
-  static const Color successContainer = Color(0xFFE0EEE8);
+  /// Confirmed, paid, boarded. 5.48:1; 4.99:1 on its container.
+  static const Color success = Color(0xFF047857);
+  static const Color successContainer = Color(0xFFDCFCE7);
 
-  /// Awaiting payment, variance, needs attention. 5.93:1 on white, 5.00:1
-  /// on [warningContainer].
-  ///
-  /// Was #F9A825 at 1.97:1 — the worst failure in the app. Amber cannot be
-  /// legible on white at full brightness; it has to become a dark ochre, or
-  /// move to a tinted chip. Both options are provided.
+  /// Awaiting payment, needs attention. 5.93:1; 5.42:1 on its container.
   static const Color warning = Color(0xFF8A5A00);
-  static const Color warningContainer = Color(0xFFF1EBE0);
+  static const Color warningContainer = Color(0xFFFFF4DB);
 
-  /// Cancelled, failed, emergency. 6.54:1 on white, 5.37:1 on
-  /// [dangerContainer].
-  ///
-  /// Nudged from #D32F2F (4.98:1 — compliant but thin) for headroom, since
-  /// this is the SOS colour and the one that must survive a cheap screen in
-  /// daylight.
+  /// Cancelled, failed, emergency. 6.54:1; 5.72:1 on its container.
   static const Color danger = Color(0xFFB3261E);
-  static const Color dangerContainer = Color(0xFFF6E5E4);
+  static const Color dangerContainer = Color(0xFFFDECEA);
 
-  /// Informational, not good or bad: "AT TERMINAL", "PENDING SYNC".
-  /// 5.75:1 on white, 4.74:1 on [infoContainer].
-  ///
-  /// Exists because the screens reached for `Colors.blue` (3.12:1),
-  /// `Colors.teal` (3.67:1) and `Colors.deepOrange` (3.16:1) when no token
-  /// fitted. All three fail AA as text. A missing token is not a neutral
-  /// omission — it gets filled in by whatever the framework offers.
-  static const Color info = Color(0xFF1565C0);
-  static const Color infoContainer = Color(0xFFE3EAF2);
+  /// Informational, neither good nor bad: "At terminal", "Pending sync".
+  /// The type colour on a grey-green tint. 12.34:1; about 10:1 on it.
+  static const Color info = AppRamp.n900;
+  static const Color infoContainer = Color(0xFFE6EFEA);
 
   // ── neutrals ───────────────────────────────────────────────────────
-  static const Color surface = Color(0xFFF7F7FA);
-  static const Color surfaceRaised = Color(0xFFFFFFFF);
+  /// The page, behind every card: meadow mist.
+  static const Color surface = AppRamp.n50;
 
-  /// 17.06:1 on white.
-  static const Color textPrimary = Color(0xFF1A1A2E);
+  /// Cards, sheets, the app bar and the tab bar.
+  static const Color surfaceRaised = AppRamp.n0;
 
-  /// 6.73:1 on white. Darkened from #6B6B80; secondary text is still text,
-  /// and "muted" is not licence to drop below AA.
-  static const Color textMuted = Color(0xFF5A5A6E);
+  /// A step inside a card: a read-only field, a disabled button.
+  static const Color surfaceSunken = AppRamp.n100;
 
-  /// Boundary of an interactive control — an input outline, a chip edge.
-  /// 3.64:1 on white, 3.41:1 on [surface], clearing WCAG 1.4.11's 3:1 for
-  /// non-text contrast.
-  ///
-  /// The old #DDDDE5 was 1.35:1. That is invisible as a boundary, and a
-  /// white filled field on a #F7F7FA scaffold is only 1.07:1, so the fill
-  /// could not delimit the control either — the field had no perceivable
-  /// edge at all. Use [divider] for decoration; use this for anything a
-  /// user must locate in order to operate.
-  static const Color border = Color(0xFF84849C);
+  /// 12.34:1 on white, 11.79:1 on the page.
+  static const Color textPrimary = AppRamp.n900;
 
-  /// Decorative separation only, where 1.4.11 does not apply because
-  /// nothing needs to be identified by it.
-  static const Color divider = Color(0xFFDDDDE5);
+  /// Secondary text is still text; "muted" is not licence to drop below
+  /// AA. 6.51:1; 6.22:1 on the page, 5.93:1 on the tint.
+  static const Color textMuted = AppRamp.n700;
+
+  /// Boundary of an interactive control -- an input outline, a chip edge.
+  /// Clears WCAG 1.4.11's 3:1: 4.00:1; 3.82:1 on the page.
+  static const Color border = AppRamp.n500;
+
+  /// Decorative separation only, where 1.4.11 does not apply.
+  static const Color divider = AppRamp.n200;
+
+  /// A disabled control's label and edge. Exempt as inactive UI.
+  static const Color disabled = AppRamp.n400;
 
   /// Retained so the screen sweep can land file by file instead of in one
   /// 22-site commit. Points at [success]; remove once no call sites remain.

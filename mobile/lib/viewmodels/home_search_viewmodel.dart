@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/network/api_exception.dart';
 import '../data/repositories/trip_repository.dart';
@@ -38,6 +39,18 @@ class HomeSearchViewModel extends ChangeNotifier {
   }
 
   final TripRepository _repo;
+
+  /// The last journey searched, so a commuter who rides the same way every
+  /// day opens the app on its departures with no taps (12 Nov). On the
+  /// phone's secure store, like the session; a read that fails just means
+  /// starting blank.
+  static const _store = FlutterSecureStorage();
+  static const _kOrigin = 'journey.origin';
+  static const _kDestination = 'journey.destination';
+
+  /// Each search's number: an answer to an older one, overtaken by a
+  /// change of journey, is dropped rather than shown against the new one.
+  int _searchSeq = 0;
 
   // --- state ---
   List<TransitNodeModel> _nodes = [];
@@ -142,16 +155,47 @@ class HomeSearchViewModel extends ChangeNotifier {
                 stopSequence: t.stopSequence,
               ))
           .toList();
+      await _restoreJourney();
     } on ApiException catch (e) {
       error = e.message;
     } finally {
       isLoadingTerminals = false;
       notifyListeners();
     }
+    if (canSearch) search();
+  }
+
+  /// The journey to open on: the last one searched; otherwise "From" is
+  /// the route's starting terminal when there is exactly one, because
+  /// everyone boards there (rev 603) -- the passenger chooses only where
+  /// they are going.
+  Future<void> _restoreJourney() async {
+    String? origin, destination;
+    try {
+      origin = await _store.read(key: _kOrigin);
+      destination = await _store.read(key: _kDestination);
+    } catch (_) {
+      // No store (a test, a locked keystore): start blank.
+    }
+    TransitNodeModel? find(String? id) =>
+        id == null ? null : _nodes.where((n) => n.id == id).firstOrNull;
+    final starts = _nodes.where((n) => n.stopSequence == 1).toList();
+    selectedOrigin ??= find(origin) ?? (starts.length == 1 ? starts.first : null);
+    selectedDestination ??= find(destination);
+  }
+
+  Future<void> _rememberJourney() async {
+    try {
+      await _store.write(key: _kOrigin, value: selectedOrigin?.id);
+      await _store.write(key: _kDestination, value: selectedDestination?.id);
+    } catch (_) {
+      // Remembering is a convenience; failing to is not an error to show.
+    }
   }
 
   Future<void> search() async {
     if (!canSearch) return;
+    final seq = ++_searchSeq;
 
     isLoadingTrips = true;
     error = null;
@@ -181,36 +225,50 @@ class HomeSearchViewModel extends ChangeNotifier {
                 status: t.isFull ? TripStatus.full : TripStatus.scheduled,
               ))
           .toList();
+      if (seq != _searchSeq) return;
       _hasSearched = true;
     } on ApiException catch (e) {
+      if (seq != _searchSeq) return;
       error = e.message;
       _trips = [];
     } finally {
-      isLoadingTrips = false;
-      notifyListeners();
+      if (seq == _searchSeq) {
+        isLoadingTrips = false;
+        notifyListeners();
+      }
     }
   }
 
+  // Every change of journey searches at once (12 Nov): there is no
+  // Search button to find and press, the departures simply follow the
+  // choice.
   void setOrigin(TransitNodeModel? node) {
     selectedOrigin = node;
-    _invalidate();
+    _changed();
   }
 
   void setDestination(TransitNodeModel? node) {
     selectedDestination = node;
-    _invalidate();
+    _changed();
   }
 
   void swapNodes() {
     final temp = selectedOrigin;
     selectedOrigin = selectedDestination;
     selectedDestination = temp;
-    _invalidate();
+    _changed();
   }
 
   void setServiceDate(DateTime date) {
     serviceDate = date;
+    _changed();
+  }
+
+  void _changed() {
     _invalidate();
+    if (!canSearch) return;
+    _rememberJourney();
+    search();
   }
 
   void setTimeBlock(TimeBlock block) {

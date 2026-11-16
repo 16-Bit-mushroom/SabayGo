@@ -9,7 +9,7 @@
 # moved 31 days ahead, so nothing hashed into the chain is backdated.
 set -uo pipefail
 
-API="http://127.0.0.1:8000/api/v1"
+API="${SABAYGO_API:-http://127.0.0.1:8000/api/v1}"
 BACKEND="$(cd "$(dirname "$0")/../.." && pwd)"
 TRIP1=TRIP-DEMO-00000001; TRIP2=TRIP-DEMO-00000002
 DONE=TRIP-A2Z-TAG-P1-0600   # completed yesterday, VAN-0003
@@ -99,7 +99,7 @@ edge /edge/events "$(event "$E3" "$H3")" "$TB" >/dev/null; up "$E3" "$TB" "$SNAP
 is "$(sql "SELECT CONCAT_WS('/', trip_id, match_status, resolution_status) FROM passenger_events WHERE event_id = '$E3'")" \
    "$TRIP2/matched_log/not_needed" "a listed boarding on XYZ-9876's trip, with its still"
 code GET /trips/$TRIP2/share "" "$CT" >/dev/null
-LINE=$(python3 -c "import json;print([l['line_id'] for l in json.load(open('/tmp/rt.json'))['lines'] if l['income_group']=='walk_up'][0])")
+LINE=$(python3 -c "import json;print([l['line_id'] for l in json.load(open('/tmp/rt.json'))['lines'] if l['income_group']=='walk_in'][0])")
 is "$(code POST /disputes "{\"subject\":\"fare_line\",\"line_id\":\"$LINE\",\"operator_statement\":\"No such passenger.\"}" "$CT")" 201 \
    "the operator disputes a line on XYZ-9876's trip"
 DSP=$(field "['dispute_id']")

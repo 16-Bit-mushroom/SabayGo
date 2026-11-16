@@ -417,7 +417,7 @@ class _TotalBar extends StatelessWidget {
                 style: FilledButton.styleFrom(minimumSize: const Size(140, 56)),
                 icon: submitting
                     ? const SizedBox(
-                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onAction))
                     : const Icon(Icons.check),
                 label: Text(submitting ? 'Logging…' : 'Log'),
               ),

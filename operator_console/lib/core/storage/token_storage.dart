@@ -21,11 +21,15 @@ class TokenStorage {
     required String userId,
   }) async {
     _cachedToken = accessToken;
-    await Future.wait([
-      _storage.write(key: _accessToken, value: accessToken),
-      _storage.write(key: _role, value: role),
-      _storage.write(key: _userId, value: userId),
-    ]);
+    // One write after another, never together. On the web each value is
+    // encrypted with a key kept in browser storage; on a browser's first
+    // login there is no key yet, and three writes at once each made one,
+    // the last overwriting the others -- the token was then sealed with a
+    // key that no longer existed, and the next page load signed the person
+    // out (found in the 10 Nov alpha run).
+    await _storage.write(key: _accessToken, value: accessToken);
+    await _storage.write(key: _role, value: role);
+    await _storage.write(key: _userId, value: userId);
   }
 
   Future<String?> readAccessToken() async {

@@ -8,7 +8,7 @@ import '../../core/design/components/components.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_exception.dart';
 import '../../data/repositories/oversight_repository.dart';
-import '../setup/step_frame.dart';
+import '../../core/layout/console_router.dart';
 
 /// The Van Status Board (brief 8): every van travelling, on site, not on
 /// a trip or out of service, from the trip status and GPS readings already
@@ -106,14 +106,16 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
           if (_vans != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-              child: Wrap(spacing: AppSpacing.md, runSpacing: AppSpacing.md, children: [
+              child: CardRow(children: [
+                // Out of service only when a van is: four figures a row (10 Nov).
                 for (final s in _order)
-                  SizedBox(width: 170, child: StatTile(
-                      label: state(s).$1, value: '${count(s)}', icon: state(s).$3)),
-                SizedBox(width: 200, child: StatTile(
-                    label: 'Owe terminal fees', value: '$owing',
+                  if (s != 'out_of_service' || count(s) > 0)
+                  StatTile(label: state(s).$1, value: '${count(s)}', icon: state(s).$3,
+                      caption: 'of ${vans.length} vans'),
+                StatTile(
+                    label: 'With a balance', value: '$owing',
                     icon: Icons.money_off, color: owing > 0 ? AppColors.warning : null,
-                    caption: 'From their last trip')),
+                    caption: 'of ${vans.length} vans, from their last trip'),
               ]),
             ),
           Expanded(
@@ -126,20 +128,34 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
                             icon: Icons.airport_shuttle_outlined,
                             title: 'No vans yet',
                             hint: 'Vans are added under Setup, Operators & vans.')
-                        : Panel(
-                            fill: true,
-                            child: Column(children: [
-                              const _VanRow.heads(),
-                              const Divider(height: 1),
-                              Expanded(
-                                child: ListView.separated(
-                                  itemCount: vans.length,
-                                  separatorBuilder: (_, _) => const Divider(height: 1),
-                                  itemBuilder: (_, i) => _VanRow(van: vans[i]),
+                        // A card a van (the owner's reference): three to a
+                        // row on a wide screen.
+                        : LayoutBuilder(builder: (context, c) {
+                            final cols = c.maxWidth >= 1200 ? 3 : (c.maxWidth >= 760 ? 2 : 1);
+                            final w = (c.maxWidth - AppSpacing.lg * (cols - 1)) / cols;
+                            // Row by row, every card in a row one height
+                            // (12 Nov: cards of different heights looked
+                            // untidy); a short last row keeps the width.
+                            final rows = <Widget>[
+                              for (var i = 0; i < vans.length; i += cols)
+                                IntrinsicHeight(
+                                  child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                    for (var j = 0; j < cols; j++) ...[
+                                      if (j > 0) const SizedBox(width: AppSpacing.lg),
+                                      SizedBox(
+                                        width: w,
+                                        child: i + j < vans.length ? _VanCard(van: vans[i + j]) : null,
+                                      ),
+                                    ],
+                                  ]),
                                 ),
-                              ),
-                            ]),
-                          ),
+                            ];
+                            return SingleChildScrollView(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                for (final (k, r) in rows.indexed) ...[if (k > 0) const SizedBox(height: AppSpacing.lg), r],
+                              ]),
+                            );
+                          }),
           ),
         ],
       ),
@@ -147,67 +163,110 @@ class _VanBoardScreenState extends State<VanBoardScreen> {
   }
 }
 
-class _VanRow extends StatelessWidget {
-  const _VanRow({required VanStatus this.van});
-
-  /// The column heads, in the row's own widths.
-  const _VanRow.heads() : van = null;
-
-  final VanStatus? van;
-
-  static Widget _cols(List<Widget> c) => Row(children: [
-        SizedBox(width: 110, child: c[0]),
-        SizedBox(width: 140, child: c[1]),
-        SizedBox(width: 220, child: c[2]),
-        Expanded(child: c[3]),
-        SizedBox(width: 170, child: Align(alignment: Alignment.centerRight, child: c[4])),
-      ]);
+class _VanCard extends StatelessWidget {
+  const _VanCard({required this.van});
+  final VanStatus van;
 
   static final _time = DateFormat.jm();
 
+  /// The door camera's count against the van's spaces, or why there is
+  /// none -- the same words as the Overview's Live vans.
+  static String _count(VanStatus v) {
+    final of = v.aboard == null ? null : '${v.aboard} of ${v.seatCapacity} aboard';
+    return switch (v.camera) {
+      'live' => '$of (camera live)',
+      'lens_blocked' => of == null ? 'Camera covered: not counted' : 'Camera covered, last count $of',
+      'silent' => of == null ? 'Camera silent: not counted' : 'Camera silent, last count $of',
+      'no_phone' => 'No phone: not counted',
+      _ => of ?? 'Not counted',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     final v = van;
-    if (v == null) {
-      final head = text.labelMedium;
-      return Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-        child: _cols([
-          Text('Van', style: head),
-          Text('Status', style: head),
-          Text('Operator', style: head),
-          Text('Where and with whom', style: head),
-          Text('Terminal fees', style: head),
-        ]),
-      );
-    }
+    final text = Theme.of(context).textTheme;
     final (label, tone, _) = _VanBoardScreenState.state(v.state);
-    final where = switch (v.state) {
-      'travelling' => [
-          v.routeName ?? '',
-          'Dispatcher ${v.dispatcherName ?? 'none'}',
-          v.aboard == null ? 'aboard not counted (no phone)' : '${v.aboard} aboard',
-          v.positionAt == null
-              ? 'no GPS reading yet'
-              : '${v.positionStale == true ? 'last seen' : 'near'} ${v.nearestStopName ?? 'the route'} '
-                  'at ${_time.format(v.positionAt!)}',
-        ].join(' · '),
-      'on_site' => '${v.tripLabel ?? ''} · ${v.tripStatus == 'boarding' ? 'boarding' : 'scheduled'}'
-          ' · Dispatcher ${v.dispatcherName ?? 'not assigned'}',
-      'out_of_service' => v.operationalStatus == 'maintenance' ? 'Under repair' : 'Not in use',
-      _ => 'No trip today',
-    };
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: _cols([
-        Align(alignment: Alignment.centerLeft, child: PlateTag(v.plateNumber)),
-        Align(alignment: Alignment.centerLeft, child: StatusBadge(label, tone: tone)),
-        Text('${v.operatorName}\n${v.operatorLicence}', style: text.bodySmall),
-        Text(where, style: text.bodyMedium),
-        v.owes > 0
-            ? StatusBadge('Owes ${peso.format(v.owes)}', tone: Tone.warning)
-            : Text('Nothing owed', style: text.bodySmall),
+    final onTrip = v.state == 'travelling' || v.state == 'on_site';
+    final trip = onTrip
+        ? [
+            v.routeName ?? v.tripLabel ?? 'Trip',
+            if (v.departure != null) '${v.state == 'travelling' ? 'left' : 'leaves'} ${_time.format(v.departure!)}',
+          ].join(', ')
+        : (v.state == 'out_of_service'
+            ? (v.operationalStatus == 'maintenance' ? 'Under repair' : 'Not in use')
+            : 'No trip now');
+    Widget row(String k, String value, {Color? colour, bool strong = false}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(width: 110, child: Text(k, style: text.bodySmall)),
+            Expanded(
+              child: Text(value,
+                  textAlign: TextAlign.right,
+                  style: text.bodySmall?.copyWith(
+                      color: colour ?? AppColors.textPrimary, fontWeight: strong ? FontWeight.w700 : FontWeight.w600)),
+            ),
+          ]),
+        );
+    final eligible = v.owes <= 0 && v.state != 'out_of_service';
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: v.owes > 0 ? AppColors.warningContainer.withValues(alpha: 0.35) : AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: v.owes > 0 ? const Color(0xFFE0B252) : AppColors.divider),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: AppColors.textPrimary, borderRadius: BorderRadius.circular(6)),
+            child: Text(v.plateNumber,
+                style: const TextStyle(color: AppColors.onFill, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5)),
+          ),
+          const Spacer(),
+          StatusBadge(label, tone: tone),
+        ]),
+        const SizedBox(height: AppSpacing.md),
+        Text('Operator: ${v.operatorName}', style: text.titleSmall),
+        Text('Licence ${v.operatorLicence}', style: text.bodySmall),
+        const SizedBox(height: AppSpacing.md),
+        const Divider(),
+        const SizedBox(height: AppSpacing.sm),
+        row('Trip', trip),
+        if (onTrip) row('Dispatcher', v.dispatcherName ?? 'Not assigned'),
+        if (onTrip) row('Door camera', _count(v)),
+        if (v.state == 'travelling')
+          row('GPS',
+              v.positionAt == null
+                  ? 'No reading yet'
+                  : '${v.positionStale == true ? 'Last seen' : 'Near'} ${v.nearestStopName ?? 'the route'}, '
+                      '${_time.format(v.positionAt!)}',
+              colour: v.positionStale == true ? AppColors.danger : null),
+        row('Fees balance', peso.format(v.owes > 0 ? v.owes : 0),
+            colour: v.owes > 0 ? AppColors.warning : AppColors.primary, strong: true),
+        // The footer sits at the bottom, level across a row of cards.
+        const Spacer(),
+        const SizedBox(height: AppSpacing.sm),
+        const Divider(),
+        const SizedBox(height: AppSpacing.sm),
+        Row(children: [
+          Expanded(
+            child: Text(
+              eligible
+                  ? '✓ Can be dispatched'
+                  : v.owes > 0
+                      ? 'Next assignment waits for the fees'
+                      : 'Out of service',
+              style: text.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700, color: eligible ? AppColors.primary : AppColors.warning),
+            ),
+          ),
+          TextButton(
+            onPressed: () => context.read<ConsoleLocation>().go('/${slug('Trips')}/${slug('Trips')}'),
+            child: const Text('Trip sheet'),
+          ),
+        ]),
       ]),
     );
   }

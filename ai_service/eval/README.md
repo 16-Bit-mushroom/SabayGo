@@ -87,6 +87,17 @@ python eval/degrade.py
 python eval/evaluate.py --sweep
 ```
 
+Two options added on 16 Nov:
+
+- `degrade.py --in-memory` writes no degraded files: each row names its
+  original as `memory:<path>` and `evaluate.py` applies the same
+  transform when it reads the frame. The written PNGs were lossless, so
+  the detector sees the same pixels; it saves the ~3 GB they take.
+- `evaluate.py --imgsz 320` (or 416) runs the network at the input size
+  the phone uses instead of Ultralytics' default 640, and the report says
+  which. Use `--tag` to keep the runs apart:
+  `python eval/evaluate.py --sweep --imgsz 416 --tag imgsz416`.
+
 Outputs land in `docs/benchmarks/`, next to the locking experiment:
 
 - `ai_count_<date>.txt` — the tables, for the Results chapter

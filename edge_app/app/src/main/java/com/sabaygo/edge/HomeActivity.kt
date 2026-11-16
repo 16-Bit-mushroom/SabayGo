@@ -179,7 +179,7 @@ class HomeActivity : ComponentActivity() {
             inputType = InputType.TYPE_TEXT_VARIATION_URI
         }
         val token = EditText(this).apply {
-            hint = "Phone token (shown once when the phone was added)"
+            hint = "Set-up code (shown once when the phone was added)"
             setText(config.token)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
         }
@@ -262,7 +262,7 @@ class HomeActivity : ComponentActivity() {
     /** PUT /edge/door-layout: kept on the van, so the next phone in it has the line too. */
     private fun saveLine() {
         val layout = overlay.editing ?: return
-        if (!config.ready) { toast("Enter the server and token first."); return }
+        if (!config.ready) { toast("Enter the server and set-up code first."); return }
         thread {
             val msg = try {
                 val r = Api(config.server, config.token).send("PUT", "/edge/door-layout", layoutJson(layout))
@@ -289,7 +289,7 @@ class HomeActivity : ComponentActivity() {
         val now = System.currentTimeMillis()
         val lines = ArrayList<String>()
         lines += when {
-            !config.ready -> "Not set up: tap Set-up and enter the server and this phone's token."
+            !config.ready -> "Not set up: tap Set-up and enter the server and this phone's set-up code."
             Live.sessionError != null -> "Server: ${Live.sessionError}"
             s == null -> "Connecting to the server…"
             s.vanId == null -> "In the office: not checked out to a van."

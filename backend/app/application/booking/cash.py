@@ -115,7 +115,7 @@ async def cancel_seat(
     booking.cancelled_by = by
     booking.cancel_reason = reason.value
     booking.updated_at = now
-    # The seat goes back into the 14 straight away, so a walk-up can
+    # The seat goes back into the 14 straight away, so a walk-in can
     # take it (brief 2.3).
     await SeatRepository(session).release(booking_id=booking.booking_id)
     # Neither seat of a home pickup stands alone: cancelling the
@@ -226,6 +226,30 @@ class CashDesk:
         self._record_payment(booking, by=by, at=at)
         await self.session.flush()
         note = await self._activate_pickup(booking, by=by)
+        # Paying is the check-in (12 Nov, the owner's decision): cash is
+        # handed over only at the terminal, so a paid passenger is there,
+        # whether or not they pressed "I'm here to pay" first. A home
+        # pickup's seats are not -- they board at home (the note says so).
+        if note is None and booking.status == BookingStatus.CONFIRMED.value:
+            booking.status = BookingStatus.CHECKED_IN.value
+
+        # The passenger's receipt (12 Nov, the owner's decision): told in
+        # Updates that the seat is paid, with the code to show at the van.
+        # A mark made offline tells them when it syncs. A walk-in has no
+        # account, so nobody to tell; a seat restored after the cutoff is
+        # told so by _restore_released instead.
+        if booking.passenger_user_id:
+            await NotificationService(self.session).notify_passenger(
+                user_id=booking.passenger_user_id,
+                title="Paid: your seat is confirmed",
+                message=(
+                    f"Seat {booking.booking_code} is paid: "
+                    f"₱{booking.fare_amount:,.2f} in cash to the Dispatcher. "
+                    "Show this code at the van door before it leaves at "
+                    f"{_clock(trip.departure_datetime)}."
+                ),
+                entity=("booking", booking.booking_id),
+            )
 
         log.info(
             "Seat %s on trip %s marked paid by %s",
@@ -241,7 +265,7 @@ class CashDesk:
 
         The passenger paid in time and the system cannot know otherwise
         from the clock on a phone, so the seat comes back if the trip
-        still has one to give (T62). If a walk-up has taken it, the
+        still has one to give (T62). If a walk-in has taken it, the
         reservation stays cancelled and the Terminal Manager is told:
         there is cash in the Dispatcher's hand for a seat that no longer
         exists, and only a person can settle that (T63). Nothing is added
@@ -452,7 +476,7 @@ class CashDesk:
 
 def _seat_select():
     """A seat with whatever name and number there is to show for it: a
-    passenger's profile, or what the Dispatcher typed for a walk-up."""
+    passenger's profile, or what the Dispatcher typed for a walk-in."""
     return (
         select(BookingRow, PassengerProfile, User)
         .join(
@@ -485,3 +509,8 @@ def _seat_on_list(
 def _naive(value: datetime) -> datetime:
     """MySQL stores naive local time (app.core.timezone)."""
     return value.replace(tzinfo=None) if value.tzinfo else value
+
+
+def _clock(at: datetime) -> str:
+    """'11:30 AM', as the apps show a time."""
+    return f"{at:%I:%M %p}".lstrip("0")

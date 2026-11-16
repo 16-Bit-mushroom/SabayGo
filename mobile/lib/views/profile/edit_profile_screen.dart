@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/section_header.dart';
+import '../../core/design/tokens.dart';
 import '../../viewmodels/profile_viewmodel.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _emerNameCtrl;
   late TextEditingController _emerRelationCtrl;
   late TextEditingController _emerPhoneCtrl;
+  late TextEditingController _emailCtrl;
 
   final _currentPasswordCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
@@ -38,6 +41,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _emerNameCtrl = TextEditingController(text: user.emergencyContactName ?? '');
     _emerRelationCtrl = TextEditingController(text: user.emergencyContactRelation ?? '');
     _emerPhoneCtrl = TextEditingController(text: user.emergencyContactPhone ?? '');
+    _emailCtrl = TextEditingController(text: user.email);
   }
 
   @override
@@ -49,6 +53,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _emerNameCtrl.dispose();
     _emerRelationCtrl.dispose();
     _emerPhoneCtrl.dispose();
+    _emailCtrl.dispose();
     _currentPasswordCtrl.dispose();
     _newPasswordCtrl.dispose();
     super.dispose();
@@ -87,20 +92,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<ProfileViewModel>().currentUser!;
+    final text = Theme.of(context).textTheme;
+    // Theme defaults throughout: ink actions, Control Edge outlines, the
+    // 2px ink focus ring. The old greys failed the 3:1 edge contrast.
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Edit Profile', style: TextStyle(fontSize: 18, color: Colors.black87)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-      ),
+      appBar: AppBar(title: const Text('Edit profile')),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.gutter),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -109,67 +111,66 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       Center(
                         child: CircleAvatar(
                           radius: 40,
-                          backgroundColor: const Color(0xFF2D2059),
-                          child: Text(
-                            user.initials,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
-                          ),
+                          backgroundColor: AppColors.primaryContainer,
+                          child: Text(user.initials,
+                              style: text.headlineMedium?.copyWith(color: AppColors.primary)),
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: AppSpacing.xxl),
 
                       if (_error != null) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.red.shade200),
+                        Semantics(
+                          liveRegion: true,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color: AppColors.dangerContainer,
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                            ),
+                            child: Text(_error!, style: text.bodyMedium?.copyWith(color: AppColors.danger)),
                           ),
-                          child: Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: AppSpacing.lg),
                       ],
 
-                      const Text('PERSONAL DETAILS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                      const SizedBox(height: 12),
-                      _buildTextField('First Name', _firstNameCtrl, Icons.person_outline),
-                      const SizedBox(height: 16),
-                      _buildTextField('Last Name', _lastNameCtrl, Icons.person_outline),
-                      const SizedBox(height: 16),
-                      _buildTextField('Phone Number', _phoneCtrl, Icons.phone_outlined),
-                      const SizedBox(height: 16),
-                      _buildTextField('Email', TextEditingController(text: user.email), Icons.email_outlined, enabled: false, required: false),
-                      const SizedBox(height: 16),
-                      _buildTextField('Home Address', _addressCtrl, Icons.home_work_outlined, required: false),
+                      const AppSectionHeader('Personal details'),
+                      const SizedBox(height: AppSpacing.md),
+                      _buildTextField('First name', _firstNameCtrl, Icons.person_outline),
+                      const SizedBox(height: AppSpacing.lg),
+                      _buildTextField('Last name', _lastNameCtrl, Icons.person_outline),
+                      const SizedBox(height: AppSpacing.lg),
+                      _buildTextField('Phone number', _phoneCtrl, Icons.phone_outlined, keyboard: TextInputType.phone),
+                      const SizedBox(height: AppSpacing.lg),
+                      _buildTextField('Email', _emailCtrl, Icons.email_outlined,
+                          enabled: false, required: false, helper: 'Your sign-in email cannot be changed here.'),
+                      const SizedBox(height: AppSpacing.lg),
+                      _buildTextField('Home address', _addressCtrl, Icons.home_work_outlined, required: false),
 
-                      const SizedBox(height: 32),
-                      const Text('EMERGENCY CONTACT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                      const SizedBox(height: 12),
-                      _buildTextField('Contact Name', _emerNameCtrl, Icons.health_and_safety_outlined, required: false),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpacing.xxxl),
+                      const AppSectionHeader('Emergency contact'),
+                      const SizedBox(height: AppSpacing.md),
+                      _buildTextField('Contact name', _emerNameCtrl, Icons.health_and_safety_outlined, required: false),
+                      const SizedBox(height: AppSpacing.lg),
                       _buildTextField('Relation', _emerRelationCtrl, Icons.people_outline, required: false),
-                      const SizedBox(height: 16),
-                      _buildTextField('Contact Phone', _emerPhoneCtrl, Icons.phone_outlined, required: false),
+                      const SizedBox(height: AppSpacing.lg),
+                      _buildTextField('Contact phone', _emerPhoneCtrl, Icons.phone_outlined,
+                          required: false, keyboard: TextInputType.phone),
 
-                      const SizedBox(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('CHANGE PASSWORD', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                          Switch(
-                            value: _changingPassword,
-                            activeThumbColor: const Color(0xFF00A859),
-                            onChanged: (val) => setState(() => _changingPassword = val),
-                          ),
-                        ],
+                      const SizedBox(height: AppSpacing.xxl),
+                      // One control: the label is the switch's name for a screen reader.
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('Change password', style: text.titleMedium),
+                        value: _changingPassword,
+                        onChanged: (val) => setState(() => _changingPassword = val),
                       ),
                       if (_changingPassword) ...[
-                        const SizedBox(height: 12),
-                        _buildTextField('Current Password', _currentPasswordCtrl, Icons.lock_outline, obscure: true),
-                        const SizedBox(height: 16),
-                        _buildTextField('New Password (min. 8 characters)', _newPasswordCtrl, Icons.lock_reset, obscure: true),
+                        const SizedBox(height: AppSpacing.md),
+                        _buildTextField('Current password', _currentPasswordCtrl, Icons.lock_outline, obscure: true),
+                        const SizedBox(height: AppSpacing.lg),
+                        _buildTextField('New password', _newPasswordCtrl, Icons.lock_reset,
+                            obscure: true, helper: 'At least 8 characters.'),
                       ],
                     ],
                   ),
@@ -178,40 +179,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
 
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
+                color: AppColors.surfaceRaised,
+                border: Border(top: BorderSide(color: AppColors.edge)),
               ),
               child: Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: BorderSide(color: Colors.grey.shade300),
+                    child: SizedBox(
+                      height: AppSizing.primaryActionHeight,
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : () => Navigator.pop(context),
+                        child: const Text('Cancel'),
                       ),
-                      child: const Text('Cancel', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: AppSpacing.md),
                   Expanded(
-                    child: FilledButton(
-                      onPressed: _saving ? null : _save,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF00A859),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: SizedBox(
+                      height: AppSizing.primaryActionHeight,
+                      child: FilledButton(
+                        onPressed: _saving ? null : _save,
+                        child: _saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.surfaceRaised),
+                              )
+                            : const Text('Save changes'),
                       ),
-                      child: _saving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -230,24 +227,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     bool required = true,
     bool enabled = true,
     bool obscure = false,
+    String? helper,
+    TextInputType? keyboard,
   }) {
     return TextFormField(
       controller: controller,
       enabled: enabled,
       obscureText: obscure,
+      keyboardType: keyboard,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, size: 20, color: Colors.grey),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF00A859), width: 2)),
-        disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        helperText: helper,
+        prefixIcon: Icon(icon, size: 20),
       ),
       validator: (val) {
         if (!required) return null;
-        if (val == null || val.trim().isEmpty) return 'Required field';
-        if (obscure && val.length < 8) return 'At least 8 characters';
+        if (val == null || val.trim().isEmpty) return 'Enter your ${label.toLowerCase()}.';
+        if (obscure && val.length < 8) return 'Use at least 8 characters.';
         return null;
       },
     );

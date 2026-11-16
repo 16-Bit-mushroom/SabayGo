@@ -662,6 +662,9 @@ class Message(Base):
     attachment_size_kb: Mapped[int | None]
     retain_until: Mapped[dt.date | None] = mapped_column(Date)
     read_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    # 040: edited / deleted by their sender (the text erased on delete).
+    edited_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    deleted_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     created_at: Mapped[dt.datetime] = mapped_column(DATETIME(fsp=6))
 
 
@@ -678,7 +681,7 @@ class Remittance(Base):
     van_id: Mapped[str] = mapped_column(ForeignKey("vans.van_id"))
     service_date: Mapped[dt.date] = mapped_column(Date)
     booked_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
-    walk_up_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    walk_in_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
     rate_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     remittance_owed: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
     held_share: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
@@ -692,6 +695,11 @@ class Remittance(Base):
     operator_share_given: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
     operator_share_given_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
     operator_share_recorded_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
+    # What the operator handed back (038): never above what was given. The
+    # share the operator holds is given - returned.
+    operator_share_returned: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
+    operator_share_returned_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))
+    operator_share_returned_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"))
     status: Mapped[str] = mapped_column(String(8), default="open")
     settled_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"))
     settled_at: Mapped[dt.datetime | None] = mapped_column(DATETIME(fsp=6))

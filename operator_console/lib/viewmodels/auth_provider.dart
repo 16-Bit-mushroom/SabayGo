@@ -34,10 +34,15 @@ class AuthProvider extends ChangeNotifier {
       }
       _profile = await _repo.me();
       _set(AuthStatus.signedIn);
+    } on NetworkException {
+      // The server could not be reached (restarting, the network down):
+      // the token may be perfectly good, so it is kept for the next load.
+      _set(AuthStatus.signedOut);
+    } on RequestTimeoutException {
+      _set(AuthStatus.signedOut);
     } catch (_) {
-      // Covers both an expired token (ApiException) and a storage read
-      // that fails outright -- e.g. a browser with storage access
-      // blocked. Either way there is no usable session to restore.
+      // An expired or refused token, or a storage read that fails outright
+      // (a browser with storage access blocked): no usable session.
       await _tokens.clear();
       _set(AuthStatus.signedOut);
     }

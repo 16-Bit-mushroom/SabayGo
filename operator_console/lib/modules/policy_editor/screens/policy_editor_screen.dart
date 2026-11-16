@@ -313,20 +313,20 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
   /// Advanced, with its name made readable.
   static const _plain = <String, _Words>{
     'advance_booking_open_days': _Words('How far ahead passengers can book', 'Booking and changes',
-        'How many days ahead the app lets a passenger book a space.'),
-    'advance_booking_seat_cap': _Words('Spaces that can be booked ahead', 'Booking and changes',
-        'How many of a van\'s spaces the app may sell in advance. Set it to the van\'s spaces to open them all.'),
+        'How many days ahead the app lets a passenger book a seat.'),
+    'advance_booking_seat_cap': _Words('Seats that can be booked ahead', 'Booking and changes',
+        'How many of a van\'s seats the app may sell in advance. Set it to the van\'s seats to open them all.'),
     'unpaid_cutoff_min': _Words('Release unpaid reservations before departure', 'Booking and changes',
         'A reservation the Dispatcher has not marked Paid this long before departure is cancelled and its '
-            'space freed. The passenger is reminded one cutoff-length earlier.'),
+            'seat freed. The passenger is reminded one cutoff-length earlier.'),
     'checkin_window_minutes': _Words('When check-in opens', 'At the terminal',
         'How long before departure a passenger at the terminal can check in from the app.'),
     'default_geofence_radius_m': _Words('Size of a terminal area', 'At the terminal',
         'How far from a terminal\'s position still counts as at the terminal, unless the terminal sets its own.'),
     'walkin_info_required': _Words('Walk-in passengers must give details', 'At the terminal',
         'No: the Dispatcher may leave a walk-in passenger\'s name out. The details are only for the receipt.'),
-    'default_seat_capacity': _Words('Spaces in a new van', 'Vans and tracking',
-        'The spaces a van is given when it is added. A2Z\'s rule is 14.'),
+    'default_seat_capacity': _Words('Seats in a new van', 'Vans and tracking',
+        'The seats a van is given when it is added. A2Z\'s rule is 14.'),
     'tracking_ping_interval_seconds': _Words('How often a van sends its position', _advancedGroup,
         'How often the phone in the van should report where it is.'),
     'tracking_stale_after_seconds': _Words('Show "No signal" after', 'Vans and tracking',
@@ -342,7 +342,7 @@ class _PolicyEditorScreenState extends State<PolicyEditorScreen> {
     'remittance_rate_pct': _Words('A2Z\'s share of the fares', 'Trips and payment',
         'The part of the fares on each trip\'s passenger list that is handed to the Cashier before Start.'),
     'dcott_ticket_fee': _Words('DCOTT ticket per trip', 'Trips and payment',
-        'Owed for every trip once it has a van, even with nobody on the list. Part of the terminal fees '
+        'Charged for every trip once it has a van, even with nobody on the list. Part of the terminal fees '
             'Start waits for.'),
     'parking_fee': _Words('Parking per van per day', 'Trips and payment',
         'Charged once a day on each van\'s statement, including a van with no trip. Part of the terminal '

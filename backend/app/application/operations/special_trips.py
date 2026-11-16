@@ -20,7 +20,7 @@ turn, and changed the same way when an operator declines a far trip
 Payment comes first. The fee is paid in cash at the terminal before the
 van leaves, which the trip's Dispatcher logs here, and then the trip's
 Start waits for it (`TripLifecycle.start`). The fee is booked income (B)
-when the request came from the app, walk-up (W) when it was entered at
+when the request came from the app, walk-in (W) when it was entered at
 the counter (rev 721 item 3). A paid fee is one fare line on the van's
 statement (`finance.statement`), so its 15 % is handed to the Cashier
 before Start under the same block as any trip. GPS auto-start is never
@@ -240,7 +240,7 @@ class SpecialTrips:
 
         The only way a rental fee is paid: A2Z handles only cash, so the
         renter, or someone acting for them, hands it over at the terminal
-        before the van leaves. Whether it counts as booked or walk-up
+        before the van leaves. Whether it counts as booked or walk-in
         income follows from where the request came from, not from how it
         was paid (`finance.statement`).
         """

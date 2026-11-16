@@ -8,7 +8,8 @@ import logging
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from app.api.v1.deps import SessionDep, require_roles
+from app.api.v1.deps import CurrentUser, SessionDep, require_roles
+from app.application.tracking.access import ensure_can_see_van
 from app.application.tracking.flags import DrivingFlags
 from app.application.tracking.nahgm import TrackingService
 from app.config import settings
@@ -98,13 +99,17 @@ async def record_ping(
 
 
 @router.get("/trips/{trip_id}/position", response_model=PositionOut)
-async def current_position(trip_id: str, session: SessionDep) -> PositionOut:
+async def current_position(
+    trip_id: str, session: SessionDep, user: CurrentUser
+) -> PositionOut:
     """Where the van is now, and when it reaches the stops ahead.
 
-    Unauthenticated on purpose: a passenger waiting at Digos should be
-    able to see the van without an account, and the response exposes only
-    a vehicle position on a public fixed route.
+    Signed in since 12 Nov (C5): the office and crew see any van, a
+    passenger only the van of a trip they hold a seat on, while it is
+    boarding or on the road -- `application/tracking/access.py`. It was
+    open to anyone, and a van's position is its driver's.
     """
+    await ensure_can_see_van(session, user, trip_id)
     pos = await TrackingService(session).current_position(trip_id=trip_id)
     return PositionOut(
         **{k: v for k, v in pos.__dict__.items() if k != "etas"},
@@ -114,9 +119,17 @@ async def current_position(trip_id: str, session: SessionDep) -> PositionOut:
 
 @router.get("/trips/{trip_id}/history")
 async def track_history(
-    trip_id: str, session: SessionDep, limit: int = Query(500, le=2000)
+    trip_id: str,
+    session: SessionDep,
+    user: CurrentUser,
+    limit: int = Query(500, le=2000),
 ) -> list[dict]:
-    """Breadcrumb trail for drawing the path travelled."""
+    """Breadcrumb trail for drawing the path travelled.
+
+    The same rule as the position (C5): a passenger sees the trail of
+    their own trip only while it runs; after arrival it is the office's.
+    """
+    await ensure_can_see_van(session, user, trip_id)
     return await TrackingService(session).track_history(trip_id=trip_id, limit=limit)
 
 

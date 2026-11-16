@@ -13,6 +13,7 @@ class PasswordField extends StatefulWidget {
     this.prefixIcon,
     this.validator,
     this.onSubmitted,
+    this.labelAbove = false,
   });
 
   final TextEditingController controller;
@@ -20,6 +21,10 @@ class PasswordField extends StatefulWidget {
   final IconData? prefixIcon;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onSubmitted;
+
+  /// The form shows the label as a heading above the field (sign-in), so
+  /// inside it the label is only the placeholder.
+  final bool labelAbove;
 
   @override
   State<PasswordField> createState() => _PasswordFieldState();
@@ -35,7 +40,8 @@ class _PasswordFieldState extends State<PasswordField> {
       obscureText: _hidden,
       style: TextStyle(color: AppColors.textPrimary),
       decoration: InputDecoration(
-        labelText: widget.label,
+        labelText: widget.labelAbove ? null : widget.label,
+        hintText: widget.labelAbove ? widget.label : null,
         prefixIcon: widget.prefixIcon == null ? null : Icon(widget.prefixIcon),
         suffixIcon: IconButton(
           tooltip: _hidden ? 'Show password' : 'Hide password',

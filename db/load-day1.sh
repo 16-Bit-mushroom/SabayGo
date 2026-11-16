@@ -16,6 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
+MYSQL_DATABASE="${SABAYGO_DB:-$MYSQL_DATABASE}"
 
 ./db/apply.sh --reset >/dev/null
 echo "==> load   db/day1/day1_a2z.sql"

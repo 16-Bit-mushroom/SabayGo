@@ -2,6 +2,33 @@
 
 Moved out of CLAUDE.md on 24 Oct 2026.
 
+- **NAHGM's ETAs (found 16 Nov, open).** The NAHGM benchmark
+  (`backend/scripts/nahgm_benchmark.py`, report
+  `docs/benchmarks/nahgm_2026-11-16_1527.txt`) shows two structural
+  errors that GPS noise does not explain. (1) The next stop leaves the
+  ETA list as soon as it becomes the *nearest* stop, about halfway along
+  the leg: on ECO-COT, 28-64 min before the van arrives, so no ETA is
+  ever shown in the last 15 min before a stop. (2) Distances are straight
+  hops between stops; the road is 1.26 times longer, so with a true speed
+  the ETAs are about 18-28 min early on stops an hour or more ahead.
+  A progress rule (`geometry.snap_to_route` is already in the code) and
+  a road factor or the schedule's offsets would address both; not
+  changed yet, the group decides.
+- **This machine has only a Java runtime (16 Nov).** `jre21-openjdk` has
+  no `javac`, so Gradle stops with "does not provide the required
+  capabilities: [JAVA_COMPILER]". Build the APKs with
+  `JAVA_HOME=/mnt/games/home-data/Android/jdk-17`, and the edge app with
+  `ANDROID_HOME=$HOME/Android/Sdk` (it has no `local.properties`).
+- **The edge app's release build fails lint (old, also on main).**
+  `InvalidFragmentVersionForActivityResult` in `HomeActivity.kt:63` and
+  `BenchActivity.kt:54`: `registerForActivityResult` wants
+  `androidx.fragment` 1.3.0 or newer on the classpath. The debug APK,
+  the one the phone runs, builds and its 15 unit tests pass. Adding
+  `androidx.fragment:fragment-ktx` to `app/build.gradle.kts` would clear
+  it.
+- **The Trips sheet is wider than a 1280 px screen (16 Nov).** At
+  1280 × 720 the last column ("Next") is cut off at the right edge.
+
 - The `--soon` reschedule failure, recorded for weeks as fixture
   self-conflict, was a reset gap (fixed 16 Oct): `reset-dev.sh` zeroed the
   policy row but not the cutoff each fixture trip copied at generation.

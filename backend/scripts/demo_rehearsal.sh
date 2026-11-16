@@ -4,7 +4,7 @@
 # thing that would embarrass you on stage.
 #
 #   login -> search -> reserve -> booking code -> check-in -> Mark as Paid
-#   -> walk-up -> terminal fees -> start -> camera check -> statements
+#   -> walk-in -> terminal fees -> start -> camera check -> statements
 #
 # Run it the morning of the demo, after:
 #   ./db/reset-dev.sh --soon          # fixture trip departs in 20 min

@@ -3,6 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
+# A scratch database for the journey tests, without touching the real one:
+#   SABAYGO_DB=sabaygo_t ./db/reset-dev.sh --soon
+MYSQL_DATABASE="${SABAYGO_DB:-$MYSQL_DATABASE}"
 
 # --soon puts departure 20 min out so the check-in window is open.
 if [ "${1:-}" = "--soon" ]; then

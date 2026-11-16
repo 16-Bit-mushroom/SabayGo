@@ -101,14 +101,14 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
           child: Text(
             'Could not load this conversation.\n${_viewModel.error}',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600),
+            style: const TextStyle(color: AppColors.textMuted),
           ),
         ),
       );
     }
     if (_viewModel.messages.isEmpty) {
       return Center(
-        child: Text('Say hello to ${widget.peerName}.', style: TextStyle(color: Colors.grey.shade500)),
+        child: Text('No messages yet. Write to ${widget.peerName} below.', style: const TextStyle(color: AppColors.textMuted)),
       );
     }
     return ListView.builder(
@@ -121,32 +121,109 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
 
   Widget _bubble(ChatMessage m) {
     final align = m.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final color = m.isMine ? AppColors.success : Colors.grey.shade200;
-    final textColor = m.isMine ? Colors.white : Colors.black87;
+    final color = m.isMine ? AppColors.primary : AppColors.primaryContainer;
+    final textColor = m.isMine ? AppColors.surfaceRaised : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: align,
         children: [
-          Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(16),
+          GestureDetector(
+            onLongPress: m.canChange ? () => _actions(m) : null,
+            child: Container(
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: m.deleted
+                  ? Text('Message deleted',
+                      style: TextStyle(color: textColor.withValues(alpha: .75), fontStyle: FontStyle.italic))
+                  : Text(m.body, style: TextStyle(color: textColor)),
             ),
-            child: Text(m.body, style: TextStyle(color: textColor)),
           ),
           Padding(
             padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
             child: Text(
-              DateFormat('hh:mm a').format(m.createdAt),
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              DateFormat('h:mm a').format(m.createdAt) +
+                  (m.edited && !m.deleted ? ' · edited' : '') +
+                  (m.canChange ? ' · hold to edit' : ''),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Long-press on one's own message: Edit or Delete.
+  Future<void> _actions(ChatMessage m) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit message'),
+            onTap: () => Navigator.pop(ctx, 'edit'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: AppColors.danger),
+            title: const Text('Delete message', style: TextStyle(color: AppColors.danger)),
+            onTap: () => Navigator.pop(ctx, 'delete'),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    String? err;
+    if (choice == 'edit') {
+      final text = await _askEdit(m.body);
+      if (text == null || text.trim().isEmpty || text.trim() == m.body) return;
+      err = await _viewModel.edit(m, text);
+    } else {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete this message?'),
+          content: const Text('Its text is removed for both of you. "Message deleted" stays where it was.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      err = await _viewModel.delete(m);
+    }
+    if (err != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    }
+  }
+
+  Future<String?> _askEdit(String current) {
+    final c = TextEditingController(text: current);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          minLines: 1,
+          maxLines: 5,
+          maxLength: 1000,
+          textCapitalization: TextCapitalization.sentences,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('Save')),
+        ],
+      ),
+    ); // c is not disposed here: the dialog still reads it while it animates out.
   }
 
   Widget _composer() {
@@ -161,24 +238,16 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
                 minLines: 1,
                 maxLines: 4,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  hintText: 'Message',
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+                // The theme's outlined field: a box the eye can find (3:1 edge).
+                decoration: const InputDecoration(hintText: 'Message'),
                 onSubmitted: (_) => _send(),
               ),
             ),
             const SizedBox(width: 8),
             IconButton.filled(
+              tooltip: 'Send',
               onPressed: _viewModel.isSending ? null : _send,
-              style: IconButton.styleFrom(backgroundColor: AppColors.success),
-              icon: const Icon(Icons.send, color: Colors.white, size: 20),
+              icon: const Icon(Icons.send, size: 20),
             ),
           ],
         ),

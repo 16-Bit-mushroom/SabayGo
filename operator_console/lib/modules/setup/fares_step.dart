@@ -77,6 +77,12 @@ class _FaresStepState extends State<FaresStep> {
     return true;
   }
 
+  static const _columns = [
+    RecordColumn('Route', flex: 5),
+    RecordColumn('Fares from the first stop', flex: 6),
+    RecordColumn('Status', flex: 2),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final routes = _routes ?? const <RouteSummary>[];
@@ -92,6 +98,7 @@ class _FaresStepState extends State<FaresStep> {
               ? LoadError(message: _error!, onRetry: _load)
               : RecordList(
                   title: 'Routes',
+                  columns: _columns,
                   empty: EmptyState(
                     icon: Icons.route,
                     title: 'No route to set fares on',
@@ -100,10 +107,11 @@ class _FaresStepState extends State<FaresStep> {
                   rows: [
                     for (final r in routes)
                       RecordRow(
-                        leading: Icon(Icons.payments_outlined, color: AppColors.textMuted),
-                        title: '${r.routeCode} · ${r.routeName}',
-                        subtitle: _summary(r),
-                        badges: [
+                        title: r.routeName,
+                        columns: _columns,
+                        cells: [
+                          CellText('${r.routeCode}  ${r.routeName}', strong: true),
+                          CellText(_summary(r), muted: true),
                           if (!r.isActive)
                             const StatusBadge('Out of service')
                           else if (_missing(r).isEmpty)
@@ -117,7 +125,7 @@ class _FaresStepState extends State<FaresStep> {
                       ),
                   ],
                 ),
-      side: selected == null
+      detail: selected == null
           ? (_routes != null && !routes.any((r) => r.isActive)
               ? SidePanel(
                   title: 'Fares',
@@ -130,6 +138,7 @@ class _FaresStepState extends State<FaresStep> {
               : null)
           : SidePanel(
               title: 'Fares · ${selected.routeName}',
+              onClose: () => setState(() => _selected = null),
               child: FareForm(
                 key: ValueKey('${selected.routeId}-${_fares[selected.routeId]?.length}'),
                 route: selected,

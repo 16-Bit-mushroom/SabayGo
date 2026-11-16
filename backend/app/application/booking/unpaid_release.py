@@ -4,7 +4,7 @@ A reservation made in the app is CONFIRMED and UNPAID: it holds one of
 the 14 seats, but it is not on the passenger list and adds nothing to
 what the van owes. Only the Dispatcher's Mark as Paid changes that. So a
 reservation nobody pays for would otherwise keep a seat out of the 14
-until the van left, and a walk-up standing at the terminal would be
+until the van left, and a walk-in standing at the terminal would be
 turned away for a passenger who never came.
 
 This job releases it `unpaid_cutoff_min` minutes before departure
@@ -74,7 +74,7 @@ class UnpaidRelease:
             .join(Trip, Trip.trip_id == BookingRow.trip_id)
             .where(
                 BookingRow.status.in_(STANDING),
-                # Not filtered by booking type: a walk-up hands over the
+                # Not filtered by booking type: a walk-in hands over the
                 # cash as it is listed, so an unpaid seat of any kind is
                 # a seat nobody has paid for.
                 BookingRow.payment_status == PaymentStatus.UNPAID.value,

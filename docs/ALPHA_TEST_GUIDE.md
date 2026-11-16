@@ -19,7 +19,7 @@ The system is three programs on one laptop and two apps on phones:
 S9 (console) and S10 (app) landed on 3 Nov on branch `rev721-frontends`:
 the apps now follow the cash-only backend. Checked: both apps analyse
 without errors; every API path and every JSON key both apps read exists
-in the backend; the reservation, Mark as Paid, walk-up, cancel and
+in the backend; the reservation, Mark as Paid, walk-in, cancel and
 statement responses were parsed by the apps' own models;
 `test_passenger_journey.sh` 55/0 and `test_home_pickup.sh` 68/0.
 **Not yet tried on a phone or in a browser**: the first round is also the
@@ -160,17 +160,17 @@ and four or more passengers.
 | 4 | Passengers | Go to the Dispatcher, say the code or name, hand play money | — |
 | 5 | Dispatcher | Finds each by name or code, **Mark as Paid** | The seat shows Paid; the passenger's app shows Paid |
 | 6 | Dispatcher | Turns on airplane mode, marks one more Paid, turns it off | The mark syncs and keeps the time it was made |
-| 7 | Dispatcher | Lists two walk-ups with destinations; adds self as crew | Walk-ups count as Walk-up income, paid at once; crew is not one of the 14 |
+| 7 | Dispatcher | Lists two walk-ins with destinations; adds self as crew | Walk-ins count as Walk-in income, paid at once; crew is not one of the 14 |
 | 8 | Cashier | Tries **Start trip** | Refused: the terminal fees are not recorded |
-| 9 | Dispatcher → Cashier | Hands over the fees at the counter; Cashier **Record payment**, with the operator's share | Amount = 15 % of (Booked + Walk-up) + ₱75 + ₱50 (the van's first trip today) |
+| 9 | Dispatcher → Cashier | Hands over the fees at the counter; Cashier **Record payment**, with the operator's share | Amount = 15 % of (Booked + Walk-in) + ₱75 + ₱50 (the van's first trip today) |
 | 10 | Cashier | **Start trip** | Trip is Boarding; operator name, licence and plate copied onto it |
 | 11 | Dispatcher | **Depart** | En Route; passengers can track the van |
 | 12 | Dispatcher | **Arrived** | Completed |
 | 13 | Terminal Manager | The bell, then Trips → the trip | An **Unaudited trip · no phone** alert at Start, and the trip panel says Unaudited (no edge phone went out). Not a zero count. Boarding Audit stays empty: it lists only what a phone reported |
-| 14 | Cashier | Money → Remittance, the van's statement | Booked, Walk-up, 15 %, ₱75 × trips, ₱50, terminal fees owed, operator's share owed and given |
+| 14 | Cashier | Money → Remittance, the van's statement | Booked, Walk-in, 15 %, ₱75 × trips, ₱50, terminal fees owed, operator's share owed and given |
 
 The brief's sample trip is the arithmetic check: Booked ₱1,370 and
-Walk-up ₱80 give 15 % = ₱217.50, terminal fees = ₱342.50, operator's
+Walk-in ₱80 give 15 % = ₱217.50, terminal fees = ₱342.50, operator's
 share = ₱1,107.50. `test_terminal_fees.sh` proves the backend gets it
 right; the console and the app must show the same numbers.
 
@@ -197,7 +197,7 @@ Each line is something a tester should try and report on.
 - See today's assigned trips; open one.
 - Find a reservation by name or booking code; **Mark as Paid**; cancel one (passenger asked, or nobody came).
 - The same in airplane mode, then back online: the marks sync; a late one says *restored* or *seat gone*.
-- List walk-ups with destinations (works offline).
+- List walk-ins with destinations (works offline).
 - Add self as crew.
 - Take a special trip's fee in cash and mark it paid.
 - Home pickup: mark the seat Paid (activates it), arrived at the pin, boarded or no-show, end the stop early.
@@ -214,7 +214,7 @@ Each line is something a tester should try and report on.
 
 ### Terminal Manager (console)
 
-- Setup in order: terminals, routes, fares, operators and vans, staff, timetable, phones, rules. Validate operators, Dispatchers and vans.
+- Setup in order: terminals, routes, fares, operators and vans, staff, trip schedules, phones, rules. Validate operators, Dispatchers and vans.
 - Everything the Cashier does, plus: void a started trip or change its van; lift the payment block with a written reason.
 - Reviews: Review Starts (system-started trips), Boarding Audit, Driving Flags, Disputes (Upheld, Rejected, Adjusted).
 - Rules & Settings: the 15 % rate, ₱75 ticket, ₱50 parking, unpaid cutoff, home-pickup wait and distance, SOS numbers.

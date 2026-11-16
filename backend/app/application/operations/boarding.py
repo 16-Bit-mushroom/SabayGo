@@ -22,7 +22,7 @@ from app.application.finance.statement import Statements
 from app.application.notifications.service import NotificationService, trip_label
 from app.core import timezone as app_tz
 from app.core.exceptions import ConflictError, NotFoundError
-from app.domain.enums import BookingStatus, DepartureSource, Role, TripStatus
+from app.domain.enums import BookingStatus, DepartureSource, PaymentStatus, Role, TripStatus
 from app.infrastructure.models import Booking as BookingRow
 from app.infrastructure.models import PassengerProfile, Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
@@ -192,14 +192,26 @@ class DepartTripUseCase:
                 BookingRow.booking_id.notin_(boards_later),
             )
         )
-        no_shows = list(result.scalars().all())
+        standing = list(result.scalars().all())
+        # Who rode (12 Nov, the owner's decision on Day 1 finding 31): with
+        # no ticket to scan, a paid seat is aboard at departure -- the cash
+        # was handed over at the van, as a walk-in's is when it is listed.
+        # It stays the passenger's current trip, with tracking and the SOS,
+        # until the van arrives. Only an unpaid one is a no-show. The door
+        # camera's "fewer aboard than listed" is what flags a paid
+        # passenger who did not come.
+        aboard = [b for b in standing if b.payment_status == PaymentStatus.PAID.value]
+        no_shows = [b for b in standing if b.payment_status != PaymentStatus.PAID.value]
+        for booking in aboard:
+            booking.status = BookingStatus.BOARDED.value
+            booking.updated_at = now
         seats = SeatRepository(self.session)
 
         for booking in no_shows:
             booking.status = BookingStatus.NO_SHOW.value
             booking.updated_at = now
-            # The seat still counts in the 15 %: it was paid (brief
-            # 2.1). The space is released because it is empty; nobody
+            # Unpaid, so it is not on the passenger list and owes no
+            # share. The space is released because it is empty; nobody
             # boards after departure (rev 603), so it is never resold.
             await seats.release(booking_id=booking.booking_id)
 
