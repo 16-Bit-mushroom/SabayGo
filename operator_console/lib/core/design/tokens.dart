@@ -10,22 +10,26 @@ import 'package:flutter/material.dart';
 ///   F0FDF4 meadow mist      the page
 ///   FFFFFF / DCFCE7         cards; the soft emerald tint
 ///   86EFAC                  card and panel edges, the sidebar's edge
-///   22C55E kelly            the progress bars' start; the action hovered
-///   10B981 emerald          the main action, the selected sidebar entry,
-///                           the progress bars' end
+///   22C55E kelly            the progress bars' start
+///   10B981 emerald          accents: the live dot, charts, the progress
+///                           bars' end
 ///   059669                  secondary hover: an outline under the pointer
-///   047857                  green text and icons, focus, success
+///   047857 forest           the main action and the selected sidebar
+///                           entry, with white text; green text and icons,
+///                           focus, success
+///   065F46                  the main action hovered
 ///   1E3A2F slate green-grey the type
 ///
 /// **Every pairing below is measured against WCAG 2.1 AA** (ratios are
 /// computed, not estimated). The reference's white text on emerald is
-/// 2.54:1, so text on the emerald and the kelly is dark ([onAction]);
-/// green *text* is 047857, the shade that passes on every surface here.
+/// 2.54:1, so the emerald and the kelly carry no text: a fill with a
+/// label is the forest 047857, which is also green *text*, the shade that
+/// passes on every surface here.
 /// Three rules:
 ///
 /// 1. A status colour is legible as *text on any panel*, and anything
-///    drawn *on* a dark filled colour uses [AppColors.onFill]; on the
-///    emerald and the kelly, [AppColors.onAction].
+///    drawn *on* a dark filled colour is light: [AppColors.onFill], or
+///    [AppColors.onAction] on the main action.
 /// 2. Status is never carried by hue alone (WCAG 1.4.1). Every semantic
 ///    role ships a `container` tint so a chip can state its meaning in
 ///    words, and callers include the label or a mark, not just the colour.
@@ -60,15 +64,23 @@ class AppColors {
   static const Color primaryContainer = Color(0xFFDCFCE7);
 
   /// The main action: filled buttons (one per view) and the selected
-  /// sidebar entry. Emerald, never text: 2.54:1 on white.
-  static const Color action = Color(0xFF10B981);
+  /// sidebar entry. Forest, so its label is white (17 Nov, the owner: a
+  /// dark fill carries light text). The emerald it replaced could not:
+  /// white on it is 2.54:1.
+  static const Color action = Color(0xFF047857);
 
-  /// The main action under the pointer: kelly. [onAction] on it 6.7:1.
-  /// (The reference's 059669 would leave dark text at 4.06:1.)
-  static const Color actionHover = Color(0xFF22C55E);
+  /// The main action under the pointer: a step darker. [onAction] on it
+  /// 7.68:1.
+  static const Color actionHover = Color(0xFF065F46);
 
-  /// Text and icons on [action] and [actionHover]: 6.03:1 on the emerald.
-  static const Color onAction = Color(0xFF0F2A20);
+  /// Text and icons on [action] and [actionHover]: white, 5.48:1 on the
+  /// forest.
+  static const Color onAction = Color(0xFFFFFFFF);
+
+  /// Emerald as decoration only: the live dot, chart fills, the accent bar
+  /// of a hovered row, the "On the road" shade. Never a fill under text
+  /// (white on it 2.54:1) and never text (2.54:1 on white).
+  static const Color accent = Color(0xFF10B981);
 
   /// The sidebar's edge and chart accents: mid-light green. Cards and
   /// panels take the lighter [divider] since 10 Nov (toned down), so green
@@ -137,8 +149,8 @@ class AppColors {
   /// The sidebar: white, with an [edge] on its right, as in the reference.
   static const Color sidebar = AppRamp.n0;
 
-  /// The selected entry: the emerald, a bold [onAction] label (6.03:1),
-  /// and its icon on a white tile. The tile and the weight carry the
+  /// The selected entry: the forest, a bold white [onAction] label
+  /// (5.48:1), and its icon on a white tile. The tile and the weight carry the
   /// selection as well as the fill.
   static const Color sidebarSelected = action;
 

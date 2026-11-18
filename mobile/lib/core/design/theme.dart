@@ -21,8 +21,8 @@ import 'tokens.dart';
 const _font = 'Inter';
 const _display = 'PlusJakartaSans';
 
-/// The main action: emerald, kelly while pressed, a sunken step when it
-/// cannot be used. Text on it is [AppColors.onAction].
+/// The main action: forest, a step darker while pressed, a sunken step
+/// when it cannot be used. Text on it is white [AppColors.onAction].
 final _actionFill = WidgetStateProperty.resolveWith<Color>((s) {
   if (s.contains(WidgetState.disabled)) return AppColors.surfaceSunken;
   if (s.contains(WidgetState.pressed) || s.contains(WidgetState.hovered)) {

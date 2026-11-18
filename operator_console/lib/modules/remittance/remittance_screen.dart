@@ -870,7 +870,7 @@ class _VanRowState extends State<_VanRow> {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.surfaceSunken))),
             foregroundDecoration: BoxDecoration(
-                border: Border(left: _hover || widget.open ? const BorderSide(color: AppColors.action, width: 3) : BorderSide.none)),
+                border: Border(left: _hover || widget.open ? const BorderSide(color: AppColors.accent, width: 3) : BorderSide.none)),
             child: Row(children: [
               SizedBox(width: _cVan, child: Align(alignment: Alignment.centerLeft, child: PlateTag(s.plateNumber))),
               SizedBox(

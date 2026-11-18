@@ -199,8 +199,8 @@ ThemeData buildConsoleTheme() {
     ),
 
     // ── actions ───────────────────────────────────────────────────────
-    // The main action is the emerald with dark text (white on it would be
-    // 1.83:1); a step darker under the pointer.
+    // The main action is the forest with white text (5.48:1); a step
+    // darker under the pointer.
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         foregroundColor: AppColors.onAction,

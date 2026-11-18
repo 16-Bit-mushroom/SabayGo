@@ -566,7 +566,19 @@ class _TripDetail extends StatelessWidget {
                 line('DCOTT ticket', money!.dcott),
                 if (money!.parking > 0) line('Parking, the van\'s first trip today', money!.parking),
                 const Divider(height: AppSpacing.lg),
-                line('Terminal fees, before Start', money!.fees, strong: true),
+                // Unpaid, the trip's fees and what Start waits for can
+                // differ: part recorded earlier today (the parking paid
+                // while the van had no trip), or another trip of the van's
+                // still unpaid. The balance is what Record payment asks.
+                if (t.paymentStatus == 'unpaid' && (money!.vanBalance - money!.fees).abs() > 0.004) ...[
+                  line('Terminal fees', money!.fees),
+                  if (money!.vanBalance < money!.fees)
+                    line('Paid earlier today', money!.fees - money!.vanBalance)
+                  else
+                    line('Other trips of ${t.plateNumber ?? 'the van'} today', money!.vanBalance - money!.fees),
+                  line('Balance, before Start', money!.vanBalance, strong: true),
+                ] else
+                  line('Terminal fees, before Start', money!.fees, strong: true),
                 line('Operator\'s share', money!.operatorShare),
               ]),
       ),

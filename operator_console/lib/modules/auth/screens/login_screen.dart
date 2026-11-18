@@ -194,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.onAction),
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
                       )
                     : const Row(mainAxisSize: MainAxisSize.min, children: [
                         Text('Sign in to Office Console', style: TextStyle(fontSize: 15)),
@@ -370,7 +370,7 @@ class _ExampleVan extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.full),
               ),
               child: Text('Example',
-                  style: text.labelSmall?.copyWith(color: AppColors.onAction, letterSpacing: 0)),
+                  style: text.labelSmall?.copyWith(color: AppColors.textPrimary, letterSpacing: 0)),
             ),
           ]),
           const SizedBox(height: AppSpacing.md),
@@ -431,8 +431,8 @@ class _Bloom extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: RadialGradient(colors: [
-              AppColors.action.withValues(alpha: 0.10),
-              AppColors.action.withValues(alpha: 0),
+              AppColors.accent.withValues(alpha: 0.10),
+              AppColors.accent.withValues(alpha: 0),
             ]),
           ),
         ),

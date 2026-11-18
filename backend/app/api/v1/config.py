@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 
 from app.api.v1.deps import MANAGER, OFFICE, CurrentUser, SessionDep
 from app.application.scheduling.generate_trips import (
@@ -27,12 +27,14 @@ from app.core.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.core.timezone import APP_TZ
 from app.infrastructure.models import (
     Booking,
+    CheckIn,
     CooperativePolicy,
     DeviceCheckout,
     EdgeDevice,
     FareMatrix,
     Operator,
     PassengerEvent,
+    RemittanceLine,
     Route,
     RouteStop,
     RouteStretch,
@@ -245,6 +247,54 @@ async def edit_terminal(
                                          stretches[0].stop_zone_radius_m)
     await commit_or_conflict(session, _terminal_taken(payload))
     return _terminal_out(terminal, routes)
+
+
+@router.delete("/terminals/{terminal_id}", dependencies=[Depends(MANAGER)])
+async def delete_terminal(terminal_id: str, session: SessionDep) -> dict:
+    """Remove a terminal added by mistake.
+
+    Only a terminal nothing uses: no route stops there, active or not (a
+    route's stops are fixed, and its fares and trips are read through
+    them), no staff are assigned to it, and no passenger's "I'm here to
+    pay" or statement line names it. Anything else is history, so the
+    terminal is closed instead (`PUT`, `is_active` off), as a departure
+    that made trips is switched off rather than deleted. A passenger's
+    saved destination there is cleared (ON DELETE SET NULL).
+    """
+    terminal = await session.get(Terminal, terminal_id)
+    if terminal is None:
+        raise NotFoundError("Terminal not found.")
+    name = terminal.terminal_name
+    routes = (await session.execute(
+        select(Route.route_code).join(RouteStop, RouteStop.route_id == Route.route_id)
+        .where(RouteStop.terminal_id == terminal_id)
+        .distinct().order_by(Route.route_code))).scalars().all()
+    if routes:
+        raise ConflictError(
+            f"{name} is a stop on {', '.join(routes)}. A route's stops cannot change, "
+            "so close the terminal instead.")
+    staff = (await session.execute(
+        select(StaffProfile.first_name, StaffProfile.last_name)
+        .where(StaffProfile.assigned_terminal_id == terminal_id)
+        .order_by(StaffProfile.last_name, StaffProfile.first_name))).all()
+    if staff:
+        names = ", ".join(f"{first} {last}" for first, last in staff)
+        raise ConflictError(
+            f"{names} {'is' if len(staff) == 1 else 'are'} assigned to {name}. "
+            "Assign them to another terminal in Staff first, or close the terminal.")
+    records = (await session.scalar(
+        select(func.count()).select_from(CheckIn).where(CheckIn.terminal_id == terminal_id))
+        or 0) + (await session.scalar(
+            select(func.count()).select_from(RemittanceLine).where(or_(
+                RemittanceLine.origin_terminal_id == terminal_id,
+                RemittanceLine.dest_terminal_id == terminal_id))) or 0)
+    if records:
+        raise ConflictError(
+            f"{name} already appears in passenger or money records. Close it instead, "
+            "so those records keep it.")
+    await session.delete(terminal)
+    await commit_or_conflict(session, f"{name} is still in use. Close it instead.")
+    return {"terminal_id": terminal_id, "deleted": True}
 
 
 class RouteStopIn(BaseModel):

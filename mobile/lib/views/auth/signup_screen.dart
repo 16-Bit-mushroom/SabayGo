@@ -258,7 +258,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                           height: 20,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2.4,
-                                            color: AppColors.onAction,
+                                            color: AppColors.primary,
                                           ),
                                         )
                                       : const Text('Create account'),

@@ -9,7 +9,8 @@ import 'step_frame.dart';
 
 /// Setup, Terminals: every terminal a route stops at (brief 2.1, Table 27).
 /// A route needs two. A terminal on a route in service cannot close; the
-/// server says which routes.
+/// server says which routes. Delete is for one added by mistake, which
+/// nothing uses; the server says what does.
 class TerminalsStep extends StatefulWidget {
   const TerminalsStep({super.key, required this.onChanged});
 
@@ -79,6 +80,25 @@ class _TerminalsStepState extends State<TerminalsStep> {
     return true;
   }
 
+  /// A terminal added by mistake. One a route, a staff member or a record
+  /// uses is closed instead; the server refuses and says which.
+  Future<void> _delete(Terminal t) async {
+    final ok = await askConfirm(
+      context,
+      title: 'Delete ${t.name}?',
+      body: 'Only for a terminal added by mistake: no route stops there, no staff are '
+          'assigned to it, and no passenger or money records name it. A terminal that '
+          'has been used is closed instead, with the Open switch.',
+      confirmLabel: 'Delete',
+    );
+    if (!ok || !mounted) return;
+    if (!await runAction(context, () => _network.deleteTerminal(t.terminalId), '${t.name} deleted.')) return;
+    if (!mounted) return;
+    setState(() => _selected = null);
+    await _load();
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final terminals = _terminals ?? const <Terminal>[];
@@ -139,6 +159,16 @@ class _TerminalsStepState extends State<TerminalsStep> {
                   terminal: selected,
                   onSave: (d, _) => _save(selected, d, false),
                   onCancel: () => setState(() => _selected = null),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => _delete(selected),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete terminal'),
+                    style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                  ),
                 ),
               ]),
             ),
