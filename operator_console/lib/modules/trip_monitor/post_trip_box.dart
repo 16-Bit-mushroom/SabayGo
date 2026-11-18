@@ -171,7 +171,7 @@ class _PostTripBoxState extends State<PostTripBox> {
         style: FilledButton.styleFrom(minimumSize: const Size(120, AppSizing.field)),
         onPressed: routeId == null || _busy || _passed ? null : () => _post(routeId),
         icon: _busy
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onAction))
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
             : const Icon(Icons.send_outlined, size: 18),
         label: Text(_busy ? 'Posting…' : 'Post'),
       ),

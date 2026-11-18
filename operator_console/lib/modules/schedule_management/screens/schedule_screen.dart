@@ -562,7 +562,7 @@ class _NewTemplateCardState extends State<_NewTemplateCard> {
               icon: _submitting
                   ? SizedBox(
                       width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onAction))
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
                   : Icon(widget.editing == null ? Icons.add : Icons.check),
               label: Text(widget.editing == null ? 'Add trip schedule' : 'Save changes'),
             ),

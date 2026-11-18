@@ -390,7 +390,7 @@ class _RecordRowState extends State<RecordRow> {
                     duration: speed,
                     curve: Curves.easeOut,
                     width: lit ? 3 : 0,
-                    color: AppColors.action,
+                    color: AppColors.accent,
                   ),
                 ),
                 Padding(

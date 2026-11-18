@@ -223,11 +223,23 @@ class _TripSheetState extends State<TripSheet> {
 /// A trip's money, from its van's statement: its fares, A2Z's 15 % of its
 /// lines, its DCOTT ticket and the day's parking on the van's first trip.
 class TripMoney {
-  const TripMoney({required this.fares, required this.share, required this.dcott, required this.parking});
+  const TripMoney({
+    required this.fares,
+    required this.share,
+    required this.dcott,
+    required this.parking,
+    required this.vanBalance,
+  });
   final double fares;
   final double share;
   final double dcott;
   final double parking;
+
+  /// The van's undisputed balance for the day: what Record payment asks
+  /// for. It differs from [fees] when part of them was recorded earlier --
+  /// the parking paid while the van had no trip (18 Nov) -- or another
+  /// trip of the van's is unpaid too.
+  final double vanBalance;
   double get fees => share + dcott + parking;
   double get operatorShare => fares - fees > 0 ? fares - fees : 0;
 }
@@ -268,6 +280,7 @@ class _Money {
       share: _share[t.tripId] ?? 0,
       dcott: s.dcottTicketFee,
       parking: _first[t.vanId]?.tripId == t.tripId ? s.parkingFee : 0,
+      vanBalance: s.amountDue,
     );
   }
 }
@@ -542,7 +555,7 @@ class _TripRowState extends State<_TripRow> {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.surfaceSunken))),
             foregroundDecoration: BoxDecoration(
-                border: Border(left: _hover ? const BorderSide(color: AppColors.action, width: 3) : BorderSide.none)),
+                border: Border(left: _hover ? const BorderSide(color: AppColors.accent, width: 3) : BorderSide.none)),
             child: Row(children: [
               SizedBox(
                 width: cols.time,

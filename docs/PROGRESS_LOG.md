@@ -2271,3 +2271,71 @@ scratch backend. GPS error and lost fixes barely move the result; the
 nearest-stop rule and straight-line distance do (KNOWN_ISSUES). One
 uvicorn worker keeps 50 vans at p95 0.48 s; at 100 it falls behind.
 Report `docs/benchmarks/nahgm_2026-11-16_1527.txt`.
+
+### Light text on dark fills; delete a terminal added by mistake (17 Nov)
+
+The owner, on the console: a dark button or state has light text, and
+Setup, Terminals had no delete.
+
+**Colours, both apps.** The main action (filled buttons, the selected
+sidebar entry, the phone app's selected tab and floating button) was
+emerald with dark text, because white on emerald is 2.54:1. It is now
+the forest 047857 with white text (5.48:1), a step darker under the
+pointer or pressed (065F46, 7.68:1); `action`, `actionHover` and
+`onAction` in both `core/design/tokens.dart`. The console's emerald stays
+as `accent`, decoration only: the live dot, the fee charts, a hovered
+row's edge bar, "On the road" on Overview (so it still differs from
+Arrived's forest). A busy button is disabled, so its spinner sits on the
+light sunken fill and is now forest, not `onAction` (three console
+screens, four phone screens).
+
+**Delete a terminal** (`DELETE /config/terminals/{id}`,
+`api/v1/config.py`, `delete_terminal`; its docstring holds the rule):
+the Terminal Manager only, and only a terminal nothing uses. Refused in
+plain words, naming the route or the staff, while a route stops there
+(active or not: a route's stops are fixed), a staff member is assigned
+to it, or a passenger's "I'm here to pay" or a statement line names it;
+such a terminal is closed instead, as a departure that made trips is
+switched off. A saved destination there is cleared (ON DELETE SET NULL).
+The console: "Delete terminal" at the foot of the terminal's edit panel,
+behind a confirm.
+
+Proof: `tests/integration/test_terminal_delete.sh` (new, in
+`run_all_journeys.sh`) 18/0 on a scratch database; `flutter analyze`
+on both apps, no errors or warnings.
+
+### Overview: a van on the road with no location; no pills there (17 Nov)
+
+The owner: Overview's ring said one trip On the road while its map said
+"No van is on a trip right now" and the top bar "Vans on the road 0".
+The map and that pill counted only vans whose phone had sent a location
+(`/tracking` fleet), the ring the trip's status. Now on the road is the
+trip's status everywhere: the map lists every van boarding or on the
+road, and one with no location yet is a "No signal" row (never placed,
+since nobody said where it is), counted under All and No signal; its
+"No van is on a trip" note shows only when that is true
+(`fleet_map_screen.dart`, `_unplaced`). The pill counts departed trips
+and calls "no signal" each one without a recent location
+(`today_strip.dart`). Overview's top bar leaves the pills out, since the
+page shows the same figures in full (`operator_shell.dart`); every other
+page keeps them.
+
+Proof: `flutter analyze`, no errors or warnings; the console rebuilt.
+
+### The trip panel shows what was paid earlier today (18 Nov)
+
+The owner, as the Cashier: ABC-1234's 12:30 AM trip showed "Terminal
+fees, before Start ₱200" with the day's parking among them, though the
+parking had been paid, so it looked charged twice. The money was right:
+the 12:10 AM trip was voided, the Cashier then recorded the van's ₱50
+parking while it had no trip, and the 12:30 AM trip, assigned after,
+owed its ₱75 DCOTT ticket and ₱75 15 %; the server's amount due, and so
+Record payment, said ₱150. Only the panel added the trip's fees without
+the van's statement. Now, while a trip is unpaid and its fees differ from
+the van's balance, the panel shows the trip's terminal fees, "Paid
+earlier today" (or the van's other unpaid trips), and "Balance, before
+Start", the figure Record payment asks for (`TripMoney.vanBalance`,
+`trip_sheet.dart`; `trip_monitor_screen.dart`).
+
+Proof: `flutter analyze`, no errors or warnings; the console rebuilt;
+`GET /trips/{id}/share` for that trip says ₱150.

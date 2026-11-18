@@ -151,10 +151,22 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
         _Filter.silent => _vans.where((v) => v.isStale).toList(),
       };
 
+  /// Trips boarding or on the road whose van has sent no location: no
+  /// signal, listed but never placed on the map (17 Nov: the map said "no
+  /// van is on a trip" beside a trip on the road).
+  List<TripBoardEntry> get _unplaced {
+    final placed = {for (final v in _vans) v.tripId};
+    return [
+      for (final t in _trips.values)
+        if ((t.status == 'boarding' || t.status == 'departed') && !placed.contains(t.tripId)) t,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final selected = _vans.where((v) => v.tripId == _selectedTripId).firstOrNull;
     final live = _vans.where((v) => !v.isStale).length;
+    final unplaced = _unplaced;
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.xxl),
@@ -197,7 +209,11 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
                     top: AppSpacing.lg,
                     child: _FilterChips(
                       value: _filter,
-                      counts: (_vans.length, live, _vans.length - live),
+                      counts: (
+                        _vans.length + unplaced.length,
+                        live,
+                        _vans.length - live + unplaced.length,
+                      ),
                       onChanged: (f) => setState(() => _filter = f),
                     ),
                   ),
@@ -215,7 +231,12 @@ class _FleetMapScreenState extends State<FleetMapScreen> {
                                 trip: _trips[selected.tripId],
                                 onClose: _deselect,
                               )
-                            : _VanList(vans: _shown, empty: _vans.isEmpty, onSelect: _select),
+                            : _VanList(
+                                vans: _shown,
+                                unplaced: _filter == _Filter.live ? const [] : unplaced,
+                                empty: _vans.isEmpty && unplaced.isEmpty,
+                                onSelect: _select,
+                              ),
                   ),
                   if (_loading) const Center(child: CircularProgressIndicator()),
                 ],
@@ -388,9 +409,15 @@ class _Floating extends StatelessWidget {
 }
 
 class _VanList extends StatelessWidget {
-  const _VanList({required this.vans, required this.empty, required this.onSelect});
+  const _VanList({required this.vans, required this.unplaced, required this.empty, required this.onSelect});
 
   final List<FleetVan> vans;
+
+  /// Under way with no location yet: listed after [vans], not tappable,
+  /// since there is nowhere on the map to show them.
+  final List<TripBoardEntry> unplaced;
+
+  /// No van is boarding or on the road at all.
   final bool empty;
   final ValueChanged<FleetVan> onSelect;
 
@@ -428,9 +455,30 @@ class _VanList extends StatelessWidget {
         child: ListView.separated(
           shrinkWrap: true,
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-          itemCount: vans.length,
+          itemCount: vans.length + unplaced.length,
           separatorBuilder: (_, _) => const Divider(indent: AppSpacing.lg, endIndent: AppSpacing.lg),
           itemBuilder: (_, i) {
+            if (i >= vans.length) {
+              final trip = unplaced[i - vans.length];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+                child: Row(children: [
+                  const _VanIcon(stale: true),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(trip.plateNumber ?? trip.tripLabel ?? trip.routeName, style: text.titleSmall),
+                      Text(
+                        '${trip.status == 'boarding' ? 'Boarding' : 'On the road'}'
+                        ' · no location from its phone yet',
+                        style: text.bodySmall,
+                      ),
+                    ]),
+                  ),
+                  const StatusBadge('No signal', tone: Tone.warning),
+                ]),
+              );
+            }
             final van = vans[i];
             return InkWell(
               onTap: () => onSelect(van),

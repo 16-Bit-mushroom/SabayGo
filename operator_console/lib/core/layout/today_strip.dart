@@ -112,9 +112,15 @@ class _TodayStripState extends State<TodayStrip> {
   @override
   Widget build(BuildContext context) {
     final vans = _vans;
-    final silent = vans?.where((v) => v.isStale).length ?? 0;
     final trips = _trips;
     final underWay = trips?.where((t) => t.status == 'boarding' || t.status == 'departed').length ?? 0;
+    // On the road is the trip's status, as Overview's ring says it; a van
+    // whose phone has sent no location, or none lately, is still on the
+    // road, with no signal (17 Nov: the pill said 0 beside a trip on the
+    // road). Without the fleet's positions, no van is called silent.
+    final onRoad = trips?.where((t) => t.status == 'departed').toList();
+    final reporting = {for (final v in vans ?? const <FleetVan>[]) if (!v.isStale) v.tripId};
+    final silent = vans == null ? 0 : onRoad?.where((t) => !reporting.contains(t.tripId)).length ?? 0;
     final review = _review;
     final sos = _emergencies;
     // Narrow, the pills keep their figures and give their words to a
@@ -128,8 +134,8 @@ class _TodayStripState extends State<TodayStrip> {
             icon: Icons.airport_shuttle_outlined,
             label: 'Vans on the road',
             compact: compact,
-            live: (vans?.length ?? 0) > silent,
-            value: vans == null ? '—' : '${vans.length}',
+            live: (onRoad?.length ?? 0) > silent,
+            value: onRoad == null ? '—' : '${onRoad.length}',
             note: silent > 0 ? '$silent no signal' : null,
             tone: silent > 0 ? Tone.warning : Tone.success,
             onTap: () => widget.onOpen(TodayTarget.fleet),

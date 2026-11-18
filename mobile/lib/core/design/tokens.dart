@@ -10,19 +10,19 @@ import 'package:flutter/material.dart';
 ///   F0FDF4 meadow mist      the page
 ///   FFFFFF / DCFCE7         cards; the soft emerald tint
 ///   86EFAC                  card edges, the app bar's rule
-///   10B981 emerald          the main action, the selected tab
-///   22C55E kelly            the main action pressed
-///   047857                  green text and icons, focus, paid
+///   047857 forest           the main action and the selected tab, with
+///                           white text; green text and icons, focus, paid
+///   065F46                  the main action pressed
 ///   1E3A2F slate green-grey the type
 ///
 /// **Every pairing is measured against WCAG 2.1 AA** (computed, not
-/// estimated). White text on the emerald is 2.54:1, so anything drawn on
-/// the emerald or the kelly is [onAction], dark; green *text* is
-/// [primary]. Three rules:
+/// estimated). White text on the emerald is 2.54:1, so no fill with a
+/// label is emerald: the main action is the forest, with white
+/// [onAction]; green *text* is [primary]. Three rules:
 ///
 /// 1. A status colour is legible as *text on any card*, and anything drawn
-///    *on* a dark filled colour uses [AppColors.onFill]; on the emerald,
-///    [AppColors.onAction].
+///    *on* a dark filled colour is light: [AppColors.onFill], or
+///    [AppColors.onAction] on the main action.
 /// 2. Status is never carried by hue alone (WCAG 1.4.1). Every semantic
 ///    role ships a `container` tint so a chip states its meaning in words,
 ///    and callers include the label or an icon, not just the colour.
@@ -56,15 +56,18 @@ class AppColors {
   static const Color primaryContainer = Color(0xFFDCFCE7);
 
   /// The main action: one filled button per screen, the selected tab's
-  /// pill, the floating button. Emerald, never text: 2.54:1 on white.
-  static const Color action = Color(0xFF10B981);
+  /// pill, the floating button. Forest, so its label is white (17 Nov,
+  /// the owner: a dark fill carries light text). The emerald it replaced
+  /// could not: white on it is 2.54:1.
+  static const Color action = Color(0xFF047857);
 
-  /// The main action pressed: kelly. [onAction] on it 6.7:1.
-  static const Color actionHover = Color(0xFF22C55E);
+  /// The main action pressed: a step darker. [onAction] on it 7.68:1.
+  static const Color actionHover = Color(0xFF065F46);
 
-  /// Text, icons and spinners on [action] and [actionHover]: 6.03:1 on the
-  /// emerald, and still legible on a disabled button's [surfaceSunken].
-  static const Color onAction = Color(0xFF0F2A20);
+  /// Text and icons on [action] and [actionHover]: white, 5.48:1 on the
+  /// forest. A busy button is disabled, so its spinner sits on
+  /// [surfaceSunken] and is [primary], not this.
+  static const Color onAction = Color(0xFFFFFFFF);
 
   /// Card edges and the app bar's rule: mid-light green. Decorative,
   /// 1.40:1, so a control a person must find has [border].

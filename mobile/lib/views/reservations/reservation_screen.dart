@@ -505,7 +505,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
 }
 
 class _Spinner extends StatelessWidget {
-  const _Spinner({this.color = AppColors.onAction});
+  const _Spinner({this.color = AppColors.primary});
 
   final Color color;
 

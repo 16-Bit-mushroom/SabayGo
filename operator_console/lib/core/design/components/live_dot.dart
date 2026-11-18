@@ -7,7 +7,7 @@ import '../tokens.dart';
 /// 1.6 s. Still -- the dot alone -- when the platform asks for reduced
 /// motion, or when [live] is false (the figure is stale or did not load).
 class LiveDot extends StatefulWidget {
-  const LiveDot({super.key, this.color = AppColors.action, this.live = true});
+  const LiveDot({super.key, this.color = AppColors.accent, this.live = true});
 
   final Color color;
   final bool live;

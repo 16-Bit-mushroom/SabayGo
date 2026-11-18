@@ -192,7 +192,7 @@ class _Key extends StatelessWidget {
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                       begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                      colors: [AppColors.action, AppColors.edge]),
+                      colors: [AppColors.accent, AppColors.edge]),
                   borderRadius: BorderRadius.circular(3),
                 ),
               )
@@ -308,7 +308,7 @@ class _ChartPainter extends CustomPainter {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: on
-                  ? const [AppColors.action, AppColors.progressStart]
+                  ? const [AppColors.accent, AppColors.progressStart]
                   : const [AppColors.edge, AppColors.primaryContainer],
             ).createShader(bar.outerRect),
         );

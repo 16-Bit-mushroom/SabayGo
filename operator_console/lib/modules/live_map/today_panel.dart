@@ -127,7 +127,7 @@ class _TripsDonut extends StatelessWidget {
   static const _states = [
     ('scheduled', 'Scheduled', AppRamp.n200),
     ('boarding', 'Boarding', AppColors.edge),
-    ('departed', 'On the road', AppColors.action),
+    ('departed', 'On the road', AppColors.accent),
     ('completed', 'Arrived', AppColors.primary),
     ('cancelled', 'Cancelled', AppColors.disabled),
   ];
@@ -433,7 +433,7 @@ class _FeesToday extends StatelessWidget {
               value: pct,
               minHeight: 8,
               backgroundColor: AppColors.surfaceRaised,
-              color: AppColors.action,
+              color: AppColors.accent,
               semanticsLabel: 'Terminal fees paid',
               semanticsValue: '${(pct * 100).round()} percent',
             ),

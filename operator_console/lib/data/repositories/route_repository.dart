@@ -121,6 +121,11 @@ class RouteRepository {
   Future<void> editTerminal(String terminalId, TerminalDraft t) =>
       _api.put('/config/terminals/$terminalId', body: t.toJson());
 
+  /// Only a terminal nothing uses; the server says what does.
+  Future<void> deleteTerminal(String terminalId) async {
+    await _api.delete('/config/terminals/$terminalId');
+  }
+
   /// [stops] in order: (terminal, minutes after departure). Fixed once saved.
   Future<void> addRoute({
     required String code,

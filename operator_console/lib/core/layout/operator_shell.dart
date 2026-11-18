@@ -237,7 +237,12 @@ class _OperatorShellState extends State<OperatorShell> {
                   child: Column(
                   children: [
                     _region(2, _TopBar(
-                      strip: TodayStrip(onOpen: _openToday),
+                      // Overview shows the same figures in full (the trips
+                      // ring, the map), so its top bar leaves the pills out
+                      // (17 Nov, the owner).
+                      strip: !_account && pages[tab].screen is FleetMapScreen
+                          ? const SizedBox.shrink()
+                          : TodayStrip(onOpen: _openToday),
                       bell: NotificationBell(onOpen: _openFor),
                     )),
                     if (!_account && pages.length > 1)
