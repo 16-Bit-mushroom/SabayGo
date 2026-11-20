@@ -40,6 +40,22 @@ import 'special_trips/special_trips_screen.dart';
 class PassengerMainScreen extends StatefulWidget {
   const PassengerMainScreen({super.key});
 
+  /// A tab another screen asks the shell to show: "Find a departure" on an
+  /// empty Trips tab, "Book again" on a released reservation (20 Nov).
+  /// A notifier, because a reservation is a pushed route, outside the
+  /// shell's subtree, where an inherited widget would not reach.
+  static final tabRequests = ValueNotifier<int?>(null);
+
+  /// The tab indexes, named where they are asked for.
+  static const home = 0;
+  static const trips = 1;
+
+  /// Close whatever is pushed over the shell and show tab [index].
+  static void goTo(BuildContext context, int index) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    tabRequests.value = index;
+  }
+
   @override
   State<PassengerMainScreen> createState() => _PassengerMainScreenState();
 }
@@ -54,9 +70,17 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
   late final ConversationsViewModel _conversations;
   late final NotificationsViewModel _notifications;
 
+  void _onTabRequest() {
+    final asked = PassengerMainScreen.tabRequests.value;
+    if (asked == null || !mounted) return;
+    setState(() => _index = asked);
+    PassengerMainScreen.tabRequests.value = null;
+  }
+
   @override
   void initState() {
     super.initState();
+    PassengerMainScreen.tabRequests.addListener(_onTabRequest);
     _conversations = ConversationsViewModel(
       MessagingRepository(context.read<ApiClient>()),
       pollEvery: const Duration(seconds: 15),
@@ -69,6 +93,7 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
 
   @override
   void dispose() {
+    PassengerMainScreen.tabRequests.removeListener(_onTabRequest);
     _conversations.dispose();
     _notifications.dispose();
     super.dispose();
@@ -82,16 +107,44 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
         // is spent inside the app. Every other tab says where you are,
         // because there a title is wayfinding, not branding.
         title: _index == 0
-            ? const BrandLogo(height: BrandLogoSize.bar, mark: true)
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const BrandLogo(height: BrandLogoSize.bar, mark: true),
+                  const SizedBox(width: AppSpacing.sm),
+                  // The wordmark beside the van (20 Nov redesign): the logo's
+                  // own wordmark is unreadable at this size.
+                  Flexible(
+                    child: Text.rich(
+                      const TextSpan(children: [
+                        TextSpan(text: 'Sabay'),
+                        TextSpan(text: 'Go', style: TextStyle(color: AppColors.primary)),
+                      ]),
+                      semanticsLabel: 'SabayGo',
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              )
             : Text(_destinations[_index].title),
         actions: [
           if (_index == 0)
-            TextButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SpecialTripsScreen()),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const SpecialTripsScreen()),
+                ),
+                style: OutlinedButton.styleFrom(
+                  shape: const StadiumBorder(),
+                  side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  minimumSize: const Size(0, AppSizing.minTouchTarget),
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                ),
+                icon: const Icon(Icons.airport_shuttle_outlined, size: 18),
+                label: const Text('Rent a van'),
               ),
-              icon: const Icon(Icons.airport_shuttle_outlined),
-              label: const Text('Rent a van'),
             ),
         ],
       ),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
-import '../../core/design/components/brand_logo.dart';
+import '../../core/design/components/app_card.dart';
 import '../../core/design/tokens.dart';
 import '../../viewmodels/auth_provider.dart';
 import 'signup_screen.dart';
@@ -64,13 +64,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // The mark, once, so a passenger who arrives here from a
-                // deep link still knows whose sign-in this is.
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: BrandLogo(height: BrandLogoSize.header),
-                ),
-                const SizedBox(height: AppSpacing.xl),
                 Text('Welcome back',
                     style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: AppSpacing.xs + 2),
@@ -89,6 +82,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                 ],
 
+                // The fields and their button on one card (20 Nov redesign):
+                // the form reads as one object, apart from the links.
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                 TextFormField(
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
@@ -131,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: (v) =>
                       (v == null || v.isEmpty) ? 'Enter your password' : null,
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
 
                 FilledButton(
                   onPressed: auth.isBusy ? null : _submit,
@@ -149,6 +148,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         )
                       : const Text('Sign in'),
                 ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 16),
 
                 TextButton(
@@ -160,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             builder: (_) => const SignupScreen(),
                           ),
                         ),
-                  child: const Text("Don't have an account? Create one"),
+                  child: const Text('New passenger? Create an account'),
                 ),
 
                 if (AppConfig.isDebug) ...[
@@ -251,11 +253,15 @@ class _DebugPanel extends StatelessWidget {
             const Icon(Icons.bug_report_outlined,
                 size: 16, color: AppColors.textMuted),
             const SizedBox(width: 6),
-            Text(
-              'Dev accounts — ${AppConfig.apiBaseUrl}',
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textMuted,
+            // Expanded: the address is long and the row overflowed a small
+            // phone (found 20 Nov by test/phase3_screens_test.dart).
+            Expanded(
+              child: Text(
+                'Dev accounts — ${AppConfig.apiBaseUrl}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textMuted,
+                ),
               ),
             ),
           ],

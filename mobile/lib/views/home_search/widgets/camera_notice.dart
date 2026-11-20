@@ -39,26 +39,43 @@ class _CameraNoticeState extends State<CameraNotice> {
       builder: (_, snap) {
         final n = snap.data;
         final days = n?.retentionDays;
+        // Four facts as a list under a title (20 Nov redesign), not one
+        // long sentence: each can be found again at a glance.
+        final lines = [
+          'It counts people getting on and off, to check the passenger list.',
+          'Faces are blurred on the phone, and no video leaves the van.',
+          'A still of each boarding is kept for ${days != null ? '$days days' : 'a fixed number of days'}, '
+              'unless a review is open.',
+          'Only A2Z\'s Terminal Manager sees it. A sign in the van says the same.',
+          if (n != null) 'Questions: ${n.privacyContact}.',
+        ];
         return Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: AppColors.infoContainer,
             borderRadius: BorderRadius.circular(AppRadius.md),
           ),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Icon(Icons.videocam_outlined, size: 20, color: AppColors.info),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                'A camera at the van door counts people getting on and off, to check the passenger '
-                'list. No video leaves the van and no one is identified: the phone blurs faces and '
-                'keeps only a still of each boarding, seen by A2Z\'s Terminal Manager alone, and '
-                'deleted after ${days != null ? '$days days' : 'a fixed number of days'} unless a '
-                'review is open. A sign in the van says the same.'
-                '${n != null ? ' Questions: ${n.privacyContact}.' : ''}',
-                style: text.bodySmall,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.videocam_outlined, size: 20, color: AppColors.info),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text('Camera at the van door',
+                      style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w700)),
+                ),
               ),
-            ),
+            ]),
+            const SizedBox(height: AppSpacing.xs),
+            for (final line in lines)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  ExcludeSemantics(child: Text('•  ', style: text.bodySmall)),
+                  Expanded(child: Text(line, style: text.bodySmall)),
+                ]),
+              ),
           ]),
         );
       },

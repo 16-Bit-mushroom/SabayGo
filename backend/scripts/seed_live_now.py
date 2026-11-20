@@ -48,6 +48,7 @@ import uuid
 
 API = os.environ.get("SABAYGO_API", "http://127.0.0.1:8000/api/v1")
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+PHONE = "realme 8 5G (live data)"  # the model name this script's simulated phones carry
 _tok: dict[str, str] = {}
 
 
@@ -177,10 +178,22 @@ def main():
             for stop in (4, 4, 3, 2)]
     step(walk == [201] * 4, "four walk-ins listed (two to Cotabato, one each to Kidapawan and Digos)", walk)
 
-    s, dev = call("POST", "/devices", {"device_model": "realme 8 5G (live data)"}, "manager")
-    ok = s == 201 and call("POST", f"/devices/{dev['device_id']}/checkout",
-                           {"van_id": vans["TST-1023"], "dispatcher_id": crew["nonoy"]}, "joy")[0] == 200
-    step(ok, "a phone added and checked out to TST-1023 and Nonoy", dev)
+    # A van carries one phone at a time, so a phone an earlier run left on
+    # TST-1023 is recorded back in the office first; otherwise the checkout
+    # is refused and the trip runs with no camera (20 Nov). Only this
+    # script's own simulated phones: a real one stays where it is, and the
+    # refusal below then says why.
+    for d in call("GET", "/devices", who="manager")[1]:
+        if d["device_model"] == PHONE and (d.get("checkout") or {}).get("van_id") == vans["TST-1023"]:
+            s, b = call("POST", f"/devices/{d['device_id']}/return",
+                        {"return_note": "Returned by seed_live_now.py before a new run."}, "joy")
+            step(s == 200, "the phone an earlier run left on TST-1023 recorded back in the office", b)
+    s, dev = call("POST", "/devices", {"device_model": PHONE}, "manager")
+    s, out = (call("POST", f"/devices/{dev['device_id']}/checkout",
+                   {"van_id": vans["TST-1023"], "dispatcher_id": crew["nonoy"]}, "joy")
+              if s == 201 else (s, dev))
+    ok = s == 200
+    step(ok, "a phone added and checked out to TST-1023 and Nonoy", out)
     token = dev["device_token"] if ok else None
     if token:
         time.sleep(1)

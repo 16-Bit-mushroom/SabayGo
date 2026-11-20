@@ -75,8 +75,6 @@ class VanPosition {
 
   final List<StopEta> etas;
 
-  StopEta? get nextStop => etas.isEmpty ? null : etas.first;
-
   factory VanPosition.fromJson(Map<String, dynamic> j) => VanPosition(
         tripId: j['trip_id'] as String,
         latitude: (j['latitude'] as num).toDouble(),

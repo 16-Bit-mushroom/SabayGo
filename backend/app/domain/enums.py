@@ -117,46 +117,6 @@ class CancelReason(str, Enum):
     AUTO_RELEASE = "auto_release"
 
 
-class AuditResolution(str, Enum):
-    RECONCILED = "reconciled"
-    PENDING = "pending"
-    RESOLVED = "resolved"
-    IGNORED = "ignored"
-    FAILED = "failed"
-
-
-class AuditTrigger(str, Enum):
-    """What caused a cabin capture -- the audit's provenance.
-
-    MANUAL is a person asking. The rest are system events (2.3.5's
-    "triggered by door closures or specific GPS nodes"), and they are the
-    ones that carry the leakage claim: a check the crew initiates is a
-    check the crew can decline to initiate. Because of that, only the
-    server may label an audit automatic; the manual endpoint does not
-    accept this value from its caller.
-
-    Mirrors the ENUM in migration 006. SCHEDULED is declared there and is
-    not yet produced by anything.
-    """
-
-    MANUAL = "manual"
-    DOOR_CLOSE = "door_close"
-    GPS_NODE = "gps_node"
-    SCHEDULED = "scheduled"
-
-    @property
-    def is_automatic(self) -> bool:
-        return self is not AuditTrigger.MANUAL
-
-
-class SosCategory(str, Enum):
-    MEDICAL = "medical"
-    ACCIDENT = "accident"
-    SECURITY = "security"
-    BREAKDOWN = "breakdown"
-    OTHER = "other"
-
-
 class SosStatus(str, Enum):
     OPEN = "open"
     ACKNOWLEDGED = "acknowledged"

@@ -8,6 +8,7 @@ import '../../core/network/api_client.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../models/notification_model.dart';
 import '../../viewmodels/notifications_viewmodel.dart';
+import '../passenger_main_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   /// Pass a [viewModel] to share one already polling elsewhere (the
@@ -101,109 +102,93 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               body: 'Try another word, or clear the search.',
             );
     }
+    // Cards with a gap, not rows under dividers (20 Nov redesign): each
+    // update is a separate thing to read and, sometimes, act on.
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.sm, AppSpacing.gutter, AppSpacing.section),
       itemCount: notifications.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
+      separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (context, index) => _buildNotificationItem(notifications[index]),
     );
   }
 
+  /// What kind of update it is, said on its chip, with the icon and tone.
+  static (String, IconData, StatusTone) _kind(NotificationType type) => switch (type) {
+        NotificationType.tailoredTrip => ('SAVED DESTINATION', Icons.directions_bus_outlined, StatusTone.success),
+        NotificationType.tripCanceled => ('CANCELLED', Icons.cancel_outlined, StatusTone.danger),
+        NotificationType.vanDeparted => ('VAN LEFT', Icons.time_to_leave, StatusTone.warning),
+        NotificationType.tripUpdate => ('TRIP UPDATE', Icons.info_outline, StatusTone.info),
+        NotificationType.policyUpdate || NotificationType.terminalPolicy => ('RULES', Icons.article_outlined, StatusTone.muted),
+        NotificationType.varianceAlert => ('COUNT CHECK', Icons.people_alt_outlined, StatusTone.warning),
+        NotificationType.sosAlert => ('SOS', Icons.emergency_share, StatusTone.danger),
+        // Money still owed is routine until it is paid: ochre, never red.
+        NotificationType.unremittedFare => ('FEES', Icons.payments_outlined, StatusTone.warning),
+        NotificationType.departureReminder => ('REMINDER', Icons.schedule, StatusTone.warning),
+        NotificationType.scheduleChange => ('SCHEDULE', Icons.event_repeat, StatusTone.info),
+        NotificationType.systemAlert => ('NOTICE', Icons.notifications_active_outlined, StatusTone.muted),
+      };
+
   Widget _buildNotificationItem(NotificationModel notification) {
     final isUnread = !notification.isRead;
-    
-    final (IconData icon, StatusTone tone) = switch (notification.type) {
-      NotificationType.tailoredTrip => (Icons.directions_bus_outlined, StatusTone.info),
-      NotificationType.tripCanceled => (Icons.cancel_outlined, StatusTone.danger),
-      NotificationType.vanDeparted => (Icons.time_to_leave, StatusTone.warning),
-      NotificationType.tripUpdate => (Icons.info_outline, StatusTone.info),
-      NotificationType.policyUpdate || NotificationType.terminalPolicy => (Icons.article_outlined, StatusTone.muted),
-      NotificationType.varianceAlert => (Icons.people_alt_outlined, StatusTone.warning),
-      NotificationType.sosAlert => (Icons.emergency_share, StatusTone.danger),
-      // Money still owed is routine until it is paid: ochre, never red.
-      NotificationType.unremittedFare => (Icons.payments_outlined, StatusTone.warning),
-      NotificationType.departureReminder => (Icons.schedule, StatusTone.warning),
-      NotificationType.scheduleChange => (Icons.event_repeat, StatusTone.info),
-      NotificationType.systemAlert => (Icons.notifications_active_outlined, StatusTone.muted),
-    };
+    final (kind, icon, tone) = _kind(notification.type);
     final text = Theme.of(context).textTheme;
 
-    return InkWell(
-      onTap: () {
-        _viewModel.markAsRead(notification.id);
-      },
-      child: Container(
-        color: isUnread ? AppColors.primaryContainer : AppColors.surfaceRaised,
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Icon container
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: tone.bg,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: tone.fg, size: 24),
-            ),
-            const SizedBox(width: 16),
-            
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          notification.title,
-                          style: text.bodyLarge?.copyWith(fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500),
-                        ),
-                      ),
-                      Text(
-                        _formatTimestamp(notification.timestamp),
-                        style: text.bodySmall,
-                      ),
-                    ],
+    return Material(
+      // Unread on the soft tint, edged in green; read on white.
+      color: isUnread ? AppColors.primaryContainer : AppColors.surfaceRaised,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: BorderSide(color: isUnread ? AppColors.primaryLight : AppColors.edge),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _viewModel.markAsRead(notification.id),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Flexible(child: StatusChip(kind, tone: tone, icon: icon)),
+                const SizedBox(width: AppSpacing.sm),
+                Text(_formatTimestamp(notification.timestamp), style: text.bodySmall),
+                if (isUnread) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Semantics(
+                    label: 'unread',
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    notification.message,
-                    style: text.bodyMedium?.copyWith(color: isUnread ? AppColors.textPrimary : AppColors.textMuted),
-                  ),
-                  
-                  // Conditional CTA Buttons
-                  if (_hasCTA(notification.type)) ...[
-                    const SizedBox(height: 12),
-                    _buildCTAButton(context, notification),
-                  ]
                 ],
+              ]),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                notification.title,
+                style: text.bodyLarge?.copyWith(fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600),
               ),
-            ),
-            
-            // Unread dot indicator
-            if (isUnread)
-              Container(
-                margin: const EdgeInsets.only(left: 8, top: 8),
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-              ),
-          ],
+              const SizedBox(height: AppSpacing.xs),
+              Text(notification.message, style: text.bodyMedium?.copyWith(color: AppColors.textPrimary)),
+              if (_hasCTA(notification.type)) ...[
+                const SizedBox(height: AppSpacing.md),
+                _buildCTAButton(context, notification),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   bool _hasCTA(NotificationType type) {
-    return type == NotificationType.tailoredTrip || 
-           type == NotificationType.tripCanceled || 
-           type == NotificationType.vanDeparted;
+    return type == NotificationType.tailoredTrip ||
+        type == NotificationType.tripCanceled ||
+        type == NotificationType.vanDeparted;
   }
 
-  // UPDATED: Added BuildContext to access the TabController
   Widget _buildCTAButton(BuildContext context, NotificationModel notification) {
     final buttonText = switch (notification.type) {
       NotificationType.tailoredTrip => 'Book a seat',
@@ -213,14 +198,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     return OutlinedButton(
       onPressed: () {
-        // 1. Mark as read
         _viewModel.markAsRead(notification.id);
-        
-        // 2. Seamlessly transition the user back to the Home Tab (Index 0)
-        DefaultTabController.of(context).animateTo(0);
+        // To Home. It called DefaultTabController.of(), which threw: the
+        // shell has used a NavigationBar, not a TabBar, since the redesign
+        // of 3 Oct (fixed 20 Nov).
+        PassengerMainScreen.goTo(context, PassengerMainScreen.home);
       },
-      // Ink, the colour of the thing you act on; 48dp tall like every target.
-      style: OutlinedButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
+      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(AppSizing.minTouchTarget)),
       child: Text(buttonText),
     );
   }

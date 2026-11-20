@@ -14,6 +14,28 @@ Moved out of CLAUDE.md on 24 Oct 2026.
   A progress rule (`geometry.snap_to_route` is already in the code) and
   a road factor or the schedule's offsets would address both; not
   changed yet, the group decides.
+- **A released seat never offers "Find another trip" (found 20 Nov,
+  open).** The app shows that button for `trip_canceled` updates, but the
+  server sends the unpaid release (`booking/unpaid_release.py`) as a
+  plain `trip_update`, and `NotificationType.fromServer` maps no type to
+  cancelled. Only saved-destination updates get their "Book a seat". A
+  release type of its own, on the server and in the app, would close it.
+- **Left in place by the 20 Nov health check, on purpose.** The dead-code
+  sweep removed what nothing used (`PROGRESS_LOG.md`, "Pre-merge health
+  check"); these it kept, for a decision after the merge:
+  (1) both apps store the role and user id at sign-in and nothing reads
+  them -- removing them changes sign-in in both apps;
+  (2) the `yolov8_audit_logs` and `cash_remittances` tables (the retired
+  AI-node audit and the rev 468 cash handover) are still in the schema,
+  and their ORM classes stay because the ORM describes the schema;
+  dropping them is a migration with its down script;
+  (3) `PolicyRepository.get_bool` and `get_str` have no caller yet but
+  belong to the typed readers every policy goes through.
+- **At large text the trip card reads as one label (20 Nov).** Above
+  130 % text the Dispatcher's "This trip" card (status, the four counts,
+  the next step) moves into the scrolling list, and a screen reader then
+  reads it as one long label; at normal size each count is its own.
+  Not changed.
 - **This machine has only a Java runtime (16 Nov).** `jre21-openjdk` has
   no `javac`, so Gradle stops with "does not provide the required
   capabilities: [JAVA_COMPILER]". Build the APKs with

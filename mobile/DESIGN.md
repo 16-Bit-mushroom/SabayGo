@@ -5,9 +5,9 @@ colors:
   green-text: "#047857"
   green-outline: "#059669"
   emerald-tint: "#DCFCE7"
-  emerald: "#10B981"
-  kelly: "#22C55E"
-  on-emerald: "#0F2A20"
+  forest: "#047857"
+  forest-pressed: "#065F46"
+  on-action: "#FFFFFF"
   green-edge: "#86EFAC"
   pin-red: "#C8151D"
   pin-red-mist: "#FBE7E8"
@@ -98,15 +98,15 @@ spacing:
   gutter: "16px"
 components:
   button-primary:
-    backgroundColor: "{colors.emerald}"
-    textColor: "{colors.on-emerald}"
+    backgroundColor: "{colors.forest}"
+    textColor: "{colors.on-action}"
     typography: "{typography.label-button}"
     rounded: "{rounded.md}"
     height: "52px"
     width: "100%"
   button-primary-pressed:
-    backgroundColor: "{colors.kelly}"
-    textColor: "{colors.on-emerald}"
+    backgroundColor: "{colors.forest-pressed}"
+    textColor: "{colors.on-action}"
   button-primary-disabled:
     backgroundColor: "{colors.sunken}"
     textColor: "{colors.slate-note}"
@@ -178,7 +178,7 @@ components:
     textColor: "{colors.slate-note}"
     height: "68px"
   navigation-bar-selected:
-    backgroundColor: "{colors.emerald}"
+    backgroundColor: "{colors.forest}"
     textColor: "{colors.green-text}"
     rounded: "{rounded.full}"
   bottom-sheet:
@@ -208,7 +208,7 @@ the same buttons. The token names and values in `tokens.dart` match the
 console's; change one, change both.
 
 The app is clean and minimal, built to be read in sunlight at a van door.
-A meadow-mist page with white cards edged in mid-light green, one emerald
+A meadow-mist page with white cards edged in mid-light green, one forest
 action per decision, status said in words on a tinted chip. Calm and exact
 rather than expressive: weight, spacing and alignment carry the hierarchy,
 and the interface stays quiet so a warning or an SOS stands out the moment
@@ -219,8 +219,10 @@ purple (`#2D2059`) are retired. Anything still ink-black or purple, or that
 describes an "owl" brand, is out of date.
 
 **Key Characteristics:**
-- Emerald (`#10B981`) with dark text is the main action; green text is
-  `#047857`. Red marks route geometry and SOS only.
+- Forest (`#047857`) with white text is the main action (17 Nov, the
+  owner: a dark fill carries light text); green text is the same colour.
+  The emerald with dark text it replaced is retired. Red marks route
+  geometry and SOS only.
 - Status is a meaning (`StatusTone`), never a loose colour, and always comes
   with a word or an icon.
 - Every colour pair is measured against WCAG 2.1 AA; control edges clear
@@ -233,16 +235,16 @@ describes an "owl" brand, is out of date.
 ## Colors
 
 A balanced mid-green: a mist page, white cards with a mid-light green edge,
-emerald for the action, a deep green for text and icons, and a slate
+forest for the action, a deep green for text and icons, and a slate
 green-grey for type. Four semantic tones each come as a text colour with
 its own tinted container. All ratios are computed.
 
 ### Primary
-- **Emerald** (`AppColors.action`): filled buttons, the selected tab's pill,
-  the floating button. Never text (2.54:1 on white); everything on it is
-  **On Emerald** (`onAction`, `#0F2A20`, 6.03:1).
-- **Kelly** (`actionHover`, `#22C55E`): the main action while pressed
-  (On Emerald on it 6.72:1).
+- **Forest** (`AppColors.action`, `#047857`): filled buttons, the selected
+  tab's pill, the floating button. Everything on it is **On Action**
+  (`onAction`, white, 5.48:1).
+- **Forest Pressed** (`actionHover`, `#065F46`): the main action while
+  pressed (white on it 7.68:1).
 - **Green Text** (`primary`, `#047857`, 5.48:1 on white, 5.24:1 on the
   page, 4.99:1 on the tint): links, outlined and text button labels, the
   selected tab's label, focus outlines, progress, icons in list tiles. White
@@ -290,9 +292,10 @@ its own tinted container. All ratios are computed.
 
 ### Named Rules
 
-**The Dark-on-Emerald Rule.** Text, icons and spinners on the emerald or
-the kelly are On Emerald, never white (2.54:1). White goes on Green Text,
-the status colours and SOS Red.
+**The Light-on-Forest Rule.** Text, icons and spinners on the forest are
+white (On Action). The emerald `#10B981` is not a fill for anything with
+a label: white on it is 2.54:1. A busy button is disabled, so its spinner
+sits on Sunken and is Green Text.
 
 **The One Meaning for Red Rule.** Pin Red marks route geometry and is never
 a button fill. On an action, red means stop or danger, and that is SOS Red,
@@ -405,9 +408,9 @@ Gently rounded throughout, with the radius growing with the surface.
 ## Components
 
 ### Buttons
-- **Primary (filled):** Emerald with an On Emerald 16 px / 600 label, full
-  width, 52 px tall; Kelly while pressed; Sunken with a Slate Note label
-  when it cannot be used. A busy spinner on it is On Emerald.
+- **Primary (filled):** Forest with a white 16 px / 600 label, full
+  width, 52 px tall; Forest Pressed while pressed; Sunken with a Slate Note
+  label when it cannot be used. A busy spinner on it is Green Text.
 - **Danger (filled):** SOS Red with white text (sign out, the SOS). The SOS
   send button stays red while it sends: an alert on its way must not look
   switched off.
@@ -457,7 +460,7 @@ screen reader announces a change.
   Slate Green left-aligned Jakarta title on the gutter.
 - **Bottom navigation bar:** White Card, 68 px, labels always shown. The
   selected item is the console's selected sidebar entry on a phone: an
-  Emerald pill behind an On Emerald icon, the icon filled, the label in
+  Forest pill behind a white icon, the icon filled, the label in
   Green Text at 700 (unselected: Slate Note at 500).
 - **Tab bar:** Green Text label and indicator, Slate Note unselected,
   Hairline divider.
@@ -490,17 +493,17 @@ only on a light surface; never recoloured.
 - **Do** take every colour from `AppColors` or the theme, and every status
   colour through `StatusTone`.
 - **Do** state a status in words or with an icon, never by colour alone.
-- **Do** make the primary action an Emerald slab with dark text, full
+- **Do** make the primary action a Forest slab with white text, full
   width, 52 px tall, within thumb reach, and only one per screen.
 - **Do** give a button that sets its own dark fill (SOS Red, Green Text) a
-  white `foregroundColor`: the theme's label colour is On Emerald.
+  white `foregroundColor` when it is not the forest.
 - **Do** keep every tappable target at 48 × 48 px or more.
 - **Do** outline every control a user must find in Control Edge.
 - **Do** route every peso amount through `Money`.
 - **Do** keep the palette in step with the console's `tokens.dart`.
 
 ### Don't:
-- **Don't** put white text, icons or spinners on the emerald or the kelly.
+- **Don't** fill a labelled control with the emerald `#10B981`: white on it fails (2.54:1).
 - **Don't** fill a button with Pin Red, or use Pin Red for anything other
   than route geometry.
 - **Don't** bring back the owl, its ink-black, the retired purple, or a
@@ -512,3 +515,54 @@ only on a light surface; never recoloured.
 - **Don't** use gradients, or a shadow on a card.
 - **Don't** centre an app bar title or hide navigation labels.
 - **Don't** fetch a font at runtime or cap text size.
+
+## The 20 Nov redesign (Gemini's study, applied)
+
+Gemini designed the app from `docs/MOBILE_APP_UI_BRIEF.md`; it was applied
+to all 17 screens on the tokens above, keeping every rule in this file.
+What it added to the system:
+
+- **Labelled, never icon-only.** The Dispatcher's top bar says Messages,
+  Alerts, End shift; Chat's floating button says New message; Send is a
+  button with its word; Profile's edit is an "Edit profile" button; SOS
+  is a red outlined pill with the word "SOS" (still two taps: the pill
+  opens the sheet).
+- **Cards for lists that are read one by one**: updates, conversations,
+  reservations on the Dispatcher's trip, van rentals, saved settings. A
+  card holding a list tile or a switch is a `Material` with a shape, not
+  a decorated box, so the tile can draw its ink (ListTile asserts it).
+- **Tabs with badges** on the Dispatcher's trip screen (Boarding, Pickups
+  or Rental, Fees & flags): the header with the four counts and the next
+  step stays above them while text is normal size, and scrolls with each
+  tab at large text. A badge says when a hidden tab waits on the
+  Dispatcher. Parts: `DashCard`, `DashNote`, `TripCounts`, `SeatCard` in
+  `views/dispatcher/dashboard_panels.dart`.
+- **One scrolling page** wherever a fixed header could grow taller than
+  the screen at 200 % text (Home): `AppEmptyState(fillViewport: false)`
+  lets an empty state sit inside such a page.
+- **A pill on the status band** (`StatusBand.trailing`) for a time the
+  passenger acts by, such as "By 10:00 AM".
+- **Long names wrap**: `AppPickerRow(maxLines: 2, showChevron: false)` on
+  the search card, whose From and To sit in tinted boxes with a round swap
+  button between them.
+- **The map speaks the journey strip**: the passenger's boarding stop is a
+  hollow pin-red ring, their stop a filled pin-red square, other stops
+  plain numbered circles; map buttons are white, edged, 48 dp, at the top
+  right.
+- **Chat bubbles** are the soft emerald tint (mine) and white (theirs),
+  both edged, ink text on both; one's own message opens Edit and Delete on
+  a tap or a long press.
+- **Big till buttons** on the walk-in screen: destinations two to a row
+  with their fares, a slate COLLECT panel with white figures, and "Log ₱…"
+  under the thumb.
+- **Dialog buttons** are one pair, `DialogButtons`: the action on top
+  (red when it cannot be taken back), the way out under it, outlined, the
+  same width and height. Never a text button beside a full-width filled
+  one.
+- **Trip cards are one size.** The card to act on next stands out by its
+  2px green outline and countdown, never by being bigger; every card ends
+  on the same van row, "No van yet" included.
+- **Count tiles are one size**, the labels measured to the tallest. A name
+  at the top never shares its line with a row of buttons: the trip screen
+  puts the van line on a full-width row under the bar, and the Dispatcher's
+  home bar carries the name and role, no logo.

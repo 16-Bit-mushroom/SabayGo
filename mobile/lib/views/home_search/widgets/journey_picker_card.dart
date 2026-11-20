@@ -23,11 +23,6 @@ class JourneyPickerCard extends StatelessWidget {
 
   final HomeSearchViewModel vm;
 
-  /// Where the text starts, so the divider between two rows begins there
-  /// too and the markers read as one rail.
-  static const double _textInset =
-      AppSpacing.lg + AppPickerRow.leadingWidth + AppSpacing.md;
-
   @override
   Widget build(BuildContext context) {
     final blocked = vm.searchBlockedReason;
@@ -62,32 +57,65 @@ class JourneyPickerCard extends StatelessWidget {
         child: Center(child: CircularProgressIndicator()),
       );
 
-  Widget _form(BuildContext context) => Column(
-        children: [
-          TerminalPickerField(
-            end: JourneyEnd.boarding,
-            label: 'From',
-            sheetTitle: 'Where are you boarding?',
-            value: vm.selectedOrigin,
-            nodes: vm.nodes,
-            onChanged: vm.setOrigin,
-          ),
-          _SwapRow(onSwap: vm.swapNodes),
-          TerminalPickerField(
-            end: JourneyEnd.alighting,
-            label: 'To',
-            sheetTitle: 'Where are you going?',
-            value: vm.selectedDestination,
-            nodes: vm.nodes,
-            onChanged: vm.setDestination,
-          ),
-          const Divider(height: 1, indent: _textInset),
-          _DayChips(
-            selected: vm.serviceDate,
-            onSelected: vm.setServiceDate,
-            onPick: () => _pickDate(context),
-          ),
-        ],
+  // From and To in their own tinted boxes, the swap button on the line
+  // between them at the right (20 Nov redesign). The boxes keep a lane free
+  // for the button, so it never covers a name.
+  Widget _form(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Stack(
+              children: [
+                Column(
+                  children: [
+                    _TerminalBox(
+                      child: TerminalPickerField(
+                        end: JourneyEnd.boarding,
+                        label: 'From',
+                        sheetTitle: 'Where are you boarding?',
+                        value: vm.selectedOrigin,
+                        nodes: vm.nodes,
+                        onChanged: vm.setOrigin,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _TerminalBox(
+                      child: TerminalPickerField(
+                        end: JourneyEnd.alighting,
+                        label: 'To',
+                        sheetTitle: 'Where are you going?',
+                        value: vm.selectedDestination,
+                        nodes: vm.nodes,
+                        onChanged: vm.setDestination,
+                      ),
+                    ),
+                  ],
+                ),
+                Positioned(
+                  right: AppSpacing.xs,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(child: _SwapButton(onSwap: vm.swapNodes)),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            // One field that opens the calendar (20 Nov, the owner), in place
+            // of the Today / Tomorrow / Other day buttons.
+            _TerminalBox(
+              lane: false,
+              child: AppPickerRow(
+                leading: const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.primary),
+                label: 'Day',
+                value: dayFriendly(vm.serviceDate),
+                placeholder: 'Choose a day',
+                semanticHint: 'Opens the calendar',
+                onTap: () => _pickDate(context),
+              ),
+            ),
+          ],
+        ),
       );
 
   Future<void> _pickDate(BuildContext context) async {
@@ -105,82 +133,52 @@ class JourneyPickerCard extends StatelessWidget {
   }
 }
 
-/// The divider between the two terminals, carrying the swap control.
-class _SwapRow extends StatelessWidget {
-  const _SwapRow({required this.onSwap});
+/// One terminal question in a tinted box. The right edge leaves a lane
+/// for the swap button.
+class _TerminalBox extends StatelessWidget {
+  const _TerminalBox({required this.child, this.lane = true});
+
+  final Widget child;
+
+  /// Keep the swap button's lane free beside the text. Off for the Day
+  /// box, which has no button beside it.
+  final bool lane;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: EdgeInsets.only(right: lane ? _SwapButton.lane : 0),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.divider),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      );
+}
+
+/// Exchanges From and To. Round, on the line between the two boxes: its
+/// place says what it does, and the tooltip and label say it too.
+class _SwapButton extends StatelessWidget {
+  const _SwapButton({required this.onSwap});
 
   final VoidCallback onSwap;
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(
-          child: Divider(height: 1, indent: JourneyPickerCard._textInset),
-        ),
-        IconButton(
-          // Both a tooltip and a semantic label: the tooltip is for a
-          // long press, the label for a screen reader, and an icon-only
-          // control needs to answer both.
-          tooltip: 'Swap From and To',
-          icon: const Icon(Icons.swap_vert, color: AppColors.primary),
-          onPressed: onSwap,
-        ),
-        const SizedBox(width: AppSpacing.sm),
-      ],
-    );
-  }
-}
-
-/// The travel day as three one-tap chips -- Today, Tomorrow, and a
-/// third that opens the calendar and then shows the day picked -- instead
-/// of a row that always opened the calendar: nearly every trip is today or
-/// tomorrow, so the common choice costs one tap, not three (Hick, Fitts).
-class _DayChips extends StatelessWidget {
-  const _DayChips({required this.selected, required this.onSelected, required this.onPick});
-
-  final DateTime selected;
-  final ValueChanged<DateTime> onSelected;
-  final VoidCallback onPick;
+  /// The width kept free beside the terminal names.
+  static const double lane = 52;
 
   @override
-  Widget build(BuildContext context) {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final tomorrow = today.add(const Duration(days: 1));
-    final day = DateUtils.dateOnly(selected);
-    final other = day != today && day != tomorrow;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
-      child: Row(children: [
-        const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textMuted),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
-            ChoiceChip(
-              label: const Text('Today'),
-              selected: day == today,
-              showCheckmark: false,
-              onSelected: (_) => onSelected(today),
-            ),
-            ChoiceChip(
-              label: const Text('Tomorrow'),
-              selected: day == tomorrow,
-              showCheckmark: false,
-              onSelected: (_) => onSelected(tomorrow),
-            ),
-            ChoiceChip(
-              avatar: Icon(Icons.event, size: 16, color: other ? AppColors.onFill : AppColors.primary),
-              label: Text(other ? dayShort(day) : 'Other day'),
-              selected: other,
-              showCheckmark: false,
-              tooltip: 'Opens the calendar',
-              onSelected: (_) => onPick(),
-            ),
-          ]),
+  Widget build(BuildContext context) => IconButton.outlined(
+        tooltip: 'Swap From and To',
+        onPressed: onSwap,
+        icon: const Icon(Icons.swap_vert),
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.surfaceRaised,
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.primary, width: 1.5),
+          minimumSize: const Size(AppSizing.minTouchTarget, AppSizing.minTouchTarget),
         ),
-      ]),
-    );
-  }
+      );
 }
 
 class _Note extends StatelessWidget {

@@ -46,7 +46,6 @@ class Van {
   final String? importBatchId;
 
   static const photoSides = ['front', 'rear', 'left', 'right'];
-  bool get hasAllPhotos => photoSides.every(photos.containsKey);
 
   factory Van.fromJson(Map<String, dynamic> json) => Van(
         vanId: json['van_id'] as String,

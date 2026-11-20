@@ -2339,3 +2339,282 @@ Start", the figure Record payment asks for (`TripMoney.vanBalance`,
 
 Proof: `flutter analyze`, no errors or warnings; the console rebuilt;
 `GET /trips/{id}/share` for that trip says ₱150.
+
+### App redesign, phase 1 of 3: the Dispatcher screens (20 Nov)
+
+Gemini designed the app from `docs/MOBILE_APP_UI_BRIEF.md`; the owner
+asked for it to be applied to all 17 screens in three phases. Gemini's
+mockup used the emerald with dark text that the brief still named; the
+owner moved the main action to forest #047857 with white text on 17 Nov
+(#29), so the app keeps its current tokens and the brief is corrected.
+Left out of Gemini's design because the system does not do it: the
+emergency contact being texted on an SOS (only `sos_contact_numbers`
+is), a photo button in every chat (photos come only from the home
+pickup), offline booking codes and chat for passengers, Depart allowed
+with a warning (the server refuses it), "30 min" and "30 days" written
+in (both are A2Z settings), the sign-in screen's test shortcut, emoji.
+
+**Trip screen** (`trip_manifest_screen.dart`): one long page of eight
+panels became a header (state, time, four counts, the next step,
+offline marks) above tabs — **Boarding** (door camera count, then the
+reservations, or the locked passenger list after departure), **Pickups**
+or **Rental** when there are any, **Fees & flags** — with a badge when a
+hidden tab waits on the Dispatcher. At large system text the header
+scrolls with each tab instead of staying pinned. The van, plate and
+operator moved to the app bar; Add walk-in and Depart/Arrived stay pinned
+under the thumb, and **Depart is held with its reason shown** while the
+camera counts more aboard than listed. Reservations are cards; a
+passenger who pressed "I'm here to pay" is edged in ochre. "Passenger
+manifest" is now "Passenger list"; the Depart dialog says what the server
+does (paid seats count as aboard, unpaid ones become no-shows, terminal
+fees). Cards (`dashboard_panels.dart`): `DashCard`, `DashNote`,
+`TripCounts`, `SeatCard`, and the camera, pickup, rental, fees and flags
+cards; disputes are a labelled button, not a gavel icon.
+
+**Never an invented count.** With no phone reporting, the door check
+returned `aboard: 0` and the app showed "0 aboard (camera)"
+(`docs/UI_UX_RECOMMENDATIONS.md` item 1). `GET /trips/{id}/door-check`
+now carries `camera` (live, lens_blocked, silent, no_phone) and `aboard`
+is null when no door event was seen and no live camera could have seen
+nobody board; the card says "Not counted". The camera test is shared with
+the office's van board (`operations/van_board.py: door_camera`).
+
+**Walk-in** (`walk_in_screen.dart`): destinations as big two-to-a-row
+buttons with their approved fares (one to a row at large text); a slate
+COLLECT panel and a full-width "Log ₱…" pinned under the thumb; a LOGGED
+count; a note when the entry settles a camera-counted boarding.
+**My trips**: Messages, Alerts and End shift labelled, not bare icons;
+the next trip edged in green with its operator. **SOS** is a labelled red
+pill (still two taps).
+
+Proof: `test_door_check.sh` 68/0 (null count before the phone reports,
+0 once it is live), `test_van_board.sh` 35/0, `test_retention.sh` 35/0,
+`test_unpaid_release.sh` 57/0, all on a scratch database.
+`flutter analyze` no errors or warnings; `flutter test` 73 pass, 41 of
+them new: `test/dispatcher_layout_test.dart` (each card at 320 dp and
+200 % text, and the tap-target, label and contrast guidelines) and
+`test/trip_screen_test.dart` (the whole trip screen against a fake
+server, in four states, every tab, three sizes; Depart held; "Not
+counted"). Not run on a phone.
+
+**A bug the new test found (old, not the redesign):** the trip screen's
+optional loads used `catchError((_) => null)` on typed futures. When one
+of them failed while the passenger list loaded (a 404, or the signal
+dropping mid-load), that null was refused at run time, the error escaped,
+and the screen built with no list and crashed. They are now awaited in a
+try, so a failed extra simply leaves its card out, and the screen never
+builds without its list.
+
+### App redesign, phase 2 of 3: the passenger's booking screens (20 Nov)
+
+Gemini's design applied to Home, Trip details, Reservation and Trips, on
+the current tokens (forest action, white text).
+
+**Home** (`home_screen.dart`, `widgets/`): a one-line "Cash only" tip at
+the top, dismissible for the run of the app (no settings store in the
+app to remember it longer). The search card puts From and To in tinted
+boxes whose long terminal names wrap to two lines instead of ending in
+"…", with a round swap button between them, and Today / Tomorrow /
+Other day as three equal buttons (chips again at large text). Trip
+cards: time and fare on the top line ("Fixed fare"), "Leaves in 25 min"
+only within the hour, the journey strip, then a seats chip ("8 of 14
+seats left", "Only 2 seats left", "FULL") and "View details". Loading
+shows three still placeholder cards; an empty result offers the next
+thing to try ("Show any time", "Check tomorrow"). **Home is now one
+scrolling page**: before, the search card stayed fixed and only the list
+scrolled, so at large system text the card was taller than the screen
+(222 px overflow at 320 dp, 200 %, found by the new screen test).
+`AppEmptyState(fillViewport: false)` lets an empty state sit in such a
+page. The shell shows the SabayGo wordmark beside the van mark, and
+"Rent a van" as an outlined pill.
+
+**Trip details**: fare and its LTFRB note on top, the journey on its own
+tint, van and seats side by side, a "Cash at the terminal" band that
+says the exact pay-before time comes after reserving (the search carries
+none, so none is written in), and the camera notice as a titled list of
+its four facts (retention days still read from A2Z's settings).
+
+**Reservation**: the booking code first, large, with Copy; then the
+status band with a "By 10:00 AM" pill while unpaid; the details card;
+one filled button for the state ("I'm here to pay" while unpaid, "Track
+the van" once paid, "Book again" once released). A **Chat** button opens
+the conversation with this trip's Dispatcher (from the passenger's
+contacts; a trip with no Dispatcher yet says so). **Trips**: the next
+trip shows its countdown, the code with an "Open" hint, and "Open
+reservation" or "Show at the van door" beside Cancel; the tabs carry
+counts; an empty tab offers "Find a departure".
+`PassengerMainScreen.goTo` switches the shell's tab from a pushed screen.
+
+Proof: `flutter analyze` no errors or warnings; `flutter test` 101 pass,
+28 of them new in `test/passenger_screens_test.dart` (the Reservation
+screen in five states, Trips with bookings and empty, Home, each at
+320 dp 100 % and 200 % and at 390 dp with the tap-target and label
+guidelines; the code above the band; Book again; the dismissible tip).
+No backend change. Not run on a phone.
+
+### App redesign, phase 3 of 3: the rest of the passenger app (20 Nov)
+
+Gemini's design applied to Welcome, Sign in, Create account, Profile and
+Edit profile, Updates, Chat (list, new message, thread), Rent a van, Book
+for someone else, Track the van and the SOS sheet. `mobile/DESIGN.md`
+now describes the current tokens (forest action, white text; it still
+said emerald with dark text) and what the redesign added to the system.
+
+**Welcome**: the logo on a white card, A2Z's name, the line, and a "How
+it works · cash only" card (reserve, pay in cash at the terminal, board
+at the starting terminal) before the two buttons. **Sign in** puts the
+form on a card; **Create account** has a real app bar, a "Passenger
+accounts only" note before the form, format helpers under the number and
+password, and stacks the names at large text. The terms box keeps its
+wording: Gemini made it consent to the camera notice, which is a notice.
+**Profile**: an "Edit profile" button in place of a pencil, and the three
+notification switches on the page instead of behind a sheet; Edit
+profile's sections are cards. **Updates** are cards with a type chip.
+**Chat**: conversations are cards with the person's role under the name,
+"New message" is labelled, bubbles are the soft tint (mine) and white
+(theirs), and one's own message opens Edit and Delete on a tap as well as
+a long press; Send is labelled. **Rent a van**: an approved request
+waiting for the cash is ochre, with a "Pay ₱… in cash" band; Withdraw is
+a labelled button; the form has a picker row for the time and a large
+passenger counter. **Book for someone else**: a step chip, cards, a
+"Here" button, both codes with Copy, "Go to My trips". **Track the van**:
+markers in the journey strip's shapes, white map buttons for Centre and
+Refresh, a "Remaining stops" list with the passenger's stop marked, and
+"Arriving soon" when the van's nearest stop is the passenger's own (a
+matched stop, never a guessed time; it covers the ETA NAHGM drops).
+**SOS**: the chosen kind filled red, every text message listed with SENT
+or NOT SENT, and "If nobody reaches you shortly, call 911."
+
+Bugs fixed on the way: the Updates action buttons called
+`DefaultTabController.of()`, which threw since the shell became a
+navigation bar; the home pickup pin was SOS red instead of pin red; the
+Edit profile spinner was white on the pale disabled button; the debug
+sign-in row overflowed a small phone; the live map's warning banners set
+ochre text on a 10 % ochre tint (now checked tones).
+
+Proof: `flutter analyze` no errors or warnings; `flutter test` 133 pass,
+32 of them new in `test/phase3_screens_test.dart` (Sign in, Create
+account, Profile, Edit profile, Updates, the three chat screens, Rent a
+van, the SOS sheet; each at 320 dp 100 % and 200 % and at 390 dp with the
+tap-target and label guidelines; the switches on the page; "Book a seat"
+no longer throwing). The two map screens load OpenStreetMap tiles over
+the network, so they are checked by `flutter analyze` only. No backend
+change. Not run on a phone.
+
+### Redesign follow-up from the owner's look at the web preview (20 Nov)
+
+- **The day is a calendar**: Home's Today / Tomorrow / Other day buttons
+  are one "Day" field (shows "Today, 20 Nov") that opens the date picker,
+  in the search card's own tinted box.
+- **Redundancy removed**: no "Check tomorrow" or "Show any time" under an
+  empty result (the Day field and Any time are just above); no "Cash at
+  the terminal" beside the results count (the cash tip says it); Rent a
+  van shows "Request a van" once (its floating button only once there is
+  a list); the pay-by time is said once on a Trips card (the chip says
+  only the state) and on a reservation (the "By 10:00 AM" pill is gone;
+  the band and the "Pay before" row remain).
+- **Rented vans on Profile**: the latest three van rentals with their
+  state chip and pickup time, then "Request another van" (or "Rent a van"
+  with none yet), so a request is seen without opening Rent a van.
+  `rentalStatus()` gives both screens the same chip.
+- **Chips no longer cut short**: a Spacer beside a Flexible chip gave the
+  chip half the row ("WAITING FOR…"); those rows now use spaceBetween
+  (Rent a van, Trips, Updates, booking rows).
+
+Proof: `flutter analyze` clean; `flutter test` 136 pass (new: the Day
+field opens the calendar and the three buttons are gone; Rented vans on
+Profile; one "Request a van" when empty; the pay-by time not repeated).
+Web preview rebuilt on :3000.
+- **Trips: one heading, only over trips** (the owner, same day): the
+  "Next trip" heading is gone from above the "No trip booked" card, which
+  now stands alone with "Find a departure". With bookings, one
+  "Upcoming" heading ("2 trips booked") covers the next trip and the later
+  ones, which no longer have an "Also booked" heading of their own.
+  `flutter test` 137 pass.
+- **Dialog buttons and Dispatcher trip cards, the same size** (the owner,
+  same day). Every two-button dialog (End shift, Sign out, Delete account,
+  Cancel reservation ×2, Depart and other trip confirms, Arrived, the
+  note and leave dialogs, Delete and Edit message) ends on
+  `DialogButtons` (`core/design/components/dialog_buttons.dart`): the
+  action, and under it the way out, the same width and height and lined
+  up. The theme's full-width filled button had pushed the action onto a
+  row of its own under a small text button at the right edge. Each button
+  carries both labels, the other invisible and silent, so the two wrap
+  alike and stay the same height on a small phone or at large text; a test
+  finds a label twice, so it finds the button by type. Deleting a message
+  is red now, as cancelling a reservation and deleting the account were.
+  The Dispatcher's trip cards are all the same size: the next trip lost
+  its own Open button (the whole card opens it, and every card ends on the
+  van row with a chevron), keeps its green outline and countdown, and its
+  2px outline gives the extra pixel back in padding; a trip without a van
+  says "No van yet" instead of dropping the row.
+  `backend/scripts/seed_live_now.py` now records an earlier run's
+  simulated phone back in the office before checking out a new one to
+  TST-1023 (a real phone is left alone), and prints the checkout's own
+  refusal; a stale phone from 11 Nov had left the 20 Nov run with no
+  camera. Proof: `flutter analyze` adds nothing (21 old infos);
+  `flutter test` 154 pass (new: `dialog_buttons_test.dart`,
+  `dispatcher_trips_test.dart`, the Sign out dialog). Web preview
+  rebuilt on :3000.
+- **No zero from a phone that came on after departure** (same day). The
+  16 Nov rule showed a live camera's 0 on the door check even for a trip
+  that had already left: swapping the new phone onto TST-1023 made
+  Nonoy's departed trip read "0 aboard" though the camera never saw its
+  boarding. A live camera's zero now counts only while the trip is
+  scheduled or boarding (`api/v1/operations.py`, `door_check`); after
+  departure only counted door events make a number. No screen showed it
+  (the app hides the panel once a trip leaves; the console does not read
+  it). `test_door_check.sh` 69/69 on the scratch database, with the new
+  after-departure check. The running backend has no auto-reload, so it
+  applies from the next `./run.sh`.
+- **The trip screen's counts and the names at the top** (the owner, same
+  day). The four count tiles (Paid, Unpaid, At terminal, Seats left) are
+  one size: `TripCounts` measures the labels and gives each the room the
+  tallest needs, so "At terminal" wrapping on a narrow phone no longer
+  makes its tile stand taller. On the trip screen the van line (plate,
+  operator, licence) left the bar, where SOS and Refresh cut it to
+  "Arnel Bautista, l…", for a full-width row under it (`_vanStrip`,
+  measured to one or two lines); it stays in view on every tab. On the
+  Dispatcher's home the van mark left the bar so the name and the role
+  chip have its room ("Nonoy Abellana", "DISPATCHER" were "Nonoy…",
+  "DISP…"). At large text the trip card around the counts is read as one
+  label by a screen reader, as before. `flutter test` 160 pass (new:
+  the four tiles one size at 363 and 320 dp, 100 and 200 %; the van line
+  whole; the name and role whole at 363 and 390 dp). Web preview rebuilt.
+- **Passenger list: state and fare at the right edge** (the owner, same
+  day). On the trip screen's list each passenger's chip (BOARDED, PAID,
+  UNPAID…) and fare sat against the name and route, mid-row: as a
+  Flexible beside the text's Expanded they took half the free width, so
+  the route wrapped to four lines. They now sit at the card's right edge,
+  lined up under the LOCKED chip, 16 px clear of the text, which takes the
+  rest of the row; the column is capped at 40 % of the screen so a long
+  state at large text ellipsises before it squeezes the name
+  (`trip_manifest_screen.dart`, `_passengerTile`). `flutter test` 163 pass
+  (new: the chip's right edge is the LOCKED chip's, with a clear gap, at
+  408 and 320 dp, 100 and 200 %). Web preview rebuilt.
+- **Pre-merge health check** (the owner, same day). Services up; `flutter
+  analyze` adds nothing in either app. Dead code removed after a sweep of
+  imports and callers: mobile `models/van_model.dart` (nothing imported
+  it), `AppDuration`, `searchSameRoute` (the retired reschedule),
+  `countFor`, and five getters nothing read; console `hasAllPhotos`,
+  `clearError`, `totalUnread`; backend the AI-node audit's
+  `booked_count_on_leg`, `occupies_leg` and `ABOARD`, `AuditTrigger`,
+  `AuditResolution`, the gateway-era `UpstreamServiceError`, an unused
+  `_unpaid`, `Booking.mark_no_show`, and two rules held twice:
+  `assert_passenger_may_cancel` (`CashDesk.cancel_by_passenger` holds it)
+  and `SosCategory` (the request's pattern and the column's ENUM do). No
+  button with an empty handler, stub or TODO in either app. Repeated UI
+  removed: the locked list's "7 booked · 14 seats" under the four counts,
+  and the "Open ›" in My trips' code box (the card and its button open the
+  same reservation). Fixed: the console's only test could not load on the
+  Dart VM (`download.dart` and `pick_file.dart` reached for the browser);
+  they are now conditional imports with a VM stub, and the web build is
+  unchanged. `test_concurrency.py` honours `SABAYGO_API`;
+  `test_terminal_fees.sh` expected the same service day for a trip five
+  hours ahead and failed after 19:00 (the system was right: the next day
+  owes its parking). New test fixtures use the unassigned 0900 prefix and
+  invented names. Kept on purpose: `KNOWN_ISSUES.md`. Proof, all on the
+  scratch database: journeys 1283/0/0
+  (`docs/test-reports/journeys_20261120_192956.txt`), the overbooking race
+  (no seat-leg sold twice), driving flags; mobile 163, console 1, edge 15;
+  the release APK built with no dev sign-in strings; both web builds.

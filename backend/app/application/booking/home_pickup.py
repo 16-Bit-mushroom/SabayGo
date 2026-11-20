@@ -247,21 +247,6 @@ class HomePickups:
             raise NotFoundError("No photo has been sent for this pickup.")
         return await self.session.get(Message, pickup.photo_message_id)
 
-    async def _unpaid(self, pickup: AssistedPickup) -> list[BookingRow]:
-        """The pair's seats whose cash the Dispatcher has not taken yet,
-        locked so that a paid mark landing on one waits until this is
-        done."""
-        pair = (await self.session.execute(
-            select(BookingRow).where(BookingRow.booking_id.in_(
-                (pickup.relative_booking_id, pickup.booking_id)))
-            .with_for_update().execution_options(populate_existing=True)
-        )).scalars().all()
-        return [
-            b for b in pair
-            if b.payment_status != PaymentStatus.PAID.value
-            and b.status in STANDING
-        ]
-
     # -------------------------------------------------------- activation
     async def on_seat_paid(self, seat: BookingRow, *, by: str) -> str | None:
         """Called when the Dispatcher marks a seat Paid, before the commit.

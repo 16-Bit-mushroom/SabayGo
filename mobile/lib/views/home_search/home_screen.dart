@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/app_card.dart';
 import '../../core/design/components/empty_state.dart';
 import '../../core/design/components/section_header.dart';
 import '../../core/design/tokens.dart';
@@ -31,6 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
   late final HomeSearchViewModel _vm;
   late final BookingRepository _bookings;
   bool _booking = false;
+
+  /// The one-line cash reminder at the top. Dismissed for this run of the
+  /// app; it comes back next time, which suits a rule that is new to most
+  /// passengers.
+  bool _showCashTip = true;
 
   @override
   void initState() {
@@ -106,69 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _tripList() {
-    if (_vm.isLoadingTrips) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_vm.error != null) {
-      return AppEmptyState(
-        icon: Icons.cloud_off,
-        title: 'Could not load trips',
-        body: _vm.error!,
-        action: FilledButton(
-          onPressed: _vm.search,
-          child: const Text('Try again'),
-        ),
-      );
-    }
-
-    // Three empty states, not one. "Choose a journey" and "nothing runs
-    // that day" are different situations and a single message for both
-    // would leave the person unsure whether they had done something
-    // wrong.
-    if (!_vm.hasSearched) {
-      return const AppEmptyState(
-        icon: Icons.route_outlined,
-        title: 'Where are you going?',
-        body: 'Pick your boarding terminal and destination to see the '
-            'departures running that journey.',
-      );
-    }
-
-    final trips = _vm.filteredTrips;
-    if (trips.isEmpty) {
-      return AppEmptyState(
-        icon: Icons.event_busy,
-        title: 'No departures found',
-        body: _vm.selectedTimeBlock == TimeBlock.all
-            ? 'Nothing runs this journey on the date you picked. Try '
-                'another day.'
-            : 'No departures in this part of the day. Try "Any time".',
-      );
-    }
-
-    // Separated, not margined. Spacing between rows belongs to the list
-    // that arranges them; a card that carries its own margin cannot be
-    // reused anywhere the rhythm differs, which is why the old card was
-    // the only thing in the app with a 6px vertical margin.
-    return ListView.separated(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.gutter, 0, AppSpacing.gutter, AppSpacing.section,
-      ),
-      itemCount: trips.length,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (context, i) {
-        final trip = trips[i];
-        return TripCard(
-          trip: trip,
-          onTap: _booking ? null : () => _openDetails(trip),
-        );
-      },
-    );
-  }
-
   void _openDetails(UvTripModel trip) {
     showModalBottomSheet<void>(
       context: context,
@@ -217,38 +160,202 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Header, filter, list — the same three in both layouts, so a change to
-  /// the results does not have to be made twice.
-  Widget _results() {
+  /// Header, filter, list -- as slivers of one scrolling page (20 Nov), so
+  /// at large text the search card scrolls away with the results instead
+  /// of pinning them under a card taller than the screen.
+  List<Widget> _resultSlivers() {
+    Widget box(Widget child) => SliverToBoxAdapter(child: child);
     final header = _resultsHeader();
-    return Column(
-      children: [
-        if (_vm.hasSearched) ...[
-          ?header,
-          TimeBlockFilterBar(
-            selected: _vm.selectedTimeBlock,
-            onSelected: _vm.setTimeBlock,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-        ],
-        Expanded(child: _tripList()),
+    return [
+      if (_vm.hasSearched) ...[
+        if (header != null) box(header) else box(const SizedBox(height: AppSpacing.lg)),
+        box(TimeBlockFilterBar(selected: _vm.selectedTimeBlock, onSelected: _vm.setTimeBlock)),
+        box(const SizedBox(height: AppSpacing.lg)),
       ],
-    );
+      ..._listSlivers(),
+      box(const SizedBox(height: AppSpacing.section)),
+    ];
   }
 
-  Widget _narrow() => Column(
-        children: [
-          JourneyPickerCard(vm: _vm),
-          Expanded(child: _results()),
+  List<Widget> _listSlivers() {
+    Widget box(Widget child) => SliverToBoxAdapter(child: child);
+    if (_vm.isLoadingTrips) return [box(const _LoadingList())];
+
+    if (_vm.error != null) {
+      return [
+        box(AppEmptyState(
+          icon: Icons.cloud_off,
+          title: 'Could not load trips',
+          body: _vm.error!,
+          fillViewport: false,
+          action: FilledButton(onPressed: _vm.search, child: const Text('Try again')),
+        )),
+      ];
+    }
+
+    // Three empty states, not one. "Choose a journey" and "nothing runs
+    // that day" are different situations and a single message for both
+    // would leave the person unsure whether they had done something wrong.
+    if (!_vm.hasSearched) {
+      return [
+        box(const AppEmptyState(
+          icon: Icons.route_outlined,
+          title: 'Where are you going?',
+          body: 'Pick your boarding terminal and destination to see the '
+              'departures running that journey.',
+          fillViewport: false,
+        )),
+      ];
+    }
+
+    final trips = _vm.filteredTrips;
+    if (trips.isEmpty) {
+      // No button here: Any time and the Day field are just above, and a
+      // second control for the same thing was redundant (20 Nov, the owner).
+      final filtered = _vm.selectedTimeBlock != TimeBlock.all;
+      return [
+        box(AppEmptyState(
+          icon: Icons.event_busy,
+          title: 'No departures found',
+          body: filtered
+              ? 'No departures in this part of the day. Try "Any time".'
+              : 'Nothing runs this journey on the day you picked. Pick another day above.',
+          fillViewport: false,
+        )),
+      ];
+    }
+
+    // Separated, not margined: spacing between rows belongs to the list
+    // that arranges them.
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
+        sliver: SliverList.separated(
+          itemCount: trips.length,
+          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+          itemBuilder: (context, i) {
+            final trip = trips[i];
+            return TripCard(trip: trip, onTap: _booking ? null : () => _openDetails(trip));
+          },
+        ),
+      ),
+    ];
+  }
+
+  Widget? _tip() => _showCashTip
+      ? Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.md, AppSpacing.gutter, 0),
+          child: _CashTip(onClose: () => setState(() => _showCashTip = false)),
+        )
+      : null;
+
+  Widget _narrow() => CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          if (_tip() case final tip?) SliverToBoxAdapter(child: tip),
+          SliverToBoxAdapter(child: JourneyPickerCard(vm: _vm)),
+          ..._resultSlivers(),
         ],
       );
 
   Widget _wide() => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 340, child: JourneyPickerCard(vm: _vm)),
+          SizedBox(
+            width: 340,
+            child: SingleChildScrollView(
+              child: Column(children: [?_tip(), JourneyPickerCard(vm: _vm)]),
+            ),
+          ),
           const VerticalDivider(width: 1),
-          Expanded(child: _results()),
+          Expanded(
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: _resultSlivers(),
+            ),
+          ),
         ],
       );
+}
+
+/// "Cash only": the rule most passengers have not met before, said once at
+/// the top of Home in one line, and dismissable.
+class _CashTip extends StatelessWidget {
+  const _CashTip({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.xs, AppSpacing.xs, AppSpacing.xs),
+        decoration: BoxDecoration(
+          color: AppColors.primaryContainer,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.edge),
+        ),
+        child: Row(children: [
+          const Icon(Icons.payments_outlined, size: 18, color: AppColors.primary),
+          const SizedBox(width: AppSpacing.sm),
+          const Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: 'Cash only. ', style: TextStyle(fontWeight: FontWeight.w700)),
+                TextSpan(text: 'Reserve here, then pay the Dispatcher in cash at the terminal before your '
+                    'pay-before time.'),
+              ]),
+              style: TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.35),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Dismiss',
+            onPressed: onClose,
+            icon: const Icon(Icons.close, size: 18, color: AppColors.textMuted),
+          ),
+        ]),
+      );
+}
+
+/// Three quiet placeholder cards while departures load, the shape of what
+/// is coming, instead of a spinner on an empty page. Still, so it needs no
+/// reduce-motion handling.
+class _LoadingList extends StatelessWidget {
+  const _LoadingList();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget bar(double width, double height) => Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSunken,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        );
+    return Semantics(
+      label: 'Loading departures',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
+        child: Column(
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(height: AppSpacing.md),
+              ExcludeSemantics(
+                child: AppCard(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [bar(96, 22), const Spacer(), bar(64, 22)]),
+                    const SizedBox(height: AppSpacing.md),
+                    bar(200, 14),
+                    const SizedBox(height: AppSpacing.sm),
+                    bar(160, 14),
+                    const SizedBox(height: AppSpacing.md),
+                    bar(140, 24),
+                  ]),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.booking.home_pickup import HomePickups
@@ -28,30 +28,6 @@ from app.infrastructure.models import PassengerProfile, Trip
 from app.infrastructure.repositories.seat_repository import SeatRepository
 
 log = logging.getLogger(__name__)
-
-
-def occupies_leg(leg_sequence: int):
-    """SQL predicate: this booking occupies a seat on the given leg.
-
-    A passenger boarding at stop 1 and alighting at stop 2 is NOT aboard
-    on leg 2. Getting this wrong is the subtle bug that would make every
-    YOLOv8 variance look like theft -- the manifest would count people who
-    already got off.
-
-    Leg k spans stop k -> k+1, so a booking occupies it when
-    boarding <= k and alighting > k.
-    """
-    return and_(
-        BookingRow.boarding_stop_sequence <= leg_sequence,
-        BookingRow.alighting_stop_sequence > leg_sequence,
-    )
-
-
-ABOARD = [
-    BookingStatus.CONFIRMED.value,
-    BookingStatus.CHECKED_IN.value,
-    BookingStatus.BOARDED.value,
-]
 
 
 class ManifestUseCase:
@@ -114,19 +90,6 @@ class ManifestUseCase:
                 for b, pp in rows
             ],
         }
-
-    async def booked_count_on_leg(self, trip_id: str, leg_sequence: int) -> int:
-        """Manifest headcount for one leg -- the YOLOv8 comparison baseline."""
-        result = await self.session.execute(
-            select(func.count())
-            .select_from(BookingRow)
-            .where(
-                BookingRow.trip_id == trip_id,
-                BookingRow.status.in_(ABOARD),
-                occupies_leg(leg_sequence),
-            )
-        )
-        return int(result.scalar_one())
 
 
 class DepartTripUseCase:

@@ -91,6 +91,34 @@ class VanState:
     open_flags: int | None = None
 
 
+async def door_camera(session: AsyncSession, van_id: str | None) -> tuple[str, datetime | None]:
+    """The van's door phone and when it last reported: 'live' (reported
+    within `heartbeat_gap_seconds`, camera working, lens clear),
+    'lens_blocked', 'silent' (no report within the gap, or never) or
+    'no_phone' -- the tests the Unaudited rule uses (`edge/evidence.py`).
+    The office's van board and the Dispatcher's door check (16 Nov) both
+    read it, so a count is never shown for a camera that is not there."""
+    if van_id is None:
+        return "no_phone", None
+    checkout = await session.scalar(
+        select(DeviceCheckout).where(DeviceCheckout.van_id == van_id,
+                                     DeviceCheckout.returned_at.is_(None)))
+    if checkout is None:
+        return "no_phone", None
+    device = await session.get(EdgeDevice, checkout.device_id)
+    last = await session.scalar(
+        select(DeviceHeartbeat).where(DeviceHeartbeat.device_id == checkout.device_id)
+        .order_by(DeviceHeartbeat.recorded_at.desc()).limit(1))
+    seen = device.last_heartbeat_at if device else None
+    gap = timedelta(seconds=await PolicyRepository(session).get_int("heartbeat_gap_seconds"))
+    now = app_tz.now().replace(tzinfo=None)
+    if seen is None or now - seen > gap:
+        return "silent", seen
+    if last is not None and (last.lens_blocked or not last.camera_ok):
+        return "lens_blocked", seen
+    return "live", seen
+
+
 class VanBoard:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -147,25 +175,7 @@ class VanBoard:
     async def _watch(self, row: VanState, trip: Trip) -> None:
         """The door camera, the count it keeps and the open driving flags of
         a trip under way."""
-        checkout = await self.session.scalar(
-            select(DeviceCheckout).where(DeviceCheckout.van_id == row.van_id,
-                                         DeviceCheckout.returned_at.is_(None)))
-        if checkout is None:
-            row.camera = "no_phone"
-        else:
-            device = await self.session.get(EdgeDevice, checkout.device_id)
-            last = await self.session.scalar(
-                select(DeviceHeartbeat).where(DeviceHeartbeat.device_id == checkout.device_id)
-                .order_by(DeviceHeartbeat.recorded_at.desc()).limit(1))
-            row.camera_seen_at = device.last_heartbeat_at if device else None
-            gap = timedelta(seconds=await PolicyRepository(self.session).get_int("heartbeat_gap_seconds"))
-            now = app_tz.now().replace(tzinfo=None)
-            if row.camera_seen_at is None or now - row.camera_seen_at > gap:
-                row.camera = "silent"
-            elif last is not None and (last.lens_blocked or not last.camera_ok):
-                row.camera = "lens_blocked"
-            else:
-                row.camera = "live"
+        row.camera, row.camera_seen_at = await door_camera(self.session, row.van_id)
         events = list((await self.session.execute(
             select(PassengerEvent).where(PassengerEvent.trip_id == trip.trip_id)
             .order_by(PassengerEvent.event_at)

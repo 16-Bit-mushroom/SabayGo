@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/design/components/brand_logo.dart';
+import '../../core/design/components/dialog_buttons.dart';
 import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
@@ -102,13 +102,11 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
           'You will need to sign in again to mark seats Paid or log passengers.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Stay'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('End shift'),
+          DialogButtons(
+            action: 'End shift',
+            onAction: () => Navigator.pop(ctx, true),
+            cancel: 'Stay',
+            onCancel: () => Navigator.pop(ctx, false),
           ),
         ],
       ),
@@ -120,11 +118,15 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
+    // The bar grows with the system text so its labels and the role chip
+    // are never clipped (WCAG 1.4.4); 56 at normal size.
+    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
 
     return ChangeNotifierProvider.value(
       value: _shift,
       child: Scaffold(
         appBar: AppBar(
+          toolbarHeight: kToolbarHeight * scale,
           // Light, like every other screen (3 Oct). The crew bar used to be
           // a solid brand block to say "this is the crew side"; after the
           // rebrand that block was black, the heaviest thing on a screen
@@ -132,70 +134,49 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
           // The role is now said in words, on a chip, which survives glare
           // better than a background colour does.
           titleSpacing: AppSpacing.gutter,
-          title: Row(
+          // The name and the role have the bar's whole left side. Beside
+          // the van mark and three labelled buttons they were cut to
+          // "Nonoy…" and "DISP…" (20 Nov); the role chip still says which
+          // side of the app this is.
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const BrandLogo(height: 30, mark: true),
-              const SizedBox(width: AppSpacing.md),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      profile?.displayName ?? 'SabayGo',
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                    ),
-                    const SizedBox(height: 2),
-                    const StatusChip(
-                      'DISPATCHER',
-                      tone: StatusTone.brand,
-                    ),
-                  ],
-                ),
+              Text(
+                profile?.displayName ?? 'SabayGo',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              const SizedBox(height: 2),
+              const StatusChip(
+                'DISPATCHER',
+                tone: StatusTone.brand,
               ),
             ],
           ),
+          // Labelled, not icons alone (20 Nov redesign): an envelope and a
+          // bell are guesses, and "End shift" must never be.
           actions: [
             ListenableBuilder(
               listenable: _conversations,
-              builder: (context, _) {
-                final unread = _conversations.unreadCount;
-                return IconButton(
-                  tooltip: unread == 0 ? 'Messages' : '$unread unread',
-                  onPressed: _openMessages,
-                  icon: Badge(
-                    isLabelVisible: unread > 0,
-                    label: Text('$unread'),
-                    child: Icon(
-                      unread > 0 ? Icons.chat_bubble : Icons.chat_bubble_outline,
-                    ),
-                  ),
-                );
-              },
+              builder: (context, _) => _BarAction(
+                icon: _conversations.unreadCount > 0 ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                label: 'Messages',
+                badge: _conversations.unreadCount,
+                onPressed: _openMessages,
+              ),
             ),
             ListenableBuilder(
               listenable: _notifications,
-              builder: (context, _) {
-                final unread = _notifications.unreadCount;
-                return IconButton(
-                  tooltip: unread == 0 ? 'Notifications' : '$unread unread',
-                  onPressed: _openNotifications,
-                  icon: Badge(
-                    isLabelVisible: unread > 0,
-                    label: Text('$unread'),
-                    child: Icon(
-                      unread > 0 ? Icons.notifications_active : Icons.notifications_none,
-                    ),
-                  ),
-                );
-              },
+              builder: (context, _) => _BarAction(
+                icon: _notifications.unreadCount > 0 ? Icons.notifications_active : Icons.notifications_none,
+                label: 'Alerts',
+                badge: _notifications.unreadCount,
+                onPressed: _openNotifications,
+              ),
             ),
-            IconButton(
-              tooltip: 'End shift',
-              icon: const Icon(Icons.logout),
-              onPressed: _confirmSignOut,
-            ),
+            _BarAction(icon: Icons.logout, label: 'End shift', onPressed: _confirmSignOut),
             const SizedBox(width: 4),
           ],
         ),
@@ -203,4 +184,46 @@ class _DispatcherMainScreenState extends State<DispatcherMainScreen> {
       ),
     );
   }
+}
+
+/// An app bar action with its name under the icon, and an unread count.
+class _BarAction extends StatelessWidget {
+  const _BarAction({required this.icon, required this.label, required this.onPressed, this.badge = 0});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final int badge;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: badge > 0 ? '$label, $badge unread' : label,
+        excludeSemantics: true,
+        onTap: onPressed,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 52, minHeight: AppSizing.minTouchTarget),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Badge(
+                    isLabelVisible: badge > 0,
+                    label: Text('$badge'),
+                    child: Icon(icon, size: 22, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(label,
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 }

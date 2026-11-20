@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/dialog_buttons.dart';
 import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
@@ -98,8 +99,18 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     });
     final id = widget.trip.tripId;
     // Anything but the manifest may fail (offline, nothing yet) without
-    // taking the screen down: that panel is simply left out.
-    Future<Object?> optional(Future<Object?> call) => call.catchError((Object _) => null);
+    // taking the screen down: that panel is simply left out. Awaited in a
+    // try, not `catchError(() => null)`: on a Future<Set<String>> that
+    // handler's null is refused at run time (ArgumentError), which escaped
+    // this method and left the screen with no list (found 20 Nov by
+    // test/trip_screen_test.dart).
+    Future<Object?> optional<T>(Future<T> call) async {
+      try {
+        return await call;
+      } catch (_) {
+        return null;
+      }
+    }
     try {
       final m = await _ops.manifest(id);
       final before = m.status == 'scheduled' || m.status == 'boarding';
@@ -167,8 +178,12 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           title: Text(title),
           content: Text(body),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(yes)),
+            DialogButtons(
+              action: yes,
+              onAction: () => Navigator.pop(ctx, true),
+              cancel: 'Not yet',
+              onCancel: () => Navigator.pop(ctx, false),
+            ),
           ],
         ),
       ) ==
@@ -178,9 +193,9 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     final unpaid = (_share?.amountDue ?? 0) > 0;
     final ok = await _confirm(
       'Depart now?',
-      'Boarding closes and the passenger list locks. Paid passengers not aboard become no-shows; '
-          'no refund is issued.${unpaid ? ' A2Z\'s share is not recorded yet: the van leaves unpaid '
-              'and its next assignment waits until the Cashier records it.' : ''}',
+      'Boarding closes and the passenger list locks. Paid passengers count as aboard; unpaid ones '
+          'become no-shows.${unpaid ? ' The terminal fees are not recorded yet: the van leaves unpaid, '
+              'and its next assignment waits until the Cashier records them.' : ''}',
       'Depart',
     );
     if (ok) await _do(() => _ops.depart(trip.tripId), 'Departed.');
@@ -303,8 +318,12 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           'The trip will be completed.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Arrived')),
+          DialogButtons(
+            action: 'Arrived',
+            onAction: () => Navigator.pop(ctx, true),
+            cancel: 'Not yet',
+            onCancel: () => Navigator.pop(ctx, false),
+          ),
         ],
       ),
     );
@@ -326,110 +345,310 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     final pending = sync.pendingFor(trip.tripId);
     final marks = sync.marksFor(trip.tripId);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(trip.title, style: const TextStyle(fontSize: 18)),
-        actions: [
-          // Beside Refresh, not buried in the action list: hands are full
-          // at the van door, and this is the one control that cannot be
-          // hunted for.
-          SosButton(tripId: trip.tripId),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
+    final appBar = AppBar(
+      titleSpacing: 0,
+      title: Text(trip.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+      // The van and its operator on a row of their own, the screen's whole
+      // width: beside SOS and Refresh the line was cut to "Arnel Bautista,
+      // l…" (20 Nov). Under the bar it stays in view whichever tab is open:
+      // the plate is checked against the van at the door (brief 9).
+      bottom: _vanStrip(context, trip),
+      actions: [
+        // Beside Refresh, not buried in the action list: hands are full
+        // at the van door, and this is the one control that cannot be
+        // hunted for.
+        SosButton(tripId: trip.tripId),
+        IconButton(
+          tooltip: 'Refresh',
+          icon: const Icon(Icons.refresh),
+          onPressed: _loading ? null : _load,
+        ),
+        // The rare action lives here, not beside Depart: a choice made a
+        // few times a month should not cost a look every trip (Hick).
+        if (!departed && _move == null)
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            enabled: !_acting,
+            onSelected: (_) => _notPassengerTrip(),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'move',
+                child: ListTile(
+                  leading: Icon(Icons.no_transfer),
+                  title: Text('Not a passenger trip'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
-          // The rare action lives here, not beside Depart: a choice made a
-          // few times a month should not cost a look every trip (Hick).
-          if (!departed && _move == null)
-            PopupMenuButton<String>(
-              tooltip: 'More',
-              enabled: !_acting,
-              onSelected: (_) => _notPassengerTrip(),
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'move',
-                  child: ListTile(
-                    leading: Icon(Icons.no_transfer),
-                    title: Text('Not a passenger trip'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
+      ],
+    );
+
+    if (_loading) {
+      return Scaffold(appBar: appBar, body: const Center(child: CircularProgressIndicator()));
+    }
+    if (m == null) return Scaffold(appBar: appBar, body: _errorView());
+
+    final tabs = _tabs(trip, m, departed, marks, pending);
+    // The trip's state and counts stay pinned above the tabs while the
+    // text is a normal size (20 Nov redesign). At large system text that
+    // band would leave too little room for the list, so it scrolls with
+    // each tab instead (WCAG 1.4.10).
+    final roomy = MediaQuery.textScalerOf(context).scale(1) <= 1.3;
+    final header = _header(trip, m, marks, pending, sync);
+
+    return DefaultTabController(
+      key: ValueKey(tabs.map((t) => t.id).join('/')),
+      length: tabs.length,
+      child: Scaffold(
+        appBar: appBar,
+        // The trip's next action sits at the bottom, under the thumb, and
+        // stays there while the list scrolls (Fitts).
+        bottomNavigationBar: _actionBar(trip, departed),
+        body: Column(
+          children: [
+            if (roomy)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.md, AppSpacing.gutter, AppSpacing.md),
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceRaised,
+                  border: Border(bottom: BorderSide(color: AppColors.divider)),
                 ),
-              ],
+                child: header,
+              ),
+            Material(
+              color: AppColors.surfaceRaised,
+              child: TabBar(
+                isScrollable: !roomy,
+                tabAlignment: roomy ? null : TabAlignment.start,
+                tabs: [for (final t in tabs) t.tab],
+              ),
             ),
-        ],
+            Expanded(
+              child: TabBarView(
+                children: [
+                  for (final t in tabs)
+                    RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.xxl),
+                        children: [
+                          if (!roomy) ...[
+                            DashCard(title: 'This trip', children: [header]),
+                            const SizedBox(height: AppSpacing.lg),
+                          ],
+                          ...t.children,
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-      // The trip's next action sits at the bottom, under the thumb, and
-      // stays there while the list scrolls (Fitts).
-      bottomNavigationBar: _loading || m == null ? null : _actionBar(trip, departed),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null && m == null
-              ? _errorView()
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    // In the order of the work: where the trip stands and what
-                    // to do next; anything that blocks Depart; the list the
-                    // Dispatcher works through; then the money and the rest.
-                    children: [
-                      _statusPanel(trip, m!, marks),
-                      if (pending.isNotEmpty || marks.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _pendingSyncBanner(pending.length, marks.length, sync),
-                      ],
-                      if (_move case final move?) ...[
-                        const SizedBox(height: 8),
-                        _moveBanner(move),
-                      ],
-                      if (_check case final check? when trip.rental == null) ...[
-                        const SizedBox(height: 8),
-                        DoorCheckPanel(
-                          check: check,
-                          busy: _acting,
-                          onList: (u) => _push(WalkInScreen(trip: trip, forEventId: u.eventId)),
-                          onExplain: _explain,
-                          onCrew: (v) => _do(() => _ops.setCrew(trip.tripId, v),
-                              v ? 'You are marked crew: not counted.' : 'You are no longer marked crew.'),
-                        ),
-                      ],
-                      if (trip.rental == null && !departed) ...[
-                        const SizedBox(height: 8),
-                        _reservations(trip, marks),
-                      ],
-                      if (trip.rental == null && departed) ...[
-                        const SizedBox(height: 8),
-                        _passengerList(trip, m, pending),
-                      ],
-                      if (_pickups.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        HomePickupsPanel(pickups: _pickups, departed: departed, busy: _acting, onAction: _pickup),
-                      ],
-                      if (trip.rental case final rental?) ...[
-                        const SizedBox(height: 8),
-                        RentalPanel(
-                          rental: rental,
-                          busy: _acting,
-                          onCash: () => _do(() => _ops.rentalCash(rental.requestId), 'Rental fee recorded.'),
-                        ),
-                      ],
-                      if (_share case final share? when share.lines.isNotEmpty || share.amountDue > 0) ...[
-                        const SizedBox(height: 8),
-                        SharePanel(
-                          share: share,
-                          disputedLines: _disputedLines,
-                          busy: _acting,
-                          onDispute: (l) => _dispute(line: l),
-                        ),
-                      ],
-                      if (_flags.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        FlagsPanel(flags: _flags, busy: _acting, onDispute: (f) => _dispute(flag: f)),
-                      ],
-                    ],
-                  ),
-                ),
+    );
+  }
+
+  /// The plate, then the operator's name and licence (the only way the
+  /// operator is shown), under the bar at full width: one line where it
+  /// fits, two on a narrow phone or at large text. Measured, because the
+  /// bar must know its height before it is laid out.
+  PreferredSizeWidget _vanStrip(BuildContext context, CrewTrip trip) {
+    final span = TextSpan(
+      style: Theme.of(context)
+          .textTheme
+          .bodyMedium!
+          .copyWith(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textMuted),
+      children: [
+        TextSpan(
+          text: trip.plateNumber ?? 'No van yet',
+          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+        ),
+        TextSpan(text: ' · ${trip.operatorName ?? 'operator not known'}'),
+        if (trip.operatorLicence != null) TextSpan(text: ' · Licence ${trip.operatorLicence}'),
+      ],
+    );
+    const icon = 16.0;
+    const gap = 6.0;
+    final painter = TextPainter(
+      text: span,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 2,
+    )..layout(maxWidth: MediaQuery.sizeOf(context).width - 2 * AppSpacing.gutter - icon - gap);
+    final line = painter.height.ceilToDouble();
+    painter.dispose();
+    return PreferredSize(
+      preferredSize: Size.fromHeight((line < icon ? icon : line) + AppSpacing.xs + AppSpacing.sm),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.xs, AppSpacing.gutter, AppSpacing.sm),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.airport_shuttle_outlined, size: icon, color: AppColors.textMuted),
+            const SizedBox(width: gap),
+            Expanded(child: Text.rich(span, maxLines: 2, overflow: TextOverflow.ellipsis)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The trip's tabs, in the order of the work: who is boarding and the
+  /// count that gates Depart; the home pickups (or the rental) when there
+  /// are any; then the money and the driving flags. A badge says when a
+  /// tab is waiting on the Dispatcher, so nothing on a hidden tab is
+  /// missed.
+  List<_TabSpec> _tabs(CrewTrip trip, Manifest m, bool departed, Map<String, PendingSeatMark> marks,
+      List<PendingWalkIn> pending) {
+    final specs = <_TabSpec>[];
+    final rental = trip.rental;
+    if (rental == null) {
+      final excess = departed ? 0 : (_check?.excess ?? 0);
+      specs.add(_TabSpec(
+        'boarding',
+        _tabLabel('Boarding', badge: excess > 0 ? '$excess' : null, badgeColour: AppColors.danger),
+        [
+          if (_check case final check? when !departed) ...[
+            DoorCheckPanel(
+              check: check,
+              busy: _acting,
+              onList: (u) => _push(WalkInScreen(trip: trip, forEventId: u.eventId, forEventAt: u.at)),
+              onExplain: _explain,
+              onCrew: (v) => _do(() => _ops.setCrew(trip.tripId, v),
+                  v ? 'You are marked crew: not counted.' : 'You are no longer marked crew.'),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+          ],
+          departed ? _passengerList(trip, m, pending) : _reservations(trip, marks),
+        ],
+      ));
+    } else {
+      specs.add(_TabSpec(
+        'rental',
+        _tabLabel('Rental', badge: rental.paymentStatus == 'paid' ? null : '!', badgeColour: AppColors.warning),
+        [
+          RentalPanel(
+            rental: rental,
+            busy: _acting,
+            onCash: () => _do(() => _ops.rentalCash(rental.requestId), 'Rental fee recorded.'),
+          ),
+        ],
+      ));
+    }
+    if (_pickups.isNotEmpty) {
+      final waiting = HomePickupsPanel.needingAction(_pickups, departed: departed);
+      specs.add(_TabSpec(
+        'pickups',
+        _tabLabel('Pickups', badge: waiting > 0 ? '$waiting' : null, badgeColour: AppColors.warning),
+        [HomePickupsPanel(pickups: _pickups, departed: departed, busy: _acting, onAction: _pickup)],
+      ));
+    }
+    final share = _share;
+    final owes = (share?.amountDue ?? 0) > 0;
+    specs.add(_TabSpec(
+      'fees',
+      _tabLabel('Fees & flags', badge: owes || _flags.isNotEmpty ? '!' : null, badgeColour: AppColors.warning),
+      [
+        if (share != null && (share.lines.isNotEmpty || share.amountDue > 0))
+          SharePanel(
+            share: share,
+            disputedLines: _disputedLines,
+            busy: _acting,
+            onDispute: (l) => _dispute(line: l),
+          )
+        else
+          _emptyCard('Nothing to hand over yet. Pull down to refresh.'),
+        if (_flags.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.lg),
+          FlagsPanel(flags: _flags, busy: _acting, onDispute: (f) => _dispute(flag: f)),
+        ] else if (departed) ...[
+          const SizedBox(height: AppSpacing.lg),
+          _emptyCard('No driving flags on this trip.'),
+        ],
+      ],
+    ));
+    return specs;
+  }
+
+  Widget _tabLabel(String text, {String? badge, Color badgeColour = AppColors.danger}) => Tab(
+        child: Semantics(
+          label: badge == null ? text : '$text, needs attention',
+          excludeSemantics: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: Text(text, overflow: TextOverflow.ellipsis)),
+              if (badge != null) ...[
+                const SizedBox(width: 6),
+                Badge(label: Text(badge), backgroundColor: badgeColour, textColor: AppColors.onFill),
+              ],
+            ],
+          ),
+        ),
+      );
+
+  Widget _emptyCard(String text) => Container(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: AppColors.edge),
+        ),
+        child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
+      );
+
+  /// The trip at a glance: its state and time, four counts, and the one
+  /// thing to do next. Offline marks and a non-passenger trip show here
+  /// too, so they are never on a hidden tab.
+  Widget _header(CrewTrip trip, Manifest m, Map<String, PendingSeatMark> marks, List<PendingWalkIn> pending,
+      OfflineSyncService sync) {
+    final (label, tone) = switch (m.status) {
+      'boarding' => ('BOARDING', StatusTone.success),
+      'departed' => ('ON THE ROAD', StatusTone.muted),
+      'completed' => ('COMPLETED', StatusTone.muted),
+      _ => ('SCHEDULED', StatusTone.brand),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          Flexible(child: StatusChip(label, tone: tone)),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              DateFormat('EEE d MMM · h:mm a').format(m.departure),
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary, fontSize: 14),
+            ),
+          ),
+        ]),
+        if (trip.rental == null) ...[
+          const SizedBox(height: AppSpacing.md),
+          TripCounts(
+            paid: m.totalBookings - m.unpaid,
+            unpaid: m.unpaid,
+            atTerminal: m.checkedIn,
+            seatsLeft: (m.seatCapacity - m.totalBookings).clamp(0, m.seatCapacity),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _nextStep(trip, marks),
+        ],
+        if (pending.isNotEmpty || marks.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _pendingSyncBanner(pending.length, marks.length, sync),
+        ],
+        if (_move case final move?) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _moveBanner(move),
+        ],
+      ],
     );
   }
 
@@ -465,144 +684,67 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
           showCheckmark: false,
           onSelected: (_) => setState(() => _show = value),
         );
+    Widget note(String text) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+          child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
+        );
 
-    return Container(
-      color: AppColors.surfaceRaised,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
-            child: Text('RESERVATIONS AND WALK-INS',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted, letterSpacing: 1.2)),
-          ),
-          if (all.loaded)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
-                chip(_Show.collect, 'To collect', toCollect.length),
-                chip(_Show.paid, 'Paid', paid.length),
-                chip(_Show.all, 'All', live.length),
-              ]),
-            ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _search,
-              onChanged: (_) => setState(() {}),
-              textInputAction: TextInputAction.search,
-              textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(
-                hintText: 'Booking code or name',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _search.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Clear',
-                        icon: const Icon(Icons.close),
-                        onPressed: () => setState(_search.clear),
-                      ),
-                border: const OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (!all.loaded)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('The list has not loaded. Pull down to try again.',
-                  textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
-            )
-          else if (shown.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                  q.isNotEmpty
-                      ? 'No reservation matches "${_search.text.trim()}".'
-                      : switch (show) {
-                          _Show.collect => 'Nobody left to collect from. Everyone listed has paid.',
-                          _Show.paid => 'Nobody has paid yet.',
-                          _ => 'Nobody has reserved yet. Add walk-ins with the button below.',
-                        },
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textMuted)),
-            ),
-          for (var i = 0; i < shown.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
-            _seatTile(trip, shown[i], marks[shown[i].bookingId]),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// One passenger, read in the order the Dispatcher checks it at the
-  /// door: who, the code they show, where they get off and the fare; then
-  /// the one action, on its own line so it never squeezes the name, with
-  /// the amount on it -- the cash to take is on the button that records it.
-  Widget _seatTile(CrewTrip trip, SeatOnList s, PendingSeatMark? mark) {
-    final paidHere = mark?.isPaid ?? false;
-    final paid = s.isPaid || paidHere;
-    final (label, tone) = switch (s.status) {
-      _ when paidHere => ('PAID · NOT SYNCED', StatusTone.info),
-      'boarded' => ('ABOARD', StatusTone.success),
-      _ when paid => ('PAID', StatusTone.success),
-      // Pressed "I'm here to pay": at the terminal, cash in hand.
-      'checked_in' => ('HERE TO PAY', StatusTone.info),
-      _ => ('UNPAID', StatusTone.warning),
-    };
-    final who = s.passengerName ?? (s.isWalkIn ? 'Walk-in passenger' : 'App passenger');
-    final canCancel = mark == null && !s.isWalkIn;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Text(who, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-            const SizedBox(width: AppSpacing.sm),
-            StatusChip(label, tone: tone),
-            const SizedBox(width: AppSpacing.sm),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          header: true,
+          child: const Text('Reservations and walk-ins',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (all.loaded)
+          Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
+            chip(_Show.collect, 'To collect', toCollect.length),
+            chip(_Show.paid, 'Paid', paid.length),
+            chip(_Show.all, 'All', live.length),
           ]),
-          const SizedBox(height: 4),
-          Text(s.bookingCode,
-              style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 2, color: AppColors.primary)),
-          const SizedBox(height: 2),
-          Text(
-            'To ${trip.stopName(s.alightingStop)} · ₱${s.fare.toStringAsFixed(0)}'
-            '${s.isWalkIn ? ' · walk-in' : ''}${s.isHomePickupSeat ? ' · home pickup' : ''}',
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-          ),
-          if (!paid || canCancel) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Row(children: [
-              if (canCancel)
-                TextButton(
-                  onPressed: _acting ? null : () => _cancelSeat(s),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.danger,
-                    minimumSize: const Size(0, AppSizing.minTouchTarget),
+        const SizedBox(height: AppSpacing.md),
+        TextField(
+          controller: _search,
+          onChanged: (_) => setState(() {}),
+          textInputAction: TextInputAction.search,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            hintText: 'Booking code or name',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _search.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(_search.clear),
                   ),
-                  child: const Text('Cancel'),
-                ),
-              const Spacer(),
-              if (!paid)
-                FilledButton.icon(
-                  // The theme's buttons are full width; here it sizes to
-                  // its label at the end of its own line.
-                  style: FilledButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
-                  onPressed: _acting ? null : () => _markPaid(s),
-                  icon: const Icon(Icons.payments_outlined, size: 20),
-                  label: Text('Mark ₱${s.fare.toStringAsFixed(0)} paid'),
-                ),
-            ]),
-          ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        if (!all.loaded)
+          note('The list has not loaded. Pull down to try again.')
+        else if (shown.isEmpty)
+          note(q.isNotEmpty
+              ? 'No reservation matches "${_search.text.trim()}".'
+              : switch (show) {
+                  _Show.collect => 'Nobody left to collect from. Everyone listed has paid.',
+                  _Show.paid => 'Nobody has paid yet.',
+                  _ => 'Nobody has reserved yet. Add walk-ins with the button below.',
+                }),
+        for (var i = 0; i < shown.length; i++) ...[
+          if (i > 0) const SizedBox(height: AppSpacing.md),
+          SeatCard(
+            seat: shown[i],
+            stopName: trip.stopName(shown[i].alightingStop),
+            mark: marks[shown[i].bookingId],
+            busy: _acting,
+            onPaid: () => _markPaid(shown[i]),
+            onCancel: () => _cancelSeat(shown[i]),
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -614,92 +756,13 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
             children: [
               const Icon(Icons.cloud_off, size: 48, color: AppColors.textMuted),
               const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
+              Text(_error ?? 'The trip could not be loaded.', textAlign: TextAlign.center),
               const SizedBox(height: 16),
               FilledButton(onPressed: _load, child: const Text('Retry')),
             ],
           ),
         ),
       );
-
-  Widget _statusPanel(CrewTrip trip, Manifest m, Map<String, PendingSeatMark> marks) {
-    final (label, tone) = switch (m.status) {
-      'boarding' => ('STARTED', StatusTone.success),
-      'departed' => ('ON THE ROAD', StatusTone.muted),
-      'completed' => ('COMPLETED', StatusTone.muted),
-      _ => ('SCHEDULED', StatusTone.brand),
-    };
-    final taken = m.totalBookings.clamp(0, m.seatCapacity);
-
-    return Container(
-      color: AppColors.surfaceRaised,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              StatusChip(label, tone: tone),
-              const Spacer(),
-              Text(
-                DateFormat('EEE d MMM · h:mm a').format(m.departure),
-                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // The operator only as a name and licence, beside the plate
-          // (brief 9): check the plate against the van at the door.
-          Row(children: [
-            const Icon(Icons.airport_shuttle_outlined, size: 20, color: AppColors.textMuted),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${trip.plateNumber ?? 'No van yet'} · ${trip.operatorName ?? 'operator not known'}'
-                '${trip.operatorLicence != null ? ', licence ${trip.operatorLicence}' : ''}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ]),
-          if (trip.rental == null) ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _stat('Paid', m.totalBookings - m.unpaid, AppColors.success),
-                _stat('Unpaid', m.unpaid, AppColors.warning),
-                _stat('At terminal', m.checkedIn, AppColors.info),
-                _stat('Seats left', (m.seatCapacity - m.totalBookings).clamp(0, m.seatCapacity), AppColors.textMuted),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // How full the van is, at a glance: listed of its spaces.
-            Semantics(
-              label: '$taken of ${m.seatCapacity} seats taken',
-              excludeSemantics: true,
-              child: Row(children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.full),
-                    child: LinearProgressIndicator(
-                      value: m.seatCapacity == 0 ? 0 : taken / m.seatCapacity,
-                      minHeight: 8,
-                      backgroundColor: AppColors.primaryContainer,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Text('$taken of ${m.seatCapacity}',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-              ]),
-            ),
-            const SizedBox(height: 16),
-            _nextStep(trip, marks),
-          ],
-        ],
-      ),
-    );
-  }
 
   /// What to do now, in one sentence, from the trip's state: the
   /// Dispatcher never has to work out which button applies.
@@ -712,70 +775,86 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
     final here = owing.where((s) => s.status == 'checked_in').length;
     final blocked = (_check?.excess ?? 0) > 0;
     final last = trip.stops.isEmpty ? 'the last terminal' : trip.stopName(trip.stops.last.stopSequence);
-    final (icon, colour, words) = switch (trip) {
-      _ when trip.isCompleted => (Icons.check_circle_outline, AppColors.success, 'Trip completed. Nothing left to do.'),
+    final (icon, tone, words) = switch (trip) {
+      _ when trip.isCompleted => (Icons.check_circle_outline, StatusTone.success, 'Trip completed. Nothing left to do.'),
       _ when trip.isDeparted =>
-        (Icons.flag_outlined, AppColors.primary, 'On the road. Tap Arrived at $last when everyone is off.'),
+        (Icons.flag_outlined, StatusTone.brand, 'On the road. Tap Arrived at $last when everyone is off.'),
       _ when blocked => (
           Icons.sensor_occupied_outlined,
-          AppColors.danger,
-          'The camera counts more aboard than listed. List them as walk-ins, or explain below, before Depart.'
+          StatusTone.danger,
+          'The camera counts more aboard than listed. Add them as walk-ins, or give a reason, before Depart.'
         ),
       _ when owing.isNotEmpty => (
           Icons.payments_outlined,
-          AppColors.warning,
+          StatusTone.warning,
           'Collect ₱${cash.toStringAsFixed(0)} in cash from ${owing.length} '
               '${owing.length == 1 ? 'passenger' : 'passengers'}, then mark each one Paid.'
               '${here == 0 ? '' : ' ${here == owing.length && here == 1 ? 'They are' : '$here ${here == 1 ? 'is' : 'are'}'} here to pay now.'}'
         ),
       _ when trip.isBoarding =>
-        (Icons.directions_bus_outlined, AppColors.primary, 'Everyone has paid. When all are aboard, tap Depart.'),
+        (Icons.directions_bus_outlined, StatusTone.brand, 'Everyone has paid. When all are aboard, tap Depart.'),
       _ => (
           Icons.hourglass_empty,
-          AppColors.info,
+          StatusTone.info,
           'Everyone listed has paid. The office starts the trip; then Depart appears below.'
         ),
     };
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: colour.withValues(alpha: 0.35)),
-      ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, color: colour, size: 22),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('NEXT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1, color: colour)),
-            const SizedBox(height: 2),
-            Text(words, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, height: 1.35)),
-          ]),
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: tone.bg,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: tone.fg.withValues(alpha: 0.3)),
         ),
-      ]),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, color: tone.fg, size: 22),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('NEXT',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1, color: tone.fg)),
+              const SizedBox(height: 2),
+              Text(words,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 15, height: 1.35, color: AppColors.textPrimary)),
+            ]),
+          ),
+        ]),
+      ),
     );
   }
 
-  Widget _moveBanner(NonPassengerMove move) => Container(
-        color: AppColors.infoContainer,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.no_transfer, size: 18, color: AppColors.info),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Not a passenger trip (${_MoveDialog.words[move.reason] ?? move.reason}) since '
-                '${DateFormat('h:mm a').format(move.startedAt)}. Ends by itself back at a terminal.',
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-              ),
-            ),
-            TextButton(
-              onPressed: _acting ? null : () => _do(() => _ops.endMove(move.moveId), 'Not a passenger trip ended.'),
-              child: const Text('End'),
-            ),
-          ],
+  /// A band with a sentence and its one action, for states that are not
+  /// on any tab: offline marks waiting to sync, a non-passenger trip.
+  Widget _band({required StatusTone tone, required IconData icon, required String text, required Widget action}) =>
+      Container(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.xs, AppSpacing.xs, AppSpacing.xs),
+        decoration: BoxDecoration(
+          color: tone.bg,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: tone.fg.withValues(alpha: 0.3)),
+        ),
+        child: Row(children: [
+          Icon(icon, size: 18, color: tone.fg),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          ),
+          action,
+        ]),
+      );
+
+  Widget _moveBanner(NonPassengerMove move) => _band(
+        tone: StatusTone.info,
+        icon: Icons.no_transfer,
+        text: 'Not a passenger trip (${_MoveDialog.words[move.reason] ?? move.reason}) since '
+            '${DateFormat('h:mm a').format(move.startedAt)}. Ends by itself back at a terminal.',
+        action: TextButton(
+          onPressed: _acting ? null : () => _do(() => _ops.endMove(move.moveId), 'Not a passenger trip ended.'),
+          child: const Text('End'),
         ),
       );
 
@@ -783,89 +862,86 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
   /// server doesn't know about yet -- done in a dead zone, waiting on the
   /// queue. Never hidden: a variance the office can't see coming is worse
   /// than one flagged in advance.
-  Widget _pendingSyncBanner(int walkIns, int marks, OfflineSyncService sync) => Container(
-        color: AppColors.warningContainer,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.cloud_off, size: 18, color: AppColors.warning),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '${[
-                  if (walkIns > 0) '$walkIns walk-in${walkIns == 1 ? '' : 's'}',
-                  if (marks > 0) '$marks mark${marks == 1 ? '' : 's'}',
-                ].join(' and ')} made offline, not yet synced.',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ),
-            TextButton(onPressed: sync.flush, child: const Text('Sync now')),
-          ],
-        ),
-      );
-
-  Widget _stat(String label, int value, Color colour) => Expanded(
-        child: Column(
-          children: [
-            Text('$value', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: colour)),
-            Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
-          ],
-        ),
+  Widget _pendingSyncBanner(int walkIns, int marks, OfflineSyncService sync) => _band(
+        tone: StatusTone.warning,
+        icon: Icons.cloud_off,
+        text: '${[
+          if (walkIns > 0) '$walkIns walk-in${walkIns == 1 ? '' : 's'}',
+          if (marks > 0) '$marks mark${marks == 1 ? '' : 's'}',
+        ].join(' and ')} made offline, not yet synced.',
+        action: TextButton(onPressed: sync.flush, child: const Text('Sync now')),
       );
 
   /// The trip's actions, pinned under the thumb: Add walk-in while the
   /// list is open, and the one step that moves the trip on -- Depart once
   /// the office has started it, Arrived once it is on the road -- filled,
-  /// at the right, where the thumb rests. Every button is 56 high and in
-  /// the same place trip after trip.
+  /// at the right, where the thumb rests. Depart is held, with the reason
+  /// said above it, while the camera counts people the list does not
+  /// have: the server refuses it then anyway.
   Widget? _actionBar(CrewTrip trip, bool departed) {
     final rental = trip.rental != null;
     final walkIn = !departed && !rental;
+    final excess = departed ? 0 : (_check?.excess ?? 0);
+    final blocked = trip.isBoarding && excess > 0;
     final Widget? main = trip.isBoarding
         ? FilledButton.icon(
-            onPressed: _acting ? null : () => _depart(trip),
+            onPressed: _acting || blocked ? null : () => _depart(trip),
             icon: const Icon(Icons.logout),
             label: const Text('Depart'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(AppSizing.primaryActionHeight)),
           )
         : departed && !trip.isCompleted
             ? FilledButton.icon(
                 onPressed: _acting ? null : _arrive,
                 icon: const Icon(Icons.flag),
                 label: const Text('Arrived'),
-                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(AppSizing.primaryActionHeight)),
               )
             : null;
     if (!walkIn && main == null) return null;
     return Material(
       color: AppColors.surfaceRaised,
-      elevation: 8,
-      shadowColor: Colors.black26,
       child: SafeArea(
         top: false,
-        child: Padding(
+        child: Container(
+          decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.edge))),
           padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
-          child: Row(children: [
-            if (walkIn)
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _acting ? null : () => _push(WalkInScreen(trip: trip)),
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text('Add walk-in'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(56),
-                    side: const BorderSide(color: AppColors.border),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (blocked)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: Text(
+                    'Depart waits: $excess more aboard than listed. Add them, or give a reason, on Boarding.',
+                    style: const TextStyle(color: AppColors.danger, fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
-              ),
-            if (walkIn && main != null) const SizedBox(width: AppSpacing.sm),
-            if (main != null) Expanded(child: main),
-          ]),
+              Row(children: [
+                if (walkIn)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _acting ? null : () => _push(WalkInScreen(trip: trip)),
+                      icon: const Icon(Icons.person_add_alt_1),
+                      label: const Text('Add walk-in'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(AppSizing.primaryActionHeight),
+                      ),
+                    ),
+                  ),
+                if (walkIn && main != null) const SizedBox(width: AppSpacing.sm),
+                if (main != null) Expanded(child: main),
+              ]),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  /// After departure the list is locked: who is on it, how they got on it
+  /// and what they paid.
   Widget _passengerList(CrewTrip trip, Manifest m, List<PendingWalkIn> pending) {
     final visible = <ManifestPassenger>[
       ...m.passengers.where((p) => !p.isCancelled),
@@ -877,111 +953,99 @@ class _TripManifestScreenState extends State<TripManifestScreen> {
         ),
     ]..sort((a, b) => a.boardingStop.compareTo(b.boardingStop));
 
-    return Container(
-      color: AppColors.surfaceRaised,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('PASSENGER MANIFEST',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted, letterSpacing: 1.2)),
-                Text('${m.totalBookings} booked · ${m.seatCapacity} seats',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              ],
-            ),
+    return DashCard(
+      title: 'Passenger list',
+      trailing: const StatusChip('LOCKED', tone: StatusTone.muted, icon: Icons.lock_outline),
+      // No "7 booked · 14 seats" line here (20 Nov): the four counts at the
+      // top already say how many are booked and how many seats are left.
+      children: [
+        if (visible.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: Text('Nobody booked.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted)),
           ),
-          if (visible.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Text('Nobody booked yet.', style: TextStyle(color: AppColors.textMuted)),
-            ),
-          for (var i = 0; i < visible.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
-            _passengerTile(trip, visible[i]),
-          ],
+        for (var i = 0; i < visible.length; i++) ...[
+          if (i > 0) const Divider(height: 1),
+          _passengerTile(trip, visible[i]),
         ],
-      ),
+      ],
     );
   }
 
   Widget _passengerTile(CrewTrip trip, ManifestPassenger p) {
-    // After departure the server closes every seat still on the trip; a
-    // paid one is not called a no-show, because nobody can tell from here
-    // whether that passenger rode.
+    // After departure the server closes every seat still on the trip: a
+    // paid one boarded, an unpaid one a no-show.
     final (label, tone) = switch (p.status) {
       'boarded' => ('BOARDED', StatusTone.success),
-      'pending_sync' => ('PENDING SYNC', StatusTone.info),
+      'pending_sync' => ('NOT SYNCED', StatusTone.info),
       _ when p.isUnpaid => (p.isNoShow ? 'NO-SHOW' : 'UNPAID', StatusTone.danger),
       'checked_in' => ('AT TERMINAL', StatusTone.info),
       _ => ('PAID', StatusTone.success),
     };
     final struck = p.isNoShow && p.isUnpaid;
 
-    // How the passenger got on the manifest — booked ahead through the
-    // app or paid cash at a terminal. A Dispatcher looks over a queue of
-    // strangers; this has to be legible at a glance, not a suffix at the
-    // end of a grey line.
-    final (methodLabel, methodColour, methodIcon) = switch (p) {
-      _ when p.isWalkIn => ('WALK-IN', AppColors.success, Icons.storefront),
-      _ => ('APP BOOKING', AppColors.primary, Icons.smartphone),
-    };
+    // How the passenger got on the list -- booked ahead through the app or
+    // paid cash at the door. A Dispatcher looks over a queue of strangers;
+    // this has to be legible at a glance.
+    final (methodLabel, methodIcon) = p.isWalkIn ? ('WALK-IN', Icons.storefront) : ('APP BOOKING', Icons.smartphone);
 
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: methodColour.withValues(alpha: 0.12),
-        child: Icon(methodIcon, color: methodColour, size: 20),
-      ),
-      title: Text(
-        p.name ?? (p.isWalkIn ? 'Walk-in passenger' : 'App passenger'),
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          color: struck ? AppColors.textMuted : AppColors.textPrimary,
-          decoration: struck ? TextDecoration.lineThrough : null,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: AppColors.primaryContainer,
+          child: Icon(methodIcon, color: AppColors.primary, size: 18),
         ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: methodColour.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              p.name ?? (p.isWalkIn ? 'Walk-in passenger' : 'App passenger'),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: struck ? AppColors.textMuted : AppColors.textPrimary,
+                decoration: struck ? TextDecoration.lineThrough : null,
+              ),
             ),
-            child: Text(
-              methodLabel,
-              style: TextStyle(color: methodColour, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.4),
+            Text(methodLabel,
+                style: const TextStyle(
+                    color: AppColors.primary, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+            Text(
+              '${p.bookingCode} · ${trip.stopName(p.boardingStop)} → ${trip.stopName(p.alightingStop)}',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
             ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            '${p.bookingCode} · ${trip.stopName(p.boardingStop)} → ${trip.stopName(p.alightingStop)}',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-          ),
-        ],
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          StatusChip(label, tone: tone),
-          const SizedBox(height: 4),
-          Text(
-            p.isPendingSync
-                ? '—'
-                : '₱${p.fare.toStringAsFixed(0)}',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
+          ]),
+        ),
+        const SizedBox(width: AppSpacing.lg),
+        // The state and the fare at the card's right edge, under the
+        // LOCKED chip, a clear gap from the name and the route, which take
+        // the rest of the row. As a Flexible beside the Expanded it took
+        // half the free width: the route wrapped to four lines and the chip
+        // sat against it (20 Nov). Capped, so a long state at large text
+        // ellipsises before it squeezes the name.
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.4),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            StatusChip(label, tone: tone),
+            const SizedBox(height: 4),
+            Text(p.isPendingSync ? '—' : '₱${p.fare.toStringAsFixed(0)}',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      ]),
     );
   }
 }
 
+/// One tab of the trip screen: an id that keys the tab set, the label,
+/// and what it shows.
+class _TabSpec {
+  const _TabSpec(this.id, this.tab, this.children);
+  final String id;
+  final Widget tab;
+  final List<Widget> children;
+}
 
 /// A sentence: a reason, the operator's words. Null when cancelled.
 class _TextDialog extends StatefulWidget {
@@ -1020,12 +1084,11 @@ class _TextDialogState extends State<_TextDialog> {
           ),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: !widget.required || _text.text.trim().length >= 3
+          DialogButtons(
+            action: 'Save',
+            onAction: !widget.required || _text.text.trim().length >= 3
                 ? () => Navigator.pop(context, _text.text.trim())
                 : null,
-            child: const Text('Save'),
           ),
         ],
       );
@@ -1073,12 +1136,11 @@ class _MoveDialogState extends State<_MoveDialog> {
           ),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: _reason != 'other' || _note.text.trim().isNotEmpty
+          DialogButtons(
+            action: 'Leave',
+            onAction: _reason != 'other' || _note.text.trim().isNotEmpty
                 ? () => Navigator.pop(context, (_reason, _note.text.trim()))
                 : null,
-            child: const Text('Leave'),
           ),
         ],
       );
