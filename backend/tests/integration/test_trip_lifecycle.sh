@@ -372,6 +372,12 @@ is "$(stmt NBC-7788 held_share $LIVE_DAY)/$(stmt NBC-7788 remittance_owed $LIVE_
 is "$(code PUT /trips/$TAG6/assignment '{"van_id":"VAN-0004"}' "$OT")" 409 "the held share still refuses the van's next assignment"
 is "$(code POST /trips/$LIVE/start-review "" "$OT")" 200 "T16 the manager reviews it"
 is "$(stmt NBC-7788 held_share $LIVE_DAY)/$(stmt NBC-7788 remittance_owed $LIVE_DAY)" 0.00/33.00 "its lines join the statement: held moves into owed"
+# 20 Nov: a top-up recorded after Depart settled the statement, and the
+# trip sheet went on saying Left unpaid over a balance of P0.
+SID=$(stmt NBC-7788 remittance_id $LIVE_DAY); DUE=$(stmt NBC-7788 amount_due $LIVE_DAY)
+is "$(code POST /statements/$SID/payments "{\"amount\":\"$DUE\",\"reference\":\"OR-$RANDOM\"}" "$CT")/$(stmt NBC-7788 amount_due $LIVE_DAY)" \
+   200/0.00 "the Cashier records the van's balance (P$DUE) after it left"
+is "$(board $LIVE payment_status $LIVE_DAY)" paid "settled after it left: Paid, no longer Left_Unpaid"
 
 BOARD=TRIP-A2Z-LIVE-BOARD  # started and paid in the seed, VAN-0003
 code GET /trips/$BOARD/stops "" "$OT" >/dev/null

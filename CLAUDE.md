@@ -151,6 +151,7 @@ four hand-maintained copies of an IP address is what broke the last demo.
 ```fish
 ./run.sh                      # db + backend + console
 ./run.sh --mobile             # also the passenger/Dispatcher app, on an attached device
+./run.sh --mobile --edge      # and the camera phone: edge app over USB, then it reports over Wi-Fi
 ./run.sh --host 10.0.52.117   # force the address, when detection picks the wrong NIC
 ./run.sh --soon               # rebuild demo data, trip departs in 20 min
 ./run.sh --reset-db           # rebuild demo data; live trips dated from now
