@@ -69,6 +69,10 @@ class TerminalPickerField extends StatelessWidget {
       value: value?.name,
       placeholder: 'Choose a terminal',
       semanticHint: 'Opens the terminal list',
+      // Long names wrap rather than end in "…" (20 Nov redesign); the
+      // swap button sits where the chevron was.
+      maxLines: 2,
+      showChevron: false,
       onTap: () => _open(context),
     );
   }

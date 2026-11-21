@@ -33,17 +33,15 @@ class WelcomeScreen extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceRaised,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xxl,
-              vertical: AppSpacing.xxxl,
+              horizontal: AppSpacing.xl,
+              vertical: AppSpacing.xxl,
             ),
             child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight -
-                  AppSpacing.xxxl * 2),
+              constraints: BoxConstraints(minHeight: constraints.maxHeight - AppSpacing.xxl * 2),
               // IntrinsicHeight, or the Spacers below have nothing to
               // divide: minHeight sets a floor but a scroll view's maximum
               // height is still infinite, and a flex child cannot expand to
@@ -51,56 +49,147 @@ class WelcomeScreen extends StatelessWidget {
               // cramped, spreads when roomy" legal in one layout.
               child: IntrinsicHeight(
                 child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Spacer(flex: 2),
-
-                  // The mark is the title, so it is centred on its own and
-                  // announced as "SabayGo" (see BrandLogo).
-                  const Center(child: BrandLogo()),
-                  const SizedBox(height: AppSpacing.xxl),
-
-                  // One sentence of value, centred under the mark. Muted
-                  // rather than ink so it reads as a caption to the logo,
-                  // not a second headline competing with it.
-                  Text(
-                    'Book a seat on your UV Express\nbefore you get to the terminal.',
-                    textAlign: TextAlign.center,
-                    style: text.bodyLarge!.copyWith(
-                      color: AppColors.textMuted,
-                      height: 1.55,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Spacer(),
+                    // The mark is the title, so it is centred on its own
+                    // card and announced as "SabayGo" (see BrandLogo).
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(AppSpacing.lg),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceRaised,
+                          borderRadius: BorderRadius.circular(AppRadius.xl),
+                          border: Border.all(color: AppColors.edge),
+                        ),
+                        child: const BrandLogo(),
+                      ),
                     ),
-                  ),
-
-                  const Spacer(flex: 3),
-
-                  // Theme defaults on purpose: emerald fill for the one primary
-                  // action, outline for the alternative. A new passenger
-                  // has exactly one obvious next step (Hick's law).
-                  FilledButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const SignupScreen()),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'A2Z Transport Cooperative · Davao City',
+                      textAlign: TextAlign.center,
+                      style: text.labelLarge!.copyWith(color: AppColors.primary, fontWeight: FontWeight.w700),
                     ),
-                    child: const Text('Create an account'),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  OutlinedButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const LoginScreen()),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'Book a seat on your UV Express before you get to the terminal.',
+                      textAlign: TextAlign.center,
+                      style: text.titleLarge!.copyWith(height: 1.35),
                     ),
-                    child: const Text('Sign in'),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
+                    const SizedBox(height: AppSpacing.xl),
+                    // How it works, once, before anyone signs up: the cash
+                    // rule is the one thing a new passenger does not expect
+                    // (20 Nov redesign, after Gemini's study).
+                    const _HowItWorks(),
+                    const Spacer(),
+                    const SizedBox(height: AppSpacing.xl),
+                    // Theme defaults on purpose: the filled button for the
+                    // one primary action, outline for the alternative. A new
+                    // passenger has exactly one obvious next step (Hick).
+                    FilledButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SignupScreen()),
+                      ),
+                      child: const Text('Create an account'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    OutlinedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      ),
+                      child: const Text('Sign in'),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Reserve, pay in cash, board: three steps side by side, or one under
+/// another when the text is large or the phone narrow. Decided from the
+/// text scale, not a LayoutBuilder, because the screen measures its column
+/// with IntrinsicHeight, which a LayoutBuilder cannot answer.
+class _HowItWorks extends StatelessWidget {
+  const _HowItWorks();
+
+  static const _steps = [
+    ('Reserve a seat', 'Get a booking code'),
+    ('Pay in cash', 'To the Dispatcher at the terminal'),
+    ('Board the van', 'At the starting terminal'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final roomy = MediaQuery.textScalerOf(context).scale(1) <= 1.3 && MediaQuery.sizeOf(context).width >= 340;
+
+    Widget number(int n) => Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(color: AppColors.primaryContainer, shape: BoxShape.circle),
+          child: Text('$n', style: text.labelLarge!.copyWith(color: AppColors.primary, fontWeight: FontWeight.w800)),
+        );
+    Widget words(String title, String note, {required bool centred}) => Column(
+          crossAxisAlignment: centred ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                textAlign: centred ? TextAlign.center : TextAlign.start,
+                style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w700)),
+            Text(note, textAlign: centred ? TextAlign.center : TextAlign.start, style: text.bodySmall),
+          ],
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.edge),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            header: true,
+            child: Text('HOW IT WORKS · CASH ONLY',
+                style: text.labelSmall!.copyWith(color: AppColors.primary, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (roomy)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final (i, (title, note)) in _steps.indexed) ...[
+                  if (i > 0) const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(children: [
+                      number(i + 1),
+                      const SizedBox(height: AppSpacing.sm),
+                      words(title, note, centred: true),
+                    ]),
+                  ),
+                ],
+              ],
+            )
+          else
+            for (final (i, (title, note)) in _steps.indexed) ...[
+              if (i > 0) const SizedBox(height: AppSpacing.md),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                number(i + 1),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(child: words(title, note, centred: false)),
+              ]),
+            ],
+        ],
       ),
     );
   }

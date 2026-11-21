@@ -24,6 +24,7 @@ Prerequisites:
 from __future__ import annotations
 
 import argparse
+import os
 import asyncio
 import pathlib
 import statistics
@@ -42,7 +43,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from app.core.db import SessionFactory  # noqa: E402
 
-API = "http://127.0.0.1:8000/api/v1"
+# The scratch runner points this at a scratch backend, as the other
+# journey scripts are (20 Nov); the live API is only the default.
+API = os.environ.get("SABAYGO_API", "http://127.0.0.1:8000/api/v1")
 TRIP_ID = "TRIP-DEMO-00000001"
 EMAIL = "passenger@sabaygo.dev"
 PASSWORD = "sabaygo123"

@@ -27,6 +27,7 @@ class StatusBand extends StatelessWidget {
     required this.title,
     required this.body,
     this.liveRegion = false,
+    this.trailing,
     super.key,
   });
 
@@ -35,6 +36,10 @@ class StatusBand extends StatelessWidget {
   final String title;
   final String body;
   final bool liveRegion;
+
+  /// A short pill beside the title, such as the pay-by time ("By 10:00
+  /// AM"). It repeats something the body says, so it is not read aloud.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -65,9 +70,20 @@ class StatusBand extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: text.titleMedium!.copyWith(color: tone.fg),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: text.titleMedium!.copyWith(color: tone.fg),
+                        ),
+                      ),
+                      if (trailing != null) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        Flexible(child: trailing!),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(

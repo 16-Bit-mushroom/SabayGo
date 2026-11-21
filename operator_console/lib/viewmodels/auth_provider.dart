@@ -110,12 +110,6 @@ class AuthProvider extends ChangeNotifier {
     _set(AuthStatus.signedOut);
   }
 
-  void clearError() {
-    if (_error == null) return;
-    _error = null;
-    notifyListeners();
-  }
-
   void _begin() {
     _busy = true;
     _error = null;

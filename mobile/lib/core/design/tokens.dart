@@ -178,14 +178,3 @@ class AppSizing {
   /// relying on colour alone.
   static const double focusOutline = 2;
 }
-
-/// Short, and consistent. A field app should feel immediate; long
-/// transitions read as lag when someone is holding up a queue.
-///
-/// Callers that animate must still honour `MediaQuery.disableAnimations`
-/// for users who ask the platform to reduce motion.
-class AppDuration {
-  static const Duration instant = Duration(milliseconds: 100);
-  static const Duration quick = Duration(milliseconds: 180);
-  static const Duration normal = Duration(milliseconds: 240);
-}

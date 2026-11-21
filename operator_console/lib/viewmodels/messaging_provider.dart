@@ -31,7 +31,6 @@ class MessagingProvider extends ChangeNotifier {
   bool _sending = false;
 
   List<ConsoleConversation> get conversations => _conversations;
-  int get totalUnread => _conversations.fold(0, (sum, c) => sum + c.unreadCount);
   bool get isLoadingList => _loadingList;
   String? get listError => _listError;
 

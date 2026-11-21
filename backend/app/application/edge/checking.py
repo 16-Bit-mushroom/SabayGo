@@ -71,6 +71,9 @@ class Check:
     explained: int
     crew_aboard: bool
     unlisted: list[PassengerEvent] = field(default_factory=list)
+    # The phone reported at least one door event before departure, so
+    # `aboard` is a count it made, not the absence of one.
+    seen: bool = False
 
     @property
     def excess(self) -> int:
@@ -130,6 +133,7 @@ class ListCheck:
             explained=sum(1 for e in boards if e.resolution_status == "explained"),
             crew_aboard=crew,
             unlisted=[e for e in boards if e.match_status == "unlisted"],
+            seen=any(e.pre_departure for e in events),
         )
 
     @staticmethod

@@ -134,44 +134,38 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         const SizedBox(height: AppSpacing.lg),
                       ],
 
-                      const AppSectionHeader('Personal details'),
-                      const SizedBox(height: AppSpacing.md),
-                      _buildTextField('First name', _firstNameCtrl, Icons.person_outline),
+                      // Each section on its own card (20 Nov redesign), so the
+                      // three things this screen changes read as three.
+                      _section('Personal details', [
+                        _buildTextField('First name', _firstNameCtrl, Icons.person_outline),
+                        _buildTextField('Last name', _lastNameCtrl, Icons.person_outline),
+                        _buildTextField('Phone number', _phoneCtrl, Icons.phone_outlined, keyboard: TextInputType.phone),
+                        _buildTextField('Email', _emailCtrl, Icons.email_outlined,
+                            enabled: false, required: false, helper: 'Your sign-in email cannot be changed here.'),
+                        _buildTextField('Home address', _addressCtrl, Icons.home_work_outlined, required: false),
+                      ]),
                       const SizedBox(height: AppSpacing.lg),
-                      _buildTextField('Last name', _lastNameCtrl, Icons.person_outline),
+                      _section('Emergency contact', [
+                        _buildTextField('Contact name', _emerNameCtrl, Icons.health_and_safety_outlined, required: false),
+                        _buildTextField('Relation', _emerRelationCtrl, Icons.people_outline, required: false),
+                        _buildTextField('Contact phone', _emerPhoneCtrl, Icons.phone_outlined,
+                            required: false, keyboard: TextInputType.phone),
+                      ]),
                       const SizedBox(height: AppSpacing.lg),
-                      _buildTextField('Phone number', _phoneCtrl, Icons.phone_outlined, keyboard: TextInputType.phone),
-                      const SizedBox(height: AppSpacing.lg),
-                      _buildTextField('Email', _emailCtrl, Icons.email_outlined,
-                          enabled: false, required: false, helper: 'Your sign-in email cannot be changed here.'),
-                      const SizedBox(height: AppSpacing.lg),
-                      _buildTextField('Home address', _addressCtrl, Icons.home_work_outlined, required: false),
-
-                      const SizedBox(height: AppSpacing.xxxl),
-                      const AppSectionHeader('Emergency contact'),
-                      const SizedBox(height: AppSpacing.md),
-                      _buildTextField('Contact name', _emerNameCtrl, Icons.health_and_safety_outlined, required: false),
-                      const SizedBox(height: AppSpacing.lg),
-                      _buildTextField('Relation', _emerRelationCtrl, Icons.people_outline, required: false),
-                      const SizedBox(height: AppSpacing.lg),
-                      _buildTextField('Contact phone', _emerPhoneCtrl, Icons.phone_outlined,
-                          required: false, keyboard: TextInputType.phone),
-
-                      const SizedBox(height: AppSpacing.xxl),
-                      // One control: the label is the switch's name for a screen reader.
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('Change password', style: text.titleMedium),
-                        value: _changingPassword,
-                        onChanged: (val) => setState(() => _changingPassword = val),
-                      ),
-                      if (_changingPassword) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        _buildTextField('Current password', _currentPasswordCtrl, Icons.lock_outline, obscure: true),
-                        const SizedBox(height: AppSpacing.lg),
-                        _buildTextField('New password', _newPasswordCtrl, Icons.lock_reset,
-                            obscure: true, helper: 'At least 8 characters.'),
-                      ],
+                      _section(null, [
+                        // One control: the label is the switch's name for a screen reader.
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('Change password', style: text.titleMedium),
+                          value: _changingPassword,
+                          onChanged: (val) => setState(() => _changingPassword = val),
+                        ),
+                        if (_changingPassword) ...[
+                          _buildTextField('Current password', _currentPasswordCtrl, Icons.lock_outline, obscure: true),
+                          _buildTextField('New password', _newPasswordCtrl, Icons.lock_reset,
+                              obscure: true, helper: 'At least 8 characters.'),
+                        ],
+                      ]),
                     ],
                   ),
                 ),
@@ -205,7 +199,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.surfaceRaised),
+                                // Primary, not white: a busy button is disabled, so the
+                                // spinner sits on the pale disabled fill.
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                               )
                             : const Text('Save changes'),
                       ),
@@ -219,6 +215,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
     );
   }
+
+  /// A white card with a green edge, a heading, and its fields spaced
+  /// evenly. A Material, so the password switch draws its ink.
+  Widget _section(String? title, List<Widget> fields) => Material(
+        color: AppColors.surfaceRaised,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: const BorderSide(color: AppColors.edge),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (title != null) ...[
+                AppSectionHeader(title),
+                const SizedBox(height: AppSpacing.md),
+              ],
+              for (final (i, f) in fields.indexed) ...[
+                if (i > 0) const SizedBox(height: AppSpacing.lg),
+                f,
+              ],
+            ],
+          ),
+        ),
+      );
 
   Widget _buildTextField(
     String label,

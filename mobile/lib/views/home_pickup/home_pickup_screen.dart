@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/design/components/money.dart';
+import '../../core/design/components/app_card.dart';
+import '../../core/design/components/status_band.dart';
+import '../../core/design/components/status_chip.dart';
+import '../passenger_main_screen.dart';
 import '../../core/design/tokens.dart';
 import '../../core/location/current_position.dart';
 import '../../core/network/api_client.dart';
@@ -120,7 +125,18 @@ class _HomePickupScreenState extends State<HomePickupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Book for someone else')),
+      appBar: AppBar(
+        title: const Text('Book for someone else'),
+        actions: [
+          // Where the relative is in the two steps (20 Nov redesign).
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.gutter),
+            child: Center(
+              child: StatusChip(_booked == null ? 'STEP 1 OF 2' : 'STEP 2 OF 2', tone: StatusTone.brand),
+            ),
+          ),
+        ],
+      ),
       body: _booked == null ? _details() : _payment(_booked!),
     );
   }
@@ -134,96 +150,135 @@ class _HomePickupScreenState extends State<HomePickupScreen> {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.gutter),
         children: [
-          Text('For a passenger who cannot come to the terminal because of age or disability. You take '
-              'a seat too: you board at ${t.origin.name} and ride along, and the van stops for them on '
-              'the way. You pay both seats in cash to the Dispatcher at the terminal.', style: text.bodyMedium),
-          const SizedBox(height: AppSpacing.lg),
-          TextFormField(
-            controller: _name,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Passenger\'s name'),
-            validator: (v) => (v ?? '').trim().length < 2 ? 'Enter their name.' : null,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextFormField(
-            controller: _contact,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Their contact number'),
-            validator: (v) => (v ?? '').trim().length < 7 ? 'Enter a number the Dispatcher can call.' : null,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Row(children: [
-            Expanded(child: Text('Where they will wait', style: text.titleSmall)),
-            TextButton.icon(onPressed: _myLocation, icon: const Icon(Icons.my_location, size: 18), label: const Text('Here')),
-          ]),
-          Text('Tap the map. It must be near the van\'s route to ${t.destination.name}.', style: text.bodySmall),
-          const SizedBox(height: AppSpacing.sm),
-          SizedBox(
-            height: 280,
-            child: ClipRRect(
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.primaryContainer,
               borderRadius: BorderRadius.circular(AppRadius.md),
-              child: start == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : FlutterMap(
-                      mapController: _map,
-                      options: MapOptions(
-                        initialCenter: start,
-                        initialZoom: 12,
-                        onTap: (_, point) => setState(() => _pin = point),
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'ph.edu.umindanao.sabaygo',
-                        ),
-                        PolylineLayer(polylines: [
-                          Polyline(
-                            points: [for (final s in _stops) LatLng(s.latitude, s.longitude)],
-                            strokeWidth: 4,
-                            color: AppColors.primary,
+              border: Border.all(color: AppColors.edge),
+            ),
+            child: Text(
+              'For a passenger who cannot come to the terminal because of age or disability. You take '
+              'a seat too: you board at ${t.origin.name} and ride along, and the van stops for them on '
+              'the way. You pay both seats in cash to the Dispatcher at the terminal.',
+              style: text.bodyMedium,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          AppCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              TextFormField(
+                controller: _name,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Passenger\'s name'),
+                validator: (v) => (v ?? '').trim().length < 2 ? 'Enter their name.' : null,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextFormField(
+                controller: _contact,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Their contact number'),
+                validator: (v) => (v ?? '').trim().length < 7 ? 'Enter a number the Dispatcher can call.' : null,
+              ),
+            ]),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          AppCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(child: Text('Where they will wait', style: text.titleSmall)),
+                // Their own spot in one tap, for a relative who does not use
+                // maps much.
+                OutlinedButton.icon(
+                  onPressed: _myLocation,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, AppSizing.minTouchTarget),
+                    shape: const StadiumBorder(),
+                  ),
+                  icon: const Icon(Icons.my_location, size: 18),
+                  label: const Text('Here'),
+                ),
+              ]),
+              const SizedBox(height: AppSpacing.xs),
+              Text('Tap the map near the green line: the van\'s route to ${t.destination.name}.', style: text.bodySmall),
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                height: 280,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: start == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : FlutterMap(
+                          mapController: _map,
+                          options: MapOptions(
+                            initialCenter: start,
+                            initialZoom: 12,
+                            onTap: (_, point) => setState(() => _pin = point),
                           ),
-                        ]),
-                        MarkerLayer(markers: [
-                          for (final s in _stops)
-                            Marker(
-                              point: LatLng(s.latitude, s.longitude),
-                              width: 14,
-                              height: 14,
-                              child: const DecoratedBox(
-                                decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                          children: [
+                            TileLayer(
+                              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'ph.edu.umindanao.sabaygo',
+                            ),
+                            PolylineLayer(polylines: [
+                              Polyline(
+                                points: [for (final s in _stops) LatLng(s.latitude, s.longitude)],
+                                strokeWidth: 5,
+                                color: AppColors.primary,
                               ),
+                            ]),
+                            MarkerLayer(markers: [
+                              for (final s in _stops)
+                                Marker(
+                                  point: LatLng(s.latitude, s.longitude),
+                                  width: 14,
+                                  height: 14,
+                                  child: const DecoratedBox(
+                                    decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                                  ),
+                                ),
+                              if (_pin != null)
+                                Marker(
+                                  point: _pin!,
+                                  width: 40,
+                                  height: 40,
+                                  alignment: Alignment.topCenter,
+                                  // The passenger's own place: pin red, the
+                                  // route marker colour, not the SOS red.
+                                  child: const Icon(Icons.location_pin, size: 40, color: AppColors.brand),
+                                ),
+                            ]),
+                            const RichAttributionWidget(
+                              attributions: [TextSourceAttribution('OpenStreetMap contributors')],
                             ),
-                          if (_pin != null)
-                            Marker(
-                              point: _pin!,
-                              width: 40,
-                              height: 40,
-                              alignment: Alignment.topCenter,
-                              child: const Icon(Icons.location_pin, size: 40, color: AppColors.danger),
-                            ),
-                        ]),
-                        const RichAttributionWidget(
-                          attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+                          ],
                         ),
-                      ],
-                    ),
-            ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextFormField(
+                controller: _note,
+                maxLength: 255,
+                decoration: const InputDecoration(
+                  labelText: 'Note for the Dispatcher (optional)',
+                  hintText: 'Green gate beside the sari-sari store',
+                ),
+              ),
+            ]),
           ),
-          const SizedBox(height: AppSpacing.md),
-          TextFormField(
-            controller: _note,
-            maxLength: 255,
-            decoration: const InputDecoration(
-              labelText: 'Note for the Dispatcher (optional)',
-              hintText: 'Green gate beside the sari-sari store',
-            ),
+          const SizedBox(height: AppSpacing.lg),
+          AppCard(
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('2 seats: ${t.origin.name} → ${t.destination.name}', style: text.titleSmall),
+                  Text('Both paid in cash at the terminal', style: text.bodySmall),
+                ]),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Money(t.approximateFare * 2, style: text.titleLarge!.copyWith(fontWeight: FontWeight.w800)),
+            ]),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text('2 seats: ${t.origin.name} → ${t.destination.name}', style: text.titleSmall),
-          Row(children: [
-            const Expanded(child: Text('Total for both')),
-            Money(t.approximateFare * 2, style: text.titleLarge!.copyWith(color: AppColors.primary)),
-          ]),
           const SizedBox(height: AppSpacing.lg),
           FilledButton(
             onPressed: _busy ? null : _book,
@@ -236,38 +291,77 @@ class _HomePickupScreenState extends State<HomePickupScreen> {
 
   Widget _payment(HomePickupBooking b) {
     final text = Theme.of(context).textTheme;
+    final name = _name.text.trim();
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.gutter),
       children: [
-        Text('Both seats are reserved.', style: text.titleMedium),
-        const SizedBox(height: AppSpacing.sm),
-        Text('Come to ${widget.trip.origin.name} before the van leaves and pay both fares in cash to the '
-            'Dispatcher. Give them these codes or your name. Once they mark the seats Paid, the van stops '
-            'for ${_name.text.trim()} at the pin. Unpaid seats are released shortly before departure.',
-            style: text.bodyMedium),
+        StatusBand(
+          tone: StatusTone.success,
+          icon: Icons.check_circle_outline,
+          title: 'Both seats are reserved',
+          body: 'Come to ${widget.trip.origin.name} before the van leaves and pay both fares in cash to the '
+              'Dispatcher. Give them these codes or your name. Once they mark the seats Paid, the van stops '
+              'for $name at the pin. Unpaid seats are released shortly before departure.',
+          liveRegion: true,
+        ),
         const SizedBox(height: AppSpacing.lg),
-        for (final (label, seat) in [('Your seat', b.relative), ('${_name.text.trim()}\'s seat', b.passenger)])
-          Card(
-            child: ListTile(
-              title: Text(label),
-              subtitle: Text('Code ${seat.bookingCode}'),
-              trailing: Money(seat.fare, style: text.titleMedium),
-            ),
+        for (final (label, seat) in [('Your seat (you board at ${widget.trip.origin.name})', b.relative),
+          ('$name\'s seat (picked up at the pin)', b.passenger)]) ...[
+          AppCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(child: Text(label, style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w600))),
+                const SizedBox(width: AppSpacing.sm),
+                const StatusChip('UNPAID', tone: StatusTone.warning),
+              ]),
+              const SizedBox(height: AppSpacing.sm),
+              Row(children: [
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(seat.bookingCode,
+                        semanticsLabel: 'Booking code ${seat.bookingCode.split('').join(' ')}',
+                        style: text.headlineSmall!.copyWith(fontWeight: FontWeight.w800, letterSpacing: 2)),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: seat.bookingCode));
+                    _snack('Booking code copied.');
+                  },
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, AppSizing.minTouchTarget),
+                    backgroundColor: AppColors.primaryContainer,
+                    foregroundColor: AppColors.primary,
+                  ),
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Copy'),
+                ),
+              ]),
+              Money(seat.fare, style: text.bodyMedium!.copyWith(color: AppColors.textMuted)),
+            ]),
           ),
-        const SizedBox(height: AppSpacing.xl),
+          const SizedBox(height: AppSpacing.md),
+        ],
+        const SizedBox(height: AppSpacing.md),
         Text('Help the Dispatcher find the place', style: text.titleSmall),
         const SizedBox(height: AppSpacing.xs),
         Text('Send a photo of a landmark near the pin, such as a gate or a store. It goes to the trip\'s '
             'Dispatcher in your chat with them. A photo can show personal details: it is kept only for a '
             'limited number of days.', style: text.bodySmall),
-        const SizedBox(height: AppSpacing.sm),
-        OutlinedButton.icon(
+        const SizedBox(height: AppSpacing.md),
+        FilledButton.icon(
           onPressed: _busy ? null : _landmarkPhoto,
           icon: Icon(_photoSent ? Icons.check_circle_outline : Icons.image_outlined),
           label: Text(_photoSent ? 'Photo sent. Send another' : 'Send a landmark photo'),
         ),
-        const SizedBox(height: AppSpacing.xl),
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done')),
+        const SizedBox(height: AppSpacing.md),
+        OutlinedButton(
+          onPressed: () => PassengerMainScreen.goTo(context, PassengerMainScreen.trips),
+          child: const Text('Go to My trips'),
+        ),
       ],
     );
   }

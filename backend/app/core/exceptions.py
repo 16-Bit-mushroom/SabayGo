@@ -72,10 +72,3 @@ class AuthenticationError(DomainError):
 class PermissionDeniedError(DomainError):
     status_code = 403
     code = "permission_denied"
-
-
-class UpstreamServiceError(DomainError):
-    """AI node or payment provider unreachable. Never fabricate a result."""
-
-    status_code = 502
-    code = "upstream_unavailable"

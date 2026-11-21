@@ -71,10 +71,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       body: SafeArea(
         child: RefreshIndicator(onRefresh: _viewModel.load, child: _body()),
       ),
-      floatingActionButton: FloatingActionButton(
+      // Labelled, not a bare pencil (20 Nov redesign).
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _startNew,
-        tooltip: 'New message',
-        child: const Icon(Icons.edit_outlined),
+        icon: const Icon(Icons.edit_outlined),
+        label: const Text('New message'),
       ),
     );
   }
@@ -95,50 +96,93 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       return const AppEmptyState(
         icon: Icons.chat_bubble_outline,
         title: 'No messages yet',
-        body: 'Tap the pencil to start a conversation.',
+        body: 'Tap New message to write to your trip\'s Dispatcher or the A2Z office.',
       );
     }
+    // Cards with a gap (20 Nov redesign), and room at the foot for the
+    // floating button.
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, 96),
       itemCount: conversations.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (context, i) => _tile(conversations[i]),
     );
   }
 
   Widget _tile(Conversation c) {
     final unread = c.unreadCount > 0;
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: AppColors.primaryContainer,
-        child: Icon(_iconFor(c.peerRole), color: AppColors.primary),
+    final text = Theme.of(context).textTheme;
+    return Material(
+      color: AppColors.surfaceRaised,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: BorderSide(color: unread ? AppColors.primaryLight : AppColors.edge, width: unread ? 1.5 : 1),
       ),
-      title: Text(c.peerName, style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500)),
-      subtitle: Text(
-        c.lastMessage ?? 'No messages yet',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: unread ? AppColors.textPrimary : AppColors.textMuted),
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (c.lastMessageAt != null)
-            Text(_formatTimestamp(c.lastMessageAt!), style: Theme.of(context).textTheme.bodySmall),
-          if (unread)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppRadius.full)),
-              child: Text('${c.unreadCount}',
-                  semanticsLabel: '${c.unreadCount} unread',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.surfaceRaised)),
+      child: InkWell(
+        onTap: () => _openThread(c),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md + 2),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.primaryContainer,
+              child: Icon(_iconFor(c.peerRole), color: AppColors.primary),
             ),
-        ],
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(
+                    child: Text(c.peerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.bodyLarge!.copyWith(fontWeight: unread ? FontWeight.w800 : FontWeight.w600)),
+                  ),
+                  if (c.lastMessageAt != null) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(_formatTimestamp(c.lastMessageAt!), style: text.bodySmall),
+                  ],
+                ]),
+                Text(_roleLabel(c.peerRole),
+                    style: text.labelMedium!.copyWith(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Row(children: [
+                  Expanded(
+                    child: Text(
+                      c.lastMessage ?? 'No messages yet',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodyMedium!.copyWith(color: unread ? AppColors.textPrimary : AppColors.textMuted),
+                    ),
+                  ),
+                  if (unread) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppRadius.full)),
+                      child: Text('${c.unreadCount}',
+                          semanticsLabel: '${c.unreadCount} unread',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.onFill)),
+                    ),
+                  ],
+                ]),
+              ]),
+            ),
+          ]),
+        ),
       ),
-      onTap: () => _openThread(c),
     );
   }
+
+  String _roleLabel(String role) => switch (role) {
+        'terminal_manager' || 'cashier' => 'A2Z office',
+        'dispatcher' => 'Dispatcher',
+        // Legacy threads only: drivers have no accounts since migration 017.
+        'driver' => 'Driver',
+        _ => 'Passenger',
+      };
 
   IconData _iconFor(String role) {
     switch (role) {

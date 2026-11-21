@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/design/components/app_card.dart';
+import '../../core/design/components/dialog_buttons.dart';
 import '../../core/design/components/info_row.dart';
 import '../../core/design/components/journey_strip.dart';
 import '../../core/design/components/money.dart';
@@ -12,12 +13,16 @@ import '../../core/design/components/status_band.dart';
 import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/util/when.dart';
 import '../../data/repositories/booking_repository.dart';
+import '../../data/repositories/messaging_repository.dart';
 import '../../models/transit_node_model.dart';
 import '../../models/uv_trip_model.dart';
 import '../../viewmodels/auth_provider.dart';
 import '../../viewmodels/reservation_viewmodel.dart';
+import '../messages/conversation_thread_screen.dart';
+import '../passenger_main_screen.dart';
 import '../tracking/live_map_screen.dart';
 
 /// One reservation (brief rev 721): the booking code the passenger gives
@@ -113,20 +118,40 @@ class _ReservationScreenState extends State<ReservationScreen> {
     final profile = context.watch<AuthProvider>().profile;
     final passengerName = profile?.displayName ?? profile?.email ?? '—';
     final state = _state(trip);
+    final vm = _viewModel;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Reservation')),
+      appBar: AppBar(
+        title: const Text('Reservation'),
+        actions: [
+          // The trip's Dispatcher, one tap away: the person to ask about a
+          // paid seat, a late arrival or where the van is parked (20 Nov).
+          if (vm.isActive)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.xs),
+              child: TextButton.icon(
+                onPressed: _openingChat ? null : () => _chatWithDispatcher(trip),
+                icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                label: const Text('Chat'),
+              ),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _viewModel.refresh,
+          onRefresh: vm.refresh,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.gutter, AppSpacing.lg,
               AppSpacing.gutter, AppSpacing.section,
             ),
             children: [
-              // State first, and only once: "am I sorted, and if not, what
-              // do I do" is the passenger's question.
+              // The code first (20 Nov redesign, after Gemini's study): it is
+              // what the passenger shows at the van door, so it is the first
+              // thing on the screen they open there.
+              _codeCard(context),
+              const SizedBox(height: AppSpacing.md),
+              // Then what to do next, and by when, said once.
               StatusBand(
                 tone: state.tone,
                 icon: state.icon,
@@ -138,7 +163,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
               ),
               ?_message(),
               const SizedBox(height: AppSpacing.lg),
-              _pass(context, trip, passengerName),
+              _details(context, trip, passengerName),
               const SizedBox(height: AppSpacing.xl),
               ..._actions(context, trip),
             ],
@@ -148,118 +173,159 @@ class _ReservationScreenState extends State<ReservationScreen> {
     );
   }
 
-  /// The booking code, then the journey it is for. The code is what the
-  /// passenger says or shows at the van door; the details are read on the
-  /// way there.
-  Widget _pass(BuildContext context, UvTripModel trip, String passengerName) {
+  bool _openingChat = false;
+
+  /// Opens the conversation with this trip's Dispatcher. The server lists
+  /// who the passenger may write to; a trip with no Dispatcher assigned yet
+  /// has none, and the passenger is told so instead of being left on an
+  /// empty screen.
+  Future<void> _chatWithDispatcher(UvTripModel trip) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final repo = MessagingRepository(context.read<ApiClient>());
+    setState(() => _openingChat = true);
+    try {
+      final contacts = await repo.listContacts();
+      final dispatcher = contacts.where((c) => c.peerRole == 'dispatcher' && c.tripId == trip.id).firstOrNull;
+      if (dispatcher == null) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('No Dispatcher is assigned to this trip yet. You can write to the A2Z office in Chat.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+        return;
+      }
+      final conv = await repo.startConversation(peerUserId: dispatcher.peerUserId, tripId: dispatcher.tripId);
+      if (!mounted) return;
+      await navigator.push(MaterialPageRoute<void>(
+        builder: (_) => ConversationThreadScreen(
+          conversationId: conv.id,
+          peerName: conv.peerName,
+          peerRole: conv.peerRole,
+        ),
+      ));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating));
+    } finally {
+      if (mounted) setState(() => _openingChat = false);
+    }
+  }
+
+  /// The booking code, large, with Copy: what the passenger says or shows
+  /// at the van door.
+  Widget _codeCard(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final code = _viewModel.bookingCode;
-
     return AppCard(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.md),
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl, AppSpacing.xl,
-            ),
-            child: Column(
-              children: [
-                Text('Booking code', style: text.bodySmall),
-                const SizedBox(height: AppSpacing.xs),
-                Semantics(
-                  label: 'Booking code ${code.split('').join(' ')}',
-                  excludeSemantics: true,
-                  child: SelectableText(
-                    code.isEmpty ? '—' : code,
-                    textAlign: TextAlign.center,
-                    style: text.headlineMedium!.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2,
-                      color: _viewModel.isCancelled ? AppColors.textMuted : AppColors.primary,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
+          Text('BOOKING CODE',
+              style: text.labelSmall!.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          const SizedBox(height: AppSpacing.xs),
+          Semantics(
+            label: 'Booking code ${code.split('').join(' ')}',
+            excludeSemantics: true,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SelectableText(
+                code.isEmpty ? '—' : code,
+                textAlign: TextAlign.center,
+                style: text.headlineLarge!.copyWith(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                  color: _viewModel.isCancelled ? AppColors.textMuted : AppColors.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
-                if (code.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: code));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Booking code copied.')),
-                      );
-                    },
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('Copy'),
-                  ),
-                if (!_viewModel.isCancelled) Text(
-                  // Nothing to hand over on a cancelled booking (12 Nov UI run).
-                  _viewModel.isPaid
-                      ? 'Show this code at the van door'
-                      : 'Give this code or your name to the Dispatcher when you pay',
-                  textAlign: TextAlign.center,
-                  style: text.bodySmall,
-                ),
-              ],
+              ),
             ),
           ),
-          const _TearLine(),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                JourneyStrip(
-                  origin: trip.origin.name,
-                  destination: trip.destination.name,
-                  originNote: 'Departs ${clockTime(trip.departureTime)}',
-                  destinationNote: trip.estimatedArrivalTime == null
-                      // The search response carries no arrival: it depends
-                      // on where the passenger gets off, and inventing one
-                      // here would be a promise the route offsets never
-                      // made.
-                      ? null
-                      : 'Arrives about '
-                          '${clockTime(trip.estimatedArrivalTime!)}',
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                const Divider(height: 1),
-                const SizedBox(height: AppSpacing.lg),
-                AppInfoRow(label: 'Passenger', value: passengerName),
-                const SizedBox(height: AppSpacing.md),
-                AppInfoRow(
-                  label: 'Fare',
-                  value: Money.format(_viewModel.fare),
-                  valueWidget: Money(
-                    _viewModel.fare,
-                    style: text.bodyLarge!
-                        .copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppInfoRow(
-                  label: 'Payment',
-                  value: _viewModel.isPaid
-                      ? 'Paid in cash${_viewModel.paidAt != null ? ' at ${clockTime(_viewModel.paidAt!)}' : ''}'
-                      : _viewModel.isCancelled
-                          ? 'None: cancelled before payment'
-                          : 'Unpaid: cash to the Dispatcher',
-                ),
-                if (_viewModel.payBy != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  AppInfoRow(label: 'Pay before', value: clockTime(_viewModel.payBy!)),
-                ],
-                if (trip.plateNumber != null ||
-                    trip.operatorName != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  AppInfoRow(
-                    label: 'Van',
-                    value: trip.plateNumber ?? trip.operatorName!,
-                  ),
-                ],
-              ],
+          if (code.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            FilledButton.tonalIcon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: code));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Booking code copied.')),
+                );
+              },
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, AppSizing.minTouchTarget),
+                backgroundColor: AppColors.primaryContainer,
+                foregroundColor: AppColors.primary,
+              ),
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Copy'),
             ),
+          ],
+          if (!_viewModel.isCancelled) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              // Nothing to hand over on a cancelled booking (12 Nov UI run).
+              _viewModel.isPaid
+                  ? 'Show this code at the van door.'
+                  : 'Give this code or your name to the Dispatcher when you pay.',
+              textAlign: TextAlign.center,
+              style: text.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// The journey and the facts of the booking, read on the way there.
+  Widget _details(BuildContext context, UvTripModel trip, String passengerName) {
+    final text = Theme.of(context).textTheme;
+    final vm = _viewModel;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          JourneyStrip(
+            origin: trip.origin.name,
+            destination: trip.destination.name,
+            originNote: 'Departs ${clockTime(trip.departureTime)}',
+            destinationNote: trip.estimatedArrivalTime == null
+                // The search response carries no arrival: it depends on
+                // where the passenger gets off, and inventing one here would
+                // be a promise the route offsets never made.
+                ? null
+                : 'Arrives about ${clockTime(trip.estimatedArrivalTime!)}',
           ),
+          const SizedBox(height: AppSpacing.lg),
+          const Divider(height: 1),
+          const SizedBox(height: AppSpacing.lg),
+          AppInfoRow(label: 'Passenger', value: passengerName),
+          const SizedBox(height: AppSpacing.md),
+          AppInfoRow(
+            label: 'Fare',
+            value: Money.format(vm.fare),
+            valueWidget: Money(vm.fare, style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppInfoRow(
+            label: 'Payment',
+            value: vm.isPaid
+                ? 'Paid in cash${vm.paidAt != null ? ' at ${clockTime(vm.paidAt!)}' : ''}'
+                : vm.isCancelled
+                    ? 'None: cancelled before payment'
+                    : 'Unpaid: cash to the Dispatcher',
+          ),
+          if (vm.payBy != null && !vm.isPaid && !vm.isCancelled) ...[
+            const SizedBox(height: AppSpacing.md),
+            AppInfoRow(
+              label: 'Pay before',
+              value: clockTime(vm.payBy!),
+              valueWidget: Text(clockTime(vm.payBy!),
+                  textAlign: TextAlign.end,
+                  style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700, color: AppColors.warning)),
+            ),
+          ],
+          if (trip.plateNumber != null || trip.operatorName != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            AppInfoRow(label: 'Van', value: trip.plateNumber ?? trip.operatorName!),
+          ],
         ],
       ),
     );
@@ -370,11 +436,10 @@ class _ReservationScreenState extends State<ReservationScreen> {
 
     // Offered for any standing reservation: a passenger deciding when to
     // leave the house needs to see that the van has not started reporting
-    // yet just as much as they need a position.
+    // yet just as much as they need a position. Once paid, nothing else is
+    // asked of the passenger, so it becomes the one filled button.
     if (vm.isActive) {
-      actions.add(
-        OutlinedButton.icon(
-          onPressed: () => Navigator.push(
+      void track() => Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => LiveMapScreen(
@@ -384,9 +449,22 @@ class _ReservationScreenState extends State<ReservationScreen> {
                 alightingStop: trip.alightingStop,
               ),
             ),
-          ),
-          icon: const Icon(Icons.map_outlined),
-          label: const Text('Track the van'),
+          );
+      actions.add(
+        vm.isPaid
+            ? FilledButton.icon(onPressed: track, icon: const Icon(Icons.map_outlined), label: const Text('Track the van'))
+            : OutlinedButton.icon(onPressed: track, icon: const Icon(Icons.map_outlined), label: const Text('Track the van')),
+      );
+    }
+
+    // Released, cancelled, or the van left before it was paid: the way on
+    // is a new booking, from Home.
+    if (vm.isCancelled || (vm.status == 'no_show' && !vm.isPaid)) {
+      actions.add(
+        FilledButton.icon(
+          onPressed: () => PassengerMainScreen.goTo(context, PassengerMainScreen.home),
+          icon: const Icon(Icons.search),
+          label: const Text('Book again'),
         ),
       );
     }
@@ -488,14 +566,12 @@ class _ReservationScreenState extends State<ReservationScreen> {
           'so there is nothing to hand back.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep it'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Cancel reservation'),
+          DialogButtons(
+            action: 'Cancel reservation',
+            danger: true,
+            onAction: () => Navigator.pop(ctx, true),
+            cancel: 'Keep it',
+            onCancel: () => Navigator.pop(ctx, false),
           ),
         ],
       ),
@@ -515,46 +591,4 @@ class _Spinner extends StatelessWidget {
         height: 16,
         child: CircularProgressIndicator(strokeWidth: 2, color: color),
       );
-}
-
-/// The tear line across the pass.
-///
-/// Drawn rather than assembled: the old one built `width / 10` SizedBoxes
-/// inside a LayoutBuilder on every frame, and the two rounded notches at
-/// either end were containers filled with the scaffold colour, so they only
-/// looked like cut-outs as long as nothing behind the card ever changed.
-class _TearLine extends StatelessWidget {
-  const _TearLine();
-
-  @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-        child: CustomPaint(
-          painter: _DashPainter(),
-          child: const SizedBox(height: 1.5, width: double.infinity),
-        ),
-      );
-}
-
-class _DashPainter extends CustomPainter {
-  static const _dash = 5.0;
-  static const _gap = 5.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.divider
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-
-    for (var x = AppSpacing.lg; x < size.width - AppSpacing.lg; x += _dash + _gap) {
-      canvas.drawLine(
-        Offset(x, size.height / 2),
-        Offset((x + _dash).clamp(0, size.width - AppSpacing.lg), size.height / 2),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashPainter oldDelegate) => false;
 }

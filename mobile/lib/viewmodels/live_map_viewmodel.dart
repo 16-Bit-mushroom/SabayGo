@@ -119,7 +119,6 @@ class LiveMapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  RouteStopDetail? get boardingNode => _nodeAt(boardingStop);
   RouteStopDetail? get alightingNode => _nodeAt(alightingStop);
 
   RouteStopDetail? _nodeAt(int? sequence) {

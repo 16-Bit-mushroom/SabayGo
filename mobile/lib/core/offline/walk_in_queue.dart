@@ -70,18 +70,6 @@ class WalkInQueue {
     return rows.map(PendingWalkIn.fromMap).toList();
   }
 
-  Future<int> countFor(String tripId) async {
-    if (!isSupported) return 0;
-    final db = await _open();
-    final rows = await db.query(
-      'pending_walk_ins',
-      columns: ['client_request_id'],
-      where: 'trip_id = ?',
-      whereArgs: [tripId],
-    );
-    return rows.length;
-  }
-
   Future<void> remove(String clientRequestId) async {
     if (!isSupported) return;
     final db = await _open();

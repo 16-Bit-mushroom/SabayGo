@@ -21,6 +21,8 @@ class AppPickerRow extends StatelessWidget {
     required this.placeholder,
     required this.onTap,
     this.semanticHint,
+    this.maxLines = 1,
+    this.showChevron = true,
     super.key,
   });
 
@@ -37,6 +39,14 @@ class AppPickerRow extends StatelessWidget {
 
   /// What tapping does, for a screen reader: "Opens the terminal list".
   final String? semanticHint;
+
+  /// Lines the answer may take. Terminal names are long ("Davao City
+  /// Overland Transport Terminal"), so the search card lets them wrap.
+  final int maxLines;
+
+  /// The up-down mark that says the row opens a list. Off where another
+  /// control already sits at the row's end.
+  final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +84,7 @@ class AppPickerRow extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         answered ? value! : placeholder,
-                        maxLines: 1,
+                        maxLines: maxLines,
                         overflow: TextOverflow.ellipsis,
                         style: text.bodyLarge!.copyWith(
                           fontWeight: FontWeight.w600,
@@ -86,8 +96,9 @@ class AppPickerRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.unfold_more,
-                    size: 18, color: AppColors.textMuted),
+                if (showChevron)
+                  const Icon(Icons.unfold_more,
+                      size: 18, color: AppColors.textMuted),
               ],
             ),
           ),

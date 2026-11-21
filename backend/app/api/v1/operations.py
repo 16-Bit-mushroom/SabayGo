@@ -27,9 +27,10 @@ from app.application.operations.check_in import (
 from app.application.operations.guards import assert_assigned_to_trip
 from app.application.operations.non_passenger import NonPassengerMoves
 from app.application.operations.trip_lifecycle import TripLifecycle
+from app.application.operations.van_board import door_camera
 from app.core import timezone as app_tz
 from app.core.exceptions import NotFoundError
-from app.domain.enums import DepartureSource, Role
+from app.domain.enums import DepartureSource, Role, TripStatus
 from app.infrastructure.models import PassengerEvent, Trip, User
 
 router = APIRouter(tags=["operations"])
@@ -284,8 +285,16 @@ class UnlistedOut(BaseModel):
 
 
 class DoorCheckOut(BaseModel):
-    """The Dispatcher's before-departure screen (brief 2.4, 6.1)."""
-    aboard: int
+    """The Dispatcher's before-departure screen (brief 2.4, 6.1).
+
+    `aboard` is null when nothing was counted: no door event yet and no
+    live camera to have seen nobody board (16 Nov). A zero there is only
+    ever a live camera's zero while the van is still at the terminal,
+    never the absence of a phone shown as a number, nor a phone that came
+    on after departure (20 Nov); `camera` says which ('live',
+    'lens_blocked', 'silent', 'no_phone'), as on the office's van board."""
+    aboard: int | None
+    camera: str
     listed: int
     explained: int
     excess: int
@@ -302,9 +311,15 @@ async def door_check(
     before Depart. Fewer: no-shows, nothing to do."""
     trip = await assert_assigned_to_trip(session, trip_id=trip_id, user=user)
     check = await ListCheck(session).recheck(trip)
+    camera, _ = await door_camera(session, trip.van_id)
     await session.commit()
+    # A live camera's zero is a count only while the van is still at the
+    # terminal. Once it has left, the camera can no longer see who boarded
+    # there, so a phone that came on later shows its state, not a 0 (20 Nov).
+    at_terminal = trip.status in (TripStatus.SCHEDULED.value, TripStatus.BOARDING.value)
     return DoorCheckOut(
-        aboard=check.aboard, listed=check.listed, explained=check.explained,
+        aboard=check.aboard if check.seen or (camera == "live" and at_terminal) else None,
+        camera=camera, listed=check.listed, explained=check.explained,
         excess=check.excess, crew_aboard=check.crew_aboard,
         unlisted=[UnlistedOut(
             event_id=e.event_id, event_at=e.event_at, resolution_status=e.resolution_status,
