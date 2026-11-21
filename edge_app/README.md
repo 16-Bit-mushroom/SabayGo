@@ -25,6 +25,12 @@ console (Phones) and is shown its token once. On the phone: Set-up, the
 server (`http://<laptop>:8000/api/v1`) and the token. A debug build also
 takes them over adb:
 `adb shell am start -n com.sabaygo.edge/.HomeActivity --es server URL --es token TOKEN`.
+`./run.sh --edge` builds and installs the app over USB, gives it this
+laptop's address and waits until the phone reports over Wi-Fi; then the
+cable can come off (20 Nov: an `adb reverse` tunnel dropped mid-boarding
+when the USB connection reset, and the trip started Unaudited). The phone
+joins the laptop's Wi-Fi by hand, once: a stock build offers no adb
+command for it.
 Then the Checklist (permissions, battery optimisation off, the Realme
 switches an app cannot read).
 

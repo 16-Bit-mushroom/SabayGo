@@ -3,7 +3,14 @@
 #
 #   ./run.sh                     database, backend, console
 #   --mobile                     also the passenger/Dispatcher app on a handset
-#   --device <id>                which handset (default: the first attached)
+#   --device <id>                which handset (default: the first attached
+#                                that is not the camera phone)
+#   --edge                       also the camera phone: build and install the
+#                                edge app over USB, point it at this machine
+#                                over Wi-Fi, wait until it reports (then the
+#                                cable can come off)
+#   --edge-device <id>           which phone is the camera (default: the one
+#                                with the edge app installed)
 #   --host <ip>                  force the address handsets dial, when
 #                                detection picks the wrong interface
 #   --reset-db                   rebuild the demo data before starting
@@ -35,17 +42,21 @@ WITH_GPS=1
 RESET_DB=0
 RESET_ARGS=()
 DEVICE=""
+WITH_EDGE=0
+EDGE_DEVICE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --host)       HOST="${2:?--host needs an address}"; shift 2 ;;
     --device)     DEVICE="${2:?--device needs a device id}"; shift 2 ;;
     --mobile)     WITH_MOBILE=1; shift ;;
+    --edge)       WITH_EDGE=1; shift ;;
+    --edge-device) WITH_EDGE=1; EDGE_DEVICE="${2:?--edge-device needs a device id}"; shift 2 ;;
     --no-console) WITH_CONSOLE=0; shift ;;
     --no-gps)     WITH_GPS=0; shift ;;
     --reset-db)   RESET_DB=1; shift ;;
     --soon)       RESET_DB=1; RESET_ARGS+=(--soon); shift ;;
-    -h|--help)    sed -n '2,12p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help)    sed -n '2,19p' "$0" | sed 's/^# \?//'; exit 0 ;;
     *) echo "unknown option: $1  (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -55,7 +66,7 @@ ok()   { printf '  . %s\n' "$*"; }
 warn() { printf '  ! %s\n' "$*" >&2; }
 die()  { printf '\nFAILED: %s\n' "$*" >&2; exit 1; }
 
-PORT_BACKEND=8000
+PORT_BACKEND="${SABAYGO_BACKEND_PORT:-8000}"   # override when another project holds 8000
 PORT_CONSOLE=3001        # pinned, not random: see the CORS note in config.py
 LOGS="$ROOT/logs"
 mkdir -p "$LOGS"
@@ -214,7 +225,7 @@ say "backend"
 # one fails to bind, the health check below answers from the old process,
 # and the whole session runs yesterday's code without a word.
 if command -v ss >/dev/null 2>&1 && ss -ltn "sport = :$PORT_BACKEND" | grep -q LISTEN; then
-  die "port $PORT_BACKEND is already in use (an old backend?). Stop it first: pkill -f 'uvicorn app.main:app'"
+  die "port $PORT_BACKEND is already in use (an old backend?). Stop it first: pkill -f 'uvicorn app.main:app', or start with SABAYGO_BACKEND_PORT=8001"
 fi
 start backend "$ROOT/backend" "$LOGS/backend.log" \
   "$ROOT/backend/venv/bin/python" -m uvicorn app.main:app \
@@ -226,33 +237,60 @@ wait_for backend "http://127.0.0.1:$PORT_BACKEND/health" 45 "$LOGS/backend.log"
 # places one where nobody said it was. Until the van kit's GPS unit
 # exists, tracking_simulator.py is that unit: real HTTP pings to the real
 # endpoint, map-matched by the real server, only the coordinates are
-# simulated. One per trip that is departed today, so a seeded or
-# demo-departed trip shows up moving instead of not at all.
+# simulated. One per trip departed today: those on the road now, and each
+# trip departed while this script runs (the watch loop at the bottom asks
+# every 15 s), so a van the testers depart starts moving on its own.
 #
-# A trip departed AFTER this point gets none until ./run.sh is re-run --
-# or start one by hand: backend/venv/bin/python backend/scripts/tracking_simulator.py --trip <id> --loop
+# Skipped: a trip this run already gave one (a simulator that stopped is
+# reported, not restarted in a loop), a trip some other simulator drives
+# (seed_live_now.py starts its own), and a trip with a position received in
+# the last two minutes -- a real phone is reporting from that van, and an
+# invented track must not be drawn over it. The simulator exits by itself
+# when its trip is no longer on the road (409 on the ping).
+#
+# By hand, e.g. a faster van for an overspeed flag:
+#   backend/venv/bin/python backend/scripts/tracking_simulator.py --trip <id> --loop --speed 4 --kph 80
 GPS_TRIPS=()
+declare -A GPS_STARTED=()
 if [ "$WITH_GPS" = 1 ]; then
-  say "GPS for trips on the road"
-  # shellcheck disable=SC1091
   MYSQL_USER_="$(read_env .env MYSQL_USER)"; MYSQL_PW_="$(read_env .env MYSQL_PASSWORD)"
   MYSQL_DB_="$(read_env .env MYSQL_DATABASE)"
-  mapfile -t GPS_TRIPS < <(docker exec -e MYSQL_PWD="$MYSQL_PW_" sabaygo-mysql \
+  export SABAYGO_API="http://127.0.0.1:$PORT_BACKEND/api/v1"
+fi
+
+# Called in this shell, never in $(...): start_aux records the PID so that
+# Ctrl-C stops the simulator with everything else.
+gps_for_departed() {
+  [ "$WITH_GPS" = 1 ] || return 0
+  local trip
+  while read -r trip; do
+    [ -n "$trip" ] || continue
+    [ -z "${GPS_STARTED[$trip]:-}" ] || continue
+    pgrep -f "tracking_simulator.py --trip $trip( |\$)" >/dev/null 2>&1 && continue
+    GPS_STARTED[$trip]=1
+    GPS_TRIPS+=("$trip")
+    # --speed 4: a 50 km route crosses the map in minutes, not an hour.
+    # --loop: back to the first stop on arrival, so the van stays visible.
+    start_aux "gps $trip" "$ROOT/backend" "$LOGS/gps_$trip.log" \
+      "$ROOT/backend/venv/bin/python" -u scripts/tracking_simulator.py \
+      --trip "$trip" --loop --speed 4
+  done < <(docker exec -e MYSQL_PWD="$MYSQL_PW_" sabaygo-mysql \
       mysql -u"$MYSQL_USER_" "$MYSQL_DB_" -N -e \
-      "SELECT trip_id FROM trips WHERE status = 'departed' AND service_date = CURDATE()" \
+      "SELECT t.trip_id FROM trips t
+        WHERE t.status = 'departed' AND t.service_date = CURDATE()
+          AND NOT EXISTS (SELECT 1 FROM trip_location_pings p
+                           WHERE p.trip_id = t.trip_id
+                             AND p.received_at > NOW(6) - INTERVAL 2 MINUTE)" \
       2>/dev/null || true)
-  if [ ${#GPS_TRIPS[@]} -eq 0 ]; then
-    ok "no trip is on the road today -- nothing to simulate"
-  else
-    export SABAYGO_API="http://127.0.0.1:$PORT_BACKEND/api/v1"
-    for trip in "${GPS_TRIPS[@]}"; do
-      # --speed 4: a 50 km route crosses the map in minutes, not an hour.
-      # --loop: back to the first stop on arrival, so the van stays visible.
-      start_aux "gps $trip" "$ROOT/backend" "$LOGS/gps_$trip.log" \
-        "$ROOT/backend/venv/bin/python" -u scripts/tracking_simulator.py \
-        --trip "$trip" --loop --speed 4
-    done
-  fi
+  # An aid: under set -e a nonzero status here would end run.sh, and the
+  # whole system with it, from inside the watch loop.
+  return 0
+}
+
+if [ "$WITH_GPS" = 1 ]; then
+  say "GPS for trips on the road"
+  gps_for_departed
+  [ ${#GPS_TRIPS[@]} -gt 0 ] || ok "no trip is on the road today -- a trip departed later gets one on its own"
 fi
 
 # ───────────────────────────────────────────── 3. Flutter clients
@@ -266,20 +304,38 @@ HAVE_FLUTTER=1
 command -v flutter >/dev/null 2>&1 || HAVE_FLUTTER=0
 [ "$HAVE_FLUTTER" = 1 ] || warn "flutter not found -- no client will be started"
 
+ADB=""
+for cand in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" /opt/android-sdk "$HOME/Android/Sdk"; do
+  if [ -n "$cand" ] && [ -x "$cand/platform-tools/adb" ]; then
+    ADB="$cand/platform-tools/adb"; break
+  fi
+done
+[ -n "$ADB" ] || ADB="$(command -v adb || true)"
+
+# Attached phones that have the edge app: the in-van camera phone.
+edge_phones() {
+  [ -n "$ADB" ] || return 0
+  local s
+  for s in $("$ADB" devices 2>/dev/null | awk 'NR > 1 && $2 == "device" {print $1}'); do
+    "$ADB" -s "$s" shell pm path com.sabaygo.edge 2>/dev/null | grep -q package: && echo "$s"
+  done
+  return 0
+}
+
 # Pick an attached handset: the first device that is neither a browser nor
-# this desktop. Printed so it is obvious which phone got the build.
+# this desktop, nor the camera phone -- with both plugged in, the passenger
+# app must not land on the phone that counts at the door. Printed so it is
+# obvious which phone got the build.
 pick_device() {
-  flutter devices --machine 2>/dev/null | python3 -c '
-import json, sys
+  flutter devices --machine 2>/dev/null | SKIP="$(edge_phones; echo "$EDGE_DEVICE")" python3 -c '
+import json, os, sys
 try: devices = json.load(sys.stdin)
 except Exception: sys.exit(0)
-for d in devices:
-    if d.get("targetPlatform", "").startswith(("android", "ios")) and not d.get("emulator", False):
-        print(d["id"]); break
-else:
-    for d in devices:
-        if d.get("targetPlatform", "").startswith(("android", "ios")):
-            print(d["id"]); break
+skip = set(os.environ.get("SKIP", "").split())
+phones = [d for d in devices if d.get("targetPlatform", "").startswith(("android", "ios"))
+          and d["id"] not in skip]
+for d in [d for d in phones if not d.get("emulator", False)] + phones:
+    print(d["id"]); break
 '
 }
 
@@ -353,8 +409,9 @@ if [ "$WITH_MOBILE" = 1 ] && [ "$HAVE_FLUTTER" = 1 ]; then
     DEVICE="$(pick_device)"
   fi
   if [ -z "$DEVICE" ]; then
-    warn "no handset attached. Connect one (adb devices) or pass --device <id>."
+    warn "no handset attached (a phone with the edge app is never picked). Connect one (adb devices) or pass --device <id>."
     WITH_MOBILE=0
+    MOBILE_SKIPPED="NOT installed: no handset attached"
   else
     ok "handset: $DEVICE"
   fi
@@ -376,15 +433,7 @@ fi
 #
 # Debug builds, because that is what has been verified on device: a
 # release build hides the dev-account chips and is a different binary.
-ADB=""
-for cand in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" /opt/android-sdk "$HOME/Android/Sdk"; do
-  if [ -n "$cand" ] && [ -x "$cand/platform-tools/adb" ]; then
-    ADB="$cand/platform-tools/adb"; break
-  fi
-done
-[ -n "$ADB" ] || ADB="$(command -v adb || true)"
-
-MOBILE_STATUS="not installed (pass --mobile)"
+MOBILE_STATUS="${MOBILE_SKIPPED:-not installed (pass --mobile)}"
 
 # install_app <label> <dir> <android package> <log> <dart-define...>
 # Sets INSTALL_RESULT rather than printing it, so its progress lines reach
@@ -432,6 +481,105 @@ if [ "$WITH_MOBILE" = 1 ]; then
   MOBILE_STATUS="$INSTALL_RESULT"
 fi
 
+# ───────────────────────────────────────────── the camera phone (--edge)
+# The edge app (native Kotlin, edge_app/) is built with Gradle and installed
+# over USB like the handset app. It then reaches the backend over Wi-Fi at
+# this machine's LAN address -- not through an `adb reverse` tunnel, which a
+# bumped cable or a USB reset removes without a word (20 Nov: the phone
+# went quiet mid-boarding and the trip started Unaudited). Once the phone
+# has reported over Wi-Fi, the cable can come off.
+#
+# The phone must already be on this machine's network: a stock Android
+# build offers no adb command to join one, and it remembers a network
+# joined once by hand. The app's set-up code (console: Setup > Phones) is
+# kept across `install -r`; a phone that has none is told so.
+EDGE_STATUS="not checked (pass --edge to install it and check it reports)"
+EDGE_PKG=com.sabaygo.edge
+
+setup_edge() {
+  local log="$LOGS/edge_build.log"
+  say "camera phone (edge app) -> $EDGE_DEVICE"
+  ok "building (Gradle)"
+  if ! ( cd "$ROOT/edge_app" && ./gradlew assembleDebug -q ) > "$log" 2>&1; then
+    warn "the edge app failed to build. Last lines of ${log#$ROOT/}:"
+    tail -n 15 "$log" >&2 || true
+    EDGE_STATUS="BUILD FAILED -- see ${log#$ROOT/}"; return 0
+  fi
+  ok "installing"
+  if ! "$ADB" -s "$EDGE_DEVICE" install -r \
+       "$ROOT/edge_app/app/build/outputs/apk/debug/app-debug.apk" >> "$log" 2>&1; then
+    if grep -q INSTALL_FAILED_UPDATE_INCOMPATIBLE "$log"; then
+      # Never uninstalled from here: that deletes the outbox, door events
+      # the phone has not sent yet.
+      warn "the edge app on the phone was built on another computer (different signature)."
+      warn "  Copy anything unsent off it, then: adb -s $EDGE_DEVICE uninstall $EDGE_PKG"
+    else
+      tail -n 8 "$log" >&2 || true
+      warn "  Unlock the phone and allow 'Install via USB' if it asks."
+    fi
+    EDGE_STATUS="INSTALL FAILED -- see ${log#$ROOT/}"; return 0
+  fi
+
+  # Only the server changes with the venue; the app keeps its set-up code.
+  # Restarted rather than handed the address while open: a stopped app
+  # starts counting again only from its first screen.
+  "$ADB" -s "$EDGE_DEVICE" reverse --remove "tcp:$PORT_BACKEND" >/dev/null 2>&1 || true
+  "$ADB" -s "$EDGE_DEVICE" shell am force-stop "$EDGE_PKG" >/dev/null 2>&1 || true
+  local mark
+  mark=$(wc -l < "$LOGS/backend.log")
+  "$ADB" -s "$EDGE_DEVICE" shell am start -n "$EDGE_PKG/.HomeActivity" \
+    --es server "$API_LAN" >> "$log" 2>&1 || warn "installed, but could not open it -- open it by hand"
+  if ! "$ADB" -s "$EDGE_DEVICE" shell run-as "$EDGE_PKG" cat shared_prefs/edge.xml 2>/dev/null \
+       | grep -q 'name="token">[^<]'; then
+    warn "the phone has no set-up code yet: console > Setup > Phones > Add phone,"
+    warn "  then on the phone: Set-up, and type the code (the server is filled in)."
+    EDGE_STATUS="installed; needs its set-up code (Setup > Phones)"; return 0
+  fi
+
+  # Its first answered request, by status: 2xx is a phone at work; 401 is a
+  # set-up code this database does not know (a reset forgets every phone).
+  ok "waiting for the phone to report over Wi-Fi"
+  local hit="" i
+  for i in $(seq 1 45); do
+    hit=$(tail -n +"$((mark + 1))" "$LOGS/backend.log" \
+            | grep -E '"[A-Z]+ /api/v1/edge/[^"]*" (2[0-9][0-9]|401) ' | grep -v '127\.0\.0\.1:' \
+            | head -n 1 || true)
+    [ -n "$hit" ] && break
+    sleep 1
+  done
+  local from status
+  from=$(awk '{print $2}' <<< "$hit" | cut -d: -f1)
+  status=$(grep -oE '" [0-9]{3} ' <<< "$hit" | tr -dc '0-9' || true)
+  if [ "$status" = 401 ]; then
+    warn "the phone reached the server from $from, but its set-up code was refused."
+    warn "  Console > Setup > Phones > the phone > New set-up code, and type it on the phone (Set-up)."
+    EDGE_STATUS="on Wi-Fi ($from), set-up code REFUSED -- give it a new one"
+  elif [ -n "$hit" ]; then
+    ok "the phone reported from $from over Wi-Fi -- the USB cable can come off"
+    EDGE_STATUS="reporting over Wi-Fi from $from"
+  else
+    local net
+    net=$("$ADB" -s "$EDGE_DEVICE" shell cmd wifi status 2>/dev/null \
+            | grep -m1 -oE 'connected to "[^"]*"|Wifi is disabled' || true)
+    warn "the phone has not reached http://$HOST:$PORT_BACKEND in 45 s (its Wi-Fi: ${net:-not connected})."
+    warn "  Join it to this laptop's network (Settings > Wi-Fi); the app keeps retrying by itself."
+    warn "  Same network and still nothing: the firewall -- sudo ufw allow $PORT_BACKEND/tcp"
+    EDGE_STATUS="installed, NOT reporting yet -- see the warning above"
+  fi
+  return 0
+}
+
+if [ "$WITH_EDGE" = 1 ]; then
+  [ -n "$EDGE_DEVICE" ] || EDGE_DEVICE="$(edge_phones | head -n 1 || true)"
+  if [ -z "$ADB" ]; then
+    warn "adb not found -- cannot set up the camera phone. Install platform-tools."
+  elif [ -z "$EDGE_DEVICE" ]; then
+    warn "no attached phone has the edge app. Pass --edge-device <id> (see: adb devices)."
+  else
+    setup_edge
+  fi
+fi
+
 # ───────────────────────────────────────────── summary
 CONSOLE_SUMMARY="not running"
 if [ "$WITH_CONSOLE" = 1 ] && [ "$HAVE_FLUTTER" = 1 ]; then
@@ -448,18 +596,20 @@ cat <<EOF
   Adminer                  http://localhost:8080
 
   Handsets dial            $API_LAN
-  GPS simulated for        $([ ${#GPS_TRIPS[@]} -gt 0 ] && echo "${GPS_TRIPS[*]}" || echo "no trip")
+  GPS simulated for        $([ ${#GPS_TRIPS[@]} -gt 0 ] && echo "${GPS_TRIPS[*]}" || echo "no trip yet")
+                           $([ "$WITH_GPS" = 1 ] && echo "(and each trip departed from now on)" || echo "(off: --no-gps)")
 EOF
 
 cat <<EOF
 
   Passenger/Dispatcher app $MOBILE_STATUS
+  Camera phone (edge app)  $EDGE_STATUS
 EOF
 
 cat <<EOF
 
   If the network changes mid-demo: Ctrl-C and re-run ./run.sh with --mobile
-  so the handset app is rebuilt against the new address.
+  (and --edge, the camera phone on its cable) so both phones get the new address.
 
   Ctrl-C stops everything. Logs: ${LOGS#$ROOT/}/
 ────────────────────────────────────────────────────────────────────
@@ -469,8 +619,12 @@ EOF
 # children. A critical one dying means the system is broken: say so and
 # stop everything. An auxiliary one (a GPS simulator) is reported once and
 # left alone. Polling rather than `wait -n`, which cannot tell the two apart.
+# Every 15 s it also gives a GPS simulator to each trip departed since.
 REPORTED=()
+TICK=0
 while :; do
+  TICK=$(( (TICK + 1) % 8 ))
+  [ "$TICK" = 0 ] && gps_for_departed
   for i in "${!PIDS[@]}"; do
     kill -0 "${PIDS[$i]}" 2>/dev/null && continue
     if [ "${CRITICAL[$i]}" = 1 ]; then

@@ -2339,3 +2339,94 @@ Start", the figure Record payment asks for (`TripMoney.vanBalance`,
 
 Proof: `flutter analyze`, no errors or warnings; the console rebuilt;
 `GET /trips/{id}/share` for that trip says ₱150.
+
+### A van departed during a session moves on the map by itself (20 Nov)
+
+For the alpha: `run.sh` gave the GPS replay only to trips already on the
+road when it started, so a trip the testers departed stood still until
+someone ran `tracking_simulator.py` by hand. Its watch loop now asks every
+15 s (`gps_for_departed`, `run.sh`) and starts one for each trip departed
+today, the same way as at launch, recorded for Ctrl-C. It leaves alone a
+trip this run already gave one (a simulator that stops is reported, not
+restarted in a loop), a trip another simulator drives (`seed_live_now.py`
+starts its own) and a trip with a position received in the last 2 min: a
+real phone is reporting from that van, and the system draws no invented
+track over it. `--no-gps` turns it off. The function always returns 0,
+since under `set -e` a failure would end `run.sh` and the system with it.
+`docs/ALPHA_TEST_GUIDE.md` §4 says so, with the overspeed recipe (a route
+speed limit below the simulator's 45 km/h). The edge app's debug APK was
+rebuilt for the camera demo (a phone filming a video on the laptop).
+
+The database was loaded with setup data only, for the alpha, from
+`db/backups/alpha_before_empty_20261120_0932.sql`: terminals, the route
+and its stops, fares, operators, vans, staff, trip schedules and settings,
+over a schema rebuilt from the migrations. Left out: passengers (they
+register in the app), the phone and each van's saved door line, trips,
+bookings and money.
+
+Proof: `bash -n run.sh`; the function cut out of `run.sh` and run against
+a scratch database (`sabaygo_t`, `TRIP-A2Z-LIVE-DEPART` departed): starts
+the trip once, not again on the next poll, skips it while another
+simulator runs and while a position is 30 s old, starts it once that
+position is 3 min old, nothing with `--no-gps`; every start in the PID
+list. `run.sh` restarted on the setup data: backend and console up.
+
+### The camera phone over Wi-Fi: `run.sh --edge` (20 Nov)
+
+The first door count with a video (20 Nov, the realme 8 5G filming a
+person walking in on the laptop's screen) worked: four crossings, four
+boardings, each with its blurred still, matched against the paid seat
+and the walk-ins as `application/edge/checking.py` says, and the extras
+listed by the Dispatcher. The phone reached the laptop through an
+`adb reverse` tunnel; when the USB connection reset the tunnel went with
+it, the counting was stopped on the phone, and the Cashier's Start found
+the phone silent: the trip went Unaudited (`silent_at_start`), correctly.
+Two boardings waited in the phone's outbox and arrived with their own
+times once it was back.
+
+`./run.sh --edge` now builds the edge app with Gradle, installs it over
+USB (`install -r`, so the set-up code stays), removes any tunnel, restarts
+the app with this machine's LAN address, and waits up to 45 s for the
+phone's first answered request from its Wi-Fi address: 2xx says the cable
+can come off, 401 says the set-up code is unknown here (a reset forgets
+every phone), silence names the phone's Wi-Fi and the firewall. It never
+uninstalls a differently signed app (that deletes unsent door events); it
+says how. The camera phone is the attached phone with the edge app, or
+`--edge-device`, and `--mobile` no longer picks it for the passenger app.
+A stock Android build has no adb command to join a network, so the phone
+joins the laptop's Wi-Fi by hand, once. `docs/ALPHA_JOURNEY.md` §0 and
+`edge_app/README.md` say so.
+
+Proof: `bash -n run.sh`; `./run.sh --mobile --edge` with only the camera
+phone attached: the passenger app was not put on it, the edge app was
+built and installed, and the phone reported from 192.168.1.25 with no
+tunnel; the outbox it held arrived. The 401 and 2xx branches checked on
+sample log lines.
+
+### A trip settled after it left no longer reads Left unpaid (20 Nov)
+
+Found in the 20 Nov rehearsal: the Dispatcher listed two walk-ins the
+camera had counted, Depart came before the Cashier recorded their top-up,
+and the trip was marked `left_unpaid` (brief 2.1). The Cashier recorded
+the ₱455.30 forty seconds later; Record payment and the Van Status Board
+then read Balance ₱0, but the trip sheet still said Unpaid / Left unpaid.
+`StatementService.record_payment` set trips to 'paid' when the statement
+reached 0 only if they had not departed yet, so a trip flagged at
+departure kept the flag for good. It now also turns `left_unpaid` into
+'paid' once a payment brings the van's statement to 0. The late payment
+stays on record: the statement's `settled_at` after the trip's
+`departed_at`, and the Left unpaid alert raised at the departure. Rules:
+`application/finance/statement.py`, `record_payment`.
+
+`run.sh`'s summary now says the camera phone is "not checked" without
+`--edge`, rather than "not set up": a phone set up earlier keeps
+reporting without the flag.
+
+Proof: `test_trip_lifecycle.sh` on a scratch database (`sabaygo_t`, its
+own backend on 8010): 141 passed, 0 failed, with two new checks after
+T16: the Cashier records the van's balance after Depart (due 0.00), and
+the trip reads paid. The test's Python fallback helpers read
+`DATABASE_URL`, so a run against a scratch backend exports it too, or
+those checks look in the live database. The trip from the rehearsal was
+paid before the fix and keeps its label; reloading the setup data
+removes it.

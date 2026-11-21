@@ -47,6 +47,11 @@ its share away and an operator can dispute a line before paying. The
 list locks at the Cashier's payment or the departure, whichever comes
 first; after that it can only grow, and a seat added then is a top-up
 line (`is_top_up`), which sets the trip back to 'unpaid' until it is paid.
+A trip that departs with fees still due is 'left_unpaid' (brief 2.1), and
+'paid' once a payment brings its van's statement to 0 (20 Nov: a top-up
+recorded 40 s after Depart left the trip sheet reading "Left unpaid" over
+a settled statement). The late payment stays on record: the statement's
+settled_at after the trip's departed_at, and the Left unpaid alert.
 
 The statement, one per van per service date, is recomputed from its
 lines and its trips whenever they change, so its totals cannot drift:
@@ -557,9 +562,13 @@ class Statements:
 
         if await self.due(statement) == 0:
             for trip in (await self.session.execute(
-                select(Trip).where(*_trips_of(statement),
-                                   Trip.payment_status == "unpaid",
-                                   Trip.status.in_(BEFORE_DEPARTURE))
+                select(Trip).where(*_trips_of(statement), or_(
+                    and_(Trip.payment_status == "unpaid", Trip.status.in_(BEFORE_DEPARTURE)),
+                    # Settled after it left: paid now. When it was paid stays
+                    # on record -- settled_at after departed_at, and the Left
+                    # unpaid alert raised at the departure.
+                    Trip.payment_status == "left_unpaid",
+                ))
             )).scalars():
                 trip.payment_status = "paid"
                 # Paid from the statement locks the list as paying the
