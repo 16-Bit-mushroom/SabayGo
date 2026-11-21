@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/location/current_position.dart';
 import '../../core/network/api_client.dart';
@@ -38,10 +39,23 @@ class SosButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (compact) {
-      return IconButton(
-        tooltip: 'Emergency',
-        onPressed: () => _open(context),
-        icon: const Icon(Icons.emergency_share, color: AppColors.danger),
+      // A labelled red pill (20 Nov redesign), not a bare icon: it must be
+      // found at a glance. It only opens the sheet, so it is still two taps.
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: OutlinedButton.icon(
+          onPressed: () => _open(context),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.danger,
+            backgroundColor: AppColors.dangerContainer,
+            side: const BorderSide(color: AppColors.danger),
+            minimumSize: const Size(0, AppSizing.minTouchTarget),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            shape: const StadiumBorder(),
+          ),
+          icon: const Icon(Icons.emergency_share, size: 18),
+          label: const Text('SOS', semanticsLabel: 'Emergency SOS', style: TextStyle(fontWeight: FontWeight.w800)),
+        ),
       );
     }
     return FilledButton.icon(
@@ -128,15 +142,21 @@ class _SosSheetState extends State<_SosSheet> {
 
   Widget _form() => Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.emergency_share, color: AppColors.danger),
-              const SizedBox(width: 8),
-              const Text('Emergency SOS',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              const Spacer(),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(color: AppColors.dangerContainer, shape: BoxShape.circle),
+                child: const Icon(Icons.emergency_share, color: AppColors.danger, size: 20),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              const Expanded(
+                child: Text('Emergency SOS',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.danger)),
+              ),
               IconButton(
                 tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
@@ -144,12 +164,11 @@ class _SosSheetState extends State<_SosSheet> {
               ),
             ],
           ),
-          const Text(
-            'The cooperative office is alerted immediately, and the '
-            'emergency numbers on file are texted.',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.md),
+          const Text('What is happening?', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: AppSpacing.sm),
+          // The chosen kind is filled red with white text: red here means
+          // emergency, the one place the app spends it (20 Nov redesign).
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -158,8 +177,17 @@ class _SosSheetState extends State<_SosSheet> {
                 ChoiceChip(
                   selected: _category == e.key,
                   onSelected: _sending ? null : (_) => setState(() => _category = e.key),
-                  avatar: Icon(e.value.icon, size: 18),
+                  showCheckmark: false,
+                  selectedColor: AppColors.danger,
+                  backgroundColor: AppColors.surfaceRaised,
+                  side: BorderSide(color: _category == e.key ? AppColors.danger : AppColors.border),
+                  avatar: Icon(e.value.icon, size: 18, color: _category == e.key ? AppColors.onFill : AppColors.danger),
                   label: Text(e.value.label),
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _category == e.key ? AppColors.onFill : AppColors.textPrimary,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
                 ),
             ],
           ),
@@ -170,78 +198,111 @@ class _SosSheetState extends State<_SosSheet> {
             maxLength: 255,
             maxLines: 2,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              labelText: 'What is happening? (optional)',
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(labelText: 'A note (optional)'),
           ),
+          const Text(
+            'The cooperative office is alerted immediately, and the '
+            'emergency numbers on file are texted.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+          ),
+          const SizedBox(height: AppSpacing.md),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
             ),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _sending ? null : _send,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.danger,
-                foregroundColor: AppColors.onFill,
-                // Red while sending: an alert on its way must not look
-                // switched off.
-                disabledBackgroundColor: AppColors.danger,
-                disabledForegroundColor: AppColors.onFill,
-              ),
-              icon: _sending
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.campaign),
-              label: Text(_sending ? 'Sending…' : 'Send alert now'),
+          FilledButton.icon(
+            onPressed: _sending ? null : _send,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: AppColors.onFill,
+              // Red while sending: an alert on its way must not look
+              // switched off.
+              disabledBackgroundColor: AppColors.danger,
+              disabledForegroundColor: AppColors.onFill,
             ),
+            icon: _sending
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onFill),
+                  )
+                : const Icon(Icons.campaign),
+            label: Text(_sending ? 'Sending…' : 'Send alert now'),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          TextButton(
+            onPressed: _sending ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
           ),
         ],
       );
 
-  /// The confirmation repeats the server's own wording. It never claims a
-  /// text message went out when the gateway refused it -- someone deciding
-  /// whether to also phone for help needs the truth, not reassurance.
+  /// The confirmation repeats the server's own wording, then each number
+  /// texted and whether the gateway accepted it. It never claims a text
+  /// went out when the gateway refused it -- someone deciding whether to
+  /// also phone for help needs the truth, not reassurance.
   Widget _sent(SosResult r) => Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(r.duplicate ? Icons.info_outline : Icons.check_circle,
-                  color: AppColors.success),
+              Icon(r.duplicate ? Icons.info_outline : Icons.check_circle, color: AppColors.success),
               const SizedBox(width: 8),
               Text(r.duplicate ? 'Already reported' : 'Alert sent',
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             ],
           ),
           const SizedBox(height: 12),
-          Text(r.message, style: const TextStyle(fontSize: 14, height: 1.4)),
-          if (r.smsAttempted > r.smsSent) ...[
-            const SizedBox(height: 12),
-            for (final d in r.dispatches.where((d) => d.status != 'sent'))
-              Text('${d.recipient}: ${d.status}${d.error == null ? '' : ' — ${d.error}'}',
-                  style: const TextStyle(fontSize: 12, color: AppColors.danger)),
-            const SizedBox(height: 4),
-            const Text(
-              'If nobody reaches you shortly, call for help directly.',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.successContainer,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.edge),
             ),
+            child: Text(r.message, style: const TextStyle(fontSize: 14, height: 1.4)),
+          ),
+          if (r.dispatches.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            const Text('Text messages', style: TextStyle(fontWeight: FontWeight.w700)),
+            for (final d in r.dispatches)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: Text(
+                      '${d.recipient}${d.status == 'sent' || d.error == null ? '' : ' — ${d.error}'}',
+                      style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  StatusChip(
+                    d.status == 'sent' ? 'SENT' : 'NOT SENT',
+                    tone: d.status == 'sent' ? StatusTone.success : StatusTone.danger,
+                  ),
+                ]),
+              ),
           ],
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+          const SizedBox(height: AppSpacing.md),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.dangerContainer,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.danger.withValues(alpha: 0.4)),
             ),
+            child: const Text(
+              // 911 is the Philippines' national emergency number.
+              'If nobody reaches you shortly, call 911.',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.danger),
+            ),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
           ),
         ],
       );

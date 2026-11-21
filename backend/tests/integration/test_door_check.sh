@@ -97,7 +97,25 @@ BID=$(field booking_id)
 is "$(code POST /bookings/$BID/mark-paid '{}' "$DT")/$(field payment_status)" 200/paid \
    "the Dispatcher takes the cash and marks the seat paid"
 is "$(walkin)" 201 "and lists a cash passenger"
-is "$(chk)" 0/2/0 "T22 nobody counted aboard yet, 2 listed: fewer aboard is a no-show, nothing to do"
+# 16 Nov: the phone is checked out but has not reported. Nothing was
+# counted, so the count is null, never an invented zero.
+is "$(chk)" None/2/0 "the phone has not reported yet: no count (null, never 0), 2 listed"
+is "$(field camera)" silent "  and the camera is called silent"
+edge POST /edge/heartbeats "{\"reports\":[{\"recorded_at\":\"$(date '+%Y-%m-%dT%H:%M:%S')\",\"camera_ok\":true,\"gps_ok\":true}]}" >/dev/null
+code GET /trips/$TRIP/door-check "" "$DT" >/dev/null
+is "$(field camera)" live "a heartbeat: the camera is live"
+is "$(chk)" 0/2/0 "T22 a live camera has seen nobody board, 2 listed: fewer aboard is a no-show, nothing to do"
+# 20 Nov: a live camera's zero is a count only while the van is at the
+# terminal. A trip that left with nothing counted stays uncounted, even
+# with a phone live now (one that came on after departure).
+WAS=$(sql "SELECT status FROM trips WHERE trip_id = '$TRIP'")
+sql "UPDATE trips SET status = 'departed' WHERE trip_id = '$TRIP'" >/dev/null
+is "$(chk)" None/2/0 "after departure, a live camera that counted nothing: no count (null), never 0"
+sql "UPDATE trips SET status = '$WAS' WHERE trip_id = '$TRIP'" >/dev/null
+# Put the phone back to never having reported: the sections below were
+# written for a phone that sends door events and no heartbeats.
+sql "DELETE FROM device_heartbeats WHERE device_id = '$PHONE'" >/dev/null
+sql "UPDATE edge_devices SET last_heartbeat_at = NULL WHERE device_id = '$PHONE'" >/dev/null
 
 # ╔═══════════════════════════════════════════════════════════════╗
 # Rev 721 removed the matching window: a boarding is listed while an

@@ -23,6 +23,7 @@ class AppEmptyState extends StatelessWidget {
     required this.title,
     required this.body,
     this.action,
+    this.fillViewport = true,
     super.key,
   });
 
@@ -31,9 +32,16 @@ class AppEmptyState extends StatelessWidget {
   final String body;
   final Widget? action;
 
+  /// Fill the screen and scroll on its own (the default), or sit inside a
+  /// page that already scrolls -- a sliver of Home, below the search card,
+  /// where measuring the viewport would find no height to measure.
+  final bool fillViewport;
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final content = _content(text);
+    if (!fillViewport) return content;
 
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
@@ -42,46 +50,44 @@ class AppEmptyState extends StatelessWidget {
           // minHeight, not a fixed height: at a large text scale the content
           // is taller than the viewport and a fixed box would clip it.
           constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.section,
-                vertical: AppSpacing.xxl,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The icon repeats the title; it is atmosphere, not
-                  // information.
-                  ExcludeSemantics(
-                    child: Icon(icon, size: 48, color: AppColors.textMuted),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: text.titleLarge,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    body,
-                    textAlign: TextAlign.center,
-                    style: text.bodyMedium!
-                        .copyWith(color: AppColors.textMuted, height: 1.5),
-                  ),
-                  if (action != null) ...[
-                    const SizedBox(height: AppSpacing.xl),
-                    action!,
-                  ],
-                ],
-              ),
-            ),
-          ),
+          child: Center(child: content),
         ),
       ),
     );
   }
+
+  Widget _content(TextTheme text) => Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.section,
+          vertical: AppSpacing.xxl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The icon repeats the title; it is atmosphere, not information.
+            ExcludeSemantics(
+              child: Icon(icon, size: 48, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Semantics(
+              header: true,
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: text.titleLarge,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: text.bodyMedium!.copyWith(color: AppColors.textMuted, height: 1.5),
+            ),
+            if (action != null) ...[
+              const SizedBox(height: AppSpacing.xl),
+              action!,
+            ],
+          ],
+        ),
+      );
 }

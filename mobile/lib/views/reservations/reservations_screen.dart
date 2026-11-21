@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/design/components/app_card.dart';
+import '../../core/design/components/dialog_buttons.dart';
 import '../../core/design/components/empty_state.dart';
 import '../../core/design/components/money.dart';
 import '../../core/design/components/journey_strip.dart';
@@ -15,6 +16,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/util/when.dart';
 import '../../data/repositories/booking_repository.dart';
 import '../../viewmodels/reservations_viewmodel.dart';
+import '../passenger_main_screen.dart';
 import 'reservation_screen.dart';
 
 /// Everything the passenger has booked: the next one, the later ones, and
@@ -96,14 +98,12 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           'so there is nothing to hand back.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep it'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Cancel reservation'),
+          DialogButtons(
+            action: 'Cancel reservation',
+            danger: true,
+            onAction: () => Navigator.pop(ctx, true),
+            cancel: 'Keep it',
+            onCancel: () => Navigator.pop(ctx, false),
           ),
         ],
       ),
@@ -126,10 +126,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _StickyTabBar(
-                  const TabBar(
+                  TabBar(
                     tabs: [
-                      Tab(text: 'Past trips'),
-                      Tab(text: 'Cancelled'),
+                      Tab(text: _vm.hasLoaded ? 'Past trips (${_vm.history.length})' : 'Past trips'),
+                      Tab(text: _vm.hasLoaded ? 'Cancelled (${_vm.cancelled.length})' : 'Cancelled'),
                     ],
                   ),
                 ),
@@ -160,6 +160,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   Widget _header() {
+    final current = _vm.current;
+    final count = (current == null ? 0 : 1) + _vm.upcoming.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.xl,
@@ -167,25 +169,22 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const AppSectionHeader('Next trip'),
-          const SizedBox(height: AppSpacing.md),
-          _currentSection(),
-          if (_vm.upcoming.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.xxl),
-            AppSectionHeader(
-              'Also booked',
-              subtitle: '${_vm.upcoming.length} more '
-                  '${_vm.upcoming.length == 1 ? 'trip' : 'trips'} ahead',
-            ),
+          // A heading only over trips (20 Nov, the owner): "Next trip" above
+          // the "No trip booked" card said the same thing twice. One
+          // "Upcoming" heading covers the next trip and the later ones, which
+          // had a second heading of their own ("Also booked").
+          if (current != null) ...[
+            AppSectionHeader('Upcoming', subtitle: count == 1 ? '1 trip booked' : '$count trips booked'),
             const SizedBox(height: AppSpacing.md),
-            for (final b in _vm.upcoming) ...[
-              _BookingRow(
-                booking: b,
-                tone: _toneFor(b),
-                onTap: () => _openReservation(b),
-              ),
-              const SizedBox(height: AppSpacing.md),
-            ],
+          ],
+          _currentSection(),
+          for (final b in _vm.upcoming) ...[
+            const SizedBox(height: AppSpacing.md),
+            _BookingRow(
+              booking: b,
+              tone: _toneFor(b),
+              onTap: () => _openReservation(b),
+            ),
           ],
         ],
       ),
@@ -218,11 +217,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
     final b = _vm.current;
     if (b == null) {
-      return const _Notice(
+      return _Notice(
         icon: Icons.directions_bus_outlined,
         title: 'No trip booked',
         body: 'Search for a departure on the Home tab and your next trip '
             'will show up here.',
+        action: FilledButton.icon(
+          onPressed: () => PassengerMainScreen.goTo(context, PassengerMainScreen.home),
+          icon: const Icon(Icons.search),
+          label: const Text('Find a departure'),
+        ),
       );
     }
     return _nextTripCard(b);
@@ -325,12 +329,27 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
-  /// The one booking that matters right now, in full.
+  /// "in 1 h 20 min" for a departure within the day; null otherwise.
+  static String? _countdown(DateTime at) {
+    final left = at.difference(DateTime.now());
+    if (left.isNegative || left.inHours >= 24) return null;
+    if (left.inMinutes < 60) return 'in ${left.inMinutes} min';
+    return 'in ${left.inHours} h ${left.inMinutes % 60} min';
+  }
+
+  /// The one booking that matters right now, in full (20 Nov redesign,
+  /// after Gemini's study): its state and how long until it leaves; the
+  /// code the Dispatcher looks for; when, the fare and the journey; what to
+  /// do next; then the way in and, while unpaid, Cancel.
   Widget _nextTripCard(BookingSummary b) {
     final busy = _vm.isBusy(b.bookingId);
     final text = Theme.of(context).textTheme;
     // The server decides: only an unpaid seat, before the list locks.
     final canCancel = b.canCancel;
+    final countdown = _countdown(b.departure);
+    // The pay-by time is said once, in the band below; the chip says only
+    // the state (20 Nov, the owner: the two repeated each other).
+    final chip = b.statusLabel.toUpperCase();
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -350,40 +369,24 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Flexible(
-                          child: StatusChip(
-                            b.statusLabel.toUpperCase(),
-                            tone: _toneFor(b),
-                          ),
-                        ),
+                        Flexible(child: StatusChip(chip, tone: _toneFor(b))),
                         const SizedBox(width: AppSpacing.sm),
-                        Flexible(
-                          child: Text(
-                            dayAndTime(b.departure),
-                            textAlign: TextAlign.end,
-                            style: text.bodyMedium!
-                                .copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
+                        if (countdown != null) ...[
+                          Text(countdown,
+                              style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w700, color: AppColors.primary)),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                    JourneyStrip(
-                      origin: b.boardingTerminal,
-                      destination: b.alightingTerminal,
-                      originNote: 'Departs ${clockTime(b.departure)}',
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.md),
                     // The ticket stub: the code the Dispatcher looks for,
-                    // large enough to read off the phone at arm's length,
-                    // with the fare beside it.
+                    // large enough to read off the phone at arm's length.
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                       decoration: BoxDecoration(
                         color: AppColors.primaryContainer,
                         borderRadius: BorderRadius.circular(AppRadius.md),
@@ -396,9 +399,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               children: [
                                 Text('BOOKING CODE',
                                     style: text.labelSmall!.copyWith(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1)),
+                                        color: AppColors.primary, fontWeight: FontWeight.w800, letterSpacing: 1)),
                                 const SizedBox(height: 2),
                                 FittedBox(
                                   fit: BoxFit.scaleDown,
@@ -415,14 +416,29 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.md),
-                          Money(
-                            b.fare,
-                            style: text.titleLarge!
-                                .copyWith(color: AppColors.primary, fontWeight: FontWeight.w800),
-                          ),
+                          // No "Open ›" here (20 Nov): the whole card opens
+                          // the reservation, and so does the button under it.
                         ],
                       ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Expanded(
+                          child: Text(dayAndTime(b.departure),
+                              style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700)),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Money(b.fare, style: text.titleLarge!.copyWith(fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    JourneyStrip(
+                      origin: b.boardingTerminal,
+                      destination: b.alightingTerminal,
+                      originNote: 'Departs ${clockTime(b.departure)}',
                     ),
                     const SizedBox(height: AppSpacing.md),
                     _nextStepBand(b),
@@ -435,30 +451,38 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             const Divider(height: 1),
             _homePickupBand(b, pickup),
           ],
-          if (canCancel) ...[
-            const Divider(height: 1),
-            Row(
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
               children: [
-                if (canCancel)
+                Expanded(
+                  flex: 3,
+                  child: FilledButton(
+                    onPressed: busy ? null : () => _openReservation(b),
+                    style: FilledButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
+                    child: Text(b.isPaid ? 'Show at the van door' : 'Open reservation'),
+                  ),
+                ),
+                if (canCancel) ...[
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
-                    child: TextButton.icon(
+                    flex: 2,
+                    child: OutlinedButton(
                       onPressed: busy ? null : () => _cancel(b),
-                      icon: busy
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.close, size: 18),
-                      label: const Text('Cancel'),
-                      style: TextButton.styleFrom(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, AppSizing.minTouchTarget),
                         foregroundColor: AppColors.danger,
                       ),
+                      child: busy
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Cancel'),
                     ),
                   ),
+                ],
               ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -579,6 +603,9 @@ class _BookingRow extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           Row(
+            // The chip at the right without a Spacer, which would have given
+            // it only half the row.
+            mainAxisAlignment: showCode ? MainAxisAlignment.start : MainAxisAlignment.end,
             children: [
               if (showCode)
                 Expanded(
@@ -590,8 +617,8 @@ class _BookingRow extends StatelessWidget {
                   ),
                 )
               else
-                const Spacer(),
-              const SizedBox(width: AppSpacing.sm),
+                const SizedBox.shrink(),
+              if (showCode) const SizedBox(width: AppSpacing.sm),
               // "RELEASED, UNPAID" is a wide chip; flexible so it ellipsises
               // rather than pushing the code off the card.
               Flexible(

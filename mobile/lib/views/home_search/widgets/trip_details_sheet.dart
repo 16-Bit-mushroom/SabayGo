@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/design/components/info_row.dart';
 import '../../../core/design/components/journey_strip.dart';
 import '../../../core/design/components/money.dart';
 import '../../../core/design/components/sheet.dart';
@@ -11,14 +10,13 @@ import '../../../core/util/when.dart';
 import '../../../models/uv_trip_model.dart';
 import 'camera_notice.dart';
 
-/// The last screen before a space is held, so it answers the questions that
+/// The last screen before a seat is held, so it answers the questions that
 /// decide it: when, where, how much, and how many are left.
 ///
-/// It used to answer them in three bordered boxes — a blue-tinted timeline, a
-/// grey vehicle box, and a loose row about spaces — each box a container with
-/// its own fill, border and radius. Three nested frames to hold six facts.
-/// The facts are the same; the frames are gone, and the fare is now the
-/// largest thing on the sheet because it is what the decision turns on.
+/// The fare is the largest thing on the sheet because it is what the
+/// decision turns on (20 Nov redesign, after Gemini's study): time and fare
+/// on one line, the journey on its own tint, the van and the seats side by
+/// side, then the cash rule and the camera notice before the button.
 class TripDetailsSheet extends StatelessWidget {
   const TripDetailsSheet({
     super.key,
@@ -37,8 +35,20 @@ class TripDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final eta = trip.estimatedArrivalTime;
-    final scarce = !trip.isFull &&
-        (trip.isNearlyFull || trip.occupancyRatio >= 0.8);
+    final scarce = !trip.isFull && (trip.isNearlyFull || trip.occupancyRatio >= 0.8);
+    final roomy = MediaQuery.textScalerOf(context).scale(1) <= 1.3;
+
+    final seatsChip = trip.isFull
+        ? const StatusChip('FULL', tone: StatusTone.danger)
+        : StatusChip(
+            '${trip.availableSeats} OF ${trip.totalSeats}${scarce ? ' · FILLING UP' : ''}',
+            tone: scarce ? StatusTone.warning : StatusTone.success,
+          );
+    final facts = [
+      _Fact(label: 'Van', child: Text(trip.plateNumber ?? trip.operatorName ?? 'Assigned later',
+          style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700))),
+      _Fact(label: 'Seats left', child: seatsChip),
+    ];
 
     return AppSheet(
       title: '${clockTime(trip.departureTime)} departure',
@@ -50,106 +60,80 @@ class TripDetailsSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            JourneyStrip(
-              origin: trip.origin.name,
-              destination: trip.destination.name,
-              originNote: 'Departs ${clockTime(trip.departureTime)}',
-              // No invented arrival. The search response carries none: it
-              // depends on where the passenger gets off, and a made-up time
-              // on the screen where they commit is the worst place for one.
-              destinationNote:
-                  eta == null ? null : 'Arrives about ${clockTime(eta)}',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            const Divider(height: 1),
-            const SizedBox(height: AppSpacing.lg),
-
             // The fare, at the size of the decision it drives. Exact, from
-            // the LTFRB pairwise terminal matrix for this pair of stops —
+            // the LTFRB pairwise terminal matrix for this pair of stops --
             // not distance-based and not dynamic, so it is not hedged.
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Fare for this journey', style: text.bodyMedium),
-                      Text(
-                        'Set by LTFRB for these two terminals',
-                        style: text.bodySmall,
-                      ),
+                      Text('Fare for this journey', style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w600)),
+                      Text('Set by LTFRB for these two terminals', style: text.bodySmall),
                     ],
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Money(
                   trip.approximateFare,
-                  style: text.headlineMedium!
-                      .copyWith(color: AppColors.primary),
+                  style: text.headlineMedium!.copyWith(fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            const Divider(height: 1),
-            const SizedBox(height: AppSpacing.lg),
-
-            AppInfoRow(
-              label: 'Van',
-              value: trip.plateNumber ?? trip.operatorName ?? 'Assigned later',
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: JourneyStrip(
+                origin: trip.origin.name,
+                destination: trip.destination.name,
+                originNote: 'Departs ${clockTime(trip.departureTime)}',
+                // No invented arrival. The search response carries none: it
+                // depends on where the passenger gets off, and a made-up time
+                // on the screen where they commit is the worst place for one.
+                destinationNote: eta == null ? null : 'Arrives about ${clockTime(eta)}',
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
-            AppInfoRow(
-              label: 'Route',
-              value: trip.tripLabel.isEmpty ? '—' : trip.tripLabel,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppInfoRow(
-              label: 'Seat left',
-              // Not a seat count. UV Express assigns no seat numbers —
-              // capacity is counted per section of road, and a passenger is
-              // never given a position in the van.
-              value: trip.isFull
-                  ? 'None'
-                  : '${trip.availableSeats} of ${trip.totalSeats}',
-              valueWidget: trip.isFull
-                  ? const StatusChip('FULL', tone: StatusTone.danger)
-                  : null,
-            ),
-
-            if (scarce) ...[
+            // Van and seats side by side; one above the other at large text.
+            roomy
+                ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: facts[0]),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: facts[1]),
+                  ])
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    facts[0],
+                    const SizedBox(height: AppSpacing.sm),
+                    facts[1],
+                  ]),
+            if (!trip.isFull) ...[
               const SizedBox(height: AppSpacing.lg),
-              StatusBand(
+              // Cash only (rev 721): there is no next payment screen, and the
+              // exact pay-before time is the server's, shown once reserved.
+              const StatusBand(
                 tone: StatusTone.warning,
-                icon: Icons.priority_high,
-                title: 'Filling up',
-                body: '${trip.availableSeats} '
-                    '${trip.availableSeats == 1 ? 'space' : 'spaces'} left on '
-                    'this departure.',
+                icon: Icons.payments_outlined,
+                title: 'Cash at the terminal',
+                body: 'You pay the Dispatcher in cash at the terminal. A seat still unpaid by its '
+                    'pay-before time goes to someone else; you see the time once you reserve.',
               ),
             ],
-
-            const SizedBox(height: AppSpacing.lg),
+            const SizedBox(height: AppSpacing.md),
             const CameraNotice(),
             const SizedBox(height: AppSpacing.xxl),
             FilledButton(
-              // Reserve first, pay the Dispatcher in cash at the terminal: the space has to be
-              // held before there is anything to charge for.
+              // Reserve first, pay the Dispatcher in cash at the terminal: the
+              // seat has to be held before there is anything to pay for.
               onPressed: trip.isFull ? null : onBook,
-              child: Text(
-                trip.isFull ? 'This trip is full' : 'Reserve a seat',
-              ),
+              child: Text(trip.isFull ? 'This trip is full' : 'Reserve a seat'),
             ),
-            if (!trip.isFull) ...[
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                // Cash only (rev 721): there is no next payment screen.
-                'You pay in cash to the Dispatcher at the terminal. A seat '
-                'still unpaid shortly before departure goes to someone else.',
-                textAlign: TextAlign.center,
-                style: text.bodySmall,
-              ),
-            ],
             if (!trip.isFull && onBookForOther != null) ...[
               const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
@@ -163,4 +147,30 @@ class TripDetailsSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A small card: a label over its answer.
+class _Fact extends StatelessWidget {
+  const _Fact({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.edge),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: AppSpacing.xs),
+            child,
+          ],
+        ),
+      );
 }

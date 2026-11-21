@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/design/tokens.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/network/api_client.dart';
@@ -66,20 +68,45 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
           }
           final contacts = snapshot.data ?? const [];
           if (contacts.isEmpty) {
-            return const Center(child: Text('No one to message yet.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xxl),
+                child: Text('No one to message yet. Your trip\'s Dispatcher appears here once you hold a seat.',
+                    textAlign: TextAlign.center),
+              ),
+            );
           }
-          return ListView.separated(
-            itemCount: contacts.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, i) {
-              final c = contacts[i];
-              return ListTile(
-                leading: CircleAvatar(child: Icon(_iconFor(c.peerRole))),
-                title: Text(c.peerName),
-                subtitle: c.tripLabel != null ? Text(c.tripLabel!) : null,
-                onTap: _starting ? null : () => _open(c),
-              );
-            },
+          // Who may be written to, as the server lists them: the
+          // Dispatcher of a trip the passenger is on, and the office.
+          return ListView(
+            padding: const EdgeInsets.all(AppSpacing.gutter),
+            children: [
+              Text('You can write to the Dispatcher of a trip you are on, or to the A2Z office.',
+                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: AppColors.textMuted)),
+              const SizedBox(height: AppSpacing.lg),
+              for (final (i, c) in contacts.indexed) ...[
+                if (i > 0) const SizedBox(height: AppSpacing.md),
+                Material(
+                  color: AppColors.surfaceRaised,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    side: const BorderSide(color: AppColors.edge),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.primaryContainer,
+                      child: Icon(_iconFor(c.peerRole), color: AppColors.primary),
+                    ),
+                    title: Text(c.peerName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(c.tripLabel != null ? 'Dispatcher · ${c.tripLabel}' : _roleLabel(c.peerRole)),
+                    trailing: const Icon(Icons.chevron_right, color: AppColors.primary),
+                    onTap: _starting ? null : () => _open(c),
+                  ),
+                ),
+              ],
+            ],
           );
         },
       ),
@@ -102,4 +129,10 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
         return Icons.person_outline;
     }
   }
+
+  String _roleLabel(String role) => switch (role) {
+        'terminal_manager' || 'cashier' => 'A2Z office',
+        'dispatcher' => 'Dispatcher',
+        _ => 'Passenger',
+      };
 }

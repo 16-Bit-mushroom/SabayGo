@@ -257,11 +257,16 @@ python3 -c "import json;l=json.load(open('/tmp/resp.json'))['lines'];assert any(
   && ok "the seat is a top-up line" || bad "lines: $(cat /tmp/resp.json)"
 
 new_trip 300; TRIP4=$TRIP_ID
+# Five hours on is the next service day after about 19:00, and that day
+# owes the van its own P50 parking: the system is right then, so the
+# expectation follows the clock (a run at 19:17 on 20 Nov failed here).
+WANT4=$([ "$(date -d "+300 minutes" +%F)" = "$DAY" ] && echo 16.50 || echo 66.50)
 crew "$TRIP4" "$VAN" && ok "$PLATE and a Dispatcher get an empty trip later today" \
   || bad "assignment: $(cat /tmp/resp.json)"
 is "$(pay "$TRIP4" 75.00)" 200 "from the trip: the Cashier records its P75 ticket, nobody listed"
 reserve_paid "$TRIP4" 3 1 "$CREW_T" && ok "then a seat to Digos is marked Paid" || bad "reserve: $(cat /tmp/resp.json)"
-is "$(share "$TRIP4" amount_due)/$(field payment_status)" 16.50/unpaid "a P16.50 top-up, and the trip owes again"
+is "$(share "$TRIP4" amount_due)/$(field payment_status)" "$WANT4/unpaid" \
+   "a P16.50 top-up (and that day's P50 parking, past midnight), and the trip owes again"
 
 # ═══════════════════════════════════════════════ settings
 hdr "Settings"

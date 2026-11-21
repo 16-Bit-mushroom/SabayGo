@@ -70,7 +70,6 @@ class TripSummary {
   final bool isSpecialTrip;
 
   bool get isFull => spacesAvailable <= 0;
-  bool get hasDeparted => departure.isBefore(DateTime.now());
 
   /// Space is scarce enough to be worth flagging in the UI. Chosen so a
   /// passenger sees the warning while there is still time to act.
@@ -160,30 +159,6 @@ class TripRepository {
     final json = await _api.get('/trips/search', query: {
       'origin_terminal_id': originTerminalId,
       'destination_terminal_id': destinationTerminalId,
-      'service_date':
-          '${date.year.toString().padLeft(4, '0')}-'
-          '${date.month.toString().padLeft(2, '0')}-'
-          '${date.day.toString().padLeft(2, '0')}',
-    }) as List<dynamic>;
-    return json
-        .map((e) => TripSummary.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  /// Other departures of the SAME journey on the SAME route -- what
-  /// reschedule offers. Sequence numbers are only meaningful once the
-  /// route is pinned, hence `routeId` is required here.
-  Future<List<TripSummary>> searchSameRoute({
-    required String routeId,
-    required int boardingStop,
-    required int alightingStop,
-    DateTime? serviceDate,
-  }) async {
-    final date = serviceDate ?? DateTime.now();
-    final json = await _api.get('/trips/search', query: {
-      'route_id': routeId,
-      'boarding_stop': boardingStop,
-      'alighting_stop': alightingStop,
       'service_date':
           '${date.year.toString().padLeft(4, '0')}-'
           '${date.month.toString().padLeft(2, '0')}-'

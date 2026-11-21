@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/journey_strip.dart';
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/tracking_repository.dart';
@@ -97,22 +99,23 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final plate = _vm.position?.plateNumber;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (plate != null)
+              Text('Van $plate',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textMuted)),
+          ],
+        ),
         // The passenger's own SOS lives here rather than on the ticket:
         // this is the screen someone has open while they are in the van.
         actions: [SosButton(tripId: widget.tripId)],
       ),
-      floatingActionButton: _vm.position == null
-          ? null
-          : FloatingActionButton(
-              onPressed: _centreOnVan,
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              tooltip: 'Centre on the van',
-              child: const Icon(Icons.my_location),
-            ),
       body: _body(),
     );
   }
@@ -139,7 +142,8 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
     return Column(
       children: [
         Expanded(
-          child: FlutterMap(
+          child: Stack(children: [
+            FlutterMap(
             mapController: _map,
             options: MapOptions(
               initialCenter:
@@ -165,8 +169,22 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               ),
             ],
           ),
+            // Centre and Refresh as map buttons at the top right (20 Nov
+            // redesign), where map controls are looked for.
+            Positioned(
+              top: AppSpacing.md,
+              right: AppSpacing.md,
+              child: Column(children: [
+                if (_vm.position != null) ...[
+                  _MapButton(icon: Icons.my_location, tooltip: 'Centre on the van', onPressed: _centreOnVan),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+                _MapButton(icon: Icons.refresh, tooltip: 'Refresh', onPressed: _vm.refresh),
+              ]),
+            ),
+          ]),
         ),
-        _StatusPanel(vm: _vm, onRefresh: _vm.refresh),
+        _StatusPanel(vm: _vm),
       ],
     );
   }
@@ -182,15 +200,17 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
           point: LatLng(stop.latitude, stop.longitude),
           width: 28,
           height: 28,
+          // The journey strip's own marks (mobile/DESIGN.md): a hollow
+          // pin-red ring where the passenger boards, a filled pin-red square
+          // where they get off, and plain numbered stops between. Pin red,
+          // not danger: getting off at your stop is not an alarm.
           child: _NodePin(
             sequence: stop.stopSequence,
-            // The destination is the logo's red pin, not `danger`: getting
-            // off at your stop is not an alarm.
-            colour: stop.stopSequence == widget.boardingStop
-                ? AppColors.success
+            end: stop.stopSequence == widget.boardingStop
+                ? _End.boarding
                 : stop.stopSequence == widget.alightingStop
-                    ? AppColors.brand
-                    : AppColors.primary,
+                    ? _End.alighting
+                    : null,
           ),
         ),
     ];
@@ -230,30 +250,60 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
       ];
 }
 
-/// A numbered terminal node.
+enum _End { boarding, alighting }
+
+/// A numbered terminal node, shaped like the journey strip's marks when it
+/// is the passenger's own stop.
 class _NodePin extends StatelessWidget {
-  const _NodePin({required this.sequence, required this.colour});
+  const _NodePin({required this.sequence, this.end});
 
   final int sequence;
-  final Color colour;
+  final _End? end;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: colour,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+  Widget build(BuildContext context) {
+    final (fill, edge, ink, square) = switch (end) {
+      _End.boarding => (AppColors.surfaceRaised, AppColors.brand, AppColors.brand, false),
+      _End.alighting => (AppColors.brand, AppColors.surfaceRaised, AppColors.onFill, true),
+      null => (AppColors.surfaceRaised, AppColors.textPrimary, AppColors.textPrimary, false),
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: fill,
+        shape: square ? BoxShape.rectangle : BoxShape.circle,
+        borderRadius: square ? BorderRadius.circular(5) : null,
+        border: Border.all(color: edge, width: end == _End.boarding ? 3 : 2),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+      ),
+      child: Center(
+        child: Text(
+          '$sequence',
+          style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.bold),
         ),
-        child: Center(
-          child: Text(
-            '$sequence',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+      ),
+    );
+  }
+}
+
+/// A white, edged map button: a 48 dp target over busy tiles.
+class _MapButton extends StatelessWidget {
+  const _MapButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton.outlined(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon),
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.surfaceRaised,
+          foregroundColor: AppColors.textPrimary,
+          side: const BorderSide(color: AppColors.edge),
+          minimumSize: const Size(AppSizing.minTouchTarget, AppSizing.minTouchTarget),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
         ),
       );
 }
@@ -298,43 +348,54 @@ String _age(int seconds) {
 }
 
 /// Everything the map itself cannot say: how old the fix is, which node
-/// the van was matched to, and when it reaches the stops ahead.
+/// the van was matched to, and when it reaches the stops ahead. A sheet with
+/// rounded top corners and a green edge, not a shadow (20 Nov redesign).
 class _StatusPanel extends StatelessWidget {
-  const _StatusPanel({required this.vm, required this.onRefresh});
+  const _StatusPanel({required this.vm});
 
   final LiveMapViewModel vm;
-  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final pos = vm.position;
     final time = DateFormat('h:mm a');
+    final text = Theme.of(context).textTheme;
+    // "Arriving soon": the van's nearest stop is the passenger's own. A
+    // fact about where the van was matched, never an estimated time; it
+    // stands in for the ETA the server drops once that stop is nearest
+    // (docs/KNOWN_ISSUES.md, NAHGM).
+    final arriving = pos != null &&
+        !pos.isStale &&
+        vm.alightingStop != null &&
+        pos.nearestStopSequence == vm.alightingStop;
+    final mineListed = pos?.etas.any((e) => e.stopSequence == vm.alightingStop) ?? false;
 
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(maxHeight: 260),
+      constraints: const BoxConstraints(maxHeight: 280),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
+        color: AppColors.surfaceRaised,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        border: Border(top: BorderSide(color: AppColors.edge, width: 2)),
       ),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (pos == null)
               _Banner(
-                colour: AppColors.textMuted,
+                tone: StatusTone.info,
                 icon: Icons.schedule,
                 text: vm.isAwaitingFirstReport
                     ? 'The van has not started reporting yet. The route is '
-                        'shown below; tracking begins when it leaves the terminal.'
+                        'shown above; tracking begins when it leaves the terminal.'
                     : 'No position available right now.',
               )
             else ...[
               if (pos.isStale)
                 _Banner(
-                  colour: AppColors.warning,
+                  tone: StatusTone.warning,
                   icon: Icons.warning_amber_rounded,
                   // Named as a last-known position, never dressed up as
                   // current: a passenger acts on this by walking to a
@@ -343,81 +404,62 @@ class _StatusPanel extends StatelessWidget {
                       'This is where the van was, not where it is now.',
                 )
               else if (vm.hasPassedBoardingStop)
-                _Banner(
-                  colour: AppColors.danger,
+                const _Banner(
+                  tone: StatusTone.danger,
                   icon: Icons.info_outline,
-                  text: 'The van has already passed your boarding stop.',
+                  text: 'The van has already passed your boarding stop. Message the Dispatcher if you need help.',
                 ),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.local_shipping_outlined,
-                      size: 18, color: AppColors.primary),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      pos.nearestStopName == null
-                          ? (pos.plateNumber ?? 'Van')
-                          : 'Near ${pos.nearestStopName}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(
+                        [
+                          pos.nearestStopName == null ? (pos.plateNumber ?? 'Van') : 'Near ${pos.nearestStopName}',
+                          if (pos.speedKph != null) '${pos.speedKph!.round()} km/h',
+                        ].join(' · '),
+                        style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      if (!pos.isStale)
+                        Text('Last reported ${_age(pos.secondsSinceReport)} ago', style: text.bodySmall),
+                    ]),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: StatusChip(
+                      arriving ? 'ARRIVING SOON' : pos.isStale ? 'LAST KNOWN' : 'LIVE',
+                      tone: arriving ? StatusTone.success : pos.isStale ? StatusTone.warning : StatusTone.success,
                     ),
                   ),
-                  if (pos.speedKph != null)
-                    Text('${pos.speedKph!.round()} km/h',
-                        style: const TextStyle(color: AppColors.textMuted)),
                 ],
               ),
-              const SizedBox(height: 10),
-              if (pos.etas.isEmpty)
-                const Text('No stops remaining on this route.',
-                    style: TextStyle(color: AppColors.textMuted))
+              const SizedBox(height: AppSpacing.md),
+              Text('REMAINING STOPS',
+                  style: text.labelSmall!.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              const SizedBox(height: AppSpacing.xs),
+              if (arriving && !mineListed)
+                _StopRow(
+                  sequence: vm.alightingStop!,
+                  name: vm.alightingNode?.terminalName ?? 'Your stop',
+                  detail: 'Arriving soon',
+                  mine: true,
+                ),
+              if (pos.etas.isEmpty && !arriving)
+                const Text('No stops remaining on this route.', style: TextStyle(color: AppColors.textMuted))
               else
                 for (final eta in pos.etas)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 26,
-                          child: Text('${eta.stopSequence}',
-                              style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontWeight: FontWeight.w600)),
-                        ),
-                        Expanded(
-                          child: Text(
-                            eta.terminalName,
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontWeight: eta.stopSequence == vm.boardingStop
-                                  ? FontWeight.w700
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          // Stationary vans get no ETA from the server, so
-                          // the distance is shown instead of a fabricated
-                          // time.
-                          eta.eta == null
-                              ? '${(eta.distanceM / 1000).toStringAsFixed(1)} km'
-                              : '${time.format(eta.eta!)}  ·  ${eta.minutesAway} min',
-                          style: const TextStyle(color: AppColors.textMuted),
-                        ),
-                      ],
-                    ),
+                  _StopRow(
+                    sequence: eta.stopSequence,
+                    name: eta.terminalName,
+                    // Stationary vans get no ETA from the server, so the
+                    // distance is shown instead of a fabricated time.
+                    detail: eta.eta == null
+                        ? '${(eta.distanceM / 1000).toStringAsFixed(1)} km'
+                        : '${(eta.distanceM / 1000).toStringAsFixed(1)} km · ${time.format(eta.eta!)} · ${eta.minutesAway} min',
+                    mine: eta.stopSequence == vm.alightingStop,
                   ),
             ],
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh'),
-              ),
-            ),
           ],
         ),
       ),
@@ -425,28 +467,80 @@ class _StatusPanel extends StatelessWidget {
   }
 }
 
-class _Banner extends StatelessWidget {
-  const _Banner({required this.colour, required this.icon, required this.text});
+/// One stop ahead and when the van reaches it. The passenger's own stop
+/// carries the journey strip's red square and is set in green.
+class _StopRow extends StatelessWidget {
+  const _StopRow({required this.sequence, required this.name, required this.detail, required this.mine});
 
-  final Color colour;
+  final int sequence;
+  final String name;
+  final String detail;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Container(
+      margin: const EdgeInsets.only(top: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
+      decoration: BoxDecoration(
+        color: mine ? AppColors.surfaceRaised : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: mine ? AppColors.edge : AppColors.divider),
+      ),
+      child: Row(children: [
+        if (mine) ...[
+          const JourneyMarker(JourneyEnd.alighting),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+        Expanded(
+          child: Text(
+            '$sequence · $name${mine ? ' (your stop)' : ''}',
+            style: text.bodyMedium!.copyWith(fontWeight: mine ? FontWeight.w700 : FontWeight.w600),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(
+          child: Text(
+            detail,
+            textAlign: TextAlign.end,
+            style: text.bodySmall!.copyWith(
+              color: mine ? AppColors.primary : AppColors.textMuted,
+              fontWeight: mine ? FontWeight.w700 : FontWeight.w500,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  const _Banner({required this.tone, required this.icon, required this.text});
+
+  final StatusTone tone;
   final IconData icon;
   final String text;
 
+  /// A tone, not a loose colour: its text and tint were checked together
+  /// (the band it replaced set ochre text on a 10 % ochre tint).
   @override
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: colour.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
+          color: tone.bg,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: tone.fg.withValues(alpha: 0.3)),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: colour),
-            const SizedBox(width: 8),
+            Icon(icon, size: 18, color: tone.fg),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: Text(text,
-                  style: TextStyle(color: colour, fontSize: 12.5, height: 1.3)),
+              child: Text(text, style: TextStyle(color: AppColors.textPrimary, fontSize: 13.5, height: 1.35)),
             ),
           ],
         ),

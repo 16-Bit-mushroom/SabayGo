@@ -84,9 +84,11 @@ class _DispatcherTripsScreenState extends State<DispatcherTripsScreen> {
       );
     }
 
-    // The trip to work on now first, large, with its own Open button; the
-    // rest of the day under it; finished trips last. The Dispatcher's first
-    // tap of a shift is always the same one.
+    // The trip to work on now first, outlined in green with a countdown;
+    // the rest of the day under it; finished trips last. Every card is the
+    // same size (20 Nov): the next one stands out by its outline, not by
+    // being bigger, and the Dispatcher's first tap of a shift is always the
+    // same one.
     final open = [for (final t in shift.trips) if (!t.isCompleted) t]
       ..sort((a, b) => a.departure.compareTo(b.departure));
     final done = [for (final t in shift.trips) if (t.isCompleted) t];
@@ -157,13 +159,14 @@ class _TripCard extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  /// The next trip: a countdown and a full-width Open button.
+  /// The next trip: outlined in green, with a countdown.
   final bool hero;
 
   @override
   Widget build(BuildContext context) {
     final first = trip.stops.isEmpty ? '' : trip.stops.first.terminalName;
     final last = trip.stops.isEmpty ? '' : trip.stops.last.terminalName;
+    final emphasis = hero || isActive;
     final (label, tone) = switch (trip.status) {
       'boarding' => ('BOARDING', StatusTone.success),
       'departed' => ('ON THE ROAD', StatusTone.muted),
@@ -191,14 +194,17 @@ class _TripCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppRadius.lg),
           child: Container(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            // The 2px outline is 1px wider than the others', so the padding
+            // gives that pixel back: every card comes out the same size.
+            padding: EdgeInsets.all(AppSpacing.lg - (emphasis ? 1 : 0)),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.lg),
-              // The trip in hand is outlined in ink at 2px -- a change of
-              // weight, not only of hue, so it reads on a washed-out screen.
+              // The next trip, and the trip in hand, are outlined in green at
+              // 2px -- a change of weight, not only of hue, so it reads on a
+              // washed-out screen.
               border: Border.all(
-                color: isActive ? AppColors.primary : AppColors.divider,
-                width: isActive ? 2 : 1,
+                color: emphasis ? AppColors.primary : AppColors.edge,
+                width: emphasis ? 2 : 1,
               ),
             ),
             child: Column(
@@ -225,6 +231,8 @@ class _TripCard extends StatelessWidget {
                             hero && !trip.isDeparted
                                 ? '${DateFormat('EEE, MMM d').format(trip.departure)} · ${_relative(trip.departure)}'
                                 : DateFormat('EEE, MMM d').format(trip.departure),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                                 color: hero ? AppColors.primary : AppColors.textMuted,
                                 fontSize: 13,
@@ -240,37 +248,40 @@ class _TripCard extends StatelessWidget {
                 Text(
                   trip.title,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (first.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text('$first → $last',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
                 ],
-                if (trip.plateNumber != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Row(
-                    children: [
-                      const Icon(Icons.airport_shuttle_outlined, size: 18, color: AppColors.textMuted),
-                      const SizedBox(width: 6),
-                      Text(trip.plateNumber!,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                    ],
-                  ),
-                ],
-                if (hero) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  // A visible button as well as the whole card: the card is
-                  // the target, the button says that it opens.
-                  ExcludeSemantics(
-                    child: FilledButton.icon(
-                      onPressed: onTap,
-                      icon: const Icon(Icons.arrow_forward),
-                      label: Text(trip.isDeparted ? 'Open trip' : 'Open passenger list'),
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                const SizedBox(height: AppSpacing.md),
+                // Every card ends on this row, van or not, and its chevron
+                // says the card opens. The next trip used to carry an Open
+                // button of its own and stood taller than the rest (20 Nov);
+                // the whole card is the button.
+                Row(
+                  children: [
+                    const Icon(Icons.airport_shuttle_outlined, size: 18, color: AppColors.textMuted),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        trip.plateNumber == null
+                            ? 'No van yet'
+                            : '${trip.plateNumber!}${trip.operatorName != null ? ' · ${trip.operatorName}' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: trip.plateNumber == null
+                            ? const TextStyle(color: AppColors.textMuted, fontSize: 15)
+                            : const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                      ),
                     ),
-                  ),
-                ],
+                    const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                  ],
+                ),
               ],
             ),
           ),

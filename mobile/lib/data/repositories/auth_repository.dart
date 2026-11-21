@@ -21,10 +21,6 @@ enum UserRole {
       );
 
   bool get isCrew => this == UserRole.dispatcher;
-  bool get isOffice =>
-      this == UserRole.terminalManager ||
-      this == UserRole.cashier ||
-      this == UserRole.admin;
 }
 
 class AuthSession {

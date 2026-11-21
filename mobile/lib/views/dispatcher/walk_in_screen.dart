@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/status_chip.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/offline/offline_sync_service.dart';
 import '../../data/repositories/operations_repository.dart';
+import 'dashboard_panels.dart';
 
 /// Record a cash passenger boarding at the starting terminal.
 ///
@@ -30,11 +33,18 @@ import '../../data/repositories/operations_repository.dart';
 /// * **Built for the next passenger.** After logging, "Next passenger"
 ///   clears the destination and keeps the screen; a run of walk-ins no
 ///   longer means backing out and re-opening it each time.
+/// * **Destinations as big buttons** (20 Nov redesign): two to a row, each
+///   with its approved fare, so the price is read before anything is
+///   tapped; one to a row when the text is large.
 class WalkInScreen extends StatefulWidget {
-  const WalkInScreen({super.key, required this.trip, this.forEventId});
+  const WalkInScreen({super.key, required this.trip, this.forEventId, this.forEventAt});
 
   final CrewTrip trip;
   final String? forEventId;
+
+  /// When the camera counted the boarding this entry settles, said on
+  /// the screen so the Dispatcher knows which person it is for.
+  final DateTime? forEventAt;
 
   @override
   State<WalkInScreen> createState() => _WalkInScreenState();
@@ -191,10 +201,7 @@ class _WalkInScreenState extends State<WalkInScreen> {
           if (_logged > 0)
             Padding(
               padding: const EdgeInsets.only(right: AppSpacing.gutter),
-              child: Center(
-                child: Text('$_logged logged',
-                    style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
-              ),
+              child: Center(child: StatusChip('$_logged LOGGED', tone: StatusTone.success)),
             ),
         ],
       ),
@@ -210,30 +217,53 @@ class _WalkInScreenState extends State<WalkInScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.lg, AppSpacing.gutter, AppSpacing.xxl),
           children: [
-            _Heading('Boarding at ${widget.trip.stopName(_boarding)}'),
-            const SizedBox(height: AppSpacing.xl),
-            const _Heading('Getting off at'),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surfaceRaised,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: AppColors.divider),
+            if (widget.forEventId != null) ...[
+              DashNote(
+                'Adding the boarding the camera counted'
+                '${widget.forEventAt != null ? ' at ${DateFormat('h:mm a').format(widget.forEventAt!)}' : ''}. '
+                'It is sent now, never saved offline.',
+                tone: StatusTone.info,
+                icon: Icons.sensor_occupied_outlined,
               ),
-              child: Column(
-                children: [
-                  for (var i = 0; i < destinations.length; i++) ...[
-                    if (i > 0) const Divider(),
-                    _DestinationRow(
-                      name: destinations[i].terminalName,
-                      selected: _alighting == destinations[i].stopSequence,
-                      fare: _fares?[(_boarding, destinations[i].stopSequence)],
-                      peso: _peso,
-                      onTap: () => setState(() => _alighting = destinations[i].stopSequence),
-                    ),
-                  ],
-                ],
+              const SizedBox(height: AppSpacing.lg),
+            ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceRaised,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  border: Border.all(color: AppColors.edge),
+                ),
+                child: Text('Boarding at ${widget.trip.stopName(_boarding)}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
               ),
             ),
+            const SizedBox(height: AppSpacing.xl),
+            const _Heading('Getting off at'),
+            LayoutBuilder(builder: (context, box) {
+              final scale = MediaQuery.textScalerOf(context).scale(1);
+              final perRow = box.maxWidth / scale >= 300 ? 2 : 1;
+              final width = (box.maxWidth - AppSpacing.sm * (perRow - 1)) / perRow;
+              return Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final d in destinations)
+                    SizedBox(
+                      width: width,
+                      child: DestinationTile(
+                        name: d.terminalName,
+                        selected: _alighting == d.stopSequence,
+                        fare: _fares?[(_boarding, d.stopSequence)],
+                        peso: _peso,
+                        onTap: () => setState(() => _alighting = d.stopSequence),
+                      ),
+                    ),
+                ],
+              );
+            }),
 
             const SizedBox(height: AppSpacing.lg),
             Theme(
@@ -287,11 +317,12 @@ class _Heading extends StatelessWidget {
       );
 }
 
-/// One destination: a full-width 56dp row, the terminal on the left and
-/// its fare on the right. Selection is a filled radio *and* bold ink text,
-/// not a tint alone, so it survives glare (WCAG 1.4.1).
-class _DestinationRow extends StatelessWidget {
-  const _DestinationRow({
+/// One destination: a big button with the terminal and its approved
+/// fare. Selection is a 2 px green edge, a fill *and* a tick, not a tint
+/// alone, so it survives glare (WCAG 1.4.1).
+class DestinationTile extends StatelessWidget {
+  const DestinationTile({
+    super.key,
     required this.name,
     required this.selected,
     required this.fare,
@@ -312,34 +343,49 @@ class _DestinationRow extends StatelessWidget {
         label: '$name${fare != null ? ', ${peso(fare!)}' : ''}',
         onTap: onTap, // restated: excludeSemantics drops the InkWell's own tap action
         excludeSemantics: true,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 56),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-            color: selected ? AppColors.primaryContainer : null,
-            child: Row(
-              children: [
-                Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                    color: selected ? AppColors.primary : AppColors.border),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Text(name,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        color: AppColors.textPrimary,
-                      )),
+        child: Material(
+          color: selected ? AppColors.primaryContainer : AppColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 72),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(
+                  color: selected ? AppColors.primary : AppColors.border,
+                  width: selected ? 2 : 1,
                 ),
-                if (fare != null)
-                  Text(peso(fare!),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                        color: AppColors.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      )),
-              ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      child: Text(name,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          )),
+                    ),
+                    if (selected) const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+                  ]),
+                  const SizedBox(height: AppSpacing.xs),
+                  fare != null
+                      ? Text(peso(fare!),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ))
+                      : const Text('Fare set when logged',
+                          style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                ],
+              ),
             ),
           ),
         ),
@@ -376,50 +422,70 @@ class _TotalBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Container(
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.divider))),
+          decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.edge))),
           padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.md, AppSpacing.gutter, AppSpacing.md),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Semantics(
-                  liveRegion: true,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('COLLECT',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: AppColors.textMuted)),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          total != null ? peso(total!) : '—',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                      Text(caption,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                    ],
+              // The amount in hand, white on the slate: the strongest
+              // contrast on the screen, read at arm's length in sun.
+              Semantics(
+                liveRegion: true,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm + 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.textPrimary,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('COLLECT',
+                              style: TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: AppColors.edge)),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              total != null ? peso(total!) : '—',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                height: 1.15,
+                                color: AppColors.onFill,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Flexible(
+                      child: Text(caption,
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontSize: 12.5, color: AppColors.primaryContainer)),
+                    ),
+                  ]),
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm + 2),
               FilledButton.icon(
                 onPressed: onSubmit,
-                style: FilledButton.styleFrom(minimumSize: const Size(140, 56)),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(AppSizing.primaryActionHeight)),
                 icon: submitting
                     ? const SizedBox(
                         width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
                     : const Icon(Icons.check),
-                label: Text(submitting ? 'Logging…' : 'Log'),
+                label: Text(submitting
+                    ? 'Logging…'
+                    : total != null
+                        ? 'Log ${peso(total!)}'
+                        : 'Log'),
               ),
             ],
           ),

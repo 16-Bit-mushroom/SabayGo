@@ -45,7 +45,6 @@ class CrewTrip {
   /// Set when this trip is a van rental (brief 2.5).
   final Rental? rental;
 
-  bool get isScheduled => status == 'scheduled';
   bool get isCompleted => status == 'completed';
   bool get isBoarding => status == 'boarding';
   bool get isDeparted => status == 'departed' || status == 'completed';
@@ -139,6 +138,7 @@ class Rental {
 class DoorCheck {
   const DoorCheck({
     required this.aboard,
+    this.camera = 'live',
     required this.listed,
     required this.explained,
     required this.excess,
@@ -146,7 +146,13 @@ class DoorCheck {
     required this.unlisted,
   });
 
-  final int aboard;
+  /// What the door camera counted aboard, or null when nothing was
+  /// counted: no door event yet and no live camera to have seen nobody
+  /// board. Never shown as 0 then (16 Nov).
+  final int? aboard;
+
+  /// The door phone: 'live', 'lens_blocked', 'silent' or 'no_phone'.
+  final String camera;
   final int listed;
   final int explained;
   /// More aboard than listed, less those explained: blocks Depart.
@@ -155,7 +161,8 @@ class DoorCheck {
   final List<UnlistedBoarding> unlisted;
 
   factory DoorCheck.fromJson(Map<String, dynamic> j) => DoorCheck(
-        aboard: j['aboard'] as int,
+        aboard: j['aboard'] as int?,
+        camera: j['camera'] as String? ?? 'live',
         listed: j['listed'] as int,
         explained: j['explained'] as int,
         excess: j['excess'] as int,

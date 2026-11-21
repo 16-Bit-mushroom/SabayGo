@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design/components/app_card.dart';
+import '../../../core/design/components/journey_strip.dart';
 import '../../../core/design/components/money.dart';
 import '../../../core/design/components/status_chip.dart';
 import '../../../core/design/tokens.dart';
@@ -9,152 +10,131 @@ import '../../../models/uv_trip_model.dart';
 
 /// One departure in the results list.
 ///
-/// Says **spaces**, never "seats". UV Express does not assign seat numbers —
-/// capacity is counted per leg, and `seat_number` is an internal slot
-/// counter a passenger is never shown. A card promising a seat promises
-/// something the system does not sell.
+/// Says **seats** (the owner's word since 12 Nov) and never gives one a
+/// number: UV Express assigns none, and `seat_number` is an internal slot
+/// counter a passenger is never shown.
 ///
-/// Recomposed from three columns of equal weight — time, route, fare — which
-/// gave the eye no order to read them in. A person scanning a list of
-/// departures is answering two questions, in this order: when does it leave,
-/// and what does it cost. Those two now sit on one line at the top, at the
-/// two ends, so both form a column the eye can run down. The journey sits
-/// under them, and the van and the remaining space sit quietly at the
-/// bottom.
-///
-/// Availability is a chip **only when it is scarce**. Twelve green
-/// "Available" chips down a list is twelve pieces of decoration teaching the
-/// eye to ignore chips, which is exactly the wrong lesson for the one row
-/// that says "Only 2 left". Ordinary availability is plain muted text.
+/// Read in the order a person scanning departures asks: when does it
+/// leave, and what does it cost -- the two ends of the top line, so both
+/// form a column the eye can run down. Then the journey, then how many
+/// seats are left and the way in (20 Nov redesign, after Gemini's study).
+/// "Leaves in 25 min" appears only within the hour, and "Last trip" only
+/// on the day's last departure: a label that is on every card teaches the
+/// eye to skip labels.
 class TripCard extends StatelessWidget {
   const TripCard({super.key, required this.trip, this.onTap});
 
   final UvTripModel trip;
   final VoidCallback? onTap;
 
-  bool get _scarce =>
-      !trip.isFull && (trip.isNearlyFull || trip.occupancyRatio >= 0.8);
+  bool get _scarce => !trip.isFull && (trip.isNearlyFull || trip.occupancyRatio >= 0.8);
 
-  String get _spaces =>
-      '${trip.availableSeats} ${trip.availableSeats == 1 ? 'space' : 'spaces'}';
+  String get _seats => '${trip.availableSeats} ${trip.availableSeats == 1 ? 'seat' : 'seats'}';
 
-  /// Short on purpose. At 200% text on a 320dp phone this chip, the van's
-  /// plate and an icon share one row, and "ONLY 2 SPACES LEFT" overflowed it
-  /// by 28 pixels. The full sentence is still spoken — see
-  /// [semanticSummary] — so nothing is lost by abbreviating the glance form.
-  String get _shortSpaces => '${trip.availableSeats} LEFT';
+  /// "Leaves in 25 min" for a departure within the hour; null otherwise.
+  /// A clock comparison, never an estimate.
+  String? get _leavesSoon {
+    final left = trip.departureTime.difference(DateTime.now());
+    if (left.isNegative || left.inMinutes > 60) return null;
+    return left.inMinutes < 1 ? 'LEAVES NOW' : 'LEAVES IN ${left.inMinutes} MIN';
+  }
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-
-    // A full trip is still worth showing — it tells someone the 5:30 exists
-    // and to try the 6:00 — but it should not compete with the departures
-    // they can actually take.
+    // A full trip is still worth showing -- it tells someone the 5:30
+    // exists and to try the 6:00 -- but it should not compete with the
+    // departures they can actually take.
     final anchor = trip.isFull ? AppColors.textMuted : AppColors.textPrimary;
-    final fare = trip.isFull ? AppColors.textMuted : AppColors.primary;
+    final eta = trip.estimatedArrivalTime;
+    final soon = _leavesSoon;
 
     return AppCard(
       onTap: onTap,
       semanticLabel: '${semanticSummary()} Opens trip details.',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Tier one: when, and how much.
           Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  clockTime(trip.departureTime),
-                  style: text.titleLarge!.copyWith(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: anchor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          clockTime(trip.departureTime),
+                          style: text.titleLarge!.copyWith(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: anchor,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        if (soon != null && !trip.isFull) StatusChip(soon, tone: StatusTone.warning),
+                        if (trip.isLastTrip) const StatusChip('LAST TRIP', tone: StatusTone.muted),
+                      ],
+                    ),
+                    // No invented arrival: shown only when the server sends one.
+                    if (eta != null) Text('Arrives about ${clockTime(eta)}', style: text.bodySmall),
+                  ],
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
               // The fare is exact, from the LTFRB pairwise terminal matrix,
               // so it is not hedged with a "from" or a "~".
-              Money(
-                trip.approximateFare,
-                showCentavos: false,
-                style: text.titleLarge!.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: fare,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          // Tier two: the journey. Terminal names, not stop numbers — the
-          // same terminal is stop 2 on one route and stop 5 on another, so a
-          // number here would mean nothing to a passenger.
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  trip.origin.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.bodyMedium,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                child: Icon(Icons.arrow_forward,
-                    size: 14, color: AppColors.textMuted),
-              ),
-              Flexible(
-                child: Text(
-                  trip.destination.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.bodyMedium,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Money(
+                    trip.approximateFare,
+                    showCentavos: false,
+                    style: text.titleLarge!.copyWith(fontSize: 22, fontWeight: FontWeight.w800, color: anchor),
+                  ),
+                  Text('Fixed fare', style: text.bodySmall),
+                ],
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-
-          // Tier three: which van, and what is left.
-          Row(
+          // Terminal names, not stop numbers: the same terminal is stop 2 on
+          // one route and stop 5 on another.
+          JourneyStrip(origin: trip.origin.name, destination: trip.destination.name),
+          const SizedBox(height: AppSpacing.md),
+          const Divider(height: 1),
+          const SizedBox(height: AppSpacing.md),
+          // A Wrap, so at large text "View details" moves under the chip
+          // instead of pushing off the card.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
-              const Icon(Icons.airport_shuttle_outlined,
-                  size: 15, color: AppColors.textMuted),
-              const SizedBox(width: AppSpacing.xs + 2),
-              Expanded(
-                child: Text(
-                  trip.plateNumber ?? trip.operatorName ?? trip.tripLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.bodySmall,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              // Flexible, because a chip left inflexible in a Row is handed
-              // unbounded width: it then sizes to its text and pushes
-              // everything beside it off the card instead of ellipsising.
-              Flexible(
-                child: trip.isFull
-                    ? const StatusChip('FULL', tone: StatusTone.danger)
-                    : _scarce
-                        ? StatusChip(
-                            _shortSpaces,
-                            tone: StatusTone.warning,
-                            icon: Icons.priority_high,
-                          )
-                        : Text(
-                            _spaces,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text.bodySmall,
-                          ),
+              trip.isFull
+                  ? const StatusChip('FULL', tone: StatusTone.danger)
+                  : _scarce
+                      ? StatusChip('ONLY ${_seats.toUpperCase()} LEFT',
+                          tone: StatusTone.warning, icon: Icons.priority_high)
+                      : StatusChip('${trip.availableSeats} OF ${trip.totalSeats} SEATS LEFT',
+                          tone: StatusTone.success),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    trip.isFull ? 'Full' : 'View details',
+                    style: text.labelLarge!.copyWith(
+                      color: trip.isFull ? AppColors.textMuted : AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (!trip.isFull) const Icon(Icons.chevron_right, size: 20, color: AppColors.primary),
+                ],
               ),
             ],
           ),
@@ -169,11 +149,13 @@ class TripCard extends StatelessWidget {
     final availability = trip.isFull
         ? 'full'
         : _scarce
-            ? 'only $_spaces left'
-            : '$_spaces left';
+            ? 'only $_seats left'
+            : '$_seats left';
     return '${clockTime(trip.departureTime)}, ${trip.origin.name} to '
         '${trip.destination.name}, '
         '${Money.format(trip.approximateFare, showCentavos: false)}, '
-        '$availability.';
+        '$availability'
+        '${_leavesSoon != null && !trip.isFull ? ', ${_leavesSoon!.toLowerCase()}' : ''}'
+        '${trip.isLastTrip ? ', the last trip' : ''}.';
   }
 }

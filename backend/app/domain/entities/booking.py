@@ -21,7 +21,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.core.timezone import APP_TZ
-from app.core.exceptions import ConflictError, PolicyViolationError
+from app.core.exceptions import ConflictError
 from app.domain.enums import BookingStatus, BookingType, PaymentStatus
 from app.domain.value_objects import Segment
 
@@ -161,27 +161,9 @@ class Booking:
             raise ConflictError(f"Cannot board a booking that is {self.status.value}.")
         self.status = BookingStatus.BOARDED
 
-    def mark_no_show(self) -> None:
-        if self.status in _TERMINAL or self.status is BookingStatus.BOARDED:
-            raise ConflictError(f"Cannot mark {self.status.value} booking as no-show.")
-        self.status = BookingStatus.NO_SHOW
-
     def cancel(self) -> None:
         if self.status in _TERMINAL:
             raise ConflictError(f"Booking is already {self.status.value}.")
         if self.status is BookingStatus.BOARDED:
             raise ConflictError("Cannot cancel a booking after boarding.")
         self.status = BookingStatus.CANCELLED
-
-    def assert_passenger_may_cancel(self) -> None:
-        """A passenger cancels only an unpaid reservation (brief 2.1).
-
-        Once the cash is in the Dispatcher's hand the money is outside
-        the system, so returning it has to be a person's act: the
-        passenger asks in the chat and the Dispatcher cancels.
-        """
-        if self.payment_status is PaymentStatus.PAID:
-            raise PolicyViolationError(
-                "This seat is paid. Ask the Dispatcher to cancel it so the "
-                "cash can be returned to you."
-            )

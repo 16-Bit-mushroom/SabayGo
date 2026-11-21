@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/components/dialog_buttons.dart';
 import '../../core/design/tokens.dart';
 import '../../core/network/api_client.dart';
 import '../../data/repositories/messaging_repository.dart';
@@ -119,28 +120,36 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
     );
   }
 
+  /// Mine on the soft green, theirs on white, both edged (20 Nov redesign):
+  /// quieter than the solid green bubble it replaces, and the text stays
+  /// the ink colour on both. One's own message opens Edit and Delete on a
+  /// tap or a long press.
   Widget _bubble(ChatMessage m) {
     final align = m.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final color = m.isMine ? AppColors.primary : AppColors.primaryContainer;
-    final textColor = m.isMine ? AppColors.surfaceRaised : AppColors.textPrimary;
+    final fill = m.isMine ? AppColors.primaryContainer : AppColors.surfaceRaised;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: align,
         children: [
-          GestureDetector(
-            onLongPress: m.canChange ? () => _actions(m) : null,
-            child: Container(
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(16),
+          Material(
+            color: fill,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: m.isMine ? AppColors.primaryLight.withValues(alpha: 0.5) : AppColors.edge),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: m.canChange ? () => _actions(m) : null,
+              onLongPress: m.canChange ? () => _actions(m) : null,
+              child: Container(
+                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: m.deleted
+                    ? const Text('Message deleted',
+                        style: TextStyle(color: AppColors.textMuted, fontStyle: FontStyle.italic))
+                    : Text(m.body, style: const TextStyle(color: AppColors.textPrimary)),
               ),
-              child: m.deleted
-                  ? Text('Message deleted',
-                      style: TextStyle(color: textColor.withValues(alpha: .75), fontStyle: FontStyle.italic))
-                  : Text(m.body, style: TextStyle(color: textColor)),
             ),
           ),
           Padding(
@@ -148,7 +157,7 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
             child: Text(
               DateFormat('h:mm a').format(m.createdAt) +
                   (m.edited && !m.deleted ? ' · edited' : '') +
-                  (m.canChange ? ' · hold to edit' : ''),
+                  (m.canChange ? ' · tap to edit' : ''),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -157,7 +166,7 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
     );
   }
 
-  /// Long-press on one's own message: Edit or Delete.
+  /// A tap or long press on one's own message: Edit or Delete.
   Future<void> _actions(ChatMessage m) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -191,8 +200,12 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
           title: const Text('Delete this message?'),
           content: const Text('Its text is removed for both of you. "Message deleted" stays where it was.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+            DialogButtons(
+              action: 'Delete',
+              danger: true,
+              onAction: () => Navigator.pop(ctx, true),
+              onCancel: () => Navigator.pop(ctx, false),
+            ),
           ],
         ),
       );
@@ -219,8 +232,7 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
           textCapitalization: TextCapitalization.sentences,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('Save')),
+          DialogButtons(action: 'Save', onAction: () => Navigator.pop(ctx, c.text)),
         ],
       ),
     ); // c is not disposed here: the dialog still reads it while it animates out.
@@ -244,10 +256,12 @@ class _ConversationThreadScreenState extends State<ConversationThreadScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            IconButton.filled(
-              tooltip: 'Send',
+            // A labelled button, not an icon alone (20 Nov redesign).
+            FilledButton.icon(
               onPressed: _viewModel.isSending ? null : _send,
-              icon: const Icon(Icons.send, size: 20),
+              style: FilledButton.styleFrom(minimumSize: const Size(0, AppSizing.minTouchTarget)),
+              icon: const Icon(Icons.send, size: 18),
+              label: const Text('Send'),
             ),
           ],
         ),
