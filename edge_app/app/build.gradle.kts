@@ -43,6 +43,11 @@ dependencies {
     implementation("com.google.ai.edge.litert:litert:2.3.0")
     implementation("com.google.ai.edge.litert:litert-gpu:2.3.0")
 
+    // The door camera when it is a Tapo on the phone's hotspot: RTSP, H.264 decoded on the phone.
+    val media3 = "1.11.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-exoplayer-rtsp:$media3")
+
     // The counting service's camera and GPS live on a LifecycleService.
     implementation("androidx.lifecycle:lifecycle-service:2.10.0")
 

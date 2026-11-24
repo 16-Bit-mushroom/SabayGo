@@ -39,7 +39,8 @@ import java.util.concurrent.TimeUnit
  * The in-van phone's work (brief 5.1), as a foreground service with the
  * camera and location types, so it keeps running behind the lock screen:
  *
- * - the camera, through [Pipeline], counting door events;
+ * - the camera (the phone's own, or the Tapo on its hotspot through
+ *   [TapoCamera]), through [Pipeline], counting door events;
  * - GPS readings every second, while the phone is out with a van;
  * - GET /edge/session every 30 s: the server's clock, the van, its door
  *   line, and whether to count (rule 13);
@@ -62,6 +63,8 @@ class CountingService : LifecycleService() {
     private val timer = Executors.newSingleThreadScheduledExecutor()
     private val gpsThread = HandlerThread("gps").apply { start() }
     private var locations: LocationManager? = null
+    private var tapo: TapoCamera? = null
+    private var cameraX: ProcessCameraProvider? = null
 
     private val onFix = LocationListener { fix -> onFix(fix) }
 
@@ -96,6 +99,7 @@ class CountingService : LifecycleService() {
         locations?.removeUpdates(onFix)
         gpsThread.quitSafely()
         timer.shutdownNow()
+        stopCamera()   // before the analysis thread closes: no frame after pipeline.close()
         analysis.execute { pipeline.close() }
         analysis.shutdown()
         device.close()
@@ -106,13 +110,21 @@ class CountingService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_REFRESH) {
+            // Set-up switched between the phone's camera and the Tapo.
+            if (config.usesTapo != (tapo != null)) { stopCamera(); startCamera() }
             uploader.reset()
             timer.execute { safely(::syncSession) }
         }
         return START_STICKY
     }
 
+    /** The Tapo on the hotspot when its Camera Account is set, else this phone's own back camera. */
     private fun startCamera() {
+        if (config.usesTapo) {
+            tapo = TapoCamera(this, config, analysis) { rotation, toBitmap -> safely { pipeline.onFrame(rotation, toBitmap) } }
+                .also { it.start() }
+            return
+        }
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             val analysisCase = ImageAnalysis.Builder()
@@ -122,13 +134,22 @@ class CountingService : LifecycleService() {
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
-            analysisCase.setAnalyzer(analysis) { image -> image.use { safely { pipeline.onFrame(it) } } }
+            analysisCase.setAnalyzer(analysis) { image ->
+                image.use { safely { pipeline.onFrame(it.imageInfo.rotationDegrees) { it.toBitmap() } } }
+            }
             try {
-                future.get().apply { unbindAll(); bindToLifecycle(this@CountingService, CameraSelector.DEFAULT_BACK_CAMERA, analysisCase) }
+                cameraX = future.get().apply { unbindAll(); bindToLifecycle(this@CountingService, CameraSelector.DEFAULT_BACK_CAMERA, analysisCase) }
             } catch (e: Exception) {
                 Live.note = "The camera did not open: ${e.message}"
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun stopCamera() {
+        tapo?.stop()
+        tapo = null
+        cameraX?.unbindAll()
+        cameraX = null
     }
 
     private fun startGps() {

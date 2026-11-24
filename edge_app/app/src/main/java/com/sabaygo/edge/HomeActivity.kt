@@ -194,10 +194,21 @@ class HomeActivity : ComponentActivity() {
             setText(config.minIntervalMs.toString())
             inputType = InputType.TYPE_CLASS_NUMBER
         }
+        // The Tapo's Camera Account; blank keeps this phone's own camera. Its address is found on the hotspot.
+        val cameraUser = EditText(this).apply {
+            hint = "Tapo camera username (blank: this phone's camera)"
+            setText(config.cameraUser)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        }
+        val cameraPass = EditText(this).apply {
+            hint = "Tapo camera password"
+            setText(config.cameraPass)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad / 2, pad, 0)
-            listOf(server, token, model, interval).forEach(::addView)
+            listOf(server, token, model, interval, cameraUser, cameraPass).forEach(::addView)
         }
         AlertDialog.Builder(this)
             .setTitle("Phone set-up")
@@ -207,6 +218,11 @@ class HomeActivity : ComponentActivity() {
                 config.token = token.text.toString()
                 config.model = models[model.selectedItemPosition]
                 config.minIntervalMs = interval.text.toString().toLongOrNull() ?: 0L
+                if (cameraUser.text.toString().trim() != config.cameraUser || cameraPass.text.toString() != config.cameraPass) {
+                    config.cameraUser = cameraUser.text.toString()
+                    config.cameraPass = cameraPass.text.toString()
+                    config.cameraHost = ""   // another camera, perhaps: look for it
+                }
                 if (Live.running) CountingService.start(this, refresh = true) else if (config.ready) startCounting()
             }
             .setNegativeButton("Cancel", null)
@@ -308,6 +324,7 @@ class HomeActivity : ComponentActivity() {
                 if (fix != null && now - Live.lastFixAt < 10_000) "ok ±${fix.accuracy.toInt()} m" else "no fix"
             }  ·  lens ${if (Live.lensBlocked) "COVERED" else "clear"}  ·  ${
                 String.format(Locale.US, "%.1f", Live.detectionRateHz)} detections/s"
+            Live.cameraNote?.let { lines += "Door camera: $it" }
             val dev = Live.device
             dev?.batteryPct?.let { pct ->
                 lines += "Battery $pct %${if (dev.plugged == "none") ", not charging" else ", charging"}" +

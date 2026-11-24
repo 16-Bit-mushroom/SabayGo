@@ -2709,3 +2709,47 @@ the trip reads paid. The test's Python fallback helpers read
 those checks look in the live database. The trip from the rehearsal was
 paid before the fix and keeps its label; reloading the setup data
 removes it.
+
+### The Tapo door camera over the phone's hotspot (24 Nov)
+
+Decided 16 Nov: the door camera may be a Tapo C110 (wired, fixed) on
+the camera phone's hotspot, and YOLOv8n stays on the phone. The laptop
+cannot reach a camera behind a hotspot on carrier NAT, and sending the
+video off the van would cost data, lose frames on a weak signal and
+carry passengers' faces off the van (brief 5.1–5.3). USB was rejected:
+the phone usually cannot charge while it powers a camera.
+
+**The gate (24 Nov), the camera on the realme's 2.4 GHz hotspot, read
+from the laptop on the same hotspot.** `stream2` is H.264 1280 × 720,
+15 fps there (25 on home Wi-Fi), with an A-law audio track. With mobile
+data off (checked every 10 s through the hotspot), the camera was
+unplugged and streamed again 40 s after power returned, at the same
+address; ten minutes read 8780 of 9000 frames (14.7 fps) with no 5-s
+window stalled. Its "Wi-Fi Backup" never moved it to the hotspot, so it
+was reset and added with the hotspot as its only network. Left: the
+parked-car heat test (rated 0–40 °C).
+
+**Built.** `edge_app/count/TapoCamera.kt`: Media3's RTSP player (1.11.1)
+on TCP, decoded into a SurfaceTexture and read back at 640 × 360 through
+OpenGL (`GlFrames.kt`), each frame handed to `Pipeline.onFrame`, which
+now takes a rotation and a bitmap supplier instead of a CameraX image.
+An `ImageReader` was tried first: the realme's MediaTek decoder
+(`c2.mtk.avc.decoder`) gives frames the CPU cannot lock as YUV, and the
+app aborted on its first frame, eight times over, as the sticky service
+restarted it. The phone finds the
+camera by asking each address on its own non-mobile networks for ports
+2020 and 554 (the hotspot changes subnet on restart, and its host has no
+list of clients), remembers it, and looks again after two failed tries.
+A stream silent for 15 s is closed and retried; while it is down no
+frame reaches the pipeline, so `camera_ok` goes false and the trip is
+Unaudited, as for the phone's own camera. Set-up takes the Tapo's Camera
+Account; blank keeps the phone's camera. `edge_app/README.md` says how
+to set the camera up.
+
+Proof: `./gradlew testDebugUnitTest assembleDebug` (15 tests pass). On
+the realme 8 5G, hosting the hotspot: the app found the camera at
+10.73.29.97 by itself, decoded on the hardware decoder and said "Camera
+ok" for over a minute without a crash; the picture is upright and not
+mirrored (the camera's date and logo read normally), its colours match the camera's own (checked against a frame read on the
+laptop), and it trails the room by about 3 s. Not yet tried: counting
+people through it, and a trip against the server.
