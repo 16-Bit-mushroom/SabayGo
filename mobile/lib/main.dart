@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/config/server_address.dart';
 import 'core/design/components/brand_logo.dart';
 import 'core/design/tokens.dart';
 import 'core/design/theme.dart';
@@ -14,13 +15,17 @@ import 'views/auth/welcome_screen.dart';
 import 'views/dispatcher/dispatcher_main_screen.dart';
 import 'views/passenger_main_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const SabayGoApp());
+  // Before the first request: restoring a session already calls the server.
+  final server = await ServerAddress.load();
+  runApp(SabayGoApp(server: server));
 }
 
 class SabayGoApp extends StatefulWidget {
-  const SabayGoApp({super.key});
+  const SabayGoApp({super.key, required this.server});
+
+  final String server;
 
   @override
   State<SabayGoApp> createState() => _SabayGoAppState();
@@ -36,7 +41,7 @@ class _SabayGoAppState extends State<SabayGoApp> {
   void initState() {
     super.initState();
     _tokens = TokenStorage();
-    _api = ApiClient(tokenStorage: _tokens);
+    _api = ApiClient(tokenStorage: _tokens, baseUrl: widget.server);
     _auth = AuthProvider(
       repository: AuthRepository(_api),
       tokens: _tokens,

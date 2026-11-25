@@ -2773,3 +2773,81 @@ ok" for over a minute without a crash; the picture is upright and not
 mirrored (the camera's date and logo read normally), its colours match the camera's own (checked against a frame read on the
 laptop), and it trails the room by about 3 s. Not yet tried: counting
 people through it, and a trip against the server.
+
+### No rebuild for a new network (25 Nov)
+
+The laptop that serves SabayGo gets a new address at every venue (home,
+school, the terminal's Wi-Fi, a phone hotspot), and two of the three apps
+had it compiled in: a venue change meant `./run.sh --mobile` (a Gradle
+build) and a ~3.5 min console rebuild. The edge app already took its
+server in Set-up.
+
+**Built.** The console dials port 8000 on the host its own page came from
+(`operator_console/lib/core/config/app_config.dart`), so one bundle works
+on every network, from the laptop (`localhost:3001`) or another computer
+at the terminal (`http://<laptop>:3001`); `API_BASE_URL` is still honoured
+for a backend on another host. `run.sh` no longer bakes the address in;
+its stamp says `same-host`, so a bundle from before is rebuilt once. The
+passenger/Dispatcher app has a Server line on the sign-in screen
+(`mobile/lib/core/config/server_address.dart`): type `10.0.52.117` (port
+and `/api/v1` are filled in), it checks `/health` and saves, or offers
+"Save anyway" when nothing answers. The build's address is only the
+starting value: a typed address holds until a build made for another
+address is installed, so whichever was chosen last wins. A signed-in phone
+signs out to reach it (sign-out keeps a Dispatcher's unsent records).
+The line is for testers and is in debug builds only (what `./run.sh
+--mobile` installs), beside the dev accounts: a released app dials the
+one server it was built for, a domain, and ignores a saved address --
+passengers never type one. Nothing running uses the laptop's address any more, so a network change
+needs no restart.
+
+Proof: `flutter analyze` (both apps, no new issues);
+`flutter test test/server_address_test.dart test/phase3_screens_test.dart
+test/auth_restore_test.dart test/layout_test.dart` 71/71, the sign-in
+screen at 320 dp and 200 % text with the tap-target checks. Not yet
+tried on a phone or in a rebuilt console.
+
+### First count through the Tapo, against the server (25 Nov)
+
+Desk test, laptop server on port 8001 (another project held 8000:
+`SABAYGO_BACKEND_PORT=8001`, which the console now follows through its
+`API_PORT` build define), the realme on its USB tunnel
+(`usb_phones.sh --watch`), hosting the hotspot. A special trip "Tapo door
+test" on TST-1023, the 21 Nov trip voided and its unpaid ₱50 parking
+overridden with a written reason (no money changed hands).
+
+The hotspot came up on a new subnet (10.40.117.x) and the edge app found
+the Tapo there by itself. The door line drawn on the phone reached the
+server (`PUT /edge/door-layout` 200). One person walked 3 in and 3 out:
+**5 of 6 crossings counted**, 2 boardings and 3 alightings, each filed on
+the test trip within 1–4 s with its still (person pixelated, line drawn);
+none held, no errors. The missed crossing was a boarding. The doorway
+was at the left edge of the frame with the line drawn close to it, so a
+person coming in is first seen already at the line, and someone first
+seen inside does not board (by design). Next run: aim the camera so the
+doorway is mid-frame, ideally from above the door, with room on both
+sides of the line.
+
+Two observations. The phone's "inside now" (`occupancy_after`) is
+in minus out for the whole session, floored at 0, so an alighting with
+nobody counted in keeps it one low afterwards: it read 0 after every
+event here. The server only stores it (and chains it) and decides
+nothing on it. In one still the hanging clothes on the wall were
+pixelated, so the model saw them as a person; it never moved, so it
+crossed nothing.
+
+Second run, camera re-aimed, line mid-frame: 5 in and 5 out walked,
+**all 5 alightings and 2 of 5 boardings** counted. A board and an alight
+on one track 0.3 s apart at 16:11:35, while the camera was being set up,
+are not part of the walk. The phone's trace (`files/trace/` on the phone,
+pulled with adb) shows why. Each missed boarding was tracked from
+outside up to the line (cabinward −0.33 to −0.08), then the detector's
+score fell from about 0.9 to 0.1–0.5 mid-crossing, the track was dropped,
+and the person was picked up again only deep inside (+0.45 to +0.48)
+as a new track, which counts nothing. The camera was too close to the
+path: the person's box averaged 0.97 of the frame's height (head and
+feet cut off) and crossed the frame in about 2 s, at 8 frames a second
+processed. Exits crossed the same zone and held their track more often.
+Next run: the camera higher and further back, looking down at the
+doorway as it would above a van door, a whole person in frame. Tracker
+changes wait until a run with that placement still misses.

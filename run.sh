@@ -111,10 +111,11 @@ if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ufw 2>/de
   warn "  (bash: for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do sudo ufw allow proto tcp from \$net to any port $PORT_BACKEND; done)"
 fi
 
-# The console runs in a browser on THIS machine, so it dials 127.0.0.1 and
-# is immune to the address changing. Only the handsets need $HOST.
+# The console dials the host its page came from, so it never needs $HOST.
+# The phones do: the passenger/Dispatcher app is built with it as its
+# starting Server (Sign in > Server changes it on the phone) and the edge
+# app is handed it below.
 API_LAN="http://$HOST:$PORT_BACKEND/api/v1"
-API_LOCAL="http://127.0.0.1:$PORT_BACKEND/api/v1"
 
 read_env() {  # read_env <file> <key>
   [ -f "$1" ] || return 0
@@ -356,14 +357,16 @@ for d in [d for d in phones if not d.get("emulator", False)] + phones:
 CONSOLE_WEB="$ROOT/operator_console/build/web"
 CONSOLE_STAMP="$CONSOLE_WEB/.sabaygo-api-base"
 
-# Rebuild only when the bundle is missing, older than the source, or was
-# built against a different backend -- API_BASE_URL is compiled in, so a
-# bundle built for another address is wrong, not merely stale, and that is
-# exactly the drift that broke the last demo.
+# Rebuild only when the bundle is missing or older than the source. No
+# address is compiled in: the console dials port 8000 on the host its page
+# came from (operator_console/lib/core/config/app_config.dart), so a new
+# network needs no rebuild. The stamp says the bundle was built that way;
+# one stamped with an address is from before 25 Nov and is rebuilt once.
+CONSOLE_KIND="same-host:$PORT_BACKEND"
 console_needs_build() {
   [ -f "$CONSOLE_WEB/main.dart.js" ] || return 0
   [ -f "$CONSOLE_STAMP" ] || return 0
-  [ "$(cat "$CONSOLE_STAMP")" = "$API_LAN" ] || return 0
+  [ "$(cat "$CONSOLE_STAMP")" = "$CONSOLE_KIND" ] || return 0
   [ -z "$(find "$ROOT/operator_console/lib" "$ROOT/operator_console/pubspec.yaml" \
             -newer "$CONSOLE_WEB/main.dart.js" -print -quit 2>/dev/null)" ] || return 0
   return 1
@@ -378,13 +381,13 @@ if [ "$WITH_CONSOLE" = 1 ] && [ "$HAVE_FLUTTER" = 1 ]; then
     # backend, which is unfixable from the demo floor.
     if ! ( cd "$ROOT/operator_console" && flutter build web --release \
              --pwa-strategy=none \
-             --dart-define=API_BASE_URL="$API_LAN" ) \
+             --dart-define=API_PORT="$PORT_BACKEND" ) \
            > "$LOGS/console_build.log" 2>&1; then
       warn "the console failed to build. Last lines:"
       tail -n 20 "$LOGS/console_build.log" >&2 || true
       die "console build failed"
     fi
-    printf '%s' "$API_LAN" > "$CONSOLE_STAMP"
+    printf '%s' "$CONSOLE_KIND" > "$CONSOLE_STAMP"
     ok "built"
   else
     ok "bundle is current -- not rebuilding"
@@ -595,7 +598,7 @@ cat <<EOF
   Backend                  http://$HOST:$PORT_BACKEND   (docs: /docs)
   Adminer                  http://localhost:8080
 
-  Handsets dial            $API_LAN
+  Phones' server address   $HOST$([ "$PORT_BACKEND" = 8000 ] || echo ":$PORT_BACKEND")   (Sign in > Server on the app; Set-up on the camera phone)
   GPS simulated for        $([ ${#GPS_TRIPS[@]} -gt 0 ] && echo "${GPS_TRIPS[*]}" || echo "no trip yet")
                            $([ "$WITH_GPS" = 1 ] && echo "(and each trip departed from now on)" || echo "(off: --no-gps)")
 EOF
@@ -608,8 +611,11 @@ EOF
 
 cat <<EOF
 
-  If the network changes mid-demo: Ctrl-C and re-run ./run.sh with --mobile
-  (and --edge, the camera phone on its cable) so both phones get the new address.
+  If the network changes mid-demo, nothing here needs restarting: type the
+  laptop's new address on each phone (Sign in > Server; the camera phone's
+  Set-up, or re-run with --edge while it is on its cable). The console on
+  this laptop (localhost) is unaffected; another computer opens
+  http://<new address>:$PORT_CONSOLE.
 
   Ctrl-C stops everything. Logs: ${LOGS#$ROOT/}/
 ────────────────────────────────────────────────────────────────────
