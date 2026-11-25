@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/config/server_address.dart';
 import '../../core/design/components/app_card.dart';
+import '../../core/design/components/dialog_buttons.dart';
+import '../../core/network/api_client.dart';
 import '../../core/design/tokens.dart';
 import '../../viewmodels/auth_provider.dart';
 import 'signup_screen.dart';
@@ -164,6 +167,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                   child: const Text('New passenger? Create an account'),
                 ),
+                if (AppConfig.isDebug) ...[
+                  const SizedBox(height: 8),
+                  const _ServerLine(),
+                ],
 
                 if (AppConfig.isDebug) ...[
                   const SizedBox(height: 32),
@@ -231,6 +238,148 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
+/// Which server the app talks to, and the way to change it. Test builds
+/// only: a released app has one fixed server (a domain) and nobody using
+/// it types an address.
+///
+/// While the server is a laptop its address changes with each network, so
+/// the tester setting up a phone types the new one here instead of the app
+/// being rebuilt (`ServerAddress`). A signed-in phone signs out to reach it;
+/// signing out keeps a Dispatcher's unsent records.
+class _ServerLine extends StatefulWidget {
+  const _ServerLine();
+
+  @override
+  State<_ServerLine> createState() => _ServerLineState();
+}
+
+class _ServerLineState extends State<_ServerLine> {
+  Future<void> _change() async {
+    final api = context.read<ApiClient>();
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (_) => _ServerDialog(current: ServerAddress.shown(api.baseUrl)),
+    );
+    if (chosen == null || !mounted) return;
+    setState(() => api.baseUrl = chosen);
+    try {
+      await ServerAddress.save(chosen);
+    } catch (_) {
+      // Used for now even if it cannot be kept: typed again after a restart.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final api = context.read<ApiClient>();
+    return TextButton.icon(
+      onPressed: _change,
+      icon: const Icon(Icons.dns_outlined, size: 18),
+      label: Text('Server: ${ServerAddress.shown(api.baseUrl)} · Change'),
+    );
+  }
+}
+
+class _ServerDialog extends StatefulWidget {
+  const _ServerDialog({required this.current});
+
+  final String current;
+
+  @override
+  State<_ServerDialog> createState() => _ServerDialogState();
+}
+
+class _ServerDialogState extends State<_ServerDialog> {
+  late final _field = TextEditingController(text: widget.current);
+  bool _busy = false;
+  String? _error;
+
+  /// The address that did not answer: a second Save keeps it anyway (the
+  /// server may still be starting).
+  String? _unanswered;
+
+  @override
+  void dispose() {
+    _field.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final url = ServerAddress.parse(_field.text);
+    if (url == null) {
+      setState(() => _error = 'Type the address, like 10.0.52.117.');
+      return;
+    }
+    if (url == _unanswered) {
+      Navigator.pop(context, url);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final ok = await ServerAddress.answers(url);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, url);
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _unanswered = url;
+      _error = 'No answer from ${ServerAddress.shown(url)}. '
+          'Is this phone on the same Wi-Fi as the server?';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Server'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'The address of the computer running SabayGo on this network.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _field,
+            autofocus: true,
+            autocorrect: false,
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) {
+              if (_unanswered != null || _error != null) {
+                setState(() {
+                  _unanswered = null;
+                  _error = null;
+                });
+              }
+            },
+            onSubmitted: (_) => _busy ? null : _save(),
+            decoration: InputDecoration(
+              labelText: 'Address',
+              hintText: '10.0.52.117',
+              errorText: _error,
+              errorMaxLines: 3,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        DialogButtons(
+          action: _unanswered == null ? 'Save' : 'Save anyway',
+          onAction: _busy ? null : _save,
+          busy: _busy,
+          onCancel: () => Navigator.pop(context),
+        ),
+      ],
+    );
+  }
+}
+
 /// Debug-only account shortcuts. Compiled out of release builds by the
 /// AppConfig.isDebug guard, so seeded credentials cannot ship.
 class _DebugPanel extends StatelessWidget {
@@ -253,12 +402,11 @@ class _DebugPanel extends StatelessWidget {
             const Icon(Icons.bug_report_outlined,
                 size: 16, color: AppColors.textMuted),
             const SizedBox(width: 6),
-            // Expanded: the address is long and the row overflowed a small
-            // phone (found 20 Nov by test/phase3_screens_test.dart).
-            Expanded(
+            // The server's address is on the Server line above it.
+            const Expanded(
               child: Text(
-                'Dev accounts — ${AppConfig.apiBaseUrl}',
-                style: const TextStyle(
+                'Dev accounts',
+                style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textMuted,
                 ),

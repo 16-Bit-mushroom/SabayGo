@@ -151,6 +151,7 @@ four hand-maintained copies of an IP address is what broke the last demo.
 ```fish
 ./run.sh                      # db + backend + console
 ./run.sh --mobile             # also the passenger/Dispatcher app, on an attached device
+./run.sh --mobile --edge      # and the camera phone: edge app over USB, then it reports over Wi-Fi
 ./run.sh --host 10.0.52.117   # force the address, when detection picks the wrong NIC
 ./run.sh --soon               # rebuild demo data, trip departs in 20 min
 ./run.sh --reset-db           # rebuild demo data; live trips dated from now
@@ -176,8 +177,9 @@ on port 3001 (it sends `Cache-Control: no-cache`, so a rebuild reaches every
 browser on its next load), not started with `flutter run`. On this machine `flutter run
 -d chrome` finds no Chrome (only `/usr/bin/chromium`) and `-d web-server`
 opens the port but never accepts a connection. The build takes ~3.5 min
-and is skipped on later runs unless `lib/`, `pubspec.yaml` or the baked-in
-API address changed (stamp: `build/web/.sabaygo-api-base`). Run `./run.sh`
+and is skipped on later runs unless `lib/` or `pubspec.yaml` changed. No
+address is compiled in: the console dials port 8000 on the host its page
+came from, so a new network needs no rebuild (25 Nov). Run `./run.sh`
 once before a demo so the build is not on stage.
 
 The handset app (`--mobile`) is built with `flutter build apk --debug`,
@@ -186,8 +188,9 @@ signed in) and launched before the launcher reports "up". It is not left
 under `flutter run`: two of those at one phone queued on Flutter's
 startup lock, and stopping the launcher killed both mid-Gradle with
 nothing installed. An installed app outlives the launcher. When the
-venue's network changes, re-run `./run.sh --mobile` so the app is rebuilt
-against the new address.
+venue's network changes, type the laptop's new address on the phone
+(Sign in > Server; `ServerAddress`) instead of rebuilding; the build's
+address is only the starting value.
 
 Piece by piece, when one component is being worked on:
 
@@ -365,6 +368,11 @@ S10 are merged into `main` and the Day 1 test passed end to end (full
 suite 1070/0/0); left are S7, S11 and the open Day 1 findings. The 3 Nov
 handoff, `docs/HANDOFF_DAY1.md`, keeps the Day 1 traps. The earlier handoff,
 `docs/HANDOFF_REV721.md`, lists S7 and S11's files and proof.
+
+**Deployment design (25 Nov): `docs/DEPLOYMENT.md`**: one cloud server
+at a fixed HTTPS domain, release apps built once with it, the camera
+phone on mobile data. Not built; waits on the owner's five decisions
+at its end.
 
 In the order agreed on 16 Oct, one step at a time. The runner probes and
 the rev 468 retirement are done (`docs/PROGRESS_LOG.md`). Left:

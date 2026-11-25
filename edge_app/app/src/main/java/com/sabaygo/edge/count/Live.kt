@@ -35,6 +35,8 @@ object Live {
     @Volatile var note: String? = null
 
     @Volatile var lastFrameAt = 0L
+    /** Which door camera, and where the Tapo is or why it is not sending; null for the phone's own. */
+    @Volatile var cameraNote: String? = null
     @Volatile var lensBlocked = false
     @Volatile var lastFix: Location? = null
     @Volatile var lastFixAt = 0L

@@ -23,11 +23,13 @@ class ApiClient {
     String? baseUrl,
   })  : _tokens = tokenStorage,
         _http = httpClient ?? http.Client(),
-        _baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
+        baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
 
   final TokenStorage _tokens;
   final http.Client _http;
-  final String _baseUrl;
+  /// The server every request goes to. Changed on the sign-in screen
+  /// when the phone is on a new network (`ServerAddress`).
+  String baseUrl;
 
   /// Called when a request comes back 401 — the token is dead and the
   /// app should return to the sign-in screen. Set once by the auth
@@ -52,7 +54,7 @@ class ApiClient {
   /// A binary GET: a payment screenshot. Errors as for JSON calls.
   Future<Uint8List> getBytes(String path) async {
     final token = await _tokens.readAccessToken();
-    final request = http.Request('GET', Uri.parse('$_baseUrl$path'))
+    final request = http.Request('GET', Uri.parse('$baseUrl$path'))
       ..headers['Accept'] = '*/*';
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
     final response = await _exchange(request);
@@ -69,7 +71,7 @@ class ApiClient {
     required String filename,
   }) async {
     final token = await _tokens.readAccessToken();
-    final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl$path'))
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
       ..headers['Accept'] = 'application/json'
       ..files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
@@ -96,7 +98,7 @@ class ApiClient {
     Object? body,
     Map<String, dynamic>? query,
   }) async {
-    final uri = Uri.parse('$_baseUrl$path').replace(
+    final uri = Uri.parse('$baseUrl$path').replace(
       queryParameters: query?.map((k, v) => MapEntry(k, '$v')),
     );
 

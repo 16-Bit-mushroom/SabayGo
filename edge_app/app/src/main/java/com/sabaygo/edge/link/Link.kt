@@ -35,6 +35,22 @@ class Config(context: Context) {
         get() = p.getLong("min_interval_ms", 0L)
         set(v) = p.edit().putLong("min_interval_ms", v.coerceAtLeast(0)).apply()
 
+    /**
+     * The Tapo's Camera Account (made in the Tapo app, not the TP-Link
+     * login). Blank: the door camera is this phone's own.
+     */
+    var cameraUser: String
+        get() = p.getString("camera_user", "")!!
+        set(v) = p.edit().putString("camera_user", v.trim()).apply()
+    var cameraPass: String
+        get() = p.getString("camera_pass", "")!!
+        set(v) = p.edit().putString("camera_pass", v).apply()
+    /** Where the Tapo last answered; found again when it stops answering there. */
+    var cameraHost: String
+        get() = p.getString("camera_host", "")!!
+        set(v) = p.edit().putString("camera_host", v).apply()
+
+    val usesTapo get() = cameraUser.isNotBlank()
     val ready get() = server.isNotBlank() && token.isNotBlank()
 
     companion object {

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.SystemClock
-import androidx.camera.core.ImageProxy
 import com.sabaygo.edge.link.Config
 import com.sabaygo.edge.link.Outbox
 import com.sabaygo.edge.link.ServerClock
@@ -25,9 +24,11 @@ import java.util.UUID
  * through YOLOv8n, ByteTrack and the door line; each crossing becomes a
  * door event in the outbox with its blurred still.
  *
- * Runs on the camera's analysis thread only. The model runs while the
- * server says to count; otherwise only while the screen is on, a few
- * times a second, so the Dispatcher can place the door line.
+ * Runs on the camera's analysis thread only, whichever camera feeds it:
+ * the phone's own (CameraX, turned by its rotation) or the Tapo on the
+ * hotspot ([TapoCamera], upright). The model runs while the server says
+ * to count; otherwise only while the screen is on, a few times a second,
+ * so the Dispatcher can place the door line.
  */
 class Pipeline(context: Context, private val config: Config, private val outbox: Outbox) {
     private val assets = context.assets
@@ -46,11 +47,11 @@ class Pipeline(context: Context, private val config: Config, private val outbox:
         Trace(File(context.getExternalFilesDir(null), "trace").apply { mkdirs() })
     } else null
 
-    fun onFrame(image: ImageProxy) {
+    /** One frame; [toBitmap] is called only if this frame is looked at, and before this returns. */
+    fun onFrame(rotation: Int, toBitmap: () -> Bitmap) {
         val now = SystemClock.elapsedRealtime()
         Live.lastFrameAt = System.currentTimeMillis()
-        val rotation = image.imageInfo.rotationDegrees
-        val frame: Bitmap by lazy { image.toBitmap() }
+        val frame: Bitmap by lazy(toBitmap)
         if (now - lastLens >= 500) {
             lastLens = now
             lens.sample(frame, now)

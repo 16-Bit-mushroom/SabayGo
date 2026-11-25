@@ -46,8 +46,8 @@ Known and expected during alpha:
   flow worked under rev 603 and the fee is now cash to the Dispatcher.
 - Open Day 1 findings (`docs/DAY1_FINDINGS.md`) that testers will meet;
   note them, do not report them as new:
-  - **#2:** trips are not posted by themselves; someone presses **Create
-    upcoming trips** (Trips).
+  - **#2:** trips are not posted by themselves; someone presses **Post a
+    trip** or **Post 7 days of trips** (Trips).
   - **#8:** voiding a trip after its fees were recorded leaves an
     overpayment that shows nowhere.
   - **#17:** a departure saved with the wrong time cannot be deleted, only
@@ -62,7 +62,7 @@ Known and expected during alpha:
 | Booking, Paid, walk-ins, fees, Start, Depart, statements, disputes, messages | ✅ fully | nothing here depends on place |
 | **SOS** | ✅ raise it, see it on the console, close it with a note | ❌ **no text messages**: SMS is off and no SOS numbers are set. A browser build shows "No location"; the Android app shows the school's position |
 | **"I'm here to pay"** | ⚠️ only after widening the terminal zone (§4) | it checks the phone is at the terminal. Not in the browser build: a browser gives no location over plain `http` |
-| **Van on the live map** | ⚠️ simulated | `run.sh` simulates trips already on the road when it started; a trip that departs later needs the simulator by hand (§4). Without it Overview lists the van as **No signal** |
+| **Van on the live map** | ⚠️ simulated | `run.sh` simulates every trip on the road, including one departed during the session (§4). Without it Overview lists the van as **No signal** |
 | **Door camera (YOLOv8)** | ⚠️ possible at a classroom door | the Realme with the edge app, checked out to the trip's van (console → Phones), the door line drawn on the phone. It would be the first test with people crossing a line |
 | GPS departure, stretch speed flags, the rental speed flag | ❌ switched off | they wait on A2Z's numbers (`depart_zone_radius_m`, stretch speed limits, `special_trip_speed_kmh`) |
 | Home pickup | ✅ with the Day 1 data (3 km) | the setting is A2Z's to confirm |
@@ -166,7 +166,8 @@ trips from that moment. Do not reset after about 22:00 (it puts the
 2. From another laptop: `http://<laptop-ip>:3001` shows the console
    sign-in.
 3. Sign in on one phone as a passenger (§3) and see today's trips from
-   Ecoland. None? Trips → **Create upcoming trips** (finding #2).
+   Ecoland. None? Trips → **Post a trip** or **Post 7 days of trips**
+   (finding #2).
 
 ### Between rounds
 
@@ -221,15 +222,28 @@ Cashier account is acceptable, but note who did what.
   Ecoland's zone for the session (console → Setup → Terminals) to cover
   the room, and set it back to 200 afterwards. It tells the Dispatcher who
   is waiting with cash; it never pays or saves a seat.
-- **Trips are not posted by themselves** (finding #2): Trips → **Create
-  upcoming trips** when a day's trips are missing.
-- **Policy changes apply to trips generated afterwards**, never to trips
-  already on the board. Changing the cutoff will not change today's trips.
-- **GPS on the map** is simulated by `run.sh` for trips already on the
-  road when it started. For a trip that departs during the session:
-  `backend/venv/bin/python backend/scripts/tracking_simulator.py --trip <trip_id> --loop`.
+- **Trips are not posted by themselves** (finding #2): Trips → **Post a
+  trip** (one, at any time) or **Post 7 days of trips** (from the Trip
+  Schedules) when a day's trips are missing.
+- **Seat capacity and the advance-booking caps are fixed on each trip when
+  it is generated**, so changing them leaves trips already on the board
+  alone. The unpaid cutoff and the check-in window are read live: a change
+  applies to today's trips at once (a home test can drop the cutoff to 5).
+- **GPS on the map** is simulated by `run.sh` for each trip on the road:
+  those departed when it started, and within 15 s any trip departed
+  during the session. A trip whose van has a phone sending its own
+  position (received in the last 2 min) is left to that phone. For an
+  **overspeed flag**, set a limit below 45 km/h in Rules & Settings →
+  Speed limits by route (say 30) before the trip departs, or start one by
+  hand at a higher speed:
+  `backend/venv/bin/python backend/scripts/tracking_simulator.py --trip <trip_id> --loop --speed 4 --kph 80`.
 
 ## 5. The round: one trip from start to finish
+
+**Round 2 (21 Nov), on the setup-only data: `docs/ALPHA_JOURNEY.md`**,
+from posting the trip to the van's statement, with the camera phone, the
+map, the SOS and the driving flags. The table below is the same round on
+the seeded data.
 
 Use a scheduled trip from Ecoland at least 45 min away (Day 1 data; 30
 min with the demo data). One Terminal Manager, one Cashier, one

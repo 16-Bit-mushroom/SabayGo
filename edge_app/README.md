@@ -25,8 +25,31 @@ console (Phones) and is shown its token once. On the phone: Set-up, the
 server (`http://<laptop>:8000/api/v1`) and the token. A debug build also
 takes them over adb:
 `adb shell am start -n com.sabaygo.edge/.HomeActivity --es server URL --es token TOKEN`.
+`./run.sh --edge` builds and installs the app over USB, gives it this
+laptop's address and waits until the phone reports over Wi-Fi; then the
+cable can come off (20 Nov: an `adb reverse` tunnel dropped mid-boarding
+when the USB connection reset, and the trip started Unaudited). The phone
+joins the laptop's Wi-Fi by hand, once: a stock build offers no adb
+command for it.
 Then the Checklist (permissions, battery optimisation off, the Realme
 switches an app cannot read).
+
+**The door camera** is the phone's own back camera, or a Tapo C110 on
+the phone's hotspot (decided 16 Nov; `count/TapoCamera.kt`). For the
+Tapo: set the phone's hotspot to 2.4 GHz and add the camera in the Tapo
+app with that hotspot as its only network (mobile data on, once); in the
+Tapo app make a Camera Account (Advanced Settings), turn Third-Party
+Compatibility on if it is offered, and leave Privacy Mode, Tapo Care and
+automatic updates off. Then on this phone, Set-up: the Camera Account's
+username and password (blank keeps the phone's own camera). The phone
+finds the camera itself (the hotspot's addresses change when it
+restarts), reads `stream2` over RTSP on TCP, decodes it, and counts as
+with its own camera; the screen's "Door camera" line says where it is.
+A dropped stream is retried every 5 s and the camera looked for again
+after two failures; while it is down the status report says the camera
+is not working, so the trip goes Unaudited. The camera needs no
+internet once set up (24 Nov: data off, back 40 s after a power cut,
+10 min with no stall).
 
 **Each mounting.** The office checks the phone out to a van and a
 Dispatcher. The Dispatcher opens the app, taps Door line, drags the
@@ -53,7 +76,9 @@ runs until stopped:
   refuses for good is set aside on the phone, not deleted.
 
 **Tested.** `./gradlew testDebugUnitTest`: assignment, ByteTrack and the
-door counter on made-up frames (14 tests). On the realme 8 5G against the
+door counter on made-up frames (15 tests). The Tapo source ran on the
+realme 8 5G (24 Nov: found by itself, about 3 s behind the room) but has
+not counted people yet. On the realme 8 5G against the
 dev backend (18 Oct): set-up over adb, the session, status reports and
 the outbox reach the server. **Not yet tried with people crossing a
 door line**, nor in a van.

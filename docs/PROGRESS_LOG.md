@@ -2618,3 +2618,236 @@ Web preview rebuilt on :3000.
   (`docs/test-reports/journeys_20261120_192956.txt`), the overbooking race
   (no seat-leg sold twice), driving flags; mobile 163, console 1, edge 15;
   the release APK built with no dev sign-in strings; both web builds.
+
+### A van departed during a session moves on the map by itself (20 Nov)
+
+For the alpha: `run.sh` gave the GPS replay only to trips already on the
+road when it started, so a trip the testers departed stood still until
+someone ran `tracking_simulator.py` by hand. Its watch loop now asks every
+15 s (`gps_for_departed`, `run.sh`) and starts one for each trip departed
+today, the same way as at launch, recorded for Ctrl-C. It leaves alone a
+trip this run already gave one (a simulator that stops is reported, not
+restarted in a loop), a trip another simulator drives (`seed_live_now.py`
+starts its own) and a trip with a position received in the last 2 min: a
+real phone is reporting from that van, and the system draws no invented
+track over it. `--no-gps` turns it off. The function always returns 0,
+since under `set -e` a failure would end `run.sh` and the system with it.
+`docs/ALPHA_TEST_GUIDE.md` §4 says so, with the overspeed recipe (a route
+speed limit below the simulator's 45 km/h). The edge app's debug APK was
+rebuilt for the camera demo (a phone filming a video on the laptop).
+
+The database was loaded with setup data only, for the alpha, from
+`db/backups/alpha_before_empty_20261120_0932.sql`: terminals, the route
+and its stops, fares, operators, vans, staff, trip schedules and settings,
+over a schema rebuilt from the migrations. Left out: passengers (they
+register in the app), the phone and each van's saved door line, trips,
+bookings and money.
+
+Proof: `bash -n run.sh`; the function cut out of `run.sh` and run against
+a scratch database (`sabaygo_t`, `TRIP-A2Z-LIVE-DEPART` departed): starts
+the trip once, not again on the next poll, skips it while another
+simulator runs and while a position is 30 s old, starts it once that
+position is 3 min old, nothing with `--no-gps`; every start in the PID
+list. `run.sh` restarted on the setup data: backend and console up.
+
+### The camera phone over Wi-Fi: `run.sh --edge` (20 Nov)
+
+The first door count with a video (20 Nov, the realme 8 5G filming a
+person walking in on the laptop's screen) worked: four crossings, four
+boardings, each with its blurred still, matched against the paid seat
+and the walk-ins as `application/edge/checking.py` says, and the extras
+listed by the Dispatcher. The phone reached the laptop through an
+`adb reverse` tunnel; when the USB connection reset the tunnel went with
+it, the counting was stopped on the phone, and the Cashier's Start found
+the phone silent: the trip went Unaudited (`silent_at_start`), correctly.
+Two boardings waited in the phone's outbox and arrived with their own
+times once it was back.
+
+`./run.sh --edge` now builds the edge app with Gradle, installs it over
+USB (`install -r`, so the set-up code stays), removes any tunnel, restarts
+the app with this machine's LAN address, and waits up to 45 s for the
+phone's first answered request from its Wi-Fi address: 2xx says the cable
+can come off, 401 says the set-up code is unknown here (a reset forgets
+every phone), silence names the phone's Wi-Fi and the firewall. It never
+uninstalls a differently signed app (that deletes unsent door events); it
+says how. The camera phone is the attached phone with the edge app, or
+`--edge-device`, and `--mobile` no longer picks it for the passenger app.
+A stock Android build has no adb command to join a network, so the phone
+joins the laptop's Wi-Fi by hand, once. `docs/ALPHA_JOURNEY.md` §0 and
+`edge_app/README.md` say so.
+
+Proof: `bash -n run.sh`; `./run.sh --mobile --edge` with only the camera
+phone attached: the passenger app was not put on it, the edge app was
+built and installed, and the phone reported from 192.168.1.25 with no
+tunnel; the outbox it held arrived. The 401 and 2xx branches checked on
+sample log lines.
+
+### A trip settled after it left no longer reads Left unpaid (20 Nov)
+
+Found in the 20 Nov rehearsal: the Dispatcher listed two walk-ins the
+camera had counted, Depart came before the Cashier recorded their top-up,
+and the trip was marked `left_unpaid` (brief 2.1). The Cashier recorded
+the ₱455.30 forty seconds later; Record payment and the Van Status Board
+then read Balance ₱0, but the trip sheet still said Unpaid / Left unpaid.
+`StatementService.record_payment` set trips to 'paid' when the statement
+reached 0 only if they had not departed yet, so a trip flagged at
+departure kept the flag for good. It now also turns `left_unpaid` into
+'paid' once a payment brings the van's statement to 0. The late payment
+stays on record: the statement's `settled_at` after the trip's
+`departed_at`, and the Left unpaid alert raised at the departure. Rules:
+`application/finance/statement.py`, `record_payment`.
+
+`run.sh`'s summary now says the camera phone is "not checked" without
+`--edge`, rather than "not set up": a phone set up earlier keeps
+reporting without the flag.
+
+Proof: `test_trip_lifecycle.sh` on a scratch database (`sabaygo_t`, its
+own backend on 8010): 141 passed, 0 failed, with two new checks after
+T16: the Cashier records the van's balance after Depart (due 0.00), and
+the trip reads paid. The test's Python fallback helpers read
+`DATABASE_URL`, so a run against a scratch backend exports it too, or
+those checks look in the live database. The trip from the rehearsal was
+paid before the fix and keeps its label; reloading the setup data
+removes it.
+
+### Phones over their USB cable: `usb_phones.sh` (21 Nov)
+
+On the day, the school's LIC-WIFI-OPEN kept its devices apart (a Meraki
+network, gateway 10.128.128.128; the laptop saw no other device on it),
+and the camera phone fell back to a hotspot on its own. Every phone now
+reaches the backend through its cable instead: the app is built to dial
+`127.0.0.1:8000`, and `./usb_phones.sh` opens an `adb reverse` tunnel on
+each attached phone and installs and opens the app on each one that is
+not the camera phone (`--tunnel`: the tunnels only, after a replug). The
+camera phone was registered again (the setup data has no phone) and its
+edge app given `http://127.0.0.1:8000/api/v1`. The browser build, made
+for the same address, is served on 3002 and 3003 for testers at the
+laptop. `docs/ALPHA_JOURNEY.md` §0 says so.
+
+Proof: the camera phone's session check and status report answered 200
+over the tunnel; `./usb_phones.sh --tunnel` found it and left its app
+alone; 3001, 3002 and 3003 answer; the browser build holds
+`http://127.0.0.1:8000/api/v1`, and the backend accepts it from
+`localhost:3002`.
+
+### The Tapo door camera over the phone's hotspot (24 Nov)
+
+Decided 16 Nov: the door camera may be a Tapo C110 (wired, fixed) on
+the camera phone's hotspot, and YOLOv8n stays on the phone. The laptop
+cannot reach a camera behind a hotspot on carrier NAT, and sending the
+video off the van would cost data, lose frames on a weak signal and
+carry passengers' faces off the van (brief 5.1–5.3). USB was rejected:
+the phone usually cannot charge while it powers a camera.
+
+**The gate (24 Nov), the camera on the realme's 2.4 GHz hotspot, read
+from the laptop on the same hotspot.** `stream2` is H.264 1280 × 720,
+15 fps there (25 on home Wi-Fi), with an A-law audio track. With mobile
+data off (checked every 10 s through the hotspot), the camera was
+unplugged and streamed again 40 s after power returned, at the same
+address; ten minutes read 8780 of 9000 frames (14.7 fps) with no 5-s
+window stalled. Its "Wi-Fi Backup" never moved it to the hotspot, so it
+was reset and added with the hotspot as its only network. Left: the
+parked-car heat test (rated 0–40 °C).
+
+**Built.** `edge_app/count/TapoCamera.kt`: Media3's RTSP player (1.11.1)
+on TCP, decoded into a SurfaceTexture and read back at 640 × 360 through
+OpenGL (`GlFrames.kt`), each frame handed to `Pipeline.onFrame`, which
+now takes a rotation and a bitmap supplier instead of a CameraX image.
+An `ImageReader` was tried first: the realme's MediaTek decoder
+(`c2.mtk.avc.decoder`) gives frames the CPU cannot lock as YUV, and the
+app aborted on its first frame, eight times over, as the sticky service
+restarted it. The phone finds the
+camera by asking each address on its own non-mobile networks for ports
+2020 and 554 (the hotspot changes subnet on restart, and its host has no
+list of clients), remembers it, and looks again after two failed tries.
+A stream silent for 15 s is closed and retried; while it is down no
+frame reaches the pipeline, so `camera_ok` goes false and the trip is
+Unaudited, as for the phone's own camera. Set-up takes the Tapo's Camera
+Account; blank keeps the phone's camera. `edge_app/README.md` says how
+to set the camera up.
+
+Proof: `./gradlew testDebugUnitTest assembleDebug` (15 tests pass). On
+the realme 8 5G, hosting the hotspot: the app found the camera at
+10.73.29.97 by itself, decoded on the hardware decoder and said "Camera
+ok" for over a minute without a crash; the picture is upright and not
+mirrored (the camera's date and logo read normally), its colours match the camera's own (checked against a frame read on the
+laptop), and it trails the room by about 3 s. Not yet tried: counting
+people through it, and a trip against the server.
+
+### No rebuild for a new network (25 Nov)
+
+The laptop that serves SabayGo gets a new address at every venue (home,
+school, the terminal's Wi-Fi, a phone hotspot), and two of the three apps
+had it compiled in: a venue change meant `./run.sh --mobile` (a Gradle
+build) and a ~3.5 min console rebuild. The edge app already took its
+server in Set-up.
+
+**Built.** The console dials port 8000 on the host its own page came from
+(`operator_console/lib/core/config/app_config.dart`), so one bundle works
+on every network, from the laptop (`localhost:3001`) or another computer
+at the terminal (`http://<laptop>:3001`); `API_BASE_URL` is still honoured
+for a backend on another host. `run.sh` no longer bakes the address in;
+its stamp says `same-host`, so a bundle from before is rebuilt once. The
+passenger/Dispatcher app has a Server line on the sign-in screen
+(`mobile/lib/core/config/server_address.dart`): type `10.0.52.117` (port
+and `/api/v1` are filled in), it checks `/health` and saves, or offers
+"Save anyway" when nothing answers. The build's address is only the
+starting value: a typed address holds until a build made for another
+address is installed, so whichever was chosen last wins. A signed-in phone
+signs out to reach it (sign-out keeps a Dispatcher's unsent records).
+The line is for testers and is in debug builds only (what `./run.sh
+--mobile` installs), beside the dev accounts: a released app dials the
+one server it was built for, a domain, and ignores a saved address --
+passengers never type one. Nothing running uses the laptop's address any more, so a network change
+needs no restart.
+
+Proof: `flutter analyze` (both apps, no new issues);
+`flutter test test/server_address_test.dart test/phase3_screens_test.dart
+test/auth_restore_test.dart test/layout_test.dart` 71/71, the sign-in
+screen at 320 dp and 200 % text with the tap-target checks. Not yet
+tried on a phone or in a rebuilt console.
+
+### First count through the Tapo, against the server (25 Nov)
+
+Desk test, laptop server on port 8001 (another project held 8000:
+`SABAYGO_BACKEND_PORT=8001`, which the console now follows through its
+`API_PORT` build define), the realme on its USB tunnel
+(`usb_phones.sh --watch`), hosting the hotspot. A special trip "Tapo door
+test" on TST-1023, the 21 Nov trip voided and its unpaid ₱50 parking
+overridden with a written reason (no money changed hands).
+
+The hotspot came up on a new subnet (10.40.117.x) and the edge app found
+the Tapo there by itself. The door line drawn on the phone reached the
+server (`PUT /edge/door-layout` 200). One person walked 3 in and 3 out:
+**5 of 6 crossings counted**, 2 boardings and 3 alightings, each filed on
+the test trip within 1–4 s with its still (person pixelated, line drawn);
+none held, no errors. The missed crossing was a boarding. The doorway
+was at the left edge of the frame with the line drawn close to it, so a
+person coming in is first seen already at the line, and someone first
+seen inside does not board (by design). Next run: aim the camera so the
+doorway is mid-frame, ideally from above the door, with room on both
+sides of the line.
+
+Two observations. The phone's "inside now" (`occupancy_after`) is
+in minus out for the whole session, floored at 0, so an alighting with
+nobody counted in keeps it one low afterwards: it read 0 after every
+event here. The server only stores it (and chains it) and decides
+nothing on it. In one still the hanging clothes on the wall were
+pixelated, so the model saw them as a person; it never moved, so it
+crossed nothing.
+
+Second run, camera re-aimed, line mid-frame: 5 in and 5 out walked,
+**all 5 alightings and 2 of 5 boardings** counted. A board and an alight
+on one track 0.3 s apart at 16:11:35, while the camera was being set up,
+are not part of the walk. The phone's trace (`files/trace/` on the phone,
+pulled with adb) shows why. Each missed boarding was tracked from
+outside up to the line (cabinward −0.33 to −0.08), then the detector's
+score fell from about 0.9 to 0.1–0.5 mid-crossing, the track was dropped,
+and the person was picked up again only deep inside (+0.45 to +0.48)
+as a new track, which counts nothing. The camera was too close to the
+path: the person's box averaged 0.97 of the frame's height (head and
+feet cut off) and crossed the frame in about 2 s, at 8 frames a second
+processed. Exits crossed the same zone and held their track more often.
+Next run: the camera higher and further back, looking down at the
+doorway as it would above a van door, a whole person in frame. Tracker
+changes wait until a run with that placement still misses.
