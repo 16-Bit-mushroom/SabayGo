@@ -37,6 +37,18 @@ Ecoland: Digos ₱150, Kidapawan ₱340, Cotabato ₱363.
 | 0.7 | Once counting, never tap **Stop** or **Benchmark** on the camera phone | A stopped phone counts and sends nothing, and a trip started while it is silent is **Unaudited** |
 | 0.8 | Laptop: a bright video of people walking through a doorway, from a fixed camera, full screen, paused at the start. Phone on its stand 30–50 cm away, the doorway filling most of its picture | Avoid dark scenes: 15 s of a dark, even picture counts as a covered lens |
 
+**On a network that keeps its devices apart** (21 Nov: the school's
+LIC-WIFI-OPEN; no phone could reach the laptop), every phone works over
+its USB cable instead of 0.1. Build the app once to dial `127.0.0.1`
+(`usb_phones.sh` has the command), then `./usb_phones.sh` each time a
+phone is plugged in: it opens the tunnel and installs and opens the app.
+A USB reset kills that phone's tunnel (the camera phone's reset four
+times in its first hour): keep `./usb_phones.sh --watch` running in a
+second terminal, and it reopens each tunnel within 3 s. The camera phone's edge app is given
+`http://127.0.0.1:8000/api/v1` as its server once. Browser testers use
+the laptop itself, `http://localhost:3002` and `http://localhost:3003`,
+with the browser build made for `127.0.0.1` too.
+
 ## The round
 
 **Timing.** Post the trip to leave **40 minutes from now**. "I'm here to

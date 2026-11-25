@@ -2710,6 +2710,26 @@ those checks look in the live database. The trip from the rehearsal was
 paid before the fix and keeps its label; reloading the setup data
 removes it.
 
+### Phones over their USB cable: `usb_phones.sh` (21 Nov)
+
+On the day, the school's LIC-WIFI-OPEN kept its devices apart (a Meraki
+network, gateway 10.128.128.128; the laptop saw no other device on it),
+and the camera phone fell back to a hotspot on its own. Every phone now
+reaches the backend through its cable instead: the app is built to dial
+`127.0.0.1:8000`, and `./usb_phones.sh` opens an `adb reverse` tunnel on
+each attached phone and installs and opens the app on each one that is
+not the camera phone (`--tunnel`: the tunnels only, after a replug). The
+camera phone was registered again (the setup data has no phone) and its
+edge app given `http://127.0.0.1:8000/api/v1`. The browser build, made
+for the same address, is served on 3002 and 3003 for testers at the
+laptop. `docs/ALPHA_JOURNEY.md` §0 says so.
+
+Proof: the camera phone's session check and status report answered 200
+over the tunnel; `./usb_phones.sh --tunnel` found it and left its app
+alone; 3001, 3002 and 3003 answer; the browser build holds
+`http://127.0.0.1:8000/api/v1`, and the backend accepts it from
+`localhost:3002`.
+
 ### The Tapo door camera over the phone's hotspot (24 Nov)
 
 Decided 16 Nov: the door camera may be a Tapo C110 (wired, fixed) on
