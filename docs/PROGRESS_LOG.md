@@ -2851,3 +2851,73 @@ processed. Exits crossed the same zone and held their track more often.
 Next run: the camera higher and further back, looking down at the
 doorway as it would above a van door, a whole person in frame. Tracker
 changes wait until a run with that placement still misses.
+
+### The realme's GPS on a real drive (26 Nov, at the terminal)
+
+Laptop server on the realme's hotspot (10.40.117.183:8001, simulated GPS
+off), trip "Tapo van door test" on TST-1023, started 15:12:38 and
+departed by hand in the console at 15:21:04 (`departure_source` staff;
+GPS departure waits on A2Z's `depart_zone_radius_m`). The van drove a
+loop of about 3.2 km (top 62.8 km/h, 850 m at its farthest) and was
+parked again by 15:29.
+
+The phone sent a fix every second from 15:13:17, 39 s after Start, to
+15:31:28, with one 9 s gap: 1,089 readings, median accuracy 1.8 m, 90 %
+within 3.2 m, all but the first (141.8 m, cold start) within 10 m. The
+laptop stayed at the terminal, out of the hotspot's range during the
+drive: the phone kept every fix and status report and uploaded them all
+at about 15:29:40, up to 7.6 min late, none lost.
+
+**Defect found:** 156 readings from 15:14–15:17, while parked, are stored
+2 to 5 times (373 extra rows, identical positions, copies about 55 s
+apart). The phone re-sends a batch it did not see accepted (batches of
+200, a 20 s read timeout), and `/edge/fixes` stores every fix it is sent
+without checking for one it already has, unlike door events (by
+`event_id`). A repeated reading could pass for several readings in a
+row. Not fixed yet.
+
+Also seen: the Tapo dropped at 15:06–15:07 and stayed down, so nothing
+was counted on the drive; the realme was not charging (55 % to 46 % in
+33 min, 40–41.5 °C).
+
+Reset for the beta test (26 Nov, 15:41): every trip and what hangs off
+it (3 test trips: door counts, GPS, status reports, walk-ins, fee
+records, notifications) was deleted in one transaction, and the stills
+with it. Kept: the 8 staff accounts, terminals, the route, fares, rules,
+the 7 Trip Schedules, the vans (TST-1023 keeps its door line), the
+operators and the realme's registration and check-out. The evidence of
+the 25–26 Nov tests above (the Tapo counts, the GPS drive) now lives
+only in `db/backups/before_beta_20261126_1541.sql` and
+`db/backups/before_beta_20261126_1541_stills/` (git-ignored).
+
+Beta prep at the terminal (27 Nov). The terminal's Wi-Fi ("GSDD VAN
+TERMINAL") was tried first and no phone reached the laptop on it; the
+laptop went back on the realme's hotspot (10.220.203.183:8001), and
+nothing needed rebuilding. The realme's edge app had run all night out
+of reach and uploaded 15,204 GPS readings and 284 status reports
+(26 Nov 16:23 – 27 Nov 08:32) when it got through; they and yesterday
+evening's leftovers were cleared (copies in
+`db/backups/edge_leftovers_20261127_1438.sql` and
+`db/backups/edge_backlog_20261127_1500.sql`). While checked out with no
+trip, the phone keeps sending GPS, which the van's next trip claims on
+assignment (`ledger.claim_held`, back to 12 h before departure): clear
+or close the app until the beta trip is assigned.
+
+**Open issue: the Tapo's stream stops while the camera stays on Wi-Fi.**
+Today it answered pings on the hotspot but ports 554 and 2020 were
+closed for over a minute; unplugging it for 10 s brought RTSP back in
+about a minute and the realme said "Camera ok" 26 s later. It also
+dropped during the 26 Nov van run. Watch for it in the beta; a
+recurrence points to the camera (power, firmware), not the phone.
+
+**The passenger app in a browser follows the laptop too (27 Nov).** Its
+web build had the laptop's address compiled in (`127.0.0.1:8000` from
+21 Nov). With no `API_BASE_URL`, a web build now dials the backend on
+the host its page came from, as the console does
+(`mobile/lib/core/config/app_config.dart`; `API_PORT` when the backend is
+off 8000); a phone build is unchanged. Built with
+`flutter build web --release --pwa-strategy=none --dart-define=API_PORT=8001`
+and served by `operator_console/tool/serve_web.py 3002 mobile/build/web`
+for the beta, on `localhost:3002` and the hotspot address. "I'm here to
+pay" still needs a phone: a browser shares no location over plain http
+from another computer.
